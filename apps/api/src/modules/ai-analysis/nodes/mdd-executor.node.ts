@@ -20,6 +20,40 @@ export function createMddExecutorNode() {
     }
 
     const nextStep = (state.mddPlanCurrentStep ?? -1) + 1;
+
+    // Mesh Topology: Colaboración lateral.
+    // Si el nodo que acaba de correr (ej. Security) dejó una directiva para un nodo anterior (ej. Software Architect),
+    // y no estamos ya en un bucle infinito, el Executor puede decidir volver atrás.
+    const lastNode = state.mddPlanCurrentStep !== undefined && state.mddPlan ? state.mddPlan[state.mddPlanCurrentStep]?.node : null;
+    const directives = state.internalDirectives ?? [];
+    if (lastNode && directives.length > 0) {
+      // Buscar si el último nodo envió algo a un nodo anterior en el plan
+      const lastNodeDirectives = directives.filter(d => d.from === lastNode);
+      if (lastNodeDirectives.length > 0) {
+        for (const dir of lastNodeDirectives) {
+          const targetNode = dir.to;
+          const targetStepIdx = plan.findIndex((s, idx) => s.node === targetNode && idx < nextStep);
+          if (targetStepIdx !== -1) {
+            // Encontrado un salto atrás válido. 
+            // Para evitar bucles infinitos, podríamos verificar si ya saltamos por esta directiva, 
+            // pero por simplicidad permitiremos un salto si el mensaje es "nuevo" o si el goal lo justifica.
+            LOG("mesh topology: detectada directiva de %s para %s. Saltando atrás al paso %s", lastNode, targetNode, targetStepIdx + 1);
+            const step = plan[targetStepIdx];
+            return new Command({
+              update: {
+                mddPlanCurrentStep: targetStepIdx,
+                currentStepAllowedTools: step.required_tools,
+                currentStepGoal: `[DIRECTIVA DE ${lastNode.toUpperCase()}]: ${dir.message}`,
+                // Consumimos las directivas para no entrar en bucle infinito
+                internalDirectives: [],
+              },
+              goto: step.node,
+            });
+          }
+        }
+      }
+    }
+
     if (nextStep >= plan.length) {
       LOG("plan completado steps=%s, volver al manager", plan.length);
       return new Command({
@@ -35,6 +69,7 @@ export function createMddExecutorNode() {
         mddPlanCurrentStep: nextStep,
         currentStepAllowedTools: step.required_tools,
         currentStepGoal: step.goal,
+        internalDirectives: [], // Consumir directivas en cada transición
       },
       goto: step.node,
     });

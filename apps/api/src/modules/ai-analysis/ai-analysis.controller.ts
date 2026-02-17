@@ -274,4 +274,16 @@ export class AiAnalysisController {
     );
     stream.pipe(res);
   }
+
+  /**
+   * Obtiene las decisiones arquitectónicas (ADRs) guardadas para el proyecto.
+   */
+  @Get("mdd/adrs")
+  async getAdrs(@Query("projectId") projectId: string) {
+    const id = typeof projectId === "string" ? projectId.trim() : "";
+    if (!id) {
+      throw new BadRequestException("projectId is required");
+    }
+    return this.aiAnalysis.getProjectDecisions(id);
+  }
 }

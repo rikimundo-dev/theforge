@@ -22,6 +22,7 @@ import {
   stripNotaPendienteHeadingInIntegrationSection,
 } from "../utils/mdd-sanitize.js";
 import { extractFirstJsonObject, parseJsonOrThrow } from "../utils/parse-json.js";
+import { getInternalDirectivesContext, extractInternalDirectives } from "../utils/mdd-mesh-topology.js";
 import { z } from "zod";
 
 /** Schema de salida estructurada: integracion con subsections y manifest opcional. */
@@ -176,6 +177,7 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
       contextParts.push(
         "**Borrador actual del MDD (usa las secciones 1–4 y Seguridad para derivar ## Integración):**",
         state.mddDraft || "(vacío)",
+        getInternalDirectivesContext(state, "integration_engineer"),
       );
       if (state.auditorFeedback?.trim()) {
         contextParts.push(
@@ -248,10 +250,13 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
       const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
       const section7Md = integracionToSection7Markdown(slice.integracion);
       const mddDraft = replaceSection6Or7InDraft(state.mddDraft ?? "", 7, section7Md);
+      const internalDirectives = extractInternalDirectives(text, "integration_engineer");
+      const meshUpdate = internalDirectives.length > 0 ? { internalDirectives } : {};
+
       const sum = getMddDraftSummary(mddDraft);
       LOG("ok integracion §7 reemplazada mddDraftLen=%s section2=%s", sum.length, sum.section2);
       logMddNodeOutput("Integration", mddDraft);
-      return { mddStructured: merged, mddDraft };
+      return { mddStructured: merged, mddDraft, ...meshUpdate };
     } catch (err) {
       LOG("error: %s", err instanceof Error ? err.message : String(err));
       throw err;

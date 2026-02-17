@@ -16,6 +16,7 @@ import {
   unbulletAndJoinForJson,
 } from "../utils/mdd-sanitize.js";
 import { extractFirstJsonObject, parseJsonOrThrow } from "../utils/parse-json.js";
+import { getInternalDirectivesContext, extractInternalDirectives } from "../utils/mdd-mesh-topology.js";
 import { z } from "zod";
 
 /** Schema estricto: array de { title, content: string[] }. */
@@ -150,6 +151,7 @@ export function createMddSecurityNode(llm: BaseChatModel) {
         "",
         "**Borrador actual del MDD:**",
         state.mddDraft || "(vacío)",
+        getInternalDirectivesContext(state, "security"),
       ];
       if (state.acceptedProposalDirective?.trim()) {
         const directive = state.acceptedProposalDirective.trim();
@@ -249,66 +251,66 @@ export function createMddSecurityNode(llm: BaseChatModel) {
             LOG("parse permisivo también falló: %s", formatParseError(permissiveErr));
             LOG("respuesta LLM (inicio): %s", snip(text, 400));
             LOG("fallback desde markdown");
-        let section = "";
-        try {
-          const legacy = parseJsonOrThrow(text, legacySecurityOutputSchema);
-          section = String(legacy.securitySection ?? "").trim();
-        } catch {
-          section = text.replace(/^```(?:markdown)?\s*|\s*```$/g, "").trim();
-        }
-        if (!section) {
-          section = "## Seguridad\n\n(Pendiente de definir.)";
-        } else if (!section.startsWith("##")) {
-          section = "## Seguridad\n\n" + section;
-        }
-        section = section.replace(/\n*--\s*$/m, "").trim();
-        // No tomar contenido de §7 (Infraestructura/manifest) como si fuera §6
-        const sec7Match = section.match(/\n##\s+7\.\s/m);
-        if (sec7Match != null && sec7Match.index != null) {
-          section = section.slice(0, sec7Match.index).trim();
-        }
-        let trimmedSection = section.trim();
-        const hasSeguridadJson =
-          trimmedSection.includes('"## Seguridad"') ||
-          trimmedSection.includes('"6. Seguridad"') ||
-          trimmedSection.includes('"6.1"') ||
-          trimmedSection.startsWith("{");
-        if (hasSeguridadJson) {
-          let normalized = trimmedSection
-            .replace(/^##\s*(6\.\s*)?Seguridad\s*\{:?\s*\n?/i, "")
-            .replace(/(\n\s*-\s*)+$/, "")
-            .replace(/\n\s*---\s*$/, "")
-            .trim();
-          normalized = normalized
-            .replace(/\n\s*-\s*}\s*\n\s*-\s*}\s*$/, "\n}\n}")
-            .replace(/\n\s*-\s*}\s*$/, "\n}")
-            .trim();
-          const jsonCandidate = normalized.startsWith("{")
-            ? normalized
-            : unbulletAndJoinForJson(normalized);
-          let markdown = jsonSectionToMarkdown(jsonCandidate, "Seguridad");
-          if (markdown === jsonCandidate) {
+            let section = "";
             try {
-              const obj = JSON.parse(jsonCandidate) as Record<string, unknown>;
-              const inner = obj["## Seguridad"] ?? obj["6. Seguridad"];
-              if (inner && typeof inner === "object" && !Array.isArray(inner)) {
-                markdown = jsonSectionToMarkdown(JSON.stringify(inner), "Seguridad");
-              }
+              const legacy = parseJsonOrThrow(text, legacySecurityOutputSchema);
+              section = String(legacy.securitySection ?? "").trim();
             } catch {
-              /* keep markdown as jsonCandidate */
+              section = text.replace(/^```(?:markdown)?\s*|\s*```$/g, "").trim();
             }
-          }
-          if (markdown !== jsonCandidate) {
-            slice = { seguridad: markdownSeguridadToItems(markdown) };
-          } else {
-            const item = markdownToSeguridadItem(section);
-            slice = { seguridad: [item] };
-          }
-        } else {
-          const body = section.replace(/^##\s*(6\.\s*)?Seguridad\s*\n?/i, "").trim() || section;
-          slice = { seguridad: markdownSeguridadToItems(body) };
-        }
-        } // end catch permissiveErr
+            if (!section) {
+              section = "## Seguridad\n\n(Pendiente de definir.)";
+            } else if (!section.startsWith("##")) {
+              section = "## Seguridad\n\n" + section;
+            }
+            section = section.replace(/\n*--\s*$/m, "").trim();
+            // No tomar contenido de §7 (Infraestructura/manifest) como si fuera §6
+            const sec7Match = section.match(/\n##\s+7\.\s/m);
+            if (sec7Match != null && sec7Match.index != null) {
+              section = section.slice(0, sec7Match.index).trim();
+            }
+            let trimmedSection = section.trim();
+            const hasSeguridadJson =
+              trimmedSection.includes('"## Seguridad"') ||
+              trimmedSection.includes('"6. Seguridad"') ||
+              trimmedSection.includes('"6.1"') ||
+              trimmedSection.startsWith("{");
+            if (hasSeguridadJson) {
+              let normalized = trimmedSection
+                .replace(/^##\s*(6\.\s*)?Seguridad\s*\{:?\s*\n?/i, "")
+                .replace(/(\n\s*-\s*)+$/, "")
+                .replace(/\n\s*---\s*$/, "")
+                .trim();
+              normalized = normalized
+                .replace(/\n\s*-\s*}\s*\n\s*-\s*}\s*$/, "\n}\n}")
+                .replace(/\n\s*-\s*}\s*$/, "\n}")
+                .trim();
+              const jsonCandidate = normalized.startsWith("{")
+                ? normalized
+                : unbulletAndJoinForJson(normalized);
+              let markdown = jsonSectionToMarkdown(jsonCandidate, "Seguridad");
+              if (markdown === jsonCandidate) {
+                try {
+                  const obj = JSON.parse(jsonCandidate) as Record<string, unknown>;
+                  const inner = obj["## Seguridad"] ?? obj["6. Seguridad"];
+                  if (inner && typeof inner === "object" && !Array.isArray(inner)) {
+                    markdown = jsonSectionToMarkdown(JSON.stringify(inner), "Seguridad");
+                  }
+                } catch {
+                  /* keep markdown as jsonCandidate */
+                }
+              }
+              if (markdown !== jsonCandidate) {
+                slice = { seguridad: markdownSeguridadToItems(markdown) };
+              } else {
+                const item = markdownToSeguridadItem(section);
+                slice = { seguridad: [item] };
+              }
+            } else {
+              const body = section.replace(/^##\s*(6\.\s*)?Seguridad\s*\n?/i, "").trim() || section;
+              slice = { seguridad: markdownSeguridadToItems(body) };
+            }
+          } // end catch permissiveErr
         } // end if (!recovered)
       }
 
@@ -359,10 +361,13 @@ export function createMddSecurityNode(llm: BaseChatModel) {
         }
       }
       mddDraft = normalizeMddFormat(mddDraft);
+      const internalDirectives = extractInternalDirectives(text, "security");
+      const meshUpdate = internalDirectives.length > 0 ? { internalDirectives } : {};
+
       const sum = getMddDraftSummary(mddDraft);
       LOG("ok seguridad §6 reemplazada mddDraftLen=%s section2=%s", sum.length, sum.section2);
       logMddNodeOutput("Security", mddDraft);
-      return { mddStructured: merged, mddDraft };
+      return { mddStructured: merged, mddDraft, ...meshUpdate };
     } catch (err) {
       LOG("error: %s", err instanceof Error ? err.message : String(err));
       throw err;

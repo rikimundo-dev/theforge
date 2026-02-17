@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { mddStructuredSchema } from "./mdd-structured.schema.js";
 
-/** Auditor decision: loop back to Clarifier with feedback or finish. */
-export const mddAuditorDecisionSchema = z.enum(["clarifier", "done"]);
+/** Auditor decision: loop back to Clarifier with feedback, finnish, or go to Blackboard for conflict resolution. */
+export const mddAuditorDecisionSchema = z.enum(["clarifier", "done", "blackboard"]);
 export type MDDAuditorDecision = z.infer<typeof mddAuditorDecisionSchema>;
 
 /** Gap crítico generado por el Auditor (LLM). Textos en español. */
@@ -114,6 +114,19 @@ export const mddStateSchema = z.object({
   architectCriticFeedback: z.string().optional(),
   /** Número de veces que se ha pasado por Architect Critic en esta delegación (evita bucle infinito; máx. 1 reintento). */
   architectCriticAttempts: z.number().int().min(0).optional(),
+  /** ID del proyecto activo (para memoria semántica). */
+  projectId: z.string().optional(),
+  /** Lista de directivas internas enviadas entre agentes (Mesh Topology). */
+  internalDirectives: z.array(
+    z.object({
+      from: z.string().describe("Nombre del nodo emisor"),
+      to: z.string().describe("Nombre del nodo receptor"),
+      message: z.string().describe("Directiva o aviso técnico crítico"),
+      timestamp: z.string().optional(),
+    }),
+  ).optional(),
+  /** Resumen del impacto de los cambios solicitados (Impact Analysis). */
+  impactSummary: z.string().optional(),
 });
 
 export type MDDState = z.infer<typeof mddStateSchema>;
@@ -149,4 +162,6 @@ export const defaultMDDState: MDDState = {
   currentStepGoal: undefined,
   architectCriticFeedback: undefined,
   architectCriticAttempts: undefined,
+  projectId: undefined,
+  internalDirectives: undefined,
 };

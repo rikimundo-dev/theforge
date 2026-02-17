@@ -122,4 +122,17 @@ export class OpenAIAdapter implements LLMProvider {
       return { complete: false, items: [] };
     }
   }
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    try {
+      const resp = await this.client.embeddings.create({
+        model: "text-embedding-3-small",
+        input: text.replace(/\n/g, " "),
+      });
+      return resp.data[0].embedding;
+    } catch (err) {
+      console.error("[OpenAIAdapter] generateEmbedding error:", err);
+      return [];
+    }
+  }
 }

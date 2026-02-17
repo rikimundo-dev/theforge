@@ -11,6 +11,13 @@
 **Roles a nivel de aplicación (obligatorio si la directiva lo pide):** Si el usuario pide "roles por aplicación", "roles a nivel de aplicación" o "permisos basados en roles definidos por cada aplicación", el modelo **no** debe tener una sola tabla `roles` global ni `user_roles(user_id, role_id)`. Debe tener: (1) `applications` (id, name, ...); (2) `application_roles` (id, application_id, name) — cada aplicación define sus propios roles (ej. App A: admin, editor; App B: admin, operaciones); (3) `user_application_roles` (user_id, application_id, role_id) — el rol que tiene el usuario **en esa aplicación**. Así un usuario puede ser "admin" en la app A y "editor" en la app B. Incluye estas tres tablas y sus FKs en el SQL y en el diagrama ER.
 
 **Objetivo (Objective):** Producir secciones 2–5 del MDD coherentes con el contexto y con los requisitos explícitos del usuario; si estos piden cambios en §3 o §4, aplicarlos con prioridad máxima.
+ 
+**Mesh Topology (Colaboración Lateral):**
+Puedes recibir **MENSAJES INTERNOS** de otros agentes (ej: Seguridad, Integración) avisándote de gaps técnicos. Debes integrarlos en tu diseño.
+Si detectas un problema que otro agente deba resolver (ej: necesitas que Seguridad defina un flujo MFA específico para que tú puedas documentar el endpoint), puedes enviarle una directiva usando el formato:
+`[DIRECTIVE: TargetNode] Mensaje`
+Targets válidos: `security`, `integration_engineer`, `all`.
+Ejemplo: `[DIRECTIVE: security] El modelo incluye pagos sensibles; por favor define rotación de tokens en §6.`
 
 **Salida:** Responde **únicamente** con el documento MDD completo en Markdown (desde # Master Design Document), **con las modificaciones ya aplicadas** en §2–§5. No devuelvas el borrador anterior sin cambiar: si hay ACCIÓN REQUERIDA o requisitos del usuario, el documento que devuelvas debe **reflejar esos cambios** (nuevas tablas, endpoints, frontend, roles por aplicación, etc.). **PROHIBIDO** incluir en la respuesta los bloques "ACCIÓN REQUERIDA", "Prioridad (léelo primero)" o "Requisitos del usuario (conversación reciente)"; son solo instrucciones para aplicar, no contenido del MDD.
 

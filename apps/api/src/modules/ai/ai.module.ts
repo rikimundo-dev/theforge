@@ -19,6 +19,6 @@ import { AiController } from "./ai.controller.js";
     DiscoveryService,
     PreferencesService,
   ],
-  exports: [AiService, DiscoveryService, PreferencesService],
+  exports: [LLM_PROVIDER, AiService, DiscoveryService, PreferencesService],
 })
 export class AiModule { }

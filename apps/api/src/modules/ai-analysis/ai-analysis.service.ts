@@ -24,6 +24,7 @@ import {
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
 } from "./utils/mdd-sanitize.js";
+import { GraphMemoryService } from "./graph-memory/graph-memory.service.js";
 import { injectMddDiagrams, suggestMddDiagrams } from "./utils/mdd-diagram-suggestions.js";
 import { markdownToMddStructured } from "./utils/mdd-markdown-to-structured.js";
 import { HumanMessage } from "@langchain/core/messages";
@@ -124,6 +125,7 @@ export class AiAnalysisService {
     private readonly checkpointerService: CheckpointerService,
     private readonly preferences: PreferencesService,
     private readonly estimationService: EstimationService,
+    private readonly graphMemory: GraphMemoryService,
   ) { }
 
   /** Devuelve el threadId del flujo MDD para el proyecto, si existe (para rehidratar al reabrir la app). */
@@ -307,10 +309,11 @@ export class AiAnalysisService {
     dbgaContent: string,
     projectId?: string,
   ): AsyncGenerator<StreamProgressEvent> {
-    const graph = createMddGraph();
+    const graph = createMddGraph(this.graphMemory);
     const initialState: MDDState = {
       ...defaultMDDState,
       dbgaContent: dbgaContent.trim() || "(Sin Benchmark. El usuario no tiene un documento de Benchmark; genera un MDD base con contexto, alcance y requisitos que el usuario podrá refinar.)",
+      projectId: projectId?.trim(),
     };
 
     const mddOrder: Array<{ node: string; message: string }> = [
@@ -395,7 +398,7 @@ export class AiAnalysisService {
     });
     const threadId = row.threadId;
 
-    const graph = createMddGraphWithManager(checkpointer, this.estimationService);
+    const graph = createMddGraphWithManager(checkpointer, this.graphMemory, this.estimationService);
     const existingMdd = (initialMddDraft ?? "").trim();
     const rawInitial = (initialMessage ?? "").trim();
     const looksLikeMddDocument =
@@ -413,6 +416,7 @@ export class AiAnalysisService {
       dbgaContent: dbgaContent.trim() || "(Sin Benchmark. El usuario no tiene un documento de Benchmark; genera un MDD base.)",
       lastUserMessage,
       mddDraft: existingMdd || defaultMDDState.mddDraft,
+      projectId: projectId?.trim(),
     };
     const config = { configurable: { thread_id: threadId } as Record<string, string> };
 
@@ -604,7 +608,7 @@ export class AiAnalysisService {
         };
         return;
       }
-    this.estimationService.clearLiveDraft(projectId.trim());
+      this.estimationService.clearLiveDraft(projectId.trim());
       const message = err instanceof Error ? err.message : "Error en el flujo MDD con Manager";
       this.logger.error(`[MDD stream/manager] error: ${message}`, err instanceof Error ? err.stack : String(err));
       lastStepFailedByThread.set(threadId, { node: "unknown", error: message });
@@ -632,7 +636,7 @@ export class AiAnalysisService {
 
     yield { type: "progress", agent: "Manager", message: "Reanudando flujo con tu respuesta..." };
 
-    const graph = createMddGraphWithManager(checkpointer, this.estimationService);
+    const graph = createMddGraphWithManager(checkpointer, this.graphMemory, this.estimationService);
     const config = { configurable: { thread_id: threadId } as Record<string, string> };
     const auditTrail: string[] = [];
     const mddOrder: Array<{ node: string; message: string }> = [
@@ -671,6 +675,7 @@ export class AiAnalysisService {
             ...(mddContentFromClient?.trim() && mddContentFromClient.trim().length > 80
               ? { mddDraft: mddContentFromClient.trim() }
               : {}),
+            projectId: projectId?.trim(),
           },
         }),
         {
@@ -957,14 +962,14 @@ export class AiAnalysisService {
         return;
       }
 
-    const structured = markdownToMddStructured(mddContent);
-    const state: MDDState = {
-      ...defaultMDDState,
-      dbgaContent: "(Regenerando sección desde documento actual.)",
-      clarifiedScope: structured?.contextoAlcance ?? "",
-      mddStructured: structured ?? undefined,
-      mddDraft: mddContent,
-    };
+      const structured = markdownToMddStructured(mddContent);
+      const state: MDDState = {
+        ...defaultMDDState,
+        dbgaContent: "(Regenerando sección desde documento actual.)",
+        clarifiedScope: structured?.contextoAlcance ?? "",
+        mddStructured: structured ?? undefined,
+        mddDraft: mddContent,
+      };
 
       if (section === 7) {
         const integrationNode = createMddIntegrationNode(llm);
@@ -1022,5 +1027,12 @@ export class AiAnalysisService {
       this.logger.error(`[MDD regenerate-section] error: ${message}`, err instanceof Error ? err.stack : undefined);
       yield { type: "error", message: `Error al regenerar §${section}: ${message}` };
     }
+  }
+
+  /**
+   * Obtiene las decisiones arquitectónicas (ADRs) guardadas en el grafo para un proyecto.
+   */
+  async getProjectDecisions(projectId: string) {
+    return this.graphMemory.getDecisionsByProject(projectId);
   }
 }

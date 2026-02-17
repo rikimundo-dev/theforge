@@ -14,6 +14,10 @@ import { createMddManagerNode } from "../nodes/mdd-manager.node.js";
 import { createMddPlanApprovalNode } from "../nodes/mdd-plan-approval.node.js";
 import { createMddExecutorNode } from "../nodes/mdd-executor.node.js";
 import { createMddMergeSection1Node } from "../nodes/mdd-merge-section1.node.js";
+import { createMddGraphPopulatorNode } from "../nodes/mdd-graph-populator.node.js";
+import { createMddCrossConsistencyNode } from "../nodes/mdd-cross-consistency.node.js";
+import { createMddBlackboardNode } from "../nodes/mdd-blackboard.node.js";
+import { GraphMemoryService } from "../graph-memory/graph-memory.service.js";
 import { createDbgaLLM } from "../llm/create-dbga-llm.js";
 import { getMddAuditorTools, getMddArchitectTools } from "../tools/tool-registry.js";
 import { MDDStateAnnotation, type MDDStateType } from "../state/index.js";
@@ -25,7 +29,7 @@ const MAX_MDD_ITERATIONS = 3;
  * Flow: … → Auditor → (score < 85 && iteration < MAX ? Manager asigna gaps a agentes : END).
  * Los agentes generan contenido; el formateador (sin LLM) normaliza mddDraft; Redactor eliminado (documento unificado por merge + render).
  */
-export function createMddGraph() {
+export function createMddGraph(graphMemory: GraphMemoryService) {
   const llm = createDbgaLLM();
   const clarifierNode = createMddClarifierNode(llm);
   const softwareArchitectNode = createMddSoftwareArchitectNode(llm, getMddArchitectTools());
@@ -33,13 +37,15 @@ export function createMddGraph() {
   const securityNode = createMddSecurityNode(llm);
   const integrationNode = createMddIntegrationNode(llm);
   const diagramInjectorNode = createMddDiagramInjectorNode();
+  const consistencyNode = createMddCrossConsistencyNode(llm);
   const auditorNode = createMddAuditorNode(llm, getMddAuditorTools(), null);
+  const graphPopulatorNode = createMddGraphPopulatorNode(llm, graphMemory);
 
   function routeAuditor(state: MDDStateType): string {
     if (state.auditorDecision === "clarifier" && (state.mddIteration ?? 0) < MAX_MDD_ITERATIONS) {
       return "clarifier";
     }
-    return END;
+    return "graph_populator";
   }
 
   const builder = new StateGraph(MDDStateAnnotation)
@@ -49,20 +55,24 @@ export function createMddGraph() {
     .addNode("security", securityNode)
     .addNode("integration", integrationNode)
     .addNode("format_after_redactor", formatterNode)
+    .addNode("cross_consistency_checker", consistencyNode)
     .addNode("diagram_injector", diagramInjectorNode)
     .addNode("auditor", auditorNode)
+    .addNode("graph_populator", graphPopulatorNode)
     .addEdge(START, "clarifier")
     .addEdge("clarifier", "software_architect")
     .addEdge("software_architect", "format_after_architect")
     .addEdge("format_after_architect", "security")
     .addEdge("security", "integration")
     .addEdge("integration", "format_after_redactor")
-    .addEdge("format_after_redactor", "diagram_injector")
+    .addEdge("format_after_redactor", "cross_consistency_checker")
+    .addEdge("cross_consistency_checker", "diagram_injector")
     .addEdge("diagram_injector", "auditor")
     .addConditionalEdges("auditor", routeAuditor, {
       clarifier: "clarifier",
-      [END]: END,
-    });
+      graph_populator: "graph_populator",
+    })
+    .addEdge("graph_populator", END);
 
   return builder.compile();
 }
@@ -76,10 +86,11 @@ export function createMddGraph() {
  */
 export function createMddGraphWithManager(
   checkpointer: BaseCheckpointSaver | null,
+  graphMemory: GraphMemoryService,
   precisionCalculator?: LivePrecisionCalculator | null,
 ) {
   const llm = createDbgaLLM();
-  const managerNode = createMddManagerNode(llm, precisionCalculator);
+  const managerNode = createMddManagerNode(llm, graphMemory, precisionCalculator);
   const askInitialTopicNode = createMddAskInitialTopicNode();
   const clarifierNode = createMddClarifierNode(llm);
   const softwareArchitectNode = createMddSoftwareArchitectNode(llm, getMddArchitectTools());
@@ -88,7 +99,10 @@ export function createMddGraphWithManager(
   const securityNode = createMddSecurityNode(llm);
   const integrationNode = createMddIntegrationNode(llm);
   const diagramInjectorNode = createMddDiagramInjectorNode();
+  const consistencyNode = createMddCrossConsistencyNode(llm);
   const auditorNode = createMddAuditorNode(llm, getMddAuditorTools(), precisionCalculator ?? null);
+  const blackboardNode = createMddBlackboardNode(llm);
+  const graphPopulatorNode = createMddGraphPopulatorNode(llm, graphMemory);
 
   /** Si hay directiva/requisitos y §3+§4 con contenido y aún no hemos pasado por critic (attempts < 1), ir a architect_critic. */
   function routeAfterSoftwareArchitect(state: MDDStateType): string {
@@ -143,13 +157,26 @@ export function createMddGraphWithManager(
   }
   function routeAfterFormatRedactor(state: MDDStateType): string {
     if (state.executorControlled === true) return "executor";
-    return nextInSections(state, "format_after_redactor") ?? "diagram_injector";
+    return nextInSections(state, "format_after_redactor") ?? "cross_consistency_checker";
+  }
+  function routeAfterConsistency(state: MDDStateType): string {
+    if (state.executorControlled === true) return "executor";
+    return nextInSections(state, "cross_consistency_checker") ?? "diagram_injector";
   }
   function routeAfterDiagram(state: MDDStateType): string {
     if (state.executorControlled === true) return "executor";
     return nextInSections(state, "diagram_injector") ?? "auditor";
   }
   function routeAfterAuditor(state: MDDStateType): string {
+    if (state.executorControlled === true) return "executor";
+    if (state.auditorDecision === "blackboard") return "blackboard";
+    return "graph_populator";
+  }
+  function routeAfterBlackboard(state: MDDStateType): string {
+    if (state.executorControlled === true) return "executor";
+    return state.sectionsToRun?.[0] || "manager";
+  }
+  function routeAfterGraphPopulator(state: MDDStateType): string {
     if (state.executorControlled === true) return "executor";
     return "manager";
   }
@@ -173,6 +200,9 @@ export function createMddGraphWithManager(
     "format_after_architect",
     "security",
     "integration",
+    "cross_consistency_checker",
+    "graph_populator",
+    "blackboard",
   ] as const;
 
   const planApprovalNode = createMddPlanApprovalNode();
@@ -186,8 +216,11 @@ export function createMddGraphWithManager(
     "security",
     "integration",
     "format_after_redactor",
+    "cross_consistency_checker",
     "diagram_injector",
     "auditor",
+    "graph_populator",
+    "blackboard",
     "manager",
   ] as const;
 
@@ -204,8 +237,11 @@ export function createMddGraphWithManager(
     .addNode("security", securityNode)
     .addNode("integration", integrationNode)
     .addNode("format_after_redactor", formatterNode)
+    .addNode("cross_consistency_checker", consistencyNode)
     .addNode("diagram_injector", diagramInjectorNode)
     .addNode("auditor", auditorNode)
+    .addNode("blackboard", blackboardNode)
+    .addNode("graph_populator", graphPopulatorNode)
     .addEdge(START, "manager")
     .addConditionalEdges("clarifier", routeAfterClarifier, {
       manager: "manager",
@@ -222,6 +258,7 @@ export function createMddGraphWithManager(
       format_after_architect: "format_after_architect",
       security: "security",
       integration: "integration",
+      cross_consistency_checker: "cross_consistency_checker",
       format_after_redactor: "format_after_redactor",
       diagram_injector: "diagram_injector",
       auditor: "auditor",
@@ -235,6 +272,7 @@ export function createMddGraphWithManager(
     .addConditionalEdges("format_after_architect", routeAfterFormatArchitect, {
       security: "security",
       integration: "integration",
+      cross_consistency_checker: "cross_consistency_checker",
       format_after_redactor: "format_after_redactor",
       diagram_injector: "diagram_injector",
       auditor: "auditor",
@@ -243,6 +281,7 @@ export function createMddGraphWithManager(
     })
     .addConditionalEdges("security", routeAfterSecurity, {
       integration: "integration",
+      cross_consistency_checker: "cross_consistency_checker",
       format_after_redactor: "format_after_redactor",
       diagram_injector: "diagram_injector",
       auditor: "auditor",
@@ -251,12 +290,20 @@ export function createMddGraphWithManager(
     })
     .addConditionalEdges("integration", routeAfterIntegration, {
       format_after_redactor: "format_after_redactor",
+      cross_consistency_checker: "cross_consistency_checker",
       diagram_injector: "diagram_injector",
       auditor: "auditor",
       manager: "manager",
       executor: "executor",
     })
     .addConditionalEdges("format_after_redactor", routeAfterFormatRedactor, {
+      cross_consistency_checker: "cross_consistency_checker",
+      diagram_injector: "diagram_injector",
+      auditor: "auditor",
+      manager: "manager",
+      executor: "executor",
+    })
+    .addConditionalEdges("cross_consistency_checker", routeAfterConsistency, {
       diagram_injector: "diagram_injector",
       auditor: "auditor",
       manager: "manager",
@@ -268,6 +315,18 @@ export function createMddGraphWithManager(
       executor: "executor",
     })
     .addConditionalEdges("auditor", routeAfterAuditor, {
+      executor: "executor",
+      blackboard: "blackboard",
+      graph_populator: "graph_populator",
+    })
+    .addConditionalEdges("blackboard", routeAfterBlackboard, {
+      executor: "executor",
+      manager: "manager",
+      software_architect: "software_architect",
+      security: "security",
+      integration: "integration",
+    })
+    .addConditionalEdges("graph_populator", routeAfterGraphPopulator, {
       executor: "executor",
       manager: "manager",
     });

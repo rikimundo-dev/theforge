@@ -24,6 +24,7 @@ import {
   ListOrdered,
   ListTodo,
   Download,
+  Brain,
 } from "lucide-react";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import ChatContainer from "../components/ChatContainer";
@@ -169,7 +170,7 @@ export default function WorkshopView({
   const [useCasesViewMode, setUseCasesViewMode] = useState<"preview" | "source">("preview");
   const [userStoriesViewMode, setUserStoriesViewMode] = useState<"preview" | "source">("preview");
   const [conformanceUseLlm, setConformanceUseLlm] = useState(false);
-  type DocPanel = "benchmark" | "spec" | "mdd" | "ux-ui-guide" | "blueprint" | "tasks" | "api-contracts" | "logic-flows" | "architecture" | "use-cases" | "user-stories" | "infra";
+  type DocPanel = "benchmark" | "spec" | "mdd" | "ux-ui-guide" | "blueprint" | "tasks" | "api-contracts" | "logic-flows" | "architecture" | "use-cases" | "user-stories" | "infra" | "adrs";
   const [centralPanel, setCentralPanel] = useState<DocPanel>("mdd");
   const [isGeneratingDeliverables, setIsGeneratingDeliverables] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
@@ -630,6 +631,15 @@ export default function WorkshopView({
                     >
                       <ListTodo className="w-4 h-4" />
                       Tasks
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCentralPanel("adrs")}
+                      title="ADRs: Decisiones Arquitectónicas Guardadas en Memoria"
+                      className={getTabClass("adrs", useWorkshopStore.getState().adrs)}
+                    >
+                      <Server className="w-4 h-4" />
+                      ADRs
                     </button>
                     <button
                       type="button"
@@ -1331,6 +1341,57 @@ export default function WorkshopView({
                 />
               )
             )}
+            {centralPanel === "adrs" && (
+              <div className="flex flex-col gap-6 h-full min-h-0 overflow-auto">
+                <div className="flex items-center justify-between border-b border-zinc-700 pb-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-amber-400">Decisiones Arquitectónicas (ADRs)</h3>
+                    <p className="text-sm text-zinc-400">Historial de decisiones persistidas en el Grafo de Memoria Semántica.</p>
+                  </div>
+                  <button
+                    onClick={() => projectId && useWorkshopStore.getState().fetchAdrs(projectId)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Actualizar
+                  </button>
+                </div>
+
+                {!useWorkshopStore.getState().adrs || useWorkshopStore.getState().adrs?.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center p-12 text-center opacity-50">
+                    <Brain className="w-12 h-12 mb-4 text-zinc-600" />
+                    <p className="text-zinc-400">No hay decisiones guardadas aún para este proyecto.</p>
+                    <p className="text-xs text-zinc-500 mt-2">Las decisiones se extraen automáticamente al finalizar el MDD.</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4">
+                    {useWorkshopStore.getState().adrs?.map((adr, i) => (
+                      <div key={i} className="p-4 rounded-lg bg-zinc-800 border border-zinc-700 hover:border-amber-500/50 transition-colors shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-bold text-zinc-100 flex items-center gap-2">
+                            <CheckCircle2 className={`w-4 h-4 ${adr.status === 'Accepted' ? 'text-green-500' : 'text-amber-500'}`} />
+                            {adr.title}
+                          </h4>
+                          <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${adr.status === 'Accepted' ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                            {adr.status}
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          <div>
+                            <p className="text-[11px] font-bold text-zinc-500 uppercase">Contexto</p>
+                            <p className="text-sm text-zinc-300 leading-relaxed">{adr.context}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] font-bold text-zinc-500 uppercase">Consecuencia</p>
+                            <p className="text-sm text-zinc-300 leading-relaxed italic border-l-2 border-zinc-600 pl-3">{adr.consequence}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -1600,36 +1661,38 @@ export default function WorkshopView({
             </div>
           )
         }
-        {pendingDeliverablePreview && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
-                <h2 className="text-lg font-semibold text-amber-400">
-                  Vista previa: {pendingDeliverablePreview.kind === "blueprint" ? "Blueprint" : pendingDeliverablePreview.kind === "api" ? "Contratos API" : "Infra"}
-                </h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => discardDeliverable()}
-                    className="px-3 py-1.5 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 text-sm"
-                  >
-                    Descartar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => confirmDeliverable()}
-                    className="px-3 py-1.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 text-sm font-medium"
-                  >
-                    Confirmar y guardar
-                  </button>
+        {
+          pendingDeliverablePreview && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+              <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
+                  <h2 className="text-lg font-semibold text-amber-400">
+                    Vista previa: {pendingDeliverablePreview.kind === "blueprint" ? "Blueprint" : pendingDeliverablePreview.kind === "api" ? "Contratos API" : "Infra"}
+                  </h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => discardDeliverable()}
+                      className="px-3 py-1.5 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 text-sm"
+                    >
+                      Descartar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => confirmDeliverable()}
+                      className="px-3 py-1.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 text-sm font-medium"
+                    >
+                      Confirmar y guardar
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                  <MddViewer content={pendingDeliverablePreview.content} />
                 </div>
               </div>
-              <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                <MddViewer content={pendingDeliverablePreview.content} />
-              </div>
             </div>
-          </div>
-        )}
+          )
+        }
       </div >
     </div >
   );

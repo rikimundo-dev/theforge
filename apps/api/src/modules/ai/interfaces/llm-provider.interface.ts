@@ -37,4 +37,5 @@ export interface LLMProvider {
   ): Promise<AsyncIterable<string>>;
 
   parseChecklist(text: string): Promise<ChecklistResult>;
+  generateEmbedding(text: string): Promise<number[]>;
 }

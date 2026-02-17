@@ -153,6 +153,8 @@ interface WorkshopState {
   } | null;
   /** true tras generar MDD desde Benchmark (one-shot); mostrar banner de revisión en panel MDD */
   mddJustGeneratedFromBenchmark: boolean;
+  /** Decisiones Arquitectónicas (ADRs) asociadas al proyecto */
+  adrs: any[] | null;
 
   setProjectId: (id: string | null) => void;
   setProject: (p: Project | null) => void;
@@ -223,6 +225,7 @@ interface WorkshopState {
   ) => Promise<Project | null>;
   clearPhase0SummaryContent: (projectId: string) => Promise<void>;
   fetchEstimation: (projectId: string) => Promise<LiveMetricsResult | null>;
+  fetchAdrs: (projectId: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -269,6 +272,7 @@ const initialState = {
     planMessage: string;
   } | null,
   mddJustGeneratedFromBenchmark: false,
+  adrs: null as any[] | null,
 };
 
 export const useWorkshopStore = create<WorkshopState>((set, get) => ({
@@ -332,6 +336,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         }
       }
       get().fetchEstimation(projectId).catch(() => { });
+      get().fetchAdrs(projectId).catch(() => { });
       return data;
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Error al cargar proyecto";
@@ -1971,5 +1976,16 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     }
   },
 
+  fetchAdrs: async (projectId) => {
+    try {
+      const r = await fetch(`${API_BASE}/ai-analysis/mdd/adrs?projectId=${encodeURIComponent(projectId)}`);
+      if (r.ok) {
+        const data = await r.json();
+        set({ adrs: data });
+      }
+    } catch (err) {
+      console.error("Error fetching ADRs:", err);
+    }
+  },
   reset: () => set(initialState),
 }));

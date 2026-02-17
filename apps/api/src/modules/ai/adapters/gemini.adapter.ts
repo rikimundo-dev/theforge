@@ -7,6 +7,7 @@ import type {
 import type { ChecklistResult } from "@the-forge/shared-types";
 
 export class GeminiAdapter implements LLMProvider {
+  private readonly genAI: GoogleGenerativeAI;
   private readonly model;
 
   constructor(apiKey?: string, modelId = "gemini-2.0-flash") {
@@ -16,8 +17,8 @@ export class GeminiAdapter implements LLMProvider {
         "GOOGLE_GENERATIVE_AI_API_KEY or GEMINI_API_KEY is required for Gemini adapter",
       );
     }
-    const genAI = new GoogleGenerativeAI(key);
-    this.model = genAI.getGenerativeModel({ model: modelId });
+    this.genAI = new GoogleGenerativeAI(key);
+    this.model = this.genAI.getGenerativeModel({ model: modelId });
   }
 
   async generateResponse(
@@ -140,6 +141,17 @@ export class GeminiAdapter implements LLMProvider {
     } catch (err) {
       console.error("[GeminiAdapter] parseChecklist error", err);
       return { complete: false, items: [] };
+    }
+  }
+
+  async generateEmbedding(text: string): Promise<number[]> {
+    try {
+      const embeddingModel = this.genAI.getGenerativeModel({ model: "embedding-001" });
+      const result = await embeddingModel.embedContent(text);
+      return result.embedding.values;
+    } catch (err) {
+      console.error("[GeminiAdapter] generateEmbedding error:", err);
+      return [];
     }
   }
 }

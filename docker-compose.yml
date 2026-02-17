@@ -23,6 +23,22 @@ services:
       timeout: 5s
       start_period: 15s
       retries: 3
+    depends_on:
+      - theforge-falkor
+
+  theforge-falkor:
+    image: falkordb/falkordb:latest
+    container_name: theforge-falkor
+    ports:
+      - "6379:6379"
+    volumes:
+      - falkor_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   theforge_db_data:
+  falkor_data:

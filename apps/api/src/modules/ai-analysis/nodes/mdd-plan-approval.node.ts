@@ -6,8 +6,12 @@ const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:PlanApproval]
 /**
  * Mensaje para aprobación del plan: pide revisar la lista de tareas y quién las ejecuta.
  */
-function buildPlanSummaryMessage(): string {
-  return "Revisa la lista de tareas y quién las ejecuta. Confirma para ejecutar o escribe qué quieres cambiar.";
+function buildPlanSummaryMessage(impactSummary?: string): string {
+  let msg = "Revisa la lista de tareas y quién las ejecuta. Confirma para ejecutar o escribe qué quieres cambiar.";
+  if (impactSummary) {
+    msg = `${impactSummary}\n\n---\n${msg}`;
+  }
+  return msg;
 }
 
 /**
@@ -23,13 +27,14 @@ export function createMddPlanApprovalNode() {
       return new Command({ goto: "manager" });
     }
 
-    const planMessage = buildPlanSummaryMessage();
+    const planMessage = buildPlanSummaryMessage(state.impactSummary);
 
     LOG("interrupt plan_approval mddPlanLen=%s", pending.mddPlan.length);
     const userResponse = interrupt({
       type: "plan_approval",
       plan: pending.mddPlan,
       message: planMessage,
+      impactSummary: state.impactSummary,
     });
     const message = typeof userResponse === "string" ? userResponse : String(userResponse ?? "").trim();
     LOG("resume: usuario respondió (len=%s), volver al manager", message.length);

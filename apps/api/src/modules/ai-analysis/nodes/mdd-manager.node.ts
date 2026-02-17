@@ -19,6 +19,8 @@ import {
   sanitizeContextSection,
 } from "../utils/mdd-sanitize.js";
 import { z } from "zod";
+import { GraphMemoryService } from "../graph-memory/graph-memory.service.js";
+import { generateImpactAnalysis } from "../utils/mdd-impact-analysis.js";
 
 /** Schema para parse manual (discriminated union). */
 const managerOutputSchema = z.discriminatedUnion("action", [
@@ -28,6 +30,10 @@ const managerOutputSchema = z.discriminatedUnion("action", [
     target: z.enum(["clarifier_only", "full_pipeline", "sections"]).optional(),
     sections: z.array(z.string()).optional(),
   }),
+  z.object({
+    action: z.literal("search_memory"),
+    memorySearchQuery: z.string(),
+  }),
 ]);
 
 /**
@@ -35,14 +41,17 @@ const managerOutputSchema = z.discriminatedUnion("action", [
  * no usar .optional() ni .default() o el JSON schema tendrá campos fuera de required y fallará.
  */
 const managerStructuredOutputSchema = z.object({
-  action: z.enum(["reply", "delegate"]).describe("reply = solo aclaración; delegate = ejecutar agentes"),
-  reply: z.string().describe("Si action es reply: respuesta breve al usuario; si delegate enviar cadena vacía"),
+  action: z.enum(["reply", "delegate", "search_memory"]).describe("reply = solo aclaración; delegate = ejecutar agentes; search_memory = buscar en grafo"),
+  reply: z.string().describe("Si action es reply: respuesta breve al usuario; si delegate/search enviar cadena vacía"),
   target: z
     .enum(["clarifier_only", "full_pipeline", "sections"])
     .describe("clarifier_only = solo sección 1; full_pipeline = todo; sections = solo los listados en sections"),
   sections: z
     .array(z.string())
     .describe("Si target es sections: software_architect, security, integration; si no, array vacío"),
+  memorySearchQuery: z
+    .string()
+    .describe("Si action es search_memory: la intención a buscar en el grafo (ej: 'auth con MFA'); si no, cadena vacía"),
 });
 
 /** Orden de agentes en el pipeline (sin Clarifier). Se inserta format_after_architect tras data_model y software_architect. */
@@ -85,7 +94,7 @@ const NODE_TASK_DESCRIPTIONS: Record<string, string> = {
 /** 4.3 Least privilege: tools por nodo (solo nodos con tools en el grafo MDD). */
 const NODE_REQUIRED_TOOLS: Record<string, string[]> = {
   software_architect: ["format_section3_endpoints"],
-  auditor: ["validate_mdd_structure"],
+  auditor: ["validate_mdd_structure", "validate_sql_syntax", "validate_json_payloads"],
 };
 
 function stepWithTools(node: string, stepId: string, taskDescription: string, goal?: string): MddPlanStep {
@@ -398,7 +407,11 @@ function mddHasContent(state: MDDStateType): boolean {
  * Done solo si Auditor >= 85% o usuario pide parar (umbral 85 = ceder intervención al usuario).
  * Si se pasa precisionCalculator, el % mostrado coincide con el semáforo (calculateLiveMetrics sobre mddDraft).
  */
-export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: LivePrecisionCalculator | null) {
+export function createMddManagerNode(
+  llm: BaseChatModel,
+  graphMemory: GraphMemoryService,
+  precisionCalculator?: LivePrecisionCalculator | null,
+) {
   return async (state: MDDStateType): Promise<Partial<MDDStateType> | Command> => {
     const userMessage = (state.lastUserMessage ?? "").trim();
     const score = state.auditorScore ?? 0;
@@ -613,6 +626,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
         const planDirective = getPlanDirective(state);
         const mddPlan = buildMddPlan("full_pipeline", undefined, getUserBrief(state), planDirective);
         if (mddPlan.length > 0) {
+          const impactSummary = await generateImpactAnalysis(llm, state, resumeAnswer);
           return new Command({
             update: {
               managerQuestions: undefined,
@@ -624,6 +638,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
               requestQuestionsOnly: false,
               pendingPlanApproval: { mddPlan, delegateTarget: "full_pipeline", goto: "clarifier" },
               planUserIntent: planDirective,
+              impactSummary,
             },
             goto: "plan_approval",
           });
@@ -678,6 +693,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       if (mddPlan.length > 0) {
         const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
         const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
         LOG("Seguir refinando → plan_approval mddPlanLen=%s", mddPlan.length);
         return new Command({
           update: {
@@ -687,6 +703,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             requestQuestionsOnly: false,
             pendingPlanApproval: { mddPlan, delegateTarget: "full_pipeline", goto: "clarifier" },
             planUserIntent: planDirective,
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -702,6 +719,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       if (mddPlan.length > 0) {
         const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Usuario: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
         const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Usuario: ${userMessage}` : ""].filter(Boolean).join("\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, directive);
         LOG("Acuerdo breve → plan_approval sections=%s", sectionsToRun.join(", "));
         return new Command({
           update: {
@@ -714,6 +732,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             acceptedProposalDirective: directive,
             pendingPlanApproval: { mddPlan, delegateTarget: "sections", sectionsToRun, goto: sectionsToRun[0] },
             planUserIntent: planDirective,
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -724,6 +743,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
     if (hasDraft && score < QUALITY_THRESHOLD && !userMessage) {
       const mddPlan = buildMddPlan("clarifier_only", undefined, getUserBrief(state), getPlanDirective(state));
       if (mddPlan.length > 0) {
+        const impactSummary = state.auditorFeedback ? await generateImpactAnalysis(llm, state, state.auditorFeedback) : "";
         LOG("Refinamiento (preguntas) → plan_approval plan=[clarifier, merge_section1_only]");
         return new Command({
           update: {
@@ -737,6 +757,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
               goto: "clarifier",
             },
             planUserIntent: getPlanDirective(state),
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -758,6 +779,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             goto: "clarifier",
           },
           planUserIntent: getPlanDirective(state),
+          impactSummary: "Análisis de impacto: refinamiento de contexto y alcance (Sección 1).",
         },
         goto: "plan_approval",
       });
@@ -796,11 +818,13 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
         stepWithTools("auditor", "1", NODE_TASK_DESCRIPTIONS.auditor),
       ];
       LOG("usuario pidió auditar → plan_approval (1 paso: auditor)");
+      const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
       return new Command({
         update: {
           lastUserMessage: undefined,
           pendingPlanApproval: { mddPlan, delegateTarget: "sections", sectionsToRun: ["auditor"], goto: "auditor" },
           planUserIntent: getPlanDirective(state),
+          impactSummary,
         },
         goto: "plan_approval",
       });
@@ -813,6 +837,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       if (mddPlan.length > 0) {
         const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
         const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
         LOG("solo contexto y alcance → plan_approval mddPlanLen=%s", mddPlan.length);
         return new Command({
           update: {
@@ -824,6 +849,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             previousMddDraftForMerge: state.mddDraft ?? "",
             pendingPlanApproval: { mddPlan, delegateTarget: "clarifier_only", previousMddDraftForMerge: state.mddDraft ?? "", goto: "clarifier" },
             planUserIntent: planDirective,
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -852,6 +878,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       if (mddPlan.length > 0) {
         const accumulatedWithRequest = stateForDirective.userInputAccumulated ?? state.userInputAccumulated;
         const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
         LOG("petición sustancial (len=%s) → plan sections=%s, goto plan_approval", userMessage!.trim().length, sectionsToRun.join(","));
         return new Command({
           update: {
@@ -862,6 +889,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             requestQuestionsOnly: false,
             pendingPlanApproval: { mddPlan, delegateTarget: "sections", sectionsToRun, goto: sectionsToRun[0] },
             planUserIntent: planDirective,
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -882,13 +910,16 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       if (!mddPlan.length) mddPlan = buildMddPlan("sections", sectionsToRun, getUserBrief(state), planDirective);
       if (mddPlan.length > 0) {
         const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Usuario: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
         LOG("usuario dijo 'ya trabaje' / ejecuta (len=%s) → plan sections=%s, goto plan_approval", userMessage!.trim().length, sectionsToRun.join(","));
         return new Command({
           update: {
             userInputAccumulated: accumulatedWithRequest || state.userInputAccumulated,
             lastUserMessage: undefined,
+            requestQuestionsOnly: false,
             pendingPlanApproval: { mddPlan, delegateTarget: "sections", sectionsToRun, goto: sectionsToRun[0] },
             planUserIntent: planDirective,
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -907,6 +938,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       if (mddPlan.length > 0) {
         const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
         const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Petición: ${userMessage}` : ""].filter(Boolean).join("\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
         LOG("usuario respondió con sustancia a nuestras preguntas (len=%s) → delegate (no más preguntas)", userMessage!.trim().length);
         return new Command({
           update: {
@@ -918,6 +950,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             clarifierJustGeneratedQuestions: false,
             pendingPlanApproval: { mddPlan, delegateTarget: "full_pipeline", goto: "clarifier" },
             planUserIntent: planDirective,
+            impactSummary,
           },
           goto: "plan_approval",
         });
@@ -947,31 +980,58 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
       .join("\n");
 
     const prompt = `${MANAGER_MDD_PROMPT}\n\n---\nRonda ${round}.\n\n${context}`;
-    const messages: HumanMessage[] = [new HumanMessage(prompt)];
-    let action: "reply" | "delegate" = "reply";
+    let messages: HumanMessage[] = [new HumanMessage(prompt)];
+    let action: "reply" | "delegate" | "search_memory" = "reply";
     let replyContent = "¿En qué más puedo ayudarte con el MDD? Puedes pedir refinamientos o revisar el documento.";
     let delegateTarget: "clarifier_only" | "full_pipeline" | "sections" | undefined;
     let sectionsToRun: string[] | undefined;
+    let memoryQuery: string | undefined;
 
     const useStructuredOutput =
       "withStructuredOutput" in llm && typeof (llm as { withStructuredOutput?: (schema: unknown, config?: unknown) => unknown }).withStructuredOutput === "function";
-    if (useStructuredOutput) {
-      try {
-        const runnable = (llm as { withStructuredOutput(schema: unknown, config?: unknown): { invoke(input: unknown): Promise<unknown> } }).withStructuredOutput(
-          managerStructuredOutputSchema,
-          { method: "function_calling", strict: true },
-        );
-        const parsed = (await runnable.invoke(messages)) as z.infer<typeof managerStructuredOutputSchema>;
-        action = parsed.action as "reply" | "delegate";
-        if (parsed.action === "reply" && parsed.reply?.trim()) replyContent = parsed.reply.trim();
-        if (parsed.action === "delegate") {
-          delegateTarget = parsed.target;
-          if (parsed.target === "sections" && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
-            sectionsToRun = expandSectionsToRun(parsed.sections);
+
+    // Loop interno para búsqueda de memoria (max 1 salto)
+    for (let i = 0; i < 2; i++) {
+      if (useStructuredOutput) {
+        try {
+          const runnable = (llm as { withStructuredOutput(schema: unknown, config?: unknown): { invoke(input: unknown): Promise<unknown> } }).withStructuredOutput(
+            managerStructuredOutputSchema,
+            { method: "function_calling", strict: true },
+          );
+          const parsed = (await runnable.invoke(messages)) as z.infer<typeof managerStructuredOutputSchema>;
+          action = parsed.action;
+          if (parsed.action === "reply" && parsed.reply?.trim()) replyContent = parsed.reply.trim();
+          if (parsed.action === "delegate") {
+            delegateTarget = parsed.target;
+            if (parsed.target === "sections" && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+              sectionsToRun = expandSectionsToRun(parsed.sections);
+            }
+          }
+          if (parsed.action === "search_memory") {
+            memoryQuery = parsed.memorySearchQuery;
+          }
+        } catch (err) {
+          LOG("structured output falló, fallback a invoke+parse: %s", err instanceof Error ? err.message : String(err));
+          const response = await llm.invoke(messages);
+          const text = typeof response.content === "string" ? response.content : "";
+          if (text.trim()) {
+            try {
+              const parsed = parseJsonOrThrow(text, managerOutputSchema);
+              action = parsed.action;
+              if (parsed.action === "reply" && parsed.reply?.trim()) replyContent = parsed.reply.trim();
+              if (parsed.action === "delegate" && "target" in parsed) {
+                delegateTarget = parsed.target;
+                if (parsed.target === "sections" && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+                  sectionsToRun = expandSectionsToRun(parsed.sections);
+                }
+              }
+              if (parsed.action === "search_memory") {
+                memoryQuery = parsed.memorySearchQuery;
+              }
+            } catch { /* keep defaults */ }
           }
         }
-      } catch (err) {
-        LOG("structured output falló, fallback a invoke+parse: %s", err instanceof Error ? err.message : String(err));
+      } else {
         const response = await llm.invoke(messages);
         const text = typeof response.content === "string" ? response.content : "";
         if (text.trim()) {
@@ -985,29 +1045,36 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
                 sectionsToRun = expandSectionsToRun(parsed.sections);
               }
             }
-          } catch {
-            // keep defaults
-          }
-        }
-      }
-    } else {
-      const response = await llm.invoke(messages);
-      const text = typeof response.content === "string" ? response.content : "";
-      if (text.trim()) {
-        try {
-          const parsed = parseJsonOrThrow(text, managerOutputSchema);
-          action = parsed.action;
-          if (parsed.action === "reply" && parsed.reply?.trim()) replyContent = parsed.reply.trim();
-          if (parsed.action === "delegate" && "target" in parsed) {
-            delegateTarget = parsed.target;
-            if (parsed.target === "sections" && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
-              sectionsToRun = expandSectionsToRun(parsed.sections);
+            if (parsed.action === "search_memory") {
+              memoryQuery = parsed.memorySearchQuery;
             }
-          }
-        } catch {
-          // keep defaults
+          } catch { /* keep defaults */ }
         }
       }
+
+      if (action === "search_memory" && memoryQuery && i < 2) {
+        LOG("ejecutando búsqueda en memoria semántica: %s", memoryQuery);
+        const [projects, decisions] = await Promise.all([
+          graphMemory.searchSimilarProjects(memoryQuery),
+          graphMemory.searchSimilarDecisions(memoryQuery)
+        ]);
+
+        let memoryContext = "";
+        if (projects && projects.length > 0) {
+          memoryContext += "### Proyectos Similares:\n" +
+            projects.map((r: any) => `- Proyecto: ${r.title} (ID: ${r.id})\n  Tablas: ${r.tables.join(", ")}\n  Endpoints: ${r.endpoints.join(", ")}`).join("\n") + "\n\n";
+        }
+        if (decisions && decisions.length > 0) {
+          memoryContext += "### Decisiones Arquitectónicas (ADRs) Relevantes:\n" +
+            decisions.map((d: any) => `- **${d.title}** (Proyecto: ${d.projectTitle})\n  Contexto: ${d.context}\n  Consecuencia: ${d.consequence}`).join("\n") + "\n";
+        }
+
+        if (!memoryContext) memoryContext = "No se encontraron proyectos o decisiones previas similares.";
+
+        messages.push(new HumanMessage(`[Resultados de búsqueda en memoria semántica para "${memoryQuery}"]:\n${memoryContext}\n\nInstrucción: Usa esta información para decidir la mejor arquitectura o delegación.`));
+        continue;
+      }
+      break;
     }
 
     LOG("action=%s delegateTarget=%s sectionsToRun=%s", action, delegateTarget, sectionsToRun?.length);
@@ -1058,6 +1125,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
         gotoNode = "clarifier";
       }
       LOG("delegar a plan_approval mddPlanLen=%s goto=%s", mddPlan.length, gotoNode);
+      const impactSummary = await generateImpactAnalysis(llm, state, userMessage || planDirective || "Re-planificación");
       return new Command({
         update: {
           pendingPlanApproval: {
@@ -1068,6 +1136,7 @@ export function createMddManagerNode(llm: BaseChatModel, precisionCalculator?: L
             goto: gotoNode,
           },
           planUserIntent: planDirective,
+          impactSummary,
         },
         goto: "plan_approval",
       });

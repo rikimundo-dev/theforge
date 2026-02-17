@@ -6,6 +6,12 @@ import {
   createFormatSection3EndpointsTool,
   createSuggestMddDiagramsTool,
 } from "./mdd-tools.js";
+import {
+  createValidateSqlTool,
+  createValidateJsonPayloadsTool,
+} from "./linter-tools.js";
+import { createQueryIntentGraphTool } from "./graph-query.tool.js";
+import { GraphMemoryService } from "../graph-memory/graph-memory.service.js";
 
 /**
  * Tools for the Scout (Market Scout) agent: search + scrape.
@@ -29,7 +35,11 @@ export function getAuditorTools(): StructuredToolInterface[] {
  * Tools for MDD Auditor: validación de estructura del MDD (sección 3 con payloads, secciones, TechnicalMetadata).
  */
 export function getMddAuditorTools(): StructuredToolInterface[] {
-  return [createValidateMddStructureTool()];
+  return [
+    createValidateMddStructureTool(),
+    createValidateSqlTool(),
+    createValidateJsonPayloadsTool(),
+  ];
 }
 
 /**
@@ -43,7 +53,11 @@ export function getMddArchitectTools(): StructuredToolInterface[] {
  * Tools for MDD Redactor: validación de estructura para saber qué corregir.
  */
 export function getMddRedactorTools(): StructuredToolInterface[] {
-  return [createValidateMddStructureTool()];
+  return [
+    createValidateMddStructureTool(),
+    createValidateSqlTool(),
+    createValidateJsonPayloadsTool(),
+  ];
 }
 
 /**
@@ -51,4 +65,11 @@ export function getMddRedactorTools(): StructuredToolInterface[] {
  */
 export function getMddDiagramTools(): StructuredToolInterface[] {
   return [createSuggestMddDiagramsTool()];
+}
+
+/**
+ * Tools para el Manager: búsqueda en grafo semántico.
+ */
+export function getManagerTools(graphMemory: GraphMemoryService): StructuredToolInterface[] {
+  return [createQueryIntentGraphTool(graphMemory)];
 }

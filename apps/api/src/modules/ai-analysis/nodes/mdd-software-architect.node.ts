@@ -10,6 +10,7 @@ import { ensureContratosSection, extractSection3Body, getMddDraftSummary, logMdd
 import { getUserBrief, getUserExplicitRequirements } from "../utils/mdd-user-brief.js";
 import { extractFirstJsonObject, extractJsonFromCodeBlock } from "../utils/parse-json.js";
 import { parseJsonOrThrow } from "../utils/parse-json.js";
+import { getInternalDirectivesContext, extractInternalDirectives } from "../utils/mdd-mesh-topology.js";
 import { z } from "zod";
 
 /** Schema estructurado que algunos LLMs devuelven en lugar de mddDraft. */
@@ -453,6 +454,7 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
         "",
         "**Borrador actual del MDD (Contexto + Modelo de datos del Experto en Datos):**",
         draftTrimmed || "(vacío)",
+        getInternalDirectivesContext(state, "software_architect"),
       ];
       if (explicitReqs.length > 0) {
         contextParts.push(
@@ -634,9 +636,14 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
           if (slice && Object.keys(slice).length > 0) {
             const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
             const structuredDraft = mddStructuredToMarkdown(merged);
+            const internalDirectives = extractInternalDirectives(text, "software_architect");
             LOG("usando slice estructurado (contratosApi/arquitecturaStack/logicaEdgeCases), mddDraftLen=%s", structuredDraft.length);
             logMddNodeOutput("SoftwareArchitect", structuredDraft);
-            return { mddStructured: merged, mddDraft: structuredDraft };
+            return {
+              mddStructured: merged,
+              mddDraft: structuredDraft,
+              ...(internalDirectives.length > 0 ? { internalDirectives } : {}),
+            };
           }
         } catch {
           // fall through to legacy mddDraft / sqlSchema / apiContracts
@@ -780,11 +787,14 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
       if (modeloDatosParsed?.sql) slice.modeloDatos = modeloDatosParsed;
       if (section4Body) slice.contratosApi = { summary: section4Body };
       if (section5Body) slice.logicaEdgeCases = section5Body;
+      const internalDirectives = extractInternalDirectives(text, "software_architect");
+      const meshUpdate = internalDirectives.length > 0 ? { internalDirectives } : {};
+
       if (Object.keys(slice).length > 0) {
         const merged = mergeMddStructured(state.mddStructured ?? undefined, slice, state.mddDraft ?? "");
-        return { mddStructured: merged, mddDraft };
+        return { mddStructured: merged, mddDraft, ...meshUpdate };
       }
-      return { mddDraft };
+      return { mddDraft, ...meshUpdate };
     } catch (err) {
       LOG("error: %s", err instanceof Error ? err.message : String(err));
       throw err;

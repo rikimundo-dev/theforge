@@ -43,6 +43,21 @@ export const MDDStateAnnotation = Annotation.Root({
   currentStepGoal: Annotation<string | undefined>(),
   architectCriticFeedback: Annotation<string | undefined>(),
   architectCriticAttempts: Annotation<number | undefined>(),
+  projectId: Annotation<string | undefined>(),
+  /** Lista de directivas internas enviadas entre agentes (Mesh Topology). */
+  internalDirectives: Annotation<
+    Array<{ from: string; to: string; message: string; timestamp?: string }> | undefined
+  >({
+    reducer: (old, newVal) => {
+      // Si se pasa un array vacío, reseteamos la lista (consumo de directivas)
+      if (newVal && Array.isArray(newVal) && newVal.length === 0) return [];
+      if (!newVal) return old;
+      return (old ?? []).concat(newVal);
+    },
+    default: () => [],
+  }),
+  impactSummary: Annotation<string | undefined>(),
+  blackboardReasoning: Annotation<string | undefined>(),
 });
 
 export type MDDStateType = typeof MDDStateAnnotation.State;

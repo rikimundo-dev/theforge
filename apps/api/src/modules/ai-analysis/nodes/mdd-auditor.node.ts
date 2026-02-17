@@ -6,6 +6,7 @@ import { AUDITOR_MDD_PROMPT } from "../prompts/load-prompts.js";
 import { auditorGapsSchema, mddAuditorDecisionSchema, type MDDStateType } from "../state/index.js";
 import { parseJsonOrThrow } from "../utils/parse-json.js";
 import { validateMddStructure } from "../utils/mdd-sanitize.js";
+import { getInternalDirectivesContext } from "../utils/mdd-mesh-topology.js";
 import { z } from "zod";
 
 /** >= 85: done (cede intervención al usuario). < 85: clarifier (Manager asigna gaps a agentes). */
@@ -40,7 +41,7 @@ const auditorOutputSchema = z.object({
 });
 
 const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:Auditor] ${msg}`, ...args);
-const MAX_TOOL_LOOPS = 2;
+const MAX_TOOL_LOOPS = 3;
 
 function buildToolsByName(tools: StructuredToolInterface[]): Record<string, StructuredToolInterface> {
   const byName: Record<string, StructuredToolInterface> = {};
@@ -63,9 +64,9 @@ export function createMddAuditorNode(
     LOG("entry mddDraftLen=%s tools=%s (allowed=%s)", (state.mddDraft ?? "").length, toolsToUse.length, allowed?.length ?? "all");
     try {
       const draft = (state.mddDraft ?? "").trim();
-      let prompt = `${AUDITOR_MDD_PROMPT}\n\n---\n**Borrador completo del MDD:**\n${draft || "(vacío)"}`;
+      let prompt = `${AUDITOR_MDD_PROMPT}\n\n---\n**Borrador completo del MDD:**\n${draft || "(vacío)"}\n\n${getInternalDirectivesContext(state, "auditor")}`;
       if (toolsToUse.length > 0) {
-        "\n\n**Opcional:** Usa la tool validate_mdd_structure con el borrador anterior para obtener section3HasPayloads, missingSections, hasTechnicalMetadata e issues. Usa ese resultado para rellenar auditorScore, auditorDecision, critical_gaps (donde cada gap es un objeto { sections: string[], issue: string, fix: string }), syntax_errors e infrastructure_ready. Responde al final solo con el JSON de salida.";
+        prompt += "\n\n**Opcional:** Usa las tools de validación (validate_mdd_structure, validate_sql_syntax, validate_json_payloads) con el borrador anterior para obtener métricas objetivas. Usa esos resultados para rellenar auditorScore, auditorDecision, critical_gaps, syntax_errors e infrastructure_ready. Responde al final solo con el JSON de salida.";
       }
       const messages = [new HumanMessage(prompt)];
 
@@ -200,10 +201,17 @@ export function createMddAuditorNode(
         }
       }
 
+      const hasConflict = Array.isArray(parsed.critical_gaps) && parsed.critical_gaps.some(g => {
+        const text = typeof g === "string" ? g : (g.issue || "");
+        return text.includes("[CONFLICTO]");
+      });
+
       const decision =
-        score >= AUDIT_PASS_THRESHOLD && validation.missingSections.length === 0
-          ? "done" as const
-          : (parsed.auditorDecision === "clarifier" ? "clarifier" : "clarifier");
+        hasConflict
+          ? "blackboard" as const
+          : score >= AUDIT_PASS_THRESHOLD && validation.missingSections.length === 0
+            ? "done" as const
+            : (parsed.auditorDecision === "clarifier" ? "clarifier" as const : "clarifier" as const);
       const iteration = (state.mddIteration ?? 0) + (decision === "clarifier" ? 1 : 0);
       const finalFeedback =
         feedback ||
