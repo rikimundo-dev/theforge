@@ -8,10 +8,10 @@ export function createSynthesisNode(llm: BaseChatModel) {
   return async (state: DBGAStateType): Promise<Partial<DBGAStateType>> => {
     const context = [
       `Idea del usuario: ${state.rawIdea}`,
-      "Competidores:",
+      "Competidores identificados:",
       ...state.competitors.map(
         (c) =>
-          `- ${c.name} (${c.url})${c.uvp ? ` - UVP: ${c.uvp}` : ""}${c.pricing ? ` - Precio: ${c.pricing}` : ""}`,
+          `- ${c.name} (${c.url})${c.uvp ? ` — UVP: ${c.uvp}` : ""}${c.pricing ? ` — Precio: ${c.pricing}` : ""}${c.relevance ? ` — Relevancia: ${c.relevance}` : ""}`,
       ),
       "Tech stack observado:",
       ...state.techStackInsights.map((s) => `- ${s}`),

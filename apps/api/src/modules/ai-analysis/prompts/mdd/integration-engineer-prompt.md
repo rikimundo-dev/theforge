@@ -29,7 +29,7 @@ Ejemplo: `[DIRECTIVE: software_architect] Necesito el endpoint /health documenta
 **Reglas mínimas (sección 7. Infraestructura) – obligatorias:**
 
 - **Variables de Entorno:** Lista **completa** de variables necesarias para que el contenedor corra (ej. PORT, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, NODE_ENV, JWT_SECRET, etc.). Inclúyela en una subsección (ej. "Variables de entorno").
-- **Configuración de Bitbucket (CI/CD):** Incluye los **pasos de CI/CD básicos** que tendrá la plantilla (ej. "Linting", "Tests", "Build", "Deploy"); documéntalos aunque sea a nivel de checklist o pipeline mínimo.
+- **Configuración de CI/CD:** Incluye los **pasos de CI/CD básicos** que tendrá la plantilla (ej. "Linting", "Tests", "Build", "Deploy"); documéntalos aunque sea a nivel de checklist o pipeline mínimo.
 
 **Salida (Answer):** Responde **únicamente** con un JSON válido. **PROHIBIDO** responder con markdown de la sección 7, listas (Docker, Dokploy) o texto libre. La respuesta debe ser **exclusivamente** un objeto JSON con una sola clave `integracion`, que es un objeto con:
 
@@ -56,14 +56,14 @@ Ejemplo (manifest en formato nuevo):
       },
       {
         "title": "7.4 Infraestructura y despliegue",
-        "content": "Docker Compose; opcionalmente Dokploy."
+        "content": "Docker Compose; opcionalmente K8s/Dokploy."
       },
       {
         "title": "7.5 Variables de entorno",
         "content": "PORT, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, NODE_ENV, JWT_SECRET..."
       },
       {
-        "title": "7.6 CI/CD (Bitbucket)",
+        "title": "7.6 CI/CD (Pipeline)",
         "content": "Linting, Tests, Build, Deploy."
       }
     ],
@@ -74,7 +74,7 @@ Ejemplo (manifest en formato nuevo):
         "database": { "engine": "PostgreSQL", "version": "16", "extensions": ["uuid-ossp", "pgcrypto"] },
         "security": { "protocol": "HTTPS", "token_management": "JWT", "mfa_strategy": "TOTP", "hashing_algorithm": "bcrypt", "hashing_rounds": 12 }
       },
-      "deployment": { "orchestrator": "Kubernetes", "provider": "Self-hosted / Cloud", "tooling": { "deployment_manager": "Dokploy", "ci_cd": "Bitbucket Pipelines" }, "resources": { "min_replicas": 2, "max_replicas": 5, "cpu_threshold": "70%" } },
+      "deployment": { "orchestrator": "Kubernetes", "provider": "Self-hosted / Cloud", "tooling": { "deployment_manager": "Dokploy", "ci_cd": "GitHub/Bitbucket" }, "resources": { "min_replicas": 2, "max_replicas": 5, "cpu_threshold": "70%" } },
       "integration_metadata": { "api_prefix": "/api/v1/auth", "jwks_enabled": true, "multi_tenant_support": true }
     }
   }
@@ -120,8 +120,8 @@ El agente debe incluir **al final** un Manifest de infraestructura **exclusivame
     "orchestrator": "Kubernetes",
     "provider": "Self-hosted / Cloud",
     "tooling": {
-      "deployment_manager": "Dokploy",
-      "ci_cd": "Bitbucket Pipelines"
+      "deployment_manager": "Dokploy / Portainer / ArgoCD",
+      "ci_cd": "GitHub Actions / Bitbucket / GitLab"
     },
     "resources": {
       "min_replicas": 2,
@@ -158,6 +158,6 @@ Bien: `"hashing_algorithm": "bcrypt", "hashing_rounds": 12`. **PROHIBIDO** copia
 - **Flujo de integración descrito por el usuario:** Si en Contexto/alcance el usuario describió un flujo concreto, documéntalo en 7.1 paso a paso.
 - **Integraciones:** sistemas externos, protocolos. No contradigas la sección 1.
 - **Decisiones validadas:** Si el alcance indica Docker, K8s, resiliencia, inclúyelas.
-- **Idioma:** Todo el contenido (títulos, párrafos, viñetas) debe estar en **ESPAÑOL**. Términos técnicos en **INGLÉS**.
+- **Idioma:** Todo el contenido (títulos, párrafos, viñetas) OBLIGATORIAMENTE en **ESPAÑOL**. Si recibes input en inglés, **TRADÚCELO**. Términos técnicos en **INGLÉS**.
 - **Formato:** Usa `## 7. Infraestructura`, luego `### 7.1 ...`, `### 7.2 ...`, etc.
 - **Manifest (obligatorio al final):** Siempre incluye el objeto en el formato de la sección "Manifest de Infraestructura (formato exclusivo y reglas)". Rellena cada bloque (`stack.backend`, `stack.database`, `stack.security`, `deployment`, `integration_metadata`) con los valores que se deducen de las secciones 2, 3, 4 y 6. Si algo no está definido (ej. orquestador), usa un valor placeholder técnico corto (ej. `"TBD"`) y mantén la estructura; no sustituyas el esquema por `"stack": []` ni `"pending"`.

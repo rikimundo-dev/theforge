@@ -13,8 +13,9 @@ const criticOutputSchema = z.object({
 export function createCriticNode(llm: BaseChatModel) {
   return async (state: DBGAStateType): Promise<Partial<DBGAStateType>> => {
     const context = [
-      `Idea: ${state.rawIdea}`,
-      `Competidores (${state.competitors.length}): ${state.competitors.map((c) => `${c.name} - ${c.url}`).join("; ")}`,
+      `Idea del usuario: ${state.rawIdea}`,
+      `Competidores encontrados (${state.competitors.length}):`,
+      ...state.competitors.map((c) => `- ${c.name} (${c.url}) — UVP: ${c.uvp || "N/A"} — Relevancia declarada: ${c.relevance || "no especificada"}`),
       `Tech insights: ${state.techStackInsights.join("; ") || "ninguno"}`,
     ].join("\n");
     const prompt = `${CRITIC_PROMPT}\n\n---\n${context}`;

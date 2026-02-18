@@ -64,4 +64,4 @@ Sin texto antes ni después del JSON.
 - **Sustento Estructural:** Si el texto menciona "encriptación", "hashing" o "hashes", el **Modelo de datos** (sección 3) debe mostrar campos tipo BYTEA o VARCHAR para hashes; documéntalo y verifica coherencia.
 - **Gestión de Identidad:** Define cómo se maneja el **primer "Super Admin"** o la **creación del primer usuario** (bootstrap, seed, script, etc.).
 - **Logs de Auditoría:** Incluye **obligatoriamente** al menos una tabla de `security_events` (o similar) para eventos de seguridad; documéntala en tu sección y asegura que el modelo de datos la contemple.
-- **Idioma:** Todo el contenido (títulos y viñetas) debe estar en **ESPAÑOL**. Términos técnicos en **INGLÉS**.
+- **Idioma:** Todo el contenido (títulos y viñetas) OBLIGATORIAMENTE en **ESPAÑOL**. Si recibes input en inglés, **TRADÚCELO**. Términos técnicos en **INGLÉS**.

@@ -22,7 +22,7 @@ Ejemplo: `[DIRECTIVE: security] El modelo incluye pagos sensibles; por favor def
 **Salida:** Responde **únicamente** con el documento MDD completo en Markdown (desde # Master Design Document), **con las modificaciones ya aplicadas** en §2–§5. No devuelvas el borrador anterior sin cambiar: si hay ACCIÓN REQUERIDA o requisitos del usuario, el documento que devuelvas debe **reflejar esos cambios** (nuevas tablas, endpoints, frontend, roles por aplicación, etc.). **PROHIBIDO** incluir en la respuesta los bloques "ACCIÓN REQUERIDA", "Prioridad (léelo primero)" o "Requisitos del usuario (conversación reciente)"; son solo instrucciones para aplicar, no contenido del MDD.
 
 **IDIOMA OBLIGATORIO: ESPAÑOL.**
-- **Narrativa (Prosa):** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints, lógica de negocio) debe estar en **ESPAÑOL**.
+- **Narrativa (Prosa):** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints, lógica de negocio) debe estar en **ESPAÑOL**. Si el borrador que recibes tiene secciones en inglés (ej. "The Oracle MCP server will implement..."), **TRADÚCELAS** al español al generar tu respuesta. NO conserves bloques de texto en inglés. reescríbelos.
 - **Contenido Técnico:** Código SQL, nombres de variables, rutas de endpoints, esquemas JSON y diagrama ER deben mantenerse en **INGLÉS** o estándar técnico.
 - **Ejemplo Correcto:** "El endpoint `POST /users` crea un nuevo usuario." (Prosa en español, código en inglés).
 - **Ejemplo Incorrecto:** "The endpoint `POST /users` creates a new user." (Prosa en inglés).
@@ -62,21 +62,20 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
 
 **Regla Anti-Alucinación:** Si el usuario no especificó un campo pero es un estándar de industria (ej. `email` en `users`), AGRÉGALO. Si es un campo exótico sin definición, NO lo inventes; marca como pendiente de clarificación en una nota.
 
-4. **Redactar ## 3. Modelo de Datos**: **OBLIGATORIO - ARQUITECTURA HÍBRIDA.**
-    *   **PostgreSQL (SQL):** Solo para entidades administrativas: `users`, `sessions`, `roles`, `permissions`, `subscriptions`. Genera el bloque SQL `CREATE TABLE`.
-    *   **FalkorDB (Graph):** Para el modelado del código fuente (AST). NO generes tablas SQL para esto. Genera un bloque `cypher` o una descripción de **Nodos** (`Component`, `Function`, `Hook`, `File`) y **Aristas** (`IMPORTS`, `RENDERS`, `CALLS`, `USES_HOOK`).
-        *   Ejemplo Cypher: `(:Component)-[:RENDERS]->(:Component)`, `(:File)-[:DEFINES]->(:Function)`.
-    *   **Diagrama ER:** Específico para las tablas de PostgreSQL.
-    *   **Diagrama del Grafo:** Usa Mermaid `graph TD` para visualizar la ontología de código en FalkorDB.
+4. **Redactar ## 3. Modelo de Datos**: **Adapta el modelo al Stack y Dominio definidos.**
+    *   **SQL (PostgreSQL, MySQL, SQLite):** Para datos relacionales y estructurados (identidad, facturación, recursos). Genera bloque `sql` (CREATE TABLE).
+    *   **Graph (FalkorDB, Neo4j, etc.):** SI (y solo si) el stack o el problema lo requiere (ej. redes sociales, análisis de dependencias, grafos de conocimiento). Genera un bloque `cypher` describiendo Nodos y Relaciones.
+    *   **Document (MongoDB, DynamoDB):** SI (y solo si) el stack lo requiere. Genera esquemas JSON/BSON.
+    *   **Diagramas (Obligatorio mostrar estructura):**
+        *   **Relacional:** Bloque `mermaid` tipo `erDiagram` para las tablas.
+        *   **NoSQL/Graph:** Bloque `mermaid` tipo `graph TD` visualizando la ontología o relaciones.
 
-50: 
-51: 3. **Redactar ## 2. Arquitectura y Stack**:
-    *   **Ingestión:** Debe incluir **Bitbucket** como fuente. Detallar el flujo: "Escaneo inicial vía API" + "Actualizaciones incrementales vía Webhooks".
-    *   **Base de Datos:** Explicar claramente la separación PostgreSQL (Auth/Admin) vs FalkorDB (Knowledge Graph).
-    *   **Interface:** Oracle MCP server para consultas de agentes.
-    *   **Frontend y Backend:** Definir stack estándar (Node/NestJS, React/Vite).
-5. **Redactar ## 4. Contratos de API**: tabla resumen + endpoints con request/response en bloques de código etiquetados «json». **Nunca** dejar "(Pendiente)" en §4 cuando el alcance lo permita: genera al menos un resumen y endpoints básicos (ej. `/health`, login/auth) derivados del modelo de datos.
-6. **Redactar ## 5. Lógica y Edge Cases**: reglas de negocio, validaciones, casos borde, flujos de estado. **Nunca** dejar "(Pendiente)" en §5 cuando el alcance lo permita: genera al menos flujos maestros y excepciones (timeout, reintentos).
+5. **Redactar ## 2. Arquitectura y Stack**:
+    *   **Definición de Stack:** Backend, Frontend, Base de Datos, Colas, Infra según lo requiera el contexto.
+    *   **Justificación:** Explica por qué se elige cada tecnología para este dominio específico.
+    *   **Componentes:** Opcional diagrama de componentes si ayuda a entender la arquitectura.
+6. **Redactar ## 4. Contratos de API**: tabla resumen + endpoints con request/response en bloques de código etiquetados «json». **Nunca** dejar "(Pendiente)" en §4 cuando el alcance lo permita: genera al menos un resumen y endpoints básicos (ej. `/health`, login/auth) derivados del modelo de datos.
+7. **Redactar ## 5. Lógica y Edge Cases**: reglas de negocio, validaciones, casos borde, flujos de estado. **Nunca** dejar "(Pendiente)", "TBD" ni "[Placeholder for Logic and Edge Cases]" en §5 cuando el alcance lo permita: genera al menos flujos maestros y excepciones (timeout, reintentos). PROHIBIDO MENSAJES EN INGLÉS COMO "Placeholder for Logic and Edge Cases".
 7. **Conservar el resto**: copiar **## 1. Contexto** exactamente del borrador de entrada; dejar placeholders para ## 6. Seguridad y ## 7. Infraestructura.
 
 **Protocolo de razonamiento (antes de redactar):** Antes de escribir las secciones 2–5, determina de forma explícita: (a) qué entidades y capacidades deduces de la sección 1 y de los requisitos explícitos del usuario; (b) qué mandatos del Scope obligan a **cambiar** algo del borrador (reescribir); (c) qué partes del borrador **preservar** porque el Scope no las contradice. Así reduces incoherencias y omisión de requisitos explícitos.

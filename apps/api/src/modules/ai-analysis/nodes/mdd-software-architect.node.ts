@@ -17,6 +17,7 @@ import { z } from "zod";
 const structuredSchema = z.object({
   sqlSchema: z.object({ tables: z.record(z.unknown()) }).optional(),
   apiContracts: z.object({ endpoints: z.record(z.unknown()) }).optional(),
+  logicaEdgeCases: z.string().optional(),
 }).passthrough();
 
 /**
@@ -128,7 +129,13 @@ function structuredToMarkdown(parsed: z.infer<typeof structuredSchema>, contextI
     }
   }
 
-  sections.push("## 5. Lógica y Edge Cases", "", "(Pendiente: Arquitecto de Software)", "", "## 6. Seguridad", "", "(Pendiente)", "", "## 7. Infraestructura", "", "(Pendiente)");
+  sections.push("## 5. Lógica y Edge Cases", "");
+  if (parsed.logicaEdgeCases && parsed.logicaEdgeCases.trim()) {
+    sections.push(parsed.logicaEdgeCases.trim());
+  } else {
+    sections.push("(Pendiente: Arquitecto de Software)");
+  }
+  sections.push("", "## 6. Seguridad", "", "(Pendiente)", "", "## 7. Infraestructura", "", "(Pendiente)");
   return sections.join("\n");
 }
 
@@ -235,6 +242,7 @@ function objectSectionToMarkdown(inner: Record<string, unknown>): string {
     "3. Modelo de Datos",
     "4. Contratos de API",
     "5. Lógica y Edge Cases",
+    "logicaEdgeCases",
     "6. Seguridad",
     "7. Infraestructura",
   ];
@@ -242,7 +250,8 @@ function objectSectionToMarkdown(inner: Record<string, unknown>): string {
   for (const sectionTitle of sectionOrder) {
     const val = inner[sectionTitle];
     if (val === undefined) continue;
-    const heading = sectionTitle.startsWith("##") ? sectionTitle : `## ${sectionTitle}`;
+    const headingCandidate = sectionTitle === "logicaEdgeCases" ? "5. Lógica y Edge Cases" : sectionTitle;
+    const heading = headingCandidate.startsWith("##") ? headingCandidate : `## ${headingCandidate}`;
     out.push(heading, "");
     seen.add(sectionTitle);
     if (typeof val === "string") {

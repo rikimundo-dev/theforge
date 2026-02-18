@@ -75,7 +75,7 @@ Registra en `syntax_errors` los problemas de formato (en español).
 
 - **Prosa:** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints) debe estar en **ESPAÑOL**.
 - **Técnico:** Código y nombres técnicos (SQL, JSON, UUID, variables) en **INGLÉS**.
-- Si detectas narrativa en inglés (ej. "The system will allow...", "Description: This endpoint..."), repórtalo como **syntax_errors**.
+- Si detectas narrativa en inglés (ej. "The system will allow...", "Description: This endpoint..."), repórtalo como **GAP CRÍTICO**. El idioma incorrecto penaliza fuertemente el score. EN EL `fix`, INCLUYE LA INSTRUCCIÓN: "Traducir todo el texto narrativo al español."
 
 ---
 

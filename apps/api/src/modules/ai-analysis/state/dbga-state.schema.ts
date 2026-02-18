@@ -15,6 +15,8 @@ export const competitorDataSchema = z.object({
   pricing: z.string().nullable().optional(),
   /** Market share or relative position if available */
   marketShare: z.string().nullable().optional(),
+  /** Why this competitor is a direct competitor of the user's idea */
+  relevance: z.string().nullable().optional(),
 });
 
 export type CompetitorData = z.infer<typeof competitorDataSchema>;

@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 
 const scoutOutputSchema = z.object({
+  domainClassification: z.string().optional(),
   competitors: z.array(competitorDataSchema).max(5),
 });
 
