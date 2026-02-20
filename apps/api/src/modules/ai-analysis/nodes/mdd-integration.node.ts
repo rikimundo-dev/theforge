@@ -186,6 +186,12 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
           state.auditorFeedback.trim(),
         );
       }
+
+      contextParts.push(
+        "",
+        "**🚨 RECORDATORIO INVIOLABLE (IDIOMA):** TODA LA NARRATIVA Y EXPLICACIONES QUE REDACTES **DEBEN ESTAR EN ESPAÑOL**. SI EL BORRADOR O EL CONTEXTO ESTÁN EN INGLÉS, TU DEBER ES **TRADUCIRLO AL ESPAÑOL** AL GENERAR TU RESPUESTA.",
+      );
+
       const context = contextParts.join("\n");
       const prompt = `${INTEGRATION_ENGINEER_MDD_PROMPT}\n\n---\n${context}`;
       const response = await llm.invoke([new HumanMessage(prompt)]);

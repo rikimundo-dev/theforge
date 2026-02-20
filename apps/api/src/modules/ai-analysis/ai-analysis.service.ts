@@ -32,7 +32,7 @@ import { createDbgaLLM } from "./llm/create-dbga-llm.js";
 import { CONTEXT_SYNTHESIZER_PROMPT } from "./prompts/load-prompts.js";
 import { createMddIntegrationNode } from "./nodes/mdd-integration.node.js";
 import { createMddSecurityNode } from "./nodes/mdd-security.node.js";
-import { createMddSoftwareArchitectNode } from "./nodes/mdd-software-architect.node.js";
+import { createMddSoftwareArchitectNode, replaceContratosInDraft } from "./nodes/mdd-software-architect.node.js";
 import { getMddArchitectTools } from "./tools/tool-registry.js";
 
 import type { PrecisionBreakdown } from "./estimation/estimation.types.js";
@@ -932,7 +932,7 @@ export class AiAnalysisService {
 
     try {
       if (section === 1) {
-        const prompt = `${CONTEXT_SYNTHESIZER_PROMPT}\n\n---\n\n**Documento MDD (usa las secciones 2–7 para sintetizar la sección 1):**\n\n${mddContent}`;
+        const prompt = `${CONTEXT_SYNTHESIZER_PROMPT}\n\n---\n\n**Documento MDD (usa las secciones 2–7 para sintetizar la sección 1):**\n\n${mddContent}\n\n**🚨 RECORDATORIO INVIOLABLE (IDIOMA):** TODA LA NARRATIVA Y EXPLICACIONES QUE REDACTES **DEBEN ESTAR EN ESPAÑOL**. SI EL BORRADOR O EL CONTEXTO ESTÁN EN INGLÉS, TU DEBER ES **TRADUCIRLO AL ESPAÑOL** AL GENERAR TU RESPUESTA.`;
         const response = await llm.invoke([new HumanMessage(prompt)]);
         const text = (typeof response.content === "string" ? response.content : "").trim();
         let newBody = (text && extractContextSectionBody(text)) || text || "(Contexto sintetizado desde el documento.)";
@@ -1006,10 +1006,19 @@ export class AiAnalysisService {
         const result = await softwareArchitectNode(state as MDDStateType);
         const architectDraft = (result.mddDraft ?? "").trim();
         const content25 = extractSections2To5Content(architectDraft);
-        const finalDraft =
-          content25 != null
-            ? replaceSections2To5InDraft(mddContent, content25)
-            : architectDraft || mddContent;
+        let finalDraft = mddContent;
+        if (content25 != null) {
+          finalDraft = replaceSections2To5InDraft(mddContent, content25);
+        } else if (architectDraft.length > 500 && /##\s*1\.\s*Contexto/i.test(architectDraft) && /##\s*7\.\s*Infraestructura/i.test(architectDraft)) {
+          finalDraft = architectDraft; // Es un documento completo, lo usamos todo
+        } else if (/##\s*(?:4\.\s*)?Contratos\b/i.test(architectDraft) || /^\s*(#+\s+)?(?:GET|POST|PUT|DELETE|PATCH)\s+\//i.test(architectDraft)) {
+          // Si parece que generó puramente la sección 4 de APIs, inyectémosla sin borrar el resto del doc
+          finalDraft = replaceContratosInDraft(mddContent, architectDraft);
+        } else if (architectDraft.length > mddContent.length / 2) {
+          finalDraft = architectDraft; // Fallback, pero al menos no si es un documento de una sola frase o de 10 endpoints
+        } else {
+          finalDraft = mddContent; // Mejor conservar el original que borrar todo si el merge falló estrepitosamente
+        }
         const markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: finalDraft });
         const metrics = this.estimationService.calculateLiveMetrics(markdown);
         yield {

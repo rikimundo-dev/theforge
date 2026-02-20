@@ -176,6 +176,12 @@ export function createMddSecurityNode(llm: BaseChatModel) {
           "Aplica las correcciones que afecten a Seguridad: decisiones respaldadas por el modelo de datos, campos de auditoría, almacén de credenciales, etc.",
         );
       }
+
+      contextParts.push(
+        "",
+        "**🚨 RECORDATORIO INVIOLABLE (IDIOMA):** TODA LA NARRATIVA Y EXPLICACIONES QUE REDACTES **DEBEN ESTAR EN ESPAÑOL**. SI EL BORRADOR O EL CONTEXTO ESTÁN EN INGLÉS, TU DEBER ES **TRADUCIRLO AL ESPAÑOL** AL GENERAR TU RESPUESTA.",
+      );
+
       const context = contextParts.filter(Boolean).join("\n");
       const prompt = `${SECURITY_ARCHITECT_MDD_PROMPT}\n\n---\n${context}`;
       const response = await llm.invoke([new HumanMessage(prompt)]);

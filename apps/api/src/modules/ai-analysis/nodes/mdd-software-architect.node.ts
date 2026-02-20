@@ -6,7 +6,7 @@ import type { MDDStateType } from "../state/index.js";
 import { mddContratosApiSchema } from "../state/mdd-structured.schema.js";
 import { mddStructuredToMarkdown } from "../render/mdd-structured-to-markdown.js";
 import { mergeMddStructured } from "../utils/mdd-merge-structured.js";
-import { ensureContratosSection, extractSection3Body, getMddDraftSummary, logMddNodeOutput, logSection3Debug, normalizeMddFormat, parseModeloDatosFromSection3Markdown, preserveContextSectionIfSubstantial, replaceContextWhenOnlyMetadata, sanitizeContextSection } from "../utils/mdd-sanitize.js";
+import { ensureContratosSection, extractArquitecturaSectionBody, extractSection3Body, getMddDraftSummary, logMddNodeOutput, logSection3Debug, normalizeMddFormat, parseModeloDatosFromSection3Markdown, preserveContextSectionIfSubstantial, replaceContextWhenOnlyMetadata, sanitizeContextSection } from "../utils/mdd-sanitize.js";
 import { getUserBrief, getUserExplicitRequirements } from "../utils/mdd-user-brief.js";
 import { extractFirstJsonObject, extractJsonFromCodeBlock } from "../utils/parse-json.js";
 import { parseJsonOrThrow } from "../utils/parse-json.js";
@@ -211,7 +211,7 @@ function extractContratosFromArchitectResponse(text: string): string | null {
 }
 
 /** Reemplaza el cuerpo de la sección 4 (Contratos de API) en draft. */
-function replaceContratosInDraft(draft: string, newContratosBody: string): string {
+export function replaceContratosInDraft(draft: string, newContratosBody: string): string {
   const match = draft.match(SECTION4_CONTRATOS_HEADING_REGEX);
   if (!match) return draft;
   const headingStart = draft.indexOf(match[0]);
@@ -236,24 +236,28 @@ function replaceContratosInDraft(draft: string, newContratosBody: string): strin
  */
 function objectSectionToMarkdown(inner: Record<string, unknown>): string {
   const out: string[] = ["# Master Design Document", ""];
-  const sectionOrder = [
-    "1. Contexto",
-    "2. Arquitectura y Stack",
-    "3. Modelo de Datos",
-    "4. Contratos de API",
-    "5. Lógica y Edge Cases",
-    "logicaEdgeCases",
-    "6. Seguridad",
-    "7. Infraestructura",
+  const keyMap: Array<{ pattern: RegExp; canonical: string }> = [
+    { pattern: /(?:1\.\s*)?Context(?:o)?/i, canonical: "1. Contexto" },
+    { pattern: /(?:2\.\s*)?(?:System\s+)?Architecture/i, canonical: "2. Arquitectura y Stack" },
+    { pattern: /(?:3\.\s*)?(?:Data\s+)?Model|schemaSQL|sqlSchema/i, canonical: "3. Modelo de Datos" },
+    { pattern: /(?:4\.\s*)?(?:API\s+)?(?:Contracts|Design)/i, canonical: "4. Contratos de API" },
+    { pattern: /(?:5\.\s*)?Log(?:ic|ica)(?:\s+and\s+Edge\s+Cases)?|logicaEdgeCases/i, canonical: "5. Lógica y Edge Cases" },
+    { pattern: /(?:6\.\s*)?Securit(?:y|ad)/i, canonical: "6. Seguridad" },
+    { pattern: /(?:7\.\s*)?(?:Deployment|Infrastructure|Integraci[oó]n)/i, canonical: "7. Infraestructura" },
   ];
+
   const seen = new Set<string>();
-  for (const sectionTitle of sectionOrder) {
-    const val = inner[sectionTitle];
+  const innerKeys = Object.keys(inner);
+
+  for (const mapping of keyMap) {
+    const key = innerKeys.find((k) => mapping.pattern.test(k));
+    if (!key) continue;
+    const val = inner[key];
     if (val === undefined) continue;
-    const headingCandidate = sectionTitle === "logicaEdgeCases" ? "5. Lógica y Edge Cases" : sectionTitle;
-    const heading = headingCandidate.startsWith("##") ? headingCandidate : `## ${headingCandidate}`;
+    const sectionTitle = mapping.canonical;
+    const heading = `## ${sectionTitle}`;
     out.push(heading, "");
-    seen.add(sectionTitle);
+    seen.add(key);
     if (typeof val === "string") {
       out.push(val.trim(), "");
       continue;
@@ -577,6 +581,12 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
           "",
         );
       }
+
+      contextParts.push(
+        "",
+        "**🚨 RECORDATORIO INVIOLABLE (IDIOMA):** TODA LA NARRATIVA Y EXPLICACIONES QUE REDACTES **DEBEN ESTAR EN ESPAÑOL**. SI EL BORRADOR O EL CONTEXTO ESTÁN EN INGLÉS, TU DEBER ES **TRADUCIRLO AL ESPAÑOL** AL GENERAR TU RESPUESTA. ESTÁ ESTRICTAMENTE PROHIBIDO RESPONDER O PRESERVAR TEXTO EN INGLÉS.",
+      );
+
       const context = contextParts.join("\n");
       const prompt = `${SOFTWARE_ARCHITECT_MDD_PROMPT}\n\n---\n${context}`;
       const messages = [new HumanMessage(prompt)];
@@ -728,7 +738,24 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
           // Si hay texto introductorio antes del primer #, recortar
           const firstHeading = rawStripped.search(/\n?#\s+/);
           const toUse = firstHeading > 0 ? rawStripped.slice(firstHeading).trim() : rawStripped;
-          mddDraft = toUse.length > 100 ? toUse : rawStripped;
+          let candidateDraft = toUse.length > 100 ? toUse : rawStripped;
+
+          // PROTECCIÓN CONTRA FRAGMENTOS: Si el LLM omitió la sección 2, y el borrador viejo la tiene
+          const hasSec2 = /##\s*2\.\s*Arquitectura/i.test(candidateDraft);
+          const oldHasSec2 = /##\s*2\.\s*Arquitectura/i.test(draftTrimmed);
+
+          if (!hasSec2 && oldHasSec2 && draftTrimmed.length > 2000) {
+            LOG("detectado fragmento sin Sección 2. Evaluando inyección en el borrador previo...");
+            if (/##\s*(?:4\.\s*)?Contratos/i.test(candidateDraft) || /^\s*(#+\s+)?(?:4\.\d+|GET|POST|PUT|DELETE|PATCH)\b/i.test(candidateDraft)) {
+              candidateDraft = replaceContratosInDraft(draftTrimmed, candidateDraft);
+              LOG("fragmento evaluado como Contratos de API, inyectado con éxito.");
+            } else {
+              LOG("fragmento no reconciliable, conservando borrador entero precio de len=%s", draftTrimmed.length);
+              candidateDraft = draftTrimmed;
+            }
+          }
+
+          mddDraft = candidateDraft;
           LOG("usando respuesta como markdown (len=%s)", mddDraft.length);
           // Normalizar de inmediato para no propagar JSON en Contexto ni tablas rotas
           mddDraft = sanitizeContextSection(mddDraft);
@@ -788,11 +815,14 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
       logSection3Debug("post-SoftwareArchitect", mddDraft);
       // Cuando el SA devolvió markdown (no JSON estructurado), §3, §4 y §5 están en mddDraft.
       // Siempre extraer y fusionar en mddStructured para que Security/Integration no reconstruyan §3 desde structured viejo.
+      const section2Body = extractArquitecturaSectionBody(mddDraft);
       const section3Body = extractSection3Body(mddDraft);
       const modeloDatosParsed = section3Body ? parseModeloDatosFromSection3Markdown(section3Body) : null;
       const section4Body = extractContratosBody(mddDraft);
       const section5Body = extractLogicaEdgeCasesBody(mddDraft);
       const slice: Partial<MDDStateType["mddStructured"]> = {};
+
+      if (section2Body) slice.arquitecturaStack = section2Body;
       if (modeloDatosParsed?.sql) slice.modeloDatos = modeloDatosParsed;
       if (section4Body) slice.contratosApi = { summary: section4Body };
       if (section5Body) slice.logicaEdgeCases = section5Body;
@@ -800,7 +830,8 @@ export function createMddSoftwareArchitectNode(llm: BaseChatModel, tools: Struct
       const meshUpdate = internalDirectives.length > 0 ? { internalDirectives } : {};
 
       if (Object.keys(slice).length > 0) {
-        const merged = mergeMddStructured(state.mddStructured ?? undefined, slice, state.mddDraft ?? "");
+        // MUST pass the new 'mddDraft' (local variable), not the old 'state.mddDraft'
+        const merged = mergeMddStructured(state.mddStructured ?? undefined, slice, mddDraft);
         return { mddStructured: merged, mddDraft, ...meshUpdate };
       }
       return { mddDraft, ...meshUpdate };

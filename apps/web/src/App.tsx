@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ChevronRight,
   Flame,
   FolderGit2,
-  FolderOpen,
-  FolderPlus,
   Loader2,
   Plus,
   RefreshCw,
@@ -84,11 +81,7 @@ export default function App() {
     if (!workshopProject) loadProjects();
   }, [workshopProject]);
 
-  const statusColor: Record<Status, string> = {
-    ROJO: "bg-red-500",
-    AMARILLO: "bg-amber-500",
-    VERDE: "bg-green-500",
-  };
+
 
   if (workshopProject) {
     return (
@@ -101,31 +94,32 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100 p-8">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-brand-500/30 selection:text-brand-200">
       {projectToDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="delete-dialog-title"
           onClick={() => setProjectToDelete(null)}
         >
           <div
-            className="bg-zinc-800 border border-zinc-600 rounded-xl p-6 shadow-xl max-w-md w-full"
+            className="glass-card bg-zinc-900/90 rounded-3xl p-8 shadow-2xl max-w-md w-full border-white/5 animate-slide-up"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="delete-dialog-title" className="text-lg font-semibold text-zinc-200 mb-2">
-              Borrar proyecto
-            </h2>
-            <p className="text-zinc-400 text-sm mb-6">
-              ¿Borrar &quot;{projectToDelete.name}&quot;? Se eliminarán sesiones y
-              estimaciones. Esta acción no se puede deshacer.
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-red-500/10 rounded-xl">
+                <Trash2 className="w-6 h-6 text-red-500" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Borrar Proyecto</h2>
+            </div>
+            <p className="text-zinc-400 text-sm leading-relaxed mb-8">
+              ¿Estás seguro de que deseas eliminar <span className="text-white font-bold">&quot;{projectToDelete.name}&quot;</span>? Esta acción es irreversible y se perderán todos los documentos generados.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
                 onClick={() => setProjectToDelete(null)}
-                className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
+                className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-300 font-bold transition-all border border-white/5"
               >
                 Cancelar
               </button>
@@ -133,129 +127,146 @@ export default function App() {
                 type="button"
                 onClick={confirmDelete}
                 disabled={loading}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white disabled:opacity-50"
+                className="px-6 py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-bold shadow-lg shadow-red-500/20 transition-all active:scale-[0.98] disabled:opacity-50"
               >
-                {loading ? "Borrando…" : "Borrar"}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Confirmar"}
               </button>
             </div>
           </div>
         </div>
       )}
-      <div className="max-w-4xl mx-auto space-y-6">
-        <header className="border-b border-zinc-700/80 pb-6">
-          <h1 className="text-3xl font-bold text-amber-400 flex items-center gap-2">
-            <Flame className="w-8 h-8" />
-            The Forge
-          </h1>
-          <p className="text-zinc-400 mt-1">
-            Software Factory — Entrevista proactiva → MDD → Semáforo →
-            Estimación
+      <div className="max-w-5xl mx-auto space-y-12 py-16 px-6">
+        <header className="space-y-4 animate-fade-in relative">
+          <div className="absolute -top-10 -left-10 w-40 h-40 bg-brand-500/10 blur-[100px] rounded-full" />
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-brand-500/10 rounded-2xl shadow-[0_0_20px_rgba(17,141,230,0.1)]">
+              <Flame className="w-10 h-10 text-brand-400 animate-pulse-subtle" />
+            </div>
+            <div>
+              <h1 className="text-4xl font-black tracking-tight text-white flex items-center gap-2">
+                The Forge
+              </h1>
+              <p className="text-sm font-bold text-zinc-500 uppercase tracking-[0.2em] mt-1">
+                Software Engineering Factory Pro
+              </p>
+            </div>
+          </div>
+          <p className="text-zinc-400 max-w-2xl text-lg leading-relaxed border-l-2 border-brand-500/30 pl-6 py-2">
+            Entrevista proactiva impulsada por IA, generación de <span className="text-brand-400 font-bold">MDD</span>, validación por semáforo de precisión y motores de estimación económica en tiempo real.
           </p>
         </header>
 
-        <section className="bg-zinc-800/80 border border-zinc-700 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-zinc-200 flex items-center gap-2 mb-4">
-            <FolderPlus className="w-5 h-5 text-amber-400/80" />
-            Nuevo proyecto
-          </h2>
-          <div className="flex gap-4 items-end flex-wrap">
-            <div>
-              <label className="block text-sm text-zinc-400 mb-1 sr-only">
-                Nombre del proyecto
-              </label>
-              <input
-                ref={newProjectInputRef}
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && createProject()}
-                placeholder="Nombre del proyecto"
-                className="bg-zinc-800 border border-zinc-600 rounded px-3 py-2 w-64 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none"
-              />
-            </div>
-            <button
-              onClick={createProject}
-              disabled={loading || !newName.trim()}
-              className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-zinc-900 font-medium px-4 py-2 rounded inline-flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-              Crear
-            </button>
-            <button
-              onClick={loadProjects}
-              disabled={loading}
-              className="bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 px-4 py-2 rounded inline-flex items-center gap-2"
-            >
-              {loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              Refrescar
-            </button>
-          </div>
-        </section>
-
-        <section className="bg-zinc-800/80 border border-zinc-700 rounded-xl p-5">
-          <h2 className="text-lg font-semibold text-zinc-200 flex items-center gap-2 mb-4">
-            <FolderOpen className="w-5 h-5 text-amber-400/80" />
-            Proyectos
-          </h2>
-          {projects.length === 0 && !loading && (
-            <div className="py-10 flex flex-col items-center justify-center text-center">
-              <FolderGit2 className="w-14 h-14 text-zinc-500 mb-3" />
-              <p className="text-zinc-300 font-medium">Aún no hay proyectos</p>
-              <p className="text-zinc-500 text-sm mt-1 max-w-xs">
-                Crea uno arriba o usa Refrescar si ya existen en el backend.
-              </p>
-              <button
-                type="button"
-                onClick={() => newProjectInputRef.current?.focus()}
-                className="mt-4 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 px-4 py-2 rounded text-sm inline-flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Crear primer proyecto
-              </button>
-            </div>
-          )}
-          {projects.length > 0 && (
-            <ul className="space-y-3">
-              {projects.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex items-center gap-4 bg-zinc-800 rounded-lg px-4 py-3 border border-zinc-700 hover:border-zinc-600 cursor-pointer transition-colors"
-                  onClick={() => setWorkshopProject(p)}
-                >
-                  <span
-                    className={`w-3 h-3 rounded-full shrink-0 ${statusColor[p.status]}`}
-                    title={p.status}
+        <div className="grid lg:grid-cols-[1fr_2fr] gap-12">
+          <section className="space-y-6 animate-slide-up" style={{ animationDelay: '0.1s' }}>
+            <div className="glass-panel rounded-3xl p-8 border-white/5 space-y-6">
+              <h2 className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                <Plus className="w-4 h-4 text-brand-400" />
+                Nueva Iniciativa
+              </h2>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest ml-1">
+                    Identificador del Proyecto
+                  </label>
+                  <input
+                    ref={newProjectInputRef}
+                    type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && createProject()}
+                    placeholder="Ej. Sistema de Pagos 2.0"
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-zinc-100 placeholder:text-zinc-600 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all outline-none"
                   />
-                  <span className="font-medium flex-1 min-w-0">{p.name}</span>
-                  <span className="text-zinc-500 text-sm shrink-0">
-                    Precisión {p.precisionScore}%
-                  </span>
-                  <span className="text-zinc-500 text-sm shrink-0">
-                    {new Date(p.createdAt).toLocaleDateString("es-MX")}
-                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-3">
                   <button
-                    type="button"
-                    onClick={(e) => openDeleteConfirm(p, e)}
-                    disabled={loading}
-                    className="p-1.5 rounded text-zinc-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50 shrink-0"
-                    title="Borrar proyecto"
+                    onClick={createProject}
+                    disabled={loading || !newName.trim()}
+                    className="w-full bg-brand-500 hover:bg-brand-400 disabled:opacity-30 text-white font-bold py-4 rounded-2xl shadow-xl shadow-brand-500/20 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    {loading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Plus className="w-5 h-5" />
+                        Crear Proyecto
+                      </>
+                    )}
                   </button>
-                  <ChevronRight className="w-5 h-5 text-zinc-500 shrink-0" />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                  <button
+                    onClick={loadProjects}
+                    disabled={loading}
+                    className="w-full bg-white/5 hover:bg-white/10 text-zinc-400 font-bold py-3 rounded-2xl border border-white/5 transition-all text-sm inline-flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    Actualizar Proyectos
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-6 animate-slide-up" style={{ animationDelay: '0.2s' }}>
+            <h2 className="text-xs font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2 px-2">
+              <FolderGit2 className="w-4 h-4 text-brand-400" />
+              Proyectos Registrados
+            </h2>
+
+            {projects.length === 0 && !loading ? (
+              <div className="glass-panel border-white/5 rounded-3xl p-16 flex flex-col items-center justify-center text-center">
+                <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-6">
+                  <FolderGit2 className="w-10 h-10 text-zinc-600" />
+                </div>
+                <p className="text-xl font-bold text-zinc-300">Vacío Operativo</p>
+                <p className="text-zinc-500 mt-2 max-w-[240px]">
+                  No se detectan proyectos activos. Comienza creando uno nuevo en el panel lateral.
+                </p>
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-4">
+                {projects.map((p, idx) => (
+                  <div
+                    key={p.id}
+                    onClick={() => setWorkshopProject(p)}
+                    className="group glass-card rounded-3xl p-6 border-white/5 cursor-pointer hover:-translate-y-1 hover:shadow-2xl hover:shadow-brand-500/5 transition-all duration-300 animate-fade-in"
+                    style={{ animationDelay: `${0.1 + idx * 0.05}s` }}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div
+                        className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${p.status === 'VERDE' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          p.status === 'AMARILLO' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
+                            'bg-red-500/10 text-red-500 border border-red-500/20'
+                          }`}
+                      >
+                        {p.status}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => openDeleteConfirm(p, e)}
+                        className="opacity-0 group-hover:opacity-100 p-2 rounded-xl text-zinc-500 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <h3 className="text-lg font-bold text-white group-hover:text-brand-400 transition-colors line-clamp-1 mb-6">
+                      {p.name}
+                    </h3>
+                    <div className="flex items-center justify-between pt-4 border-t border-white/5 mt-auto">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-tighter">Precisión</span>
+                        <span className="text-sm font-bold text-zinc-300 font-mono">{p.precisionScore}%</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] font-black text-zinc-600 uppercase tracking-tighter">Creado</span>
+                        <span className="text-sm font-bold text-zinc-500">{new Date(p.createdAt).toLocaleDateString("es-MX")}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );

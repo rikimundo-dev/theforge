@@ -52,7 +52,24 @@ interface TableColumns {
 }
 
 const COL_DEF_REGEX =
-  /([a-zA-Z_][a-zA-Z0-9_]*)\s+(UUID|VARCHAR|CHAR|TEXT|BOOLEAN|INT|BIGINT|SMALLINT|SERIAL|TIMESTAMPTZ|TIMESTAMP|DATE|TIME|NUMERIC|DECIMAL|REAL|FLOAT|DOUBLE)(\s*\([^)]+\))?/gi;
+  /([a-zA-Z_][a-zA-Z0-9_]*)\s+(UUID|VARCHAR|CHAR|TEXT|BOOLEAN|INT|BIGINT|SMALLINT|SERIAL|TIMESTAMPTZ|TIMESTAMP(?:\s+WITH\s+TIME\s+ZONE)?|DATE|TIME|NUMERIC|DECIMAL|REAL|FLOAT|DOUBLE)(\s*\([^)]+\))?/gi;
+
+const SQL_KEYWORDS = new Set([
+  "default",
+  "with",
+  "time",
+  "zone",
+  "null",
+  "not",
+  "primary",
+  "key",
+  "unique",
+  "references",
+  "constraint",
+  "check",
+  "foreign",
+  "index",
+]);
 
 /** Devuelve el índice del paréntesis de cierre que equilibra el abierto en start. */
 function findMatchingParen(str: string, start: number): number {
@@ -75,18 +92,33 @@ function parseColumnsFromBlock(block: string, tableName: string): { columns: Arr
   const openParen = block.indexOf("(");
   const closeParen = findMatchingParen(block, openParen);
   const inner = openParen !== -1 && closeParen !== -1 ? block.slice(openParen + 1, closeParen) : block;
+
+  // 1. Extraer FKs de bloque (al final) primero para que no interfieran con la búsqueda inline
+  const fkMatches = [...inner.matchAll(/FOREIGN\s+KEY\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\)\s*REFERENCES\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)/gi)];
+  for (const m of fkMatches) {
+    relations.push({ from: tableName, to: m[2].toLowerCase(), fkColumn: m[1].toLowerCase() });
+  }
+
+  // 2. Extraer columnas
   let m: RegExpExecArray | null;
   COL_DEF_REGEX.lastIndex = 0;
   while ((m = COL_DEF_REGEX.exec(inner)) !== null) {
     const colName = m[1].toLowerCase();
-    const sqlType = (m[2] + (m[3] ?? "")).trim();
+    if (SQL_KEYWORDS.has(colName)) continue;
+
+    // Limitar la búsqueda de PK y REFERENCES al segmento de la columna actual (hasta la siguiente coma o fin)
     const start = m.index;
-    const rest = inner.slice(start);
-    const pk = /\bPRIMARY\s+KEY\b/i.test(rest);
-    const refMatch = rest.match(/REFERENCES\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)/i);
+    const currentLineEnd = inner.indexOf(",", start);
+    const segment = inner.slice(start, currentLineEnd !== -1 ? currentLineEnd : inner.length);
+
+    const sqlType = (m[2] + (m[3] ?? "")).trim();
+    const pk = /\bPRIMARY\s+KEY\b/i.test(segment);
+    const refMatch = segment.match(/REFERENCES\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)/i);
     if (refMatch) relations.push({ from: tableName, to: refMatch[1].toLowerCase(), fkColumn: colName });
+
     columns.push({ name: colName, type: sqlTypeToMermaid(sqlType), pk });
   }
+
   const pkOnlyLine = inner.match(/\bPRIMARY\s+KEY\s*\(\s*([^)]+)\s*\)/gi);
   if (pkOnlyLine && columns.length > 0) {
     for (const pkLine of pkOnlyLine) {

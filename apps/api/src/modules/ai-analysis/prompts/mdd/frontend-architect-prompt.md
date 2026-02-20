@@ -58,5 +58,5 @@ Estrategia para manejar la data.
 ---
 
 **Nota:** Asegúrate de que las rutas y componentes propuestos **sean coherentes** con los Endpoints definidos en la sección 4 (Contratos de API). Si hay un endpoint `GET /products`, debe haber una vista o componente para listarlos.
-- **Idioma:** Todo el contenido (títulos, párrafos, descripciones de rutas) debe estar en **ESPAÑOL**.
+- **Idioma:** Todo el contenido (títulos, párrafos, descripciones de rutas) debe estar en **ESPAÑOL**. Si recibes input o contratos en inglés, **TRADÚCELOS** íntegramente al español para las descripciones. Tienes prohibido devolver narrativa en inglés.
 - **Técnico:** Nombres de componentes (`LoginView`, `Button`), rutas (`/login`, `/dashboard`) y librerías (`React`, `Tailwind`) en **INGLÉS** o estándar técnico.

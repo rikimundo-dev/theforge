@@ -18,7 +18,10 @@ export const auditorGapsSchema = z.object({
   status: z.enum(["APROBADO", "RECHAZADO"]),
   critical_gaps: z.array(auditorCriticalGapSchema),
   syntax_errors: z.array(z.string()),
-  infrastructure_ready: z.boolean(),
+  infrastructure_ready: z.union([
+    z.boolean(),
+    z.string().transform((s) => s.toLowerCase() === "true" || s.toLowerCase() === "yes" || s.toLowerCase() === "sí" || s.toLowerCase() === "si"),
+  ]),
 });
 export type AuditorGapsState = z.infer<typeof auditorGapsSchema>;
 

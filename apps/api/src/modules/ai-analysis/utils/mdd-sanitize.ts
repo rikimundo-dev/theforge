@@ -1438,17 +1438,24 @@ export function ensureContratosSection(draft: string): string {
 /** Títulos canónicos del MDD (7 secciones). */
 const CANONICAL_HEADINGS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /^#+\s*Contexto\s*y\s*alcance\s*$/im, replacement: "## 1. Contexto" },
+  { pattern: /^#+\s*Context\s*(?:and\s+scope)?\b/im, replacement: "## 1. Contexto" },
   { pattern: /^#+\s*Arquitectura\s+y\s*Stack\s*$/im, replacement: "## 2. Arquitectura y Stack" },
+  { pattern: /^#+\s*(?:System\s+)?Architecture\s*(?:and\s+Stack)?\b/im, replacement: "## 2. Arquitectura y Stack" },
   { pattern: /^#+\s*schemaSQL\s*$/im, replacement: "## 3. Modelo de Datos" },
   { pattern: /^#+\s*Schema\s*SQL\s*$/im, replacement: "## 3. Modelo de Datos" },
+  { pattern: /^#+\s*Data\s+Model\s*$/im, replacement: "## 3. Modelo de Datos" },
   { pattern: /^#+\s*\d\.\s*Modelo\s+(?:de\s+)?datos\s*$/im, replacement: "## 3. Modelo de Datos" },
   { pattern: /^#+\s*Modelo\s+(?:de\s+)?datos\s*$/im, replacement: "## 3. Modelo de Datos" },
   { pattern: /^#+\s*Contratos\s+de\s+API\s*$/im, replacement: "## 4. Contratos de API" },
+  { pattern: /^#+\s*API\s+(?:Design|Contracts)\b/im, replacement: "## 4. Contratos de API" },
   { pattern: /^#+\s*Lógica\s+y\s*Edge\s+Cases\s*$/im, replacement: "## 5. Lógica y Edge Cases" },
+  { pattern: /^#+\s*Logic\s+and\s+Edge\s+Cases\b/im, replacement: "## 5. Lógica y Edge Cases" },
   { pattern: /^#+\s*Seguridad\s*$/im, replacement: "## 6. Seguridad" },
+  { pattern: /^#+\s*Security\s*(?:Considerations)?\b/im, replacement: "## 6. Seguridad" },
   { pattern: /^#+\s*Integración\s*$/im, replacement: "## 7. Infraestructura" },
   { pattern: /^#+\s*Infraestructura\s*$/im, replacement: "## 7. Infraestructura" },
-  { pattern: /^#+\s*endpoints\s*$/im, replacement: "### Endpoints" },
+  { pattern: /^#+\s*(?:Deployment\s+Strategy|Infrastructure)\b/im, replacement: "## 7. Infraestructura" },
+  { pattern: /^#+\s*endpoints\b/im, replacement: "### Endpoints" },
 ];
 
 /**
@@ -2334,9 +2341,9 @@ export function seguridadItemsToSection6Markdown(
   const filtered =
     items.length > 1
       ? items.filter((item) => {
-          const t = (item.title ?? "").trim().replace(/^\d+\.\d*\s*/, "");
-          return t && t !== "Seguridad" && !/^6\.\s*Seguridad$/i.test(t);
-        })
+        const t = (item.title ?? "").trim().replace(/^\d+\.\d*\s*/, "");
+        return t && t !== "Seguridad" && !/^6\.\s*Seguridad$/i.test(t);
+      })
       : items;
   const reLineSeguridad = /^\s*(-\s*)?##\s*6\.\s*Seguridad\s*$/i;
   const parts = filtered.map((item) => {
@@ -2713,10 +2720,37 @@ function fixMarkdownTableRows(body: string): string {
   const lines = collapsed.split(/\n/);
   const out: string[] = [];
   let lastWasTable = false;
-  for (const line of lines) {
+  let inMultilineRow = false;
+  let rowBuffer: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
+
+    // Si estamos en medio de una fila multilínea (ej. un code block roto que el LLM puso dentro de | |)
+    if (inMultilineRow) {
+      rowBuffer.push(trimmed);
+      if (trimmed.includes("|") || i === lines.length - 1 || (lines[i + 1] && lines[i + 1].trim().startsWith("|"))) {
+        // Intentamos cerrar la fila. Si termina en | o la siguiente empieza con |, cerramos esta.
+        const rowContent = rowBuffer.join(" ").replace(/\s+/g, " ");
+        out.push(ensureTrailingTablePipe(rowContent));
+        inMultilineRow = false;
+        rowBuffer = [];
+        lastWasTable = true;
+      }
+      continue;
+    }
+
     const hasDoublePipe = /\|\s*\|/.test(trimmed);
     const looksLikeTable = trimmed.includes("|") && (trimmed.includes("---") || /\|[^|]+\|[^|]+\|/.test(trimmed));
+
+    // Detección de fila rota: empieza con | pero tiene un bloque de código ``` que no se cierra o tiene muchos saltos
+    if (trimmed.startsWith("|") && trimmed.includes("```") && (trimmed.match(/```/g) || []).length % 2 !== 0) {
+      inMultilineRow = true;
+      rowBuffer = [trimmed];
+      continue;
+    }
+
     const concatenatedRows = splitConcatenatedTableRows(trimmed, 4);
     if (concatenatedRows.length > 1) {
       if (lastWasTable === false && out.length > 0) out.push("");

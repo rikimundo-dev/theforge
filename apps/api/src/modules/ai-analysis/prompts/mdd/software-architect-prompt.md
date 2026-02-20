@@ -22,7 +22,7 @@ Ejemplo: `[DIRECTIVE: security] El modelo incluye pagos sensibles; por favor def
 **Salida:** Responde **únicamente** con el documento MDD completo en Markdown (desde # Master Design Document), **con las modificaciones ya aplicadas** en §2–§5. No devuelvas el borrador anterior sin cambiar: si hay ACCIÓN REQUERIDA o requisitos del usuario, el documento que devuelvas debe **reflejar esos cambios** (nuevas tablas, endpoints, frontend, roles por aplicación, etc.). **PROHIBIDO** incluir en la respuesta los bloques "ACCIÓN REQUERIDA", "Prioridad (léelo primero)" o "Requisitos del usuario (conversación reciente)"; son solo instrucciones para aplicar, no contenido del MDD.
 
 **IDIOMA OBLIGATORIO: ESPAÑOL.**
-- **Narrativa (Prosa):** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints, lógica de negocio) debe estar en **ESPAÑOL**. Si el borrador que recibes tiene secciones en inglés (ej. "The Oracle MCP server will implement..."), **TRADÚCELAS** al español al generar tu respuesta. NO conserves bloques de texto en inglés. reescríbelos.
+- **Narrativa (Prosa):** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints, lógica de negocio) debe estar en **ESPAÑOL**. Si el borrador que recibes tiene secciones en inglés (ej. "The Oracle MCP server will implement..."), o si el **INPUT DEL USUARIO** está en inglés, **TRADÚCELOS** íntegramente al español al generar tu respuesta. NO conserves bloques de intención técnica en inglés para la prosa. REESCRIBE CUALQUIER NARRATIVA INGLESA AL ESPAÑOL.
 - **Contenido Técnico:** Código SQL, nombres de variables, rutas de endpoints, esquemas JSON y diagrama ER deben mantenerse en **INGLÉS** o estándar técnico.
 - **Ejemplo Correcto:** "El endpoint `POST /users` crea un nuevo usuario." (Prosa en español, código en inglés).
 - **Ejemplo Incorrecto:** "The endpoint `POST /users` creates a new user." (Prosa en inglés).
@@ -119,9 +119,16 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
 - **Estrategia Híbrida (Estricta):**
   - **SQL (PostgreSQL):** ÚNICAMENTE para identidad, acceso y configuración del sistema (`users`, `sessions`, `workspaces`, `apikeys`). Usa `TIMESTAMPTZ`.
   - **Graph (FalkorDB):** OBLIGATORIO para todo el análisis de código. NUNCA crees tablas SQL para `components`, `files`, `imports` o `functions`.
+  - **REGLA ANTI-BASURA FUNCIONAL (Crítica):** Si el documento menciona utilidades funcionales, motores de cálculo, wrappers de servicios externos o lógica pura (ej: "Validador de esquemas", "Motor de IA"), **NO** crees tablas SQL para ellos. Estos son componentes de lógica, no entidades persistentes. El modelo de datos debe ser minimalista y centrado en el dominio, no en la implementación de clases o métodos.
   - **Entregables:**
     1.  Bloque `sql` para tablas PostgreSQL.
     2.  Bloque `mermaid` (erDiagram) para PostgreSQL.
+        **REGLAS ESTRICTAS DE MERMAID ERD:**
+        - **Tipos Permitidos:** `uuid`, `string`, `int`, `datetime`, `boolean`, `jsonb`.
+        - **Mapeo Obligatorio:** `TIMESTAMPTZ` -> `datetime`, `UUID` -> `uuid`, `VARCHAR/TEXT` -> `string`, `JSONB` -> `jsonb`.
+        - **PROHIBIDO:** No incluyas palabras clave de SQL como `DEFAULT`, `WITH`, `TIME`, `ZONE`, `NOT`, `NULL` dentro del bloque Mermaid.
+        - **Formato:** `tipo nombre_columna`. Ejemplo: `datetime created_at`.
+        - **Evita Basura:** No crees columnas llamadas "default", "with" o "timezone".
     3.  Bloque `cypher` (puedes usar el tag `cypher` o `text`) describiendo el esquema del grafo (Nodos y Relaciones).
     4.  Bloque `mermaid` (graph TD) mostrando la ontología del grafo (ej. `File --> defines --> Component`).
 

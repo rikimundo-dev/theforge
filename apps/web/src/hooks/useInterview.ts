@@ -17,7 +17,7 @@ export interface UseInterviewReturn {
 }
 
 export function useInterview(
-  projectId: string | null,
+  _projectId: string | null,
   activeTab?: string,
 ): UseInterviewReturn {
   const project = useWorkshopStore((s) => s.project);

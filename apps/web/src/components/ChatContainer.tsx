@@ -281,15 +281,26 @@ export default function ChatContainer({
               disabled={loading}
             />
             {isBenchmarkFirstAction ? (
-              <button
-                onClick={handleGenerateBenchmark}
-                disabled={loading || !inputValue.trim()}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                title="Generar Benchmark & Gap Analysis"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Generar Benchmark & Gap Analysis
-              </button>
+              <>
+                <button
+                  onClick={handleGenerateBenchmark}
+                  disabled={loading || !inputValue.trim()}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  title="Generar Benchmark & Gap Analysis"
+                >
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Generar Benchmark & Gap Analysis
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    useWorkshopStore.getState().setActivePanel("mdd");
+                  }}
+                  className="text-xs text-zinc-500 hover:text-amber-400 underline decoration-zinc-700 underline-offset-4 self-center"
+                >
+                  Omitir investigación e ir directamente al MDD
+                </button>
+              </>
             ) : (
               <button
                 onClick={handleSend}

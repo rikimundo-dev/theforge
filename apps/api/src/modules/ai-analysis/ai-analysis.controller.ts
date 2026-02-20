@@ -28,7 +28,8 @@ export class AiAnalysisController {
       mddContent && mddContent.trim().length > 80
         ? this.estimationService.getPrecisionBreakdown(mddContent)
         : undefined;
-    return { ...metrics, precisionBreakdown };
+    const gaps = mddContent ? this.estimationService.getGapsReport(mddContent) : [];
+    return { ...metrics, precisionBreakdown, gaps };
   }
 
   @Post("estimation")
@@ -45,7 +46,8 @@ export class AiAnalysisController {
       contentForBreakdown && contentForBreakdown.trim().length > 80
         ? this.estimationService.getPrecisionBreakdown(contentForBreakdown)
         : undefined;
-    return { ...metrics, precisionBreakdown };
+    const gaps = contentForBreakdown ? this.estimationService.getGapsReport(contentForBreakdown) : [];
+    return { ...metrics, precisionBreakdown, gaps };
   }
 
   /**

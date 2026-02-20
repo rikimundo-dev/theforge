@@ -13,7 +13,7 @@ const TAVILY_API_KEY = process.env.TAVILY_API_KEY ?? "";
 export function createTavilySearchTool() {
   const tavily = new TavilySearch({
     maxResults: 5,
-    searchDepth: "basic",
+    searchDepth: "advanced",
     includeAnswer: false,
     includeRawContent: false,
     tavilyApiKey: TAVILY_API_KEY || undefined,

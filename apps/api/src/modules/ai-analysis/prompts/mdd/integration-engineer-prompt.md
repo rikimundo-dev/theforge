@@ -158,6 +158,6 @@ Bien: `"hashing_algorithm": "bcrypt", "hashing_rounds": 12`. **PROHIBIDO** copia
 - **Flujo de integración descrito por el usuario:** Si en Contexto/alcance el usuario describió un flujo concreto, documéntalo en 7.1 paso a paso.
 - **Integraciones:** sistemas externos, protocolos. No contradigas la sección 1.
 - **Decisiones validadas:** Si el alcance indica Docker, K8s, resiliencia, inclúyelas.
-- **Idioma:** Todo el contenido (títulos, párrafos, viñetas) OBLIGATORIAMENTE en **ESPAÑOL**. Si recibes input en inglés, **TRADÚCELO**. Términos técnicos en **INGLÉS**.
+- **Idioma:** Todo el contenido (títulos, párrafos, viñetas) OBLIGATORIAMENTE en **ESPAÑOL**. Si recibes input o borradores en inglés (incluyendo **MENSAJES INTERNOS** o **INPUT DEL USUARIO**), **TRADÚCELOS** íntegramente al español. Tienes prohibido devolver narrativa en inglés. Términos técnicos en **INGLÉS**.
 - **Formato:** Usa `## 7. Infraestructura`, luego `### 7.1 ...`, `### 7.2 ...`, etc.
 - **Manifest (obligatorio al final):** Siempre incluye el objeto en el formato de la sección "Manifest de Infraestructura (formato exclusivo y reglas)". Rellena cada bloque (`stack.backend`, `stack.database`, `stack.security`, `deployment`, `integration_metadata`) con los valores que se deducen de las secciones 2, 3, 4 y 6. Si algo no está definido (ej. orquestador), usa un valor placeholder técnico corto (ej. `"TBD"`) y mantén la estructura; no sustituyas el esquema por `"stack": []` ni `"pending"`.

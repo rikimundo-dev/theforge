@@ -164,6 +164,8 @@ interface WorkshopState {
   streamingContent: string | null;
   /** Tab del mensaje en streaming (para filtrar por tab) */
   streamingTab: string | null;
+  /** Tab central activo (Benchmark, MDD, etc.) */
+  activePanel: DocPanel;
   /** Progreso de agentes DBGA (Benchmark): qué agente trabaja y qué hace */
   agentProgress: Array<{ agent: string; message: string }>;
   /** Métricas en vivo (Semáforo + estimación) desde GET /ai-analysis/estimation */
@@ -197,6 +199,7 @@ interface WorkshopState {
   setUxUiGuideContent: (content: string | null) => void;
   persistUxUiGuideContent: (content: string) => Promise<void>;
   setLoading: (v: boolean) => void;
+  setActivePanel: (panel: DocPanel) => void;
   setSynced: (v: boolean) => void;
   setError: (e: string | null) => void;
 
@@ -263,6 +266,21 @@ interface WorkshopState {
   reset: () => void;
 }
 
+export type DocPanel =
+  | "benchmark"
+  | "spec"
+  | "mdd"
+  | "ux-ui-guide"
+  | "blueprint"
+  | "tasks"
+  | "api-contracts"
+  | "logic-flows"
+  | "architecture"
+  | "use-cases"
+  | "user-stories"
+  | "infra"
+  | "adrs";
+
 const initialState = {
   projectId: null as string | null,
   project: null as Project | null,
@@ -280,18 +298,19 @@ const initialState = {
   useCasesContent: null as string | null,
   userStoriesContent: null as string | null,
   infraContent: null as string | null,
-  conformance: null as {
-    blueprint: ConformanceResult;
-    api: ApiConformanceResult;
-    logicFlows: ConformanceResult;
-    infra: ConformanceResult;
-  } | null,
+  conformance: {
+    blueprint: { ok: true, gaps: [] },
+    api: { ok: true, missingInApi: [], extraInApi: [] },
+    logicFlows: { ok: true, gaps: [] },
+    infra: { ok: true, gaps: [] },
+  },
   pendingDeliverablePreview: null as { kind: "blueprint" | "api" | "infra" | "architecture" | "use-cases" | "user-stories"; content: string } | null,
   loading: false,
   loadingReason: null as "benchmark" | "phase0-deep-research" | null,
   streamingUserMessage: null as string | null,
   streamingContent: null as string | null,
   streamingTab: null as string | null,
+  activePanel: "mdd" as DocPanel,
   agentProgress: [] as Array<{ agent: string; message: string }>,
   liveMetrics: null as LiveMetricsResult | null,
   managerThreadId: null as string | null,
@@ -331,6 +350,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   setSession: (s) => set({ session: s }),
   setMddContent: (content) => set({ mddContent: content }),
   setLoading: (v) => set({ loading: v }),
+  setActivePanel: (panel) => set({ activePanel: panel }),
   setSynced: (v) => set({ synced: v }),
   setError: (e) => set({ error: e }),
 
@@ -373,6 +393,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       setTimeout(() => {
         get().fetchEstimation(projectId).catch(() => { });
         get().fetchAdrs(projectId).catch(() => { });
+        get().fetchConformance(projectId).catch(() => { });
       }, 0);
       return data;
     } catch (e) {
@@ -1930,11 +1951,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         }),
       });
       if (!r.ok) return null;
-      const data = (await r.json()) as LiveMetricsResult & { precisionBreakdown?: PrecisionBreakdown };
-      const { precisionBreakdown, ...metrics } = data;
+      const data = (await r.json()) as LiveMetricsResult & { precisionBreakdown?: PrecisionBreakdown; gaps?: string[] };
+      const { precisionBreakdown, gaps, ...metrics } = data;
       set({
         liveMetrics: metrics,
         ...(precisionBreakdown != null ? { precisionBreakdown } : {}),
+        ...(gaps != null && gaps.length > 0 ? { auditorFeedback: gaps.join("\n\n") } : { auditorFeedback: null }),
       });
       return metrics;
     } catch {

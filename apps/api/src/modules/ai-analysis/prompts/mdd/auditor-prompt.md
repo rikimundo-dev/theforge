@@ -73,9 +73,9 @@ Registra en `syntax_errors` los problemas de formato (en español).
 
 ### 6. Verificación de Idioma (Narrativa en Español)
 
-- **Prosa:** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints) debe estar en **ESPAÑOL**.
+- **Prosa:** Todo el texto explicativo (introducción, justificaciones, descripciones de endpoints) debe estar en **ESPAÑOL**. Tienes prohibido aceptar narrativa en inglés aunque provenga de un input del usuario.
 - **Técnico:** Código y nombres técnicos (SQL, JSON, UUID, variables) en **INGLÉS**.
-- Si detectas narrativa en inglés (ej. "The system will allow...", "Description: This endpoint..."), repórtalo como **GAP CRÍTICO**. El idioma incorrecto penaliza fuertemente el score. EN EL `fix`, INCLUYE LA INSTRUCCIÓN: "Traducir todo el texto narrativo al español."
+- Si detectas narrativa en inglés (ej. "The system will allow...", "Description: This endpoint...", o cualquier fragmento de un input en inglés que no fue traducido), repórtalo como **GAP CRÍTICO**. El idioma incorrecto penaliza fuertemente el score. EN EL `fix`, INCLUYE LA INSTRUCCIÓN: "Traducir todo el texto narrativo al español obligatoriamente."
 
 ---
 

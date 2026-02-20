@@ -548,30 +548,43 @@ function parseCountsFromMarkdown(md: string): {
 
   for (const line of lines) {
     const lower = line.toLowerCase();
-    if (/^#+\s*(?:\d\.\s*)?.*modelo de datos/i.test(line) || (lower.includes("modelo de datos") && /^#+\s*/.test(line))) {
+    const isHeaderLine = line.startsWith("#");
+
+    if (isHeaderLine && (/modelo de datos/i.test(line) || /\b3\./i.test(line) || lower.includes("modelo de datos") || lower.includes("data model"))) {
       inDataModel = true;
       inApi = false;
       continue;
     }
-    if (/^#+\s*(?:\d\.\s*)?.*contratos de api|^#+\s*4\.|endpoints/i.test(line) || (lower.includes("contratos de api") && /^#+\s*/.test(line))) {
+    if (isHeaderLine && (/contratos de api/i.test(line) || /\b4\./i.test(line) || lower.includes("contratos de api") || lower.includes("api contracts") || lower.includes("endpoints"))) {
       inDataModel = false;
       inApi = true;
       continue;
     }
+
     if (inDataModel) {
-      const m = line.match(/\*\*([A-Za-z][A-Za-z0-9_]*)\*\*|^-\s*\*\*([A-Za-z][A-Za-z0-9_]*)\*\*|^([A-Za-z][A-Za-z0-9_]*)\s*\(/);
+      // Entity markers: **Name**, CREATE TABLE Name, (id:Name)
+      const m = line.match(/\*\*([A-Za-z][A-Za-z0-9_]*)\*\*(?:\s*\([^)]*\))?\s*[:]?|^-\s*\*\*([A-Za-z][A-Za-z0-9_]*)\*\*|(?:\bcreate\s+table\s+)(?:if\s+not\s+exists\s+)?["`]?([a-z_][a-z0-9_]*)["`]?/i);
       if (m) {
         const name = (m[1] ?? m[2] ?? m[3])?.trim();
-        if (name) entities.add(name);
+        if (name) entities.add(name.toLowerCase());
       }
-      const createTable = line.match(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?([a-z_][a-z0-9_]*)["`]?/i);
-      if (createTable) entities.add(createTable[1].toLowerCase());
+      const graphMatch = line.match(/(?:\((?:[a-z0-9_]+)?\s*:\s*([A-Z][A-Za-z0-9_]*)\s*\))|(?:\s*:\s*([A-Z][A-Za-z0-9_]*)\b)/);
+      if (graphMatch) {
+        const name = (graphMatch[1] ?? graphMatch[2])?.trim();
+        if (name) entities.add(name.toLowerCase());
+      }
     }
-    if (inApi && (/\/api\/|\/auth\//.test(line) || /\b(POST|GET|PUT|DELETE|PATCH)\s+(\/|https?)/i.test(line))) {
-      extraEndpointCount += 1;
+
+    if (inApi) {
+      const hasMethod = /\b(POST|GET|PUT|DELETE|PATCH)\b/.test(line);
+      const hasPath = /(\/[\w/{}-]+)/.test(line);
+      if (hasMethod && hasPath) {
+        extraEndpointCount += 1;
+      }
     }
   }
 
+  // Global capture for safety
   const createTableGlobal = md.matchAll(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?([a-z_][a-z0-9_]*)["`]?/gi);
   for (const m of createTableGlobal) entities.add(m[1].toLowerCase());
 
@@ -652,22 +665,27 @@ export class EstimationService {
     }
     const trimmed = (md ?? "").trim();
     if (!trimmed) return [];
-    const traceability = computeTraceabilityGaps(trimmed);
-    const contract = computeContractGaps(trimmed);
+
+    const breakdown = computePrecisionBreakdown(trimmed);
     const messages: string[] = [];
-    if (traceability.inconsistentSections.length > 0) {
-      messages.push("Trazabilidad MFA: Contexto menciona MFA pero falta tablas de secretos en Modelo de Datos, endpoint /verify o /totp en Contratos de API, o algoritmo TOTP en Seguridad.");
+
+    if (breakdown.sectionReasons) {
+      for (const key of Object.keys(breakdown.sectionReasons)) {
+        const reason = breakdown.sectionReasons[key as keyof typeof breakdown.sectionReasons];
+        if (reason) {
+          // Si hay múltiples oraciones unidas por espacio o punto, las separamos para que se vean como items individuales
+          const parts = reason.split(/\.\s+/);
+          for (const p of parts) {
+            const clean = p.trim();
+            if (clean) {
+              messages.push(clean.endsWith(".") ? clean : clean + ".");
+            }
+          }
+        }
+      }
     }
-    if (contract.mermaidParityGap) {
-      messages.push("El diagrama Mermaid (erDiagram) tiene entidades o atributos que no existen en el SQL; no se permiten abreviaturas.");
-    }
-    if (contract.infraStackGap) {
-      messages.push("El stack (NestJS/Node) en Arquitectura debe reflejarse en Infraestructura (Dockerfile compatible con Node.js).");
-    }
-    if (contract.securityEdgeCaseGap) {
-      messages.push("Lógica menciona bloqueo de cuenta pero Seguridad debe definir el número de intentos.");
-    }
-    return messages;
+
+    return [...new Set(messages)];
   }
 
   /**

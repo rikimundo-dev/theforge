@@ -4,8 +4,6 @@ import {
   Lock,
   AlertTriangle,
   CheckCircle2,
-  Cloud,
-  CloudOff,
   FileText,
   DollarSign,
   Package,
@@ -18,13 +16,18 @@ import {
   Target,
   Palette,
   Trash2,
-  Save,
   X,
-  Play,
+  Download,
   ListOrdered,
   ListTodo,
-  Download,
   Brain,
+  Check,
+  TrendingUp,
+  Play,
+  ArrowRight,
+  ChevronRight,
+  Maximize2,
+  Save
 } from "lucide-react";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import ChatContainer from "../components/ChatContainer";
@@ -128,12 +131,14 @@ export default function WorkshopView({
   const synced = useWorkshopStore((s) => s.synced);
   const loading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
+  const auditorFeedback = useWorkshopStore((s) => s.auditorFeedback);
   const error = useWorkshopStore((s) => s.error);
   const setError = useWorkshopStore((s) => s.setError);
   const fetchProject = useWorkshopStore((s) => s.fetchProject);
   const adrsRaw = useWorkshopStore((s) => s.adrs);
   const adrs = useMemo(() => adrsRaw || [], [adrsRaw]);
   const fetchAdrs = useWorkshopStore((s) => s.fetchAdrs);
+  const fetchEstimation = useWorkshopStore((s) => s.fetchEstimation);
   const fetchWelcome = useWorkshopStore((s) => s.fetchWelcome);
   const sendMessage = useWorkshopStore((s) => s.sendMessage);
   const setMddContent = useWorkshopStore((s) => s.setMddContent);
@@ -194,10 +199,11 @@ export default function WorkshopView({
   const [useCasesViewMode, setUseCasesViewMode] = useState<"preview" | "source">("preview");
   const [userStoriesViewMode, setUserStoriesViewMode] = useState<"preview" | "source">("preview");
   const [conformanceUseLlm, setConformanceUseLlm] = useState(false);
-  type DocPanel = "benchmark" | "spec" | "mdd" | "ux-ui-guide" | "blueprint" | "tasks" | "api-contracts" | "logic-flows" | "architecture" | "use-cases" | "user-stories" | "infra" | "adrs";
-  const [centralPanel, setCentralPanel] = useState<DocPanel>("mdd");
+  const centralPanel = useWorkshopStore((s) => s.activePanel);
+  const setCentralPanel = useWorkshopStore((s) => s.setActivePanel);
   const [isGeneratingDeliverables, setIsGeneratingDeliverables] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
+  const [focusedGaps, setFocusedGaps] = useState<{ label: string; gaps: string[] } | null>(null);
   const initialPanelSetForProject = useRef<string | null>(null);
 
   const handleGenerateDeliverables = useCallback(async () => {
@@ -250,7 +256,9 @@ export default function WorkshopView({
     if (!project || project.id !== projectId) return;
     if (initialPanelSetForProject.current === projectId) return;
     initialPanelSetForProject.current = projectId;
-    if (!(project.mddContent ?? "").trim()) setCentralPanel("benchmark");
+    if (!(project.mddContent ?? "").trim() && !(project.dbgaContent ?? "").trim()) {
+      setCentralPanel("benchmark");
+    }
   }, [project?.id, projectId, project?.mddContent]);
 
 
@@ -400,27 +408,34 @@ export default function WorkshopView({
         rolesHours: {} as Record<string, number>,
       };
 
-  const effectiveStatus = mddEmpty ? "red" : (liveMetrics?.status ?? (precisionScore <= 40 ? "red" : precisionScore <= 90 ? "yellow" : "green"));
+  const calculatedStatus = precisionScore < 50 ? "red" : precisionScore < 80 ? "yellow" : "green";
+  const effectiveStatus = mddEmpty ? "red" : calculatedStatus;
   const semaphoreConfig =
     effectiveStatus === "red"
       ? {
         icon: Lock,
-        color: "text-red-500",
-        bg: "bg-red-500/20",
-        label: "Bloqueado",
+        color: "text-rose-500",
+        bg: "bg-rose-500/10",
+        label: "Crítico",
+        border: "border-rose-500/20",
+        glow: "shadow-[0_0_20px_rgba(244,63,94,0.15)]"
       }
       : effectiveStatus === "yellow"
         ? {
           icon: AlertTriangle,
-          color: "text-amber-500",
-          bg: "bg-amber-500/20",
+          color: "text-amber-400",
+          bg: "bg-amber-400/10",
           label: "Advertencia",
+          border: "border-amber-500/20",
+          glow: "shadow-[0_0_20px_rgba(245,158,11,0.15)]"
         }
         : {
           icon: CheckCircle2,
-          color: "text-green-500",
-          bg: "bg-green-500/20",
-          label: "Listo",
+          color: "text-emerald-400",
+          bg: "bg-emerald-500/10",
+          label: "Aprobado",
+          border: "border-emerald-500/20",
+          glow: "shadow-[0_0_20px_rgba(16,185,129,0.15)]"
         };
 
   const SemaphoreIcon = semaphoreConfig.icon;
@@ -461,33 +476,38 @@ export default function WorkshopView({
   }
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-900 text-zinc-100">
-      <header className="flex items-center justify-between px-4 py-2 border-b border-zinc-700 shrink-0">
-        <div className="flex items-center gap-3">
+    <div className="h-screen flex flex-col bg-zinc-950 text-zinc-100 animate-fade-in overflow-hidden">
+      <header className="glass-panel sticky top-0 z-40 flex items-center justify-between px-6 py-3 shrink-0">
+        <div className="flex items-center gap-4">
           {onBack && (
             <button
               onClick={onBack}
-              className="text-zinc-400 hover:text-zinc-100 text-sm"
+              className="p-2 -ml-2 text-zinc-400 hover:text-white hover:bg-white/10 rounded-full transition-all duration-200"
+              aria-label="Volver"
             >
-              ← Volver
+              <X className="w-5 h-5 rotate-90" />
             </button>
           )}
-          <h1 className="text-lg font-semibold text-amber-400">
-            {projectName ?? project?.name ?? "Workshop"}
-          </h1>
-          <span className="flex items-center gap-1.5 text-xs text-zinc-500">
-            {synced ? (
-              <>
-                <Cloud className="w-3.5 h-3.5 text-green-500" />
-                Sincronizado
-              </>
-            ) : (
-              <>
-                <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                Sincronizando…
-              </>
-            )}
-          </span>
+          <div className="flex flex-col">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-amber-400 to-brand-400 bg-clip-text text-transparent">
+              {projectName ?? project?.name ?? "Workshop"}
+            </h1>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                {synced ? (
+                  <>
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                    Sincronizado
+                  </>
+                ) : (
+                  <>
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    Sincronizando…
+                  </>
+                )}
+              </span>
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -510,21 +530,24 @@ export default function WorkshopView({
             if (ok) setError(null);
             else setError("No hay documentos con contenido para descargar.");
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-zinc-300 hover:text-amber-400 hover:bg-white/10 hover:border-amber-500/30 transition-all duration-300 text-sm font-medium"
           title="Descargar todos los documentos del proyecto en un ZIP"
         >
           <Download className="w-4 h-4" />
-          Descargar todo (ZIP)
+          <span>Exportar Todo</span>
         </button>
       </header>
 
       {error && (
-        <div className="shrink-0 px-4 py-2 bg-red-500/10 border-b border-red-500/30 flex items-center justify-between gap-2">
-          <p className="text-sm text-red-200">{error}</p>
+        <div className="mx-6 mt-4 p-4 glass-card border-red-500/20 bg-red-500/5 flex items-center justify-between gap-4 animate-slide-up">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <p className="text-sm text-red-200">{error}</p>
+          </div>
           <button
             type="button"
             onClick={() => useWorkshopStore.getState().setError(null)}
-            className="text-red-300 hover:text-red-100 text-xs"
+            className="p-1.5 hover:bg-white/10 rounded-lg text-red-300 transition-colors"
             aria-label="Cerrar"
           >
             <X className="w-4 h-4" />
@@ -532,9 +555,9 @@ export default function WorkshopView({
         </div>
       )}
 
-      <div className="flex-1 min-h-0 grid grid-cols-[380px_1fr_320px]">
-        {/* Columna A: Chat (siempre a la izquierda, como en MDD) */}
-        <section className="flex flex-col border-r border-zinc-700 min-h-0 overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col md:grid md:grid-cols-[380px_1fr_320px] lg:grid-cols-[420px_1fr_360px] relative">
+        {/* Columna A: Chat */}
+        <section className="flex flex-col border-r border-white/5 min-h-0 overflow-hidden bg-zinc-950/30 backdrop-blur-sm">
           <ChatContainer
             projectId={projectId}
             activeTab={centralPanel as import("../components/ChatContainer").ActiveTab}
@@ -546,6 +569,11 @@ export default function WorkshopView({
                   onGenerateBenchmark: (idea) => {
                     setLastBenchmarkIdea(idea);
                     generateBenchmark(projectId, idea);
+                    setTimeout(() => {
+                      fetchEstimation(projectId).catch(() => { });
+                      fetchAdrs(projectId).catch(() => { });
+                      fetchConformance(projectId).catch(() => { });
+                    }, 0);
                   },
                 }
                 : undefined
@@ -553,81 +581,77 @@ export default function WorkshopView({
           />
         </section>
 
-        {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
-        <section className="flex flex-col min-w-0 min-h-0 border-r border-zinc-700 overflow-hidden">
-          <div className="px-4 py-2 border-b border-zinc-700 flex flex-col gap-2 text-zinc-400 text-sm shrink-0">
-            {/* Renglón 1: Todos los tabs de los documentos */}
-            <div className="flex items-center gap-0.5 flex-nowrap overflow-x-auto scrollbar-hide pb-1">
+        {/* Columna B: Contenido del tab */}
+        <section className="flex flex-col min-w-0 min-h-0 border-r border-white/5 overflow-hidden shadow-[inset_0_0_100px_rgba(0,0,0,0.3)]">
+          <div className="px-6 py-4 glass-panel border-x-0 border-t-0 flex flex-col gap-4 text-zinc-400 text-sm shrink-0">
+            {/* Renglón 1: Navegación Estilo iOS/SaaS */}
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide py-1 -mx-2 px-2">
               {(() => {
                 const getTabClass = (id: string, content: any) => {
                   const isActive = centralPanel === id;
                   const hasContent = !!String(content || "").trim();
 
+                  const baseClasses = "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-300 shrink-0";
+
                   if (!hasContent) {
-                    return `flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap bg-red-100 text-zinc-900 font-semibold hover:bg-red-200 transition-colors shrink-0 ${isActive ? "ring-1 ring-red-400" : ""}`;
+                    if (id === "benchmark" || id === "spec") {
+                      return `${baseClasses} ${isActive
+                        ? "bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/30"
+                        : "text-zinc-500 hover:bg-white/5 hover:text-zinc-300"}`;
+                    }
+                    const hasMdd = !!(mddContent || "").trim();
+                    if (hasMdd) {
+                      return `${baseClasses} bg-red-500/10 text-red-400 ring-1 ring-red-500/20 hover:bg-red-500/20 ${isActive ? "ring-red-500/50" : ""}`;
+                    }
+                    return `${baseClasses} ${isActive ? "bg-white/10 text-amber-400" : "text-zinc-600 hover:bg-white/5"}`;
                   }
 
-                  return `flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap transition-colors shrink-0 ${isActive ? "bg-zinc-700 text-amber-400 font-medium" : "text-zinc-400 hover:bg-zinc-700/50"}`;
+                  return `${baseClasses} ${isActive
+                    ? "bg-brand-500/10 text-brand-400 ring-1 ring-brand-500/40"
+                    : "text-zinc-300 hover:bg-white/5 hover:text-white"}`;
                 };
 
                 return (
-                  <>
+                  <div className="flex items-center gap-1.5 p-1 bg-black/20 rounded-2xl ring-1 ring-white/5">
                     <button
                       type="button"
                       onClick={() => setCentralPanel("benchmark")}
                       className={getTabClass("benchmark", (phase0SummaryContent || "") + (dbgaContent || ""))}
                     >
-                      <Target className="w-4 h-4" />
+                      <Target className="w-3.5 h-3.5" />
                       Paso 0
                     </button>
                     <button
                       type="button"
                       onClick={() => setCentralPanel("mdd")}
-                      title="Constitución del proyecto (gobierna Blueprint, Contratos API e Infra)"
                       className={getTabClass("mdd", mddContent)}
                     >
-                      <FileText className="w-4 h-4" />
+                      <FileText className="w-3.5 h-3.5" />
                       MDD
                     </button>
                     <button
                       type="button"
                       onClick={() => setCentralPanel("spec")}
-                      title="Spec (SDD: what/why); alimenta el MDD"
                       className={getTabClass("spec", specContent)}
                     >
-                      <ListOrdered className="w-4 h-4" />
+                      <ListOrdered className="w-3.5 h-3.5" />
                       Spec
                     </button>
+                    <div className="w-px h-4 bg-white/10 mx-1" />
                     <button
                       type="button"
                       onClick={() => setCentralPanel("architecture")}
                       className={getTabClass("architecture", architectureContent)}
                     >
-                      <GitBranch className="w-4 h-4" />
+                      <GitBranch className="w-3.5 h-3.5" />
                       Arq.
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCentralPanel("use-cases")}
-                      className={getTabClass("use-cases", useCasesContent)}
-                    >
-                      <ListOrdered className="w-4 h-4" />
-                      Casos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCentralPanel("user-stories")}
-                      className={getTabClass("user-stories", userStoriesContent)}
-                    >
-                      <Package className="w-4 h-4" />
-                      H.U.
                     </button>
                     <button
                       type="button"
                       onClick={() => setCentralPanel("blueprint")}
                       className={getTabClass("blueprint", blueprintContent)}
                     >
-                      <LayoutTemplate className="w-4 h-4" />
+                      <LayoutTemplate className="w-3.5 h-3.5" />
                       Blueprint
                     </button>
                     <button
@@ -635,55 +659,30 @@ export default function WorkshopView({
                       onClick={() => setCentralPanel("ux-ui-guide")}
                       className={getTabClass("ux-ui-guide", uxUiGuideContent)}
                     >
-                      <Palette className="w-4 h-4" />
-                      Guía UX/UI
+                      <Palette className="w-3.5 h-3.5" />
+                      Guía UX
                     </button>
                     <button
                       type="button"
                       onClick={() => setCentralPanel("api-contracts")}
                       className={getTabClass("api-contracts", apiContractsContent)}
                     >
-                      <FileCode className="w-4 h-4" />
+                      <FileCode className="w-3.5 h-3.5" />
                       API
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCentralPanel("logic-flows")}
-                      className={getTabClass("logic-flows", logicFlowsContent)}
-                    >
-                      <GitBranch className="w-4 h-4" />
-                      Flujos
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCentralPanel("tasks")}
-                      title="Tasks (breakdown desde MDD + Blueprint)"
-                      className={getTabClass("tasks", tasksContent)}
-                    >
-                      <ListTodo className="w-4 h-4" />
-                      Tasks
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCentralPanel("adrs")}
-                      title="ADRs: Decisiones Arquitectónicas Guardadas en Memoria"
-                      className={getTabClass("adrs", adrs)}
-                    >
-                      <Brain className="w-4 h-4" />
-                      ADRs
                     </button>
                     <button
                       type="button"
                       onClick={() => setCentralPanel("infra")}
                       className={getTabClass("infra", infraContent)}
                     >
-                      <Server className="w-4 h-4" />
+                      <Server className="w-3.5 h-3.5" />
                       Infra
                     </button>
-                  </>
+                  </div>
                 );
               })()}
             </div>
+
 
             {/* Renglón 2: Texto del flujo y botones de acción */}
             <div className="flex items-center justify-between gap-1 border-t border-zinc-800 pt-2">
@@ -1426,46 +1425,61 @@ export default function WorkshopView({
           </div>
         </section>
 
-        {/* Columna C: Semáforo + Costos (lógica cost-calculator) */}
-        <section className="flex flex-col min-h-0 overflow-y-auto bg-zinc-800/50 p-4 space-y-6">
-          <div>
-            <h3 className="text-sm font-medium text-zinc-400 mb-3 flex items-center gap-2">
-              <Package className="w-4 h-4" />
-              Semáforo
+        {/* Columna C: Semáforo + Costos */}
+        <section className="flex flex-col min-h-0 overflow-y-auto glass-panel border-y-0 border-r-0 p-8 space-y-10 animate-fade-in custom-scrollbar">
+          <div className="space-y-6">
+            <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] flex items-center gap-2">
+              <Package className="w-3.5 h-3.5 text-brand-400" />
+              Estado del Diseño
             </h3>
             <div
-              className={`flex items-center gap-3 rounded-lg p-4 ${semaphoreConfig.bg} border border-zinc-600`}
+              className={`relative flex items-center gap-6 rounded-3xl p-6 border transition-all duration-500 group overflow-hidden ${semaphoreConfig.bg} ${semaphoreConfig.border} ${semaphoreConfig.glow}`}
             >
-              <SemaphoreIcon
-                className={`w-10 h-10 ${semaphoreConfig.color}`}
-              />
-              <div>
-                <p className={`font-semibold ${semaphoreConfig.color}`}>
+              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-50" />
+              <div className="relative">
+                <SemaphoreIcon
+                  className={`w-14 h-14 ${semaphoreConfig.color} filter drop-shadow-[0_0_8px_currentColor] animate-pulse-subtle`}
+                />
+              </div>
+              <div className="relative flex-1">
+                <p className={`text-xl font-black uppercase tracking-tight leading-none ${semaphoreConfig.color}`}>
                   {semaphoreConfig.label}
                 </p>
-                <p className="text-zinc-400 text-sm">
-                  Precisión {precisionScore}%
-                </p>
+                <div className="flex flex-col gap-2 mt-4">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+                    <span>Precisión del Agente</span>
+                    <span className="font-mono text-zinc-300">{precisionScore}%</span>
+                  </div>
+                  <div className="h-2 w-full bg-black/40 rounded-full overflow-hidden border border-white/5">
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ease-out ${precisionScore >= 80 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' :
+                        precisionScore >= 50 ? 'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' :
+                          'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]'
+                        }`}
+                      style={{ width: `${precisionScore}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-            {/* Botón Ver detalles de auditoría */}
+
             <button
               onClick={() => setShowAuditModal(true)}
-              className="mt-3 text-xs text-zinc-400 hover:text-amber-400 underline decoration-zinc-600 underline-offset-4 flex items-center gap-1"
+              className="w-full h-12 flex items-center justify-center gap-3 rounded-2xl bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white transition-all duration-300 text-xs font-bold uppercase tracking-widest border border-white/5 group active:scale-[0.98]"
             >
-              <FileText className="w-3 h-3" />
-              Ver logs y desglose
+              <FileText className="w-4 h-4 transition-transform group-hover:scale-110" />
+              Análisis Detallado
             </button>
           </div>
 
           {conformance && (
-            <div>
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  Conformance vs MDD
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-brand-400" />
+                  Consistencia vs MDD
                 </h3>
-                <label className="flex items-center gap-1.5 text-xs text-zinc-500 cursor-pointer">
+                <label className="flex items-center gap-2 text-[10px] text-zinc-500 cursor-pointer hover:text-zinc-300 transition-colors">
                   <input
                     type="checkbox"
                     checked={conformanceUseLlm}
@@ -1473,108 +1487,115 @@ export default function WorkshopView({
                       setConformanceUseLlm(e.target.checked);
                       fetchConformance(projectId!, { useLlm: e.target.checked });
                     }}
-                    className="rounded border-zinc-600 bg-zinc-800 text-amber-500 focus:ring-amber-500"
+                    className="w-3 h-3 rounded border-white/10 bg-black/40 text-brand-500 focus:ring-brand-500/50"
                   />
-                  Incluir verificación con IA
+                  Smart Audit (IA)
                 </label>
               </div>
-              <div className="rounded-lg border border-zinc-600 p-3 space-y-2 text-xs">
-                <p className={conformance.blueprint.ok ? "text-green-400" : "text-amber-400"}>
-                  Blueprint: {conformance.blueprint.ok ? "Cumple" : `Gaps: ${conformance.blueprint.gaps.join("; ")}`}
-                </p>
-                {!conformance.blueprint.ok && conformance.blueprint.gaps.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => generateBlueprint(projectId!, { preview: true, gapsFeedback: conformance!.blueprint.gaps.join("\n") })}
-                    disabled={loading || mddReviewing}
-                    className="text-amber-400 hover:underline disabled:opacity-50"
-                  >
-                    Regenerar Blueprint con gaps
-                  </button>
-                )}
-                <p className={conformance.api.ok ? "text-green-400" : "text-amber-400"}>
-                  API: {conformance.api.ok ? "Cumple" : `Faltan en el doc. de API (entregable): ${conformance.api.missingInApi.join(", ")}`}
-                </p>
-                {!conformance.api.ok && (conformance.api.missingInApi.length > 0 || conformance.api.extraInApi.length > 0) && (
-                  <button
-                    type="button"
-                    onClick={() => generateApiContracts(projectId!, { preview: true, gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n") })}
-                    disabled={loading || mddReviewing}
-                    className="text-amber-400 hover:underline disabled:opacity-50"
-                  >
-                    Regenerar API con gaps
-                  </button>
-                )}
-                <p className={conformance.logicFlows.ok ? "text-green-400" : "text-amber-400"}>
-                  Flujos: {conformance.logicFlows.ok ? "Cumple" : `Gaps: ${conformance.logicFlows.gaps.join("; ")}`}
-                </p>
-                {!conformance.logicFlows.ok && conformance.logicFlows.gaps.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => generateLogicFlows(projectId!, { gapsFeedback: conformance!.logicFlows.gaps.join("\n") })}
-                    disabled={loading || mddReviewing}
-                    className="text-amber-400 hover:underline disabled:opacity-50"
-                  >
-                    Regenerar Flujos con gaps
-                  </button>
-                )}
-                <p className={conformance.infra.ok ? "text-green-400" : "text-amber-400"}>
-                  Infra: {conformance.infra.ok ? "Cumple" : `Gaps: ${conformance.infra.gaps.join("; ")}`}
-                </p>
-                {!conformance.infra.ok && conformance.infra.gaps.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => generateInfra(projectId!, { preview: true, gapsFeedback: conformance!.infra.gaps.join("\n") })}
-                    disabled={loading || mddReviewing}
-                    className="text-amber-400 hover:underline disabled:opacity-50"
-                  >
-                    Regenerar Infra con gaps
-                  </button>
-                )}
+
+              <div className="glass-panel border-white/5 rounded-3xl p-2 space-y-1">
+                {[
+                  { label: "Blueprint", icon: LayoutTemplate, status: conformance.blueprint.ok, gaps: conformance.blueprint.gaps, action: () => generateBlueprint(projectId!, { preview: true, gapsFeedback: conformance!.blueprint.gaps.join("\n") }) },
+                  { label: "API", icon: FileCode, status: conformance.api.ok, gaps: [...conformance.api.missingInApi, ...conformance.api.extraInApi], action: () => generateApiContracts(projectId!, { preview: true, gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n") }) },
+                  { label: "Infra", icon: Server, status: conformance.infra.ok, gaps: conformance.infra.gaps, action: () => generateInfra(projectId!, { preview: true, gapsFeedback: conformance!.infra.gaps.join("\n") }) }
+                ].map((item, idx) => (
+                  <div key={idx} className="relative group p-4 rounded-2xl transition-all duration-300 hover:bg-white/[0.02]">
+                    <div className="flex items-center gap-4">
+                      <div className={`p-3 rounded-xl bg-zinc-900 border border-white/5 ${!item.status ? 'text-amber-500/80' : 'text-zinc-600'}`}>
+                        <item.icon className="w-5 h-5" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-sm font-bold tracking-tight ${item.status ? 'text-zinc-400' : 'text-zinc-200'}`}>
+                            {item.label}
+                          </span>
+
+                          {item.status ? (
+                            <Check className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <AlertTriangle className="w-5 h-5 text-amber-500 animate-pulse-subtle" />
+                              <button
+                                onClick={() => setFocusedGaps({ label: item.label, gaps: item.gaps })}
+                                className="text-[9px] font-black text-amber-500/50 hover:text-amber-400 uppercase tracking-widest mt-0.5 transition-colors"
+                              >
+                                Ver
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {!item.status ? (
+                          <div className="space-y-2">
+                            <p className="text-[10px] font-medium text-amber-500/60 uppercase tracking-wide">
+                              Corregir {item.gaps.length} gaps detectados
+                            </p>
+                            <button
+                              type="button"
+                              onClick={item.action}
+                              disabled={loading || mddReviewing}
+                              className="flex items-center gap-2 text-[10px] font-bold text-amber-500 hover:text-amber-400 transition-all active:scale-95 group/btn"
+                            >
+                              <Play className="w-2.5 h-2.5 transition-transform group/btn:translate-x-0.5" />
+                              <span className="underline underline-offset-4 decoration-amber-500/20">Ejecutar Corrección</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-[10px] text-zinc-600 font-medium uppercase tracking-wide">Sin diferencias detectadas</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <div>
-            <h3 className="text-sm font-medium text-zinc-400 mb-3 flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Estimación (MXN)
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-brand-400" />
+              Estimación Económica
             </h3>
-            <div className="rounded-lg border border-zinc-600 p-4 space-y-3">
-              <p className="text-zinc-400 text-sm">
-                {costDisplay.totalHours.toFixed(1)} h totales
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-zinc-500 mb-0.5">Nómina interna</p>
-                  <p className="text-xl font-bold text-amber-400">
-                    ${costDisplay.totalMxn.toLocaleString("es-MX")}
+            <div className="glass-card rounded-2xl p-6 space-y-4 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <TrendingUp className="w-20 h-20" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-tighter">Esfuerzo Estimado</p>
+                <p className="text-2xl font-bold font-mono">{costDisplay.totalHours.toFixed(1)} <span className="text-xs text-zinc-500">Horas Reales</span></p>
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <div className="p-3 bg-white/5 rounded-xl border border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Costo Operativo (Nómina)</p>
+                  <p className="text-2xl font-bold text-amber-500">
+                    ${costDisplay.totalMxn.toLocaleString("es-MX")} <span className="text-[10px] text-zinc-500">MXN</span>
                   </p>
                 </div>
-                <div>
-                  <p className="text-xs text-zinc-500 mb-0.5">Precio mercado</p>
-                  <p className="text-xl font-bold text-green-400">
-                    ${(costDisplay.totalMxnMarket ?? costDisplay.totalMxn).toLocaleString("es-MX")}
+                <div className="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                  <p className="text-[10px] text-emerald-500/50 uppercase font-bold mb-1">Valor Comercial (Mercado)</p>
+                  <p className="text-2xl font-bold text-emerald-400">
+                    ${(costDisplay.totalMxnMarket ?? costDisplay.totalMxn).toLocaleString("es-MX")} <span className="text-[10px] text-zinc-500">MXN</span>
                   </p>
                 </div>
               </div>
-              {costDisplay.teamStructure &&
-                Object.keys(costDisplay.teamStructure).length > 0 && (
-                  <div className="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-zinc-600 text-xs text-zinc-500">
-                    {Object.entries(costDisplay.teamStructure).map(
-                      ([role, count]) =>
-                        count ? (
-                          <div key={role} className="flex flex-col">
-                            <span className="font-medium text-zinc-400 capitalize">{role}</span>
-                            <span>{count} {costDisplay.rolesHours?.[role] != null ? `· ${Number(costDisplay.rolesHours[role]).toFixed(1)} h` : ""}</span>
-                          </div>
-                        ) : null,
-                    )}
+
+              {costDisplay.teamStructure && Object.keys(costDisplay.teamStructure).length > 0 && (
+                <div className="pt-4 border-t border-white/5">
+                  <p className="text-[10px] text-zinc-500 uppercase font-bold mb-3 tracking-widest">Equipo Sugerido</p>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(costDisplay.teamStructure).map(([role, count]) => count ? (
+                      <div key={role} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-white/5 border border-white/5 text-[10px] text-zinc-400">
+                        <span className="font-bold text-zinc-200 capitalize">{role}</span>
+                        <span className="opacity-50">× {count}</span>
+                      </div>
+                    ) : null)}
                   </div>
-                )}
+                </div>
+              )}
             </div>
-            <p className="text-zinc-500 text-xs mt-2">
-              El motor de estimación siempre calcula; en Rojo puedes ver viabilidad económica antes de completar el diseño.
+            <p className="text-[10px] text-zinc-500 leading-relaxed italic px-2">
+              * Motor de viabilidad activado. El coste se recalcula dinámicamente según la complejidad del MDD y Blueprint.
             </p>
           </div>
 
@@ -1582,149 +1603,230 @@ export default function WorkshopView({
             type="button"
             onClick={handleGenerateDeliverables}
             disabled={!canGenerate || isGeneratingDeliverables || mddReviewing}
-            className="w-full py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-green-600 hover:bg-green-500 text-white disabled:bg-zinc-600 disabled:hover:bg-zinc-600 flex items-center justify-center gap-2"
+            className="w-full py-4 rounded-2xl font-bold transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed bg-brand-500 hover:bg-brand-400 text-white shadow-[0_8px_20px_rgba(17,141,230,0.3)] hover:shadow-[0_12px_24px_rgba(17,141,230,0.4)] hover:-translate-y-0.5 flex items-center justify-center gap-3 active:scale-[0.98]"
           >
             {isGeneratingDeliverables ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Generando entregables…
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Generando Entregables…
               </>
-            ) : canGenerate ? (
-              "Generar Entregables"
-            ) : !semaphoreGreen ? (
-              "Semáforo en Verde para generar"
             ) : (
-              "Genera o revisa el Spec antes de generar entregables"
+              <>
+                <CheckCircle2 className="w-5 h-5" />
+                Finalizar y Generar Entregables
+              </>
             )}
           </button>
 
-          {/* Feedback del auditor debajo del semáforo */}
-          {useWorkshopStore.getState().auditorFeedback ? (
-            <div className="mt-4 p-4 rounded-lg bg-zinc-900 border border-zinc-700 text-xs text-zinc-300 leading-relaxed shadow-sm">
-              <strong className="block text-zinc-100 mb-1">
-                Auditoría ({useWorkshopStore.getState().liveMetrics?.precision ?? 0}% - {useWorkshopStore.getState().liveMetrics?.status === "green" ? "Verde" : useWorkshopStore.getState().liveMetrics?.status === "yellow" ? "Amarillo" : "Rojo"}):
-              </strong>
-              {useWorkshopStore.getState().auditorFeedback}
+          {/* Feedback del auditor */}
+          {auditorFeedback ? (
+            <div className="glass-card bg-zinc-900/40 p-5 rounded-2xl border-white/5 text-[11px] text-zinc-400 leading-relaxed shadow-xl animate-slide-up">
+              <div className="flex items-center gap-2 mb-3">
+                <Brain className="w-4 h-4 text-brand-400" />
+                <strong className="text-zinc-100 uppercase tracking-widest">Feedback del Auditor IA</strong>
+              </div>
+              <div className="prose prose-invert prose-xs max-w-none opacity-80">
+                {auditorFeedback}
+              </div>
             </div>
           ) : null}
         </section>
-        {
-          showAuditModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setShowAuditModal(false)}>
-              <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 shrink-0">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                    <FileText className="w-5 h-5 text-amber-500" />
-                    Detalles de Auditoría
-                  </h2>
-                  <button onClick={() => setShowAuditModal(false)} className="text-zinc-400 hover:text-white">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                  {/* Sección Desglose */}
-                  <div>
-                    <h3 className="text-sm font-medium text-zinc-400 mb-3 uppercase tracking-wider">Desglose de Calificación</h3>
-                    {precisionBreakdown ? (
-                      <div className="overflow-hidden rounded-lg border border-zinc-700">
-                        <table className="w-full text-sm text-left">
-                          <thead className="bg-zinc-800/50 text-zinc-400 border-b border-zinc-700">
-                            <tr>
-                              <th className="px-4 py-3 font-medium">Sección</th>
-                              <th className="px-4 py-3 font-medium">Agente</th>
-                              <th className="px-4 py-3 font-medium text-right">Calificación</th>
-                              <th className="px-4 py-3 font-medium">Por qué</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-700/50">
-                            {[
-                              { section: "Contexto y alcance", agent: "Clarificador", value: precisionBreakdown.contexto, reasonKey: "contexto" as const },
-                              { section: "Modelo de datos", agent: "Arquitecto de Software", value: precisionBreakdown.modeloDatos, reasonKey: "modeloDatos" as const },
-                              { section: "Contratos API", agent: "Arquitecto de Software", value: precisionBreakdown.apiContracts, reasonKey: "apiContracts" as const },
-                              { section: "Seguridad", agent: "Arquitecto de Seguridad", value: precisionBreakdown.seguridad, reasonKey: "seguridad" as const },
-                              { section: "Integración", agent: "Ingeniero de Integración", value: precisionBreakdown.integracion, reasonKey: "integracion" as const },
-                            ].map((row, i) => (
-                              <tr key={i} className="hover:bg-zinc-800/30">
-                                <td className="px-4 py-2.5 text-zinc-300 align-top">{row.section}</td>
-                                <td className="px-4 py-2.5 text-zinc-400 align-top">{row.agent}</td>
-                                <td className={`px-4 py-2.5 text-right font-mono font-medium align-top ${(row.value ?? 0) >= 90 ? "text-green-400" : (row.value ?? 0) >= 50 ? "text-amber-400" : "text-red-400"}`}>
-                                  {row.value ?? 0}%
-                                </td>
-                                <td className="px-4 py-2.5 text-zinc-500 text-xs max-w-[280px] align-top">
-                                  {precisionBreakdown.sectionReasons?.[row.reasonKey] ?? "—"}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <p className="text-zinc-500 italic">No hay desglose disponible aún.</p>
-                    )}
-                  </div>
+      </main>
 
-                  {/* Sección Logs */}
-                  <div>
-                    <h3 className="text-sm font-medium text-zinc-400 mb-3 uppercase tracking-wider flex items-center justify-between">
-                      <span>Audit Trail (Logs)</span>
-                      <span className="text-xs normal-case text-zinc-500 font-normal">Secuencia de ejecución de agentes</span>
-                    </h3>
-                    {auditTrail && auditTrail.length > 0 ? (
-                      <div className="bg-zinc-950 rounded-lg border border-zinc-800 p-4 overflow-x-auto max-h-60 overflow-y-auto custom-scrollbar">
-                        <pre className="font-mono text-xs text-green-400/90 whitespace-pre-wrap leading-relaxed">
-                          {auditTrail.join(" -> ")}
-                        </pre>
+      {showAuditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setShowAuditModal(false)}>
+          <div className="bg-zinc-900 border border-white/5 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0 bg-white/5">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <Brain className="w-5 h-5 text-brand-400" />
+                Análisis de Auditoría
+              </h2>
+              <button onClick={() => setShowAuditModal(false)} className="p-2 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+              {/* Sección Desglose */}
+              <div>
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Métricas de Precisión</h3>
+                {precisionBreakdown ? (
+                  <div className="overflow-hidden rounded-2xl border border-white/5 bg-white/5">
+                    <table className="w-full text-sm text-left border-collapse">
+                      <thead className="bg-white/10 text-zinc-400">
+                        <tr>
+                          <th className="px-5 py-4 font-bold uppercase tracking-tight text-[10px]">Dimensión</th>
+                          <th className="px-5 py-4 font-bold uppercase tracking-tight text-[10px]">Agente Responsable</th>
+                          <th className="px-5 py-4 font-bold uppercase tracking-tight text-[10px] text-right">Score</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {[
+                          { section: "Contexto y alcance", agent: "Clarificador", value: precisionBreakdown.contexto, reasonKey: "contexto" as const },
+                          { section: "Modelo de datos", agent: "Architect", value: precisionBreakdown.modeloDatos, reasonKey: "modeloDatos" as const },
+                          { section: "Contratos API", agent: "Architect", value: precisionBreakdown.apiContracts, reasonKey: "apiContracts" as const },
+                          { section: "Seguridad", agent: "Security Eng.", value: precisionBreakdown.seguridad, reasonKey: "seguridad" as const },
+                          { section: "Integración", agent: "Integration Eng.", value: precisionBreakdown.integracion, reasonKey: "integracion" as const },
+                        ].map((row, i) => (
+                          <tr key={i} className="hover:bg-white/5 transition-colors group">
+                            <td className="px-5 py-4">
+                              <p className="text-zinc-300 font-medium">{row.section}</p>
+                              <p className="text-[10px] text-zinc-500 mt-0.5 line-clamp-1 group-hover:line-clamp-none transition-all">
+                                {precisionBreakdown.sectionReasons?.[row.reasonKey] ?? "Sin observaciones"}
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 text-zinc-500 text-xs">{row.agent}</td>
+                            <td className={`px-5 py-4 text-right font-mono font-bold ${(row.value ?? 0) >= 90 ? "text-emerald-400" : (row.value ?? 0) >= 50 ? "text-amber-400" : "text-red-400"}`}>
+                              {row.value ?? 0}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-zinc-500 italic text-center py-8">No hay desglose disponible aún.</p>
+                )}
+              </div>
+
+              {/* Sección Conformidad de Entregables */}
+              {conformance && (!conformance.blueprint.ok || !conformance.api.ok || !conformance.infra.ok) && (
+                <div>
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4">Gaps de Conformidad (Entregables)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      { label: "Blueprint", gaps: conformance.blueprint.gaps, ok: conformance.blueprint.ok },
+                      { label: "API Contracts", gaps: [...conformance.api.missingInApi, ...conformance.api.extraInApi], ok: conformance.api.ok },
+                      { label: "Infraestructura", gaps: conformance.infra.gaps, ok: conformance.infra.ok },
+                    ].filter(item => !item.ok).map((item, i) => (
+                      <div key={i} className="bg-amber-500/5 rounded-2xl border border-amber-500/10 p-5">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                          <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wider">{item.label}</h4>
+                        </div>
+                        <ul className="space-y-2">
+                          {item.gaps.map((gap, gIdx) => (
+                            <li key={gIdx} className="text-[11px] text-zinc-400 leading-relaxed flex gap-2">
+                              <span className="text-amber-500/30 flex-shrink-0">•</span>
+                              {gap}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    ) : (
-                      <p className="text-zinc-500 italic">No hay logs de auditoría disponibles aún.</p>
-                    )}
+                    ))}
                   </div>
                 </div>
-                <div className="p-4 border-t border-zinc-800 bg-zinc-900/50 flex justify-end shrink-0">
-                  <button
-                    onClick={() => setShowAuditModal(false)}
-                    className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-medium transition-colors"
-                  >
-                    Cerrar
-                  </button>
-                </div>
+              )}
+
+              {/* Sección Logs */}
+              <div>
+                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center justify-between">
+                  <span>Audit Trail</span>
+                  <span className="text-[10px] normal-case text-zinc-600 font-normal italic">Secuencia de ejecución</span>
+                </h3>
+                {auditTrail && auditTrail.length > 0 ? (
+                  <div className="bg-black/40 rounded-2xl border border-white/5 p-6 max-h-60 overflow-y-auto custom-scrollbar">
+                    <div className="flex flex-wrap gap-3 items-center">
+                      {auditTrail.map((node, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="px-3 py-1.5 rounded-xl bg-emerald-500/5 text-emerald-400 text-[10px] font-mono border border-emerald-500/10 shadow-[0_0_15px_rgba(16,185,129,0.05)]">
+                            {node}
+                          </span>
+                          {i < auditTrail.length - 1 && <ChevronRight className="w-3 h-3 text-zinc-700" />}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-zinc-500 italic">No hay logs de auditoría disponibles aún.</p>
+                )}
               </div>
             </div>
-          )
-        }
-        {
-          pendingDeliverablePreview && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700 shrink-0">
-                  <h2 className="text-lg font-semibold text-amber-400">
-                    Vista previa: {pendingDeliverablePreview.kind === "blueprint" ? "Blueprint" : pendingDeliverablePreview.kind === "api" ? "Contratos API" : "Infra"}
+            <div className="p-4 border-t border-white/5 bg-black/20 flex justify-end shrink-0">
+              <button
+                onClick={() => setShowAuditModal(false)}
+                className="px-8 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-200 text-sm font-bold transition-all border border-white/5 active:scale-95"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {focusedGaps && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setFocusedGaps(null)}>
+          <div className="bg-zinc-900 border border-white/5 rounded-2xl w-full max-w-lg max-h-[70vh] flex flex-col shadow-2xl overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 shrink-0 bg-white/5">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                Diferencias en {focusedGaps.label}
+              </h2>
+              <button onClick={() => setFocusedGaps(null)} className="p-2 hover:bg-white/10 rounded-full text-zinc-400 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+              {focusedGaps.gaps.map((gap, i) => (
+                <div key={i} className="flex gap-3 p-3 rounded-xl bg-white/5 border border-white/5 group hover:bg-white/[0.07] transition-colors">
+                  <span className="text-amber-500/50 flex-shrink-0 mt-0.5">•</span>
+                  <p className="text-xs text-zinc-400 leading-relaxed group-hover:text-zinc-300 transition-colors">{gap}</p>
+                </div>
+              ))}
+            </div>
+            <div className="p-4 border-t border-white/5 bg-black/20 flex justify-end shrink-0">
+              <button
+                onClick={() => setFocusedGaps(null)}
+                className="px-6 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-200 text-xs font-bold transition-all border border-white/5 active:scale-95"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeliverablePreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xl animate-fade-in">
+          <div className="bg-zinc-900 border border-white/10 rounded-3xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-[0_32px_128px_-12px_rgba(0,0,0,0.8)] overflow-hidden">
+            <div className="flex items-center justify-between px-8 py-5 border-b border-white/5 shrink-0 bg-white/5">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-brand-500/10 rounded-2xl">
+                  <Maximize2 className="w-5 h-5 text-brand-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white uppercase tracking-tight leading-none">
+                    Preview <span className="text-brand-400">· {pendingDeliverablePreview.kind}</span>
                   </h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => discardDeliverable()}
-                      className="px-3 py-1.5 rounded bg-zinc-700 text-zinc-300 hover:bg-zinc-600 text-sm"
-                    >
-                      Descartar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => confirmDeliverable()}
-                      className="px-3 py-1.5 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 text-sm font-medium"
-                    >
-                      Confirmar y guardar
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                  <MddViewer content={pendingDeliverablePreview.content} />
+                  <p className="text-[10px] text-zinc-500 font-medium mt-1">Revisa el contenido antes de persistir en el repositorio</p>
                 </div>
               </div>
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={() => discardDeliverable()}
+                  className="px-5 py-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/5 text-sm font-bold transition-all"
+                >
+                  Descartar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => confirmDeliverable()}
+                  className="px-8 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-white text-sm font-bold shadow-xl shadow-brand-500/20 transition-all flex items-center gap-3 active:scale-[0.98]"
+                >
+                  Confirmar y Guardar
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          )
-        }
-      </div >
-    </div >
+            <div className="flex-1 min-h-0 overflow-y-auto p-10 bg-zinc-950/30">
+              <div className="max-w-4xl mx-auto glass-card p-8 rounded-3xl border-white/5 shadow-2xl">
+                <MddViewer content={pendingDeliverablePreview.content} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
+
