@@ -38,6 +38,7 @@ import { calculateCostFromMdd } from "../utils/costCalculator";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
 import type { LucideIcon } from "lucide-react";
+import { Button } from "../components/ui";
 
 function DocEmptyState({
   icon: Icon,
@@ -55,18 +56,17 @@ function DocEmptyState({
   hasMdd: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center min-h-[200px] text-zinc-500 text-center gap-4">
-      <Icon className="w-12 h-12 text-zinc-600" />
+    <div className="flex flex-col items-center justify-center min-h-[200px] text-[var(--foreground-muted)] text-center gap-4">
+      <Icon className="w-12 h-12 text-[var(--foreground-subtle)]" />
       <p className="text-sm">{description}</p>
-      <button
-        type="button"
+      <Button
+        variant="outline"
         onClick={onGenerate}
         disabled={loading || !hasMdd}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+        loading={loading}
       >
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
         Generar {title} desde MDD
-      </button>
+      </Button>
       {!hasMdd && (
         <p className="text-xs">Necesitas tener contenido en el MDD para generar este documento.</p>
       )}

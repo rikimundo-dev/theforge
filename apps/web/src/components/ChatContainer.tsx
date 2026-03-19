@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw } from "lucide-react";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
+import { Button, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui";
 
 export type ActiveTab =
   | "benchmark"
@@ -88,32 +89,32 @@ function PlanApprovalCard({
   onModify: () => void;
 }) {
   return (
-    <div className="mx-4 mb-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex flex-col shrink-0">
-      <div className="text-sm text-amber-200/90 mb-3 shrink-0 prose prose-invert prose-p:my-1 prose-ul:my-1 prose-li:my-0">
+    <div className="mx-4 mb-2 p-3 rounded-lg bg-[var(--primary)]/10 border border-[var(--primary)]/30 flex flex-col shrink-0">
+      <div className="text-sm text-[var(--foreground)]/90 mb-3 shrink-0 prose prose-invert prose-p:my-1 prose-ul:my-1 prose-li:my-0">
         <ReactMarkdown>{planMessage}</ReactMarkdown>
       </div>
-      <p className="text-xs text-zinc-400 mb-1.5 font-medium shrink-0">Tareas y responsables:</p>
+      <p className="text-xs text-[var(--foreground-muted)] mb-1.5 font-medium shrink-0">Tareas y responsables:</p>
       <div className="mb-3">
         <table className="w-full text-sm border-collapse">
           <thead>
-            <tr className="text-left text-zinc-400 border-b border-zinc-600">
+            <tr className="text-left text-[var(--foreground-muted)] border-b border-[var(--border)]">
               <th className="py-1.5 pr-2 w-8">#</th>
               <th className="py-1.5 pr-2">Tarea</th>
               <th className="py-1.5">Responsable</th>
             </tr>
           </thead>
-          <tbody className="text-zinc-300">
+          <tbody className="text-[var(--foreground)]">
             {plan.map((step, i) => (
-              <tr key={i} className="border-b border-zinc-700/50">
-                <td className="py-1.5 pr-2 font-medium text-zinc-400">{step.step_id}</td>
+              <tr key={i} className="border-b border-[var(--border)]/50">
+                <td className="py-1.5 pr-2 font-medium text-[var(--foreground-muted)]">{step.step_id}</td>
                 <td className="py-1.5 pr-2">
                   <span>{step.task_description}</span>
                   {step.goal && (
-                    <p className="text-xs text-zinc-500 mt-0.5 font-normal">{step.goal}</p>
+                    <p className="text-xs text-[var(--foreground-subtle)] mt-0.5 font-normal">{step.goal}</p>
                   )}
                 </td>
                 <td className="py-1.5">
-                  <span className="text-amber-200/90">
+                  <span className="text-[var(--primary)]">
                     {PLAN_NODE_LABELS[step.node] ?? step.node}
                   </span>
                 </td>
@@ -123,24 +124,14 @@ function PlanApprovalCard({
         </table>
       </div>
       <div className="flex gap-2 shrink-0">
-        <button
-          type="button"
-          onClick={onExecute}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-zinc-900 text-sm font-medium disabled:opacity-50"
-        >
+        <Button size="sm" onClick={onExecute} disabled={loading}>
           <Play className="w-3.5 h-3.5" />
           Ejecutar
-        </button>
-        <button
-          type="button"
-          onClick={onModify}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm disabled:opacity-50"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onModify} disabled={loading}>
           <Pencil className="w-3.5 h-3.5" />
           Modificar
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -401,40 +392,24 @@ export default function ChatContainer({
               </button>
             </div>
           )}
-          {showClearConfirm && (
-            <div
-              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-              role="dialog"
-              aria-modal="true"
-              onClick={() => setShowClearConfirm(false)}
-            >
-              <div
-                className="bg-zinc-800 border border-zinc-600 rounded-xl p-5 shadow-xl max-w-sm w-full"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <p className="text-zinc-200 text-sm mb-4">
+          <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Borrar historial</AlertDialogTitle>
+                <AlertDialogDescription>
                   ¿Borrar historial de la conversación? El contenido del MDD no se modifica y podrás iniciar de nuevo con un mensaje de bienvenida.
-                </p>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowClearConfirm(false)}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearChat}
-                    disabled={loading}
-                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm disabled:opacity-50"
-                  >
-                    Borrar historial
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setShowClearConfirm(false)}>
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction onClick={handleClearChat} disabled={loading} className="bg-[var(--destructive)] hover:bg-[var(--destructive)]/90">
+                  Borrar historial
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             {messagesToShow.length ? (
               messagesToShow.map((msg, i) => (
@@ -589,28 +564,30 @@ export default function ChatContainer({
                     : `Tu respuesta (contexto: ${contextLabel})...`
               }
               rows={1}
-              className="flex-1 min-h-[2.5rem] max-h-[5rem] overflow-y-auto resize-none bg-zinc-800 border border-zinc-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none break-words min-w-0"
+              className="flex-1 min-h-[2.5rem] max-h-[5rem] overflow-y-auto resize-none bg-[var(--input)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent outline-none break-words min-w-0"
               spellCheck={false}
               disabled={loading}
             />
             {isBenchmarkFirstAction ? (
-              <button
+              <Button
+                variant="outline"
+                size="icon"
                 onClick={handleGenerateBenchmark}
                 disabled={loading || !inputValue.trim()}
-                className="flex items-center justify-center p-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                loading={loading}
                 title="Generar Benchmark & Gap Analysis"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Send className="w-4 h-4 shrink-0" />}
-              </button>
+                <Send className="w-4 h-4 shrink-0" />
+              </Button>
             ) : (
-              <button
+              <Button
+                size="icon"
                 onClick={handleSend}
                 disabled={loading || !inputValue.trim()}
-                className="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-zinc-900 p-2 rounded-lg shrink-0"
                 title="Enviar"
               >
                 <Send className="w-4 h-4" />
-              </button>
+              </Button>
             )}
           </div>
         </>
