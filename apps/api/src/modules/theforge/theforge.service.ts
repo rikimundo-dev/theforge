@@ -115,6 +115,8 @@ export class TheForgeService {
     const t0 = Date.now();
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), this.theforgeMcpTimeoutMs());
+    const tokenPreview = this.token ? `${this.token.slice(0, 4)}...${this.token.slice(-4)}` : "(vacío)";
+    this.logger.log(`[TheForge] MCP POST ${this.baseUrl} | token length=${this.token.length} preview=${tokenPreview}`);
     try {
       const response = await fetch(this.baseUrl, {
         method: "POST",
@@ -228,10 +230,12 @@ export class TheForgeService {
         return [];
       }
       const raw = await response.text();
+      this.logger.log(`[TheForge] listKnownProjects: raw response (first 2000 chars): ${raw.slice(0, 2000)}`);
       const data = parseMcpResponse(raw) as {
         result?: { content?: Array<{ type: string; text?: string }> };
         error?: { message: string };
       };
+      this.logger.log(`[TheForge] listKnownProjects: parsed data keys=${data ? Object.keys(data as object).join(",") : "null"}, hasResult=${!!data?.result}, hasError=${!!(data as { error?: unknown })?.error}`);
       if (!data) {
         this.logger.warn("[TheForge] listKnownProjects: no se pudo extraer JSON de la respuesta");
         return [];
@@ -241,17 +245,19 @@ export class TheForgeService {
         return [];
       }
       const content = data.result?.content;
+      this.logger.log(`[TheForge] listKnownProjects: result.content length=${content?.length ?? 0}, items=${content?.map((c) => c.type).join(",") ?? "none"}`);
       if (!content?.length) {
         this.logger.log("[TheForge] listKnownProjects: result.content vacío o ausente");
         return [];
       }
       const text = content.find((c) => c.type === "text")?.text;
+      this.logger.log(`[TheForge] listKnownProjects: text length=${text?.length ?? 0}, preview=${(text ?? "").slice(0, 500)}`);
       if (!text) {
         this.logger.log("[TheForge] listKnownProjects: no hay content type=text en result");
         return [];
       }
       const jsonStr = extractJsonFromToolContent(text);
-      this.logger.log(`[TheForge] listKnownProjects: raw JSON from MCP (first 1500 chars): ${jsonStr.slice(0, 1500)}`);
+      this.logger.log(`[TheForge] listKnownProjects: extracted JSON (full): ${jsonStr}`);
       const parsed = JSON.parse(jsonStr) as unknown;
       if (!Array.isArray(parsed)) {
         this.logger.warn(`[TheForge] listKnownProjects: respuesta no es array (typeof=${typeof parsed}), preview=${String(parsed).slice(0, 200)}`);
