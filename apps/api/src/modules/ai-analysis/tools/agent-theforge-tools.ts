@@ -64,5 +64,53 @@ export function getLegacyTheForgeAgentTools(theforge: TheForgeService, theforgeP
         }),
       },
     ),
+    tool(
+      async ({ query, limit }) =>
+        theforge.semanticSearch(query, pid, limit ?? 5),
+      {
+        name: "semantic_search",
+        description: "Busca componentes, funciones y archivos por palabra clave en el grafo indexado.",
+        schema: z.object({
+          query: z.string(),
+          limit: z.number().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ path, currentFilePath }) =>
+        theforge.getFunctionsInFile(path, pid, currentFilePath),
+      {
+        name: "get_functions_in_file",
+        description: "Lista funciones y componentes definidos en un archivo.",
+        schema: z.object({
+          path: z.string(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ symbol, currentFilePath }) =>
+        theforge.getDefinitions(symbol, pid, currentFilePath),
+      {
+        name: "get_definitions",
+        description: "Ubicación exacta (archivo, líneas) de una clase o función.",
+        schema: z.object({
+          symbol: z.string(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ symbol, currentFilePath }) =>
+        theforge.getReferences(symbol, pid, currentFilePath),
+      {
+        name: "get_references",
+        description: "Todos los usos de un símbolo en el codebase (impacto de cambios).",
+        schema: z.object({
+          symbol: z.string(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
   ];
 }

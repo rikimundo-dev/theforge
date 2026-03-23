@@ -124,6 +124,7 @@ export class TheForgeService {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json, text/event-stream",
+          "MCP-Protocol-Version": "2025-03-26",
           Authorization: `Bearer ${this.token}`,
         },
         body: JSON.stringify(body),
@@ -152,11 +153,16 @@ export class TheForgeService {
       if (!response.ok) return null;
       const raw = await response.text();
       const data = parseMcpResponse(raw) as {
-        result?: { content?: Array<{ type: string; text?: string }> };
+        result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
         error?: { message: string };
       } | null;
       if (!data || data.error) {
         if (data?.error) this.logger.warn(`[TheForge] ${toolName} error: ${data.error.message}`);
+        return null;
+      }
+      if (data.result?.isError) {
+        const errText = data.result?.content?.find((c) => c.type === "text")?.text;
+        this.logger.warn(`[TheForge] ${toolName} tool error: ${errText ?? "(no message)"}`);
         return null;
       }
       const text = data.result?.content?.find((c) => c.type === "text")?.text ?? null;
@@ -183,21 +189,31 @@ export class TheForgeService {
   async getContextForDeliverables(projectId: string): Promise<string> {
     if (!this.isConfigured()) return "";
     const parts: string[] = [];
-    const q1 = await this.askCodebase(
-      "List exhaustively: all data models, entities, tables and their fields; all API routes and services; main UI components and screens; configuration and env. This is for documentation generation — be thorough.",
-      projectId,
-    );
+    const [q1, q2, q3, searchModels, searchApi, searchUi] = await Promise.all([
+      this.askCodebase(
+        "List exhaustively: all data models, entities, tables and their fields; all API routes and services; main UI components and screens; configuration and env. This is for documentation generation — be thorough.",
+        projectId,
+      ),
+      this.askCodebase(
+        "Describe architecture: folder structure, modules, how backend and frontend connect, existing patterns and conventions. Include file paths for key areas.",
+        projectId,
+      ),
+      this.askCodebase(
+        "What is the EXACT tech stack and directory structure of this project? List only what exists in the codebase: backend runtime and framework (e.g. Node/Express, Node/NestJS, Python/Django), frontend framework (e.g. React, Vue), database, build tools. If the project has multiple repositories, list them and their main folders. Do NOT assume or invent; only state what the codebase contains.",
+        projectId,
+      ),
+      this.semanticSearch("data models entities database schema", projectId, 5),
+      this.semanticSearch("API routes endpoints controllers", projectId, 5),
+      this.semanticSearch("UI components screens pages", projectId, 5),
+    ]);
     if (q1.trim()) parts.push("Modelos, rutas y configuración:\n" + q1.trim());
-    const q2 = await this.askCodebase(
-      "Describe architecture: folder structure, modules, how backend and frontend connect, existing patterns and conventions. Include file paths for key areas.",
-      projectId,
-    );
     if (q2.trim()) parts.push("Arquitectura y carpetas:\n" + q2.trim());
-    const q3 = await this.askCodebase(
-      "What is the EXACT tech stack and directory structure of this project? List only what exists in the codebase: backend runtime and framework (e.g. Node/Express, Node/NestJS, Python/Django), frontend framework (e.g. React, Vue), database, build tools. If the project has multiple repositories, list them and their main folders. Do NOT assume or invent; only state what the codebase contains.",
-      projectId,
-    );
     if (q3.trim()) parts.push("Stack y estructura real (solo lo que existe):\n" + q3.trim());
+    const searchParts: string[] = [];
+    if (searchModels.trim()) searchParts.push("Búsqueda semántica modelos: " + searchModels.trim().slice(0, 800));
+    if (searchApi.trim()) searchParts.push("Búsqueda semántica API: " + searchApi.trim().slice(0, 800));
+    if (searchUi.trim()) searchParts.push("Búsqueda semántica UI: " + searchUi.trim().slice(0, 800));
+    if (searchParts.length > 0) parts.push("Índice semántico:\n" + searchParts.join("\n"));
     return parts.join("\n\n---\n\n");
   }
 
@@ -232,7 +248,7 @@ export class TheForgeService {
       const raw = await response.text();
       this.logger.log(`[TheForge] listKnownProjects: raw response (first 2000 chars): ${raw.slice(0, 2000)}`);
       const data = parseMcpResponse(raw) as {
-        result?: { content?: Array<{ type: string; text?: string }> };
+        result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
         error?: { message: string };
       };
       this.logger.log(`[TheForge] listKnownProjects: parsed data keys=${data ? Object.keys(data as object).join(",") : "null"}, hasResult=${!!data?.result}, hasError=${!!(data as { error?: unknown })?.error}`);
@@ -242,6 +258,11 @@ export class TheForgeService {
       }
       if (data.error) {
         this.logger.warn(`[TheForge] listKnownProjects: MCP error=${data.error.message}`);
+        return [];
+      }
+      if (data.result?.isError) {
+        const errText = data.result?.content?.find((c) => c.type === "text")?.text;
+        this.logger.warn(`[TheForge] listKnownProjects: tool error: ${errText ?? "(no message)"}`);
         return [];
       }
       const content = data.result?.content;
@@ -316,11 +337,16 @@ export class TheForgeService {
       if (!response.ok) return null;
       const raw = await response.text();
       const data = parseMcpResponse(raw) as {
-        result?: { content?: Array<{ type: string; text?: string }> };
+        result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
         error?: { message: string };
       } | null;
       if (!data || data.error) {
         if (data?.error) this.logger.warn(`[TheForge] get_modification_plan error: ${data.error.message}`);
+        return null;
+      }
+      if (data.result?.isError) {
+        const errText = data.result?.content?.find((c) => c.type === "text")?.text;
+        this.logger.warn(`[TheForge] get_modification_plan tool error: ${errText ?? "(no message)"}`);
         return null;
       }
       const text = data.result?.content?.find((c) => c.type === "text")?.text ?? "";
@@ -366,11 +392,16 @@ export class TheForgeService {
       if (!response.ok) return "";
       const raw = await response.text();
       const data = parseMcpResponse(raw) as {
-        result?: { content?: Array<{ type: string; text?: string }> };
+        result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
         error?: { message: string };
       } | null;
       if (!data || data.error) {
         if (data?.error) this.logger.warn(`TheForge ask_codebase error: ${data.error.message}`);
+        return "";
+      }
+      if (data.result?.isError) {
+        const errText = data.result?.content?.find((c) => c.type === "text")?.text;
+        this.logger.warn(`TheForge ask_codebase tool error: ${errText ?? "(no message)"}`);
         return "";
       }
       const text = data.result?.content?.find((c) => c.type === "text")?.text ?? "";
@@ -458,6 +489,70 @@ export class TheForgeService {
     };
     if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
     const out = await this.callTool("get_component_graph", args);
+    return out ?? "";
+  }
+
+  /**
+   * Búsqueda semántica en el grafo (herramienta MCP semantic_search).
+   * Encuentra componentes, funciones y archivos por palabra clave. Útil para documentación y refinamiento del plan.
+   */
+  async semanticSearch(
+    query: string,
+    projectId?: string,
+    limit?: number,
+  ): Promise<string> {
+    const args: Record<string, unknown> = { query: query.trim() };
+    if (projectId?.trim()) args.projectId = projectId.trim();
+    if (typeof limit === "number" && limit > 0) args.limit = limit;
+    const out = await this.callTool("semantic_search", args);
+    return out ?? "";
+  }
+
+  /**
+   * Lista funciones y componentes definidos en un archivo (herramienta MCP get_functions_in_file).
+   * Enriquece el contexto para documentación y MDD de cambio.
+   */
+  async getFunctionsInFile(
+    path: string,
+    projectId?: string,
+    currentFilePath?: string,
+  ): Promise<string> {
+    const args: Record<string, unknown> = { path: path.trim() };
+    if (projectId?.trim()) args.projectId = projectId.trim();
+    if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
+    const out = await this.callTool("get_functions_in_file", args);
+    return out ?? "";
+  }
+
+  /**
+   * Obtiene la definición exacta (archivo, líneas) de un símbolo (herramienta MCP get_definitions).
+   * Útil para documentar dónde vive cada clase/función.
+   */
+  async getDefinitions(
+    symbol: string,
+    projectId?: string,
+    currentFilePath?: string,
+  ): Promise<string> {
+    const args: Record<string, unknown> = { symbol: symbol.trim() };
+    if (projectId?.trim()) args.projectId = projectId.trim();
+    if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
+    const out = await this.callTool("get_definitions", args);
+    return out ?? "";
+  }
+
+  /**
+   * Obtiene todas las referencias a un símbolo en el codebase (herramienta MCP get_references).
+   * Complementa get_definitions para documentar impacto y usos.
+   */
+  async getReferences(
+    symbol: string,
+    projectId?: string,
+    currentFilePath?: string,
+  ): Promise<string> {
+    const args: Record<string, unknown> = { symbol: symbol.trim() };
+    if (projectId?.trim()) args.projectId = projectId.trim();
+    if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
+    const out = await this.callTool("get_references", args);
     return out ?? "";
   }
 }

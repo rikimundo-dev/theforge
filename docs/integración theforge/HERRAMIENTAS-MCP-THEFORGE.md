@@ -23,14 +23,14 @@ Referencia de todas las herramientas del MCP según la guía actual (theforge.ob
 | **get_legacy_impact** | Qué se rompe si se modifica un nodo. | ✅ Fallback cuando validate_before_edit no existe o devuelve vacío. |
 | **get_contract_specs** | Props reales de un componente. | Disponible en TheForgeService; no usado en flujo automático. |
 | **get_component_graph** | Árbol de dependencias de un componente. | Disponible en TheForgeService; no usado en flujo automático. |
-| **get_functions_in_file** | Funciones y componentes que contiene un archivo. | No implementado en TheForgeService; uso futuro en contexto por archivo. |
+| **get_functions_in_file** | Funciones y componentes que contiene un archivo. | ✅ TheForgeService; usado en generateMdd y agente ReAct. |
 | **get_import_graph** | Grafo de imports de un archivo (qué importa/exporta). | No implementado; uso futuro. |
 | **get_file_context** | Contenido + imports + exports (paso: search → get_file_context → validate). | No implementado; alternativa enriquecida a get_file_content. |
 | **get_project_standards** | Prettier, ESLint, tsconfig. | No implementado; uso futuro para que código generado siga estándares. |
-| **semantic_search** | Búsqueda por palabra clave en componentes, funciones, archivos. | No implementado; uso futuro para afinar archivos/preguntas. |
+| **semantic_search** | Búsqueda por palabra clave en componentes, funciones, archivos. | ✅ TheForgeService; usado en generateCodebaseDoc, getContextForDeliverables, generateMdd y agente ReAct. |
 | **get_project_analysis** | Diagnóstico (`diagnostico`), duplicados (`duplicados`), reingeniería (`reingenieria`), opcional `codigo_muerto`. | No implementado; uso futuro para deuda técnica o refinamiento del plan. |
-| **get_definitions** | Origen exacto (archivo, líneas) de clase/función. | No implementado. |
-| **get_references** | Todos los usos de un símbolo. | No implementado. |
+| **get_definitions** | Origen exacto (archivo, líneas) de clase/función. | ✅ TheForgeService; usado en generateMdd y agente ReAct. |
+| **get_references** | Todos los usos de un símbolo. | ✅ TheForgeService; disponible para agente ReAct. |
 | **get_implementation_details** | Firma, tipos, props, endpoints de un símbolo. | No implementado. |
 | **trace_reachability** | Funciones/componentes nunca llamados desde puntos de entrada. | No implementado. |
 | **check_export_usage** | Exports sin importaciones activas. | No implementado. |

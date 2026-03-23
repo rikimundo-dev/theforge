@@ -12,7 +12,7 @@ Flujo separado para **proyectos legacy** (documentados en TheForge): modificacio
 
 ## Servicios
 
-- **LegacyCoordinatorService:** Orquesta start (TheForge), answer, generateMdd, generateDeliverables. Usa knowledge pack y AiService para generación. En legacy, **prioriza TheForge**: antes de generar el MDD hace varias consultas a TheForge (qué existe, arquitectura, reglas); antes de la cascada de entregables recupera contexto amplio del codebase (modelos, rutas, UI, estructura) y lo inyecta en cada llamada a generateSpec, generateArchitecture, etc. (vía `theforgeContext` en AiService). **Regla aplicada a todos los entregables:** no inventar; apegarse al MDD y únicamente al conocimiento TheForge (AiService inyecta esta instrucción cuando hay `theforgeContext`).
+- **LegacyCoordinatorService:** Orquesta start (TheForge), answer, generateMdd, generateDeliverables. Usa knowledge pack y AiService para generación. En legacy, **prioriza TheForge**: genera codebase doc con ask_codebase + semantic_search; genera MDD con ask_codebase, semantic_search, validate_before_edit, get_definitions, get_functions_in_file, get_file_content; genera entregables con getContextForDeliverables (ask_codebase + semantic_search). Contexto inyectado en cada paso vía `theforgeContext`. **Regla aplicada a todos los entregables:** no inventar; apegarse al MDD y al conocimiento TheForge.
 - **LegacyReviewerService:** Revisa lista archivos/preguntas y borrador MDD antes de devolver al usuario.
 
 ## Conocimiento

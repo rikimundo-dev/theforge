@@ -119,6 +119,18 @@ export class LegacyCoordinatorService {
     );
     if (q4.trim()) parts.push("## 4. Reglas de negocio y convenciones\n\n" + q4.trim());
 
+    // Búsqueda semántica: enriquece con hits del grafo (componentes, funciones, archivos por término)
+    const [searchModels, searchApi, searchUi] = await Promise.all([
+      this.theforge.semanticSearch("data models entities database schema tables", theforgeId, 5),
+      this.theforge.semanticSearch("API routes endpoints controllers services", theforgeId, 5),
+      this.theforge.semanticSearch("UI components screens pages views", theforgeId, 5),
+    ]);
+    const searchParts: string[] = [];
+    if (searchModels.trim()) searchParts.push("Modelos/entidades (búsqueda semántica):\n" + searchModels.trim());
+    if (searchApi.trim()) searchParts.push("API/rutas (búsqueda semántica):\n" + searchApi.trim());
+    if (searchUi.trim()) searchParts.push("Componentes/pantallas (búsqueda semántica):\n" + searchUi.trim());
+    if (searchParts.length > 0) parts.push("## 5. Índice semántico del grafo\n\n" + searchParts.join("\n\n"));
+
     const codebaseDoc = parts.length > 0
       ? "# Documentación del Codebase (partida)\n\n" + parts.join("\n\n---\n\n")
       : "";
@@ -245,9 +257,14 @@ export class LegacyCoordinatorService {
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n");
 
-    // Múltiples consultas a TheForge para contexto amplio (ask_codebase + herramientas de refactor seguro)
+    // Múltiples consultas a TheForge para contexto amplio (ask_codebase + semantic_search + refactor seguro)
     const theforgeParts: string[] = [];
     if (description) {
+      // Búsqueda semántica con términos del cambio para descubrir archivos/símbolos relacionados
+      const descTerms = description.slice(0, 200).replace(/[^\w\s]/g, " ");
+      const searchRelated = await this.theforge.semanticSearch(descTerms, theforgeId, 5);
+      if (searchRelated?.trim()) theforgeParts.push("Código relacionado (búsqueda semántica):\n" + searchRelated.trim());
+
       const q1 = await this.theforge.askCodebase(
         `For this change: "${description.slice(0, 400)}". List what ALREADY EXISTS in the codebase: data models/entities (tables, fields), API endpoints or services, and UI screens or components that touch clients, discounts, prices, price lists, campaigns, or profitability. Be exhaustive.`,
         theforgeId,
@@ -264,14 +281,20 @@ export class LegacyCoordinatorService {
       );
       if (q3.trim()) theforgeParts.push("Reglas y edge cases existentes:\n" + q3.trim());
     }
-    // Validación antes de editar (validate_before_edit = impacto + contrato en un solo llamado); fallback a get_legacy_impact
+    // Validación antes de editar (validate_before_edit = impacto + contrato); fallback a get_legacy_impact
+    // + get_definitions (ubicación exacta) y get_functions_in_file (qué exporta el archivo)
     for (let i = 0; i < Math.min(3, files.length); i++) {
       const f = files[i]!;
       const nodeName = f.path.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || f.path;
       const repoId = f.repoId || theforgeId;
-      let impactBlock = await this.theforge.validateBeforeEdit(nodeName, repoId, f.path);
-      if (!impactBlock?.trim()) impactBlock = await this.theforge.getLegacyImpact(nodeName, repoId, f.path);
-      if (impactBlock.trim()) theforgeParts.push(`Validación antes de editar "${f.path}":\n` + impactBlock.trim());
+      const [impactBlock, defs, funcs] = await Promise.all([
+        this.theforge.validateBeforeEdit(nodeName, repoId, f.path).then((b) => b || this.theforge.getLegacyImpact(nodeName, repoId, f.path)),
+        this.theforge.getDefinitions(nodeName, repoId, f.path),
+        this.theforge.getFunctionsInFile(f.path, repoId, f.path),
+      ]);
+      if (impactBlock?.trim()) theforgeParts.push(`Validación antes de editar "${f.path}":\n` + impactBlock.trim());
+      if (defs?.trim()) theforgeParts.push(`Definición de "${nodeName}" (archivo:líneas):\n` + defs.trim());
+      if (funcs?.trim()) theforgeParts.push(`Funciones/componentes en ${f.path}:\n` + funcs.trim());
     }
     // Contenido de los primeros 2 archivos a modificar (get_file_content) para contexto exacto
     for (let i = 0; i < Math.min(2, files.length); i++) {
@@ -292,7 +315,7 @@ export class LegacyCoordinatorService {
       "\n---\n\n" +
       filesLine +
       (answersText ? "Respuestas del usuario:\n---\n" + answersText + "\n---\n\n" : "") +
-      (theforgeContext ? "Contexto del codebase (TheForge) — usar para inferir impacto completo:\n---\n" + theforgeContext.slice(0, 12000) + "\n---" : "");
+      (theforgeContext ? "Contexto del codebase (TheForge) — incluye validaciones, definiciones exactas, funciones por archivo y búsqueda semántica. Usar TODO para inferir impacto completo:\n---\n" + theforgeContext.slice(0, 12000) + "\n---" : "");
     const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
     const mddContent = await this.reviewer.reviewMdd(description, mddDraft?.trim() ?? "");
     const cleaned = cleanDocumentContent(mddContent);

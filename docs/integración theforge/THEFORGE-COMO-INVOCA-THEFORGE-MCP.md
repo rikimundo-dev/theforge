@@ -11,6 +11,7 @@ Documento para explicar al equipo/proyecto TheForge cómo TheForge usa su MCP: t
 - **Auth:** Header `Authorization: Bearer <MCP_AUTH_TOKEN>`. La variable es `MCP_AUTH_TOKEN` (inyectada en Docker). Si falta el token, no se envía header (y el servidor puede rechazar).
 - **Content-Type:** `application/json`.
 - **Accept:** `application/json, text/event-stream` (por si el MCP devuelve SSE).
+- **MCP-Protocol-Version:** `2025-03-26` (obligatorio según spec Streamable HTTP).
 
 Cada petición es un **JSON-RPC 2.0** con `method: "tools/call"` y `params: { name: "<tool_name>", arguments: { ... } }`.
 
