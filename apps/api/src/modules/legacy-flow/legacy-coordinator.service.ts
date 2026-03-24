@@ -374,7 +374,8 @@ export class LegacyCoordinatorService {
     };
 
     let p = await load();
-    const complexity = row.complexity ?? ComplexityLevel.HIGH;
+    const isReverseEngineering = !mddContent && !!codebaseDoc;
+    const complexity = isReverseEngineering ? ComplexityLevel.HIGH : (row.complexity ?? ComplexityLevel.HIGH);
     const deliverablesToRun = DELIVERABLES_BY_COMPLEXITY[complexity];
 
     const ensureBlueprint = async (): Promise<string> => {

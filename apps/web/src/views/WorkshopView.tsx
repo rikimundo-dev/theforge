@@ -125,6 +125,8 @@ export default function WorkshopView({
   const hasSpec = (specContent ?? "").trim().length > 0;
   const complexity = project?.complexity ?? "HIGH";
   const isLegacyProject = project?.projectType === "LEGACY";
+  const isReverseEngineering = isLegacyProject && !!((project?.legacyFlowState?.codebaseDoc ?? "").trim()) && !(mddContent ?? "").trim();
+  const effectiveComplexityForTabs = isReverseEngineering ? "HIGH" : complexity;
   const canGenerate = useMemo(() => {
     if (isLegacyProject) {
       const hasMdd = (mddContent ?? "").trim().length > 0;
@@ -853,7 +855,7 @@ export default function WorkshopView({
 
                 const tabPt = isLegacyProject ? "LEGACY" : "NEW";
                 const tabVisible = (id: WorkshopDocTab) =>
-                  isTabVisibleForComplexity(id, complexity, { projectType: tabPt });
+                  isTabVisibleForComplexity(id, effectiveComplexityForTabs, { projectType: tabPt });
                 return (
                   <>
                     {isLegacyProject && (
