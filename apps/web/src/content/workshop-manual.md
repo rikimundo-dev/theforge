@@ -62,7 +62,7 @@ En el **Workshop**, el **selector de etapa** (cuando hay más de una) define el 
 
 **En la UI:** con **más de una etapa**, al **cambiar el selector** de etapa (arriba a la derecha) puede aparecer un **aviso** recordando que el historial del chat es compartido; puedes cerrarlo. Los mensajes **nuevos** pueden mostrar una etiqueta **«Etapa: …»** cuando el sistema guardó la etapa en foco al enviarlos (los mensajes antiguos pueden no tenerla).
 
-**Nueva etapa:** botón **Nueva etapa** junto al selector → modal y `POST /projects/:id/stages` (opcional copiar MDD desde la etapa actual).
+**Nueva etapa:** botón **Nueva etapa** junto al selector → modal y `POST /projects/:projectId/stages` (respuesta `{ stage }`). En el modal, **Copiar MDD desde** permite elegir cualquier etapa existente o dejar el MDD vacío. El selector del header cambia la **vista en vivo** (MDD/semáforo de la etapa activa).
 
 ### Checklist manual (multi-etapa)
 

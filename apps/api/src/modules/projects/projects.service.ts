@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ComplexityLevel, Prisma, StageStatus, Status } from "@theforge/database";
 import type { Estimation, Project, Stage } from "@theforge/database";
+import { getRequestUserId } from "../../common/request-user.store.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
 import { MddUpdatePipelineService } from "../engine/mdd-update-pipeline.service.js";
@@ -37,6 +38,11 @@ function toApiProject<P extends { stages: StageWithEst[] } & Record<string, unkn
 
 @Injectable()
 export class ProjectsService {
+  /** Scope de proyecto autenticado (AsyncLocalStorage). */
+  private projectWhereForUser(projectId: string) {
+    return { id: projectId, userId: getRequestUserId() };
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly conformance: ConformanceService,
@@ -122,8 +128,8 @@ export class ProjectsService {
 
   /** Recalcula semáforo de la etapa principal cuando cambian entregables/complejidad sin tocar el MDD. */
   private async refreshStageSemaphoreFromProject(projectId: string): Promise<void> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) return;
@@ -173,8 +179,10 @@ export class ProjectsService {
   async create(data: CreateProjectDto) {
     const parsed = createProjectSchema.parse(data);
     const isLegacy = parsed.projectType === "LEGACY";
+    const userId = getRequestUserId();
     const created = await this.prisma.project.create({
       data: {
+        userId,
         name: parsed.name,
         hasUxTeam: parsed.hasUxTeam ?? false,
         complexity: parsed.complexity as ComplexityLevel,
@@ -200,6 +208,7 @@ export class ProjectsService {
 
   async findAll() {
     const rows = await this.prisma.project.findMany({
+      where: { userId: getRequestUserId() },
       orderBy: { createdAt: "desc" },
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
@@ -207,8 +216,8 @@ export class ProjectsService {
   }
 
   async findOne(id: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(id),
       include: {
         sessions: true,
         stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } },
@@ -220,8 +229,8 @@ export class ProjectsService {
 
   async update(id: string, data: UpdateProjectDto) {
     const parsed = updateProjectSchema.partial().parse(data);
-    const existing = await this.prisma.project.findUnique({
-      where: { id },
+    const existing = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(id),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!existing) throw new NotFoundException("Project not found");
@@ -300,7 +309,7 @@ export class ProjectsService {
       cpInput !== undefined;
     if (hasProjectFieldUpdates) {
       await this.prisma.project.update({
-        where: { id },
+        where: this.projectWhereForUser(id),
         data: updatePayload,
       });
     }
@@ -328,14 +337,23 @@ export class ProjectsService {
 
   async remove(id: string) {
     await this.prisma.architecturalPreference.deleteMany({ where: { projectId: id } });
-    await this.prisma.project.delete({ where: { id } });
+    try {
+      await this.prisma.project.delete({ where: this.projectWhereForUser(id) });
+    } catch {
+      throw new NotFoundException("Project not found");
+    }
     return { deleted: id };
   }
 
   /** Una sola etapa ACTIVE por proyecto: demueve las demás ACTIVE a SUPERSEDED. */
   async activateStageExclusive(projectId: string, stageId: string): Promise<void> {
+    const uid = getRequestUserId();
     const stage = await this.prisma.stage.findFirst({
-      where: { id: stageId, projectId },
+      where: {
+        id: stageId,
+        projectId,
+        project: { id: projectId, userId: uid },
+      },
     });
     if (!stage) throw new NotFoundException("Etapa no encontrada");
     await this.prisma.$transaction([
@@ -352,8 +370,8 @@ export class ProjectsService {
 
   async createStage(projectId: string, body: unknown) {
     const dto = createStageBodySchema.parse(body);
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -408,13 +426,46 @@ export class ProjectsService {
       });
     }
 
-    return this.findOne(projectId);
+    const out = await this.prisma.stage.findFirst({
+      where: { id: newStage.id },
+      include: { estimation: true },
+    });
+    if (!out) throw new NotFoundException("Etapa no encontrada tras crear");
+    return { stage: out };
+  }
+
+  async listStages(projectId: string) {
+    const p = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
+      select: { id: true },
+    });
+    if (!p) throw new NotFoundException("Project not found");
+    const stages = await this.prisma.stage.findMany({
+      where: { projectId },
+      orderBy: { ordinal: "asc" },
+      include: { estimation: true },
+    });
+    return { stages };
+  }
+
+  private assertBlueprintCoversMddDataModel(project: Project & { stages: StageWithEst[] }): void {
+    const mdd = this.constitutionMarkdown(project);
+    const dm = this.conformance.checkBlueprintDataModel(mdd, project.blueprintContent);
+    if (!dm.ok) {
+      throw new BadRequestException({
+        message:
+          "El Blueprint debe reflejar el modelo de datos del MDD (§3) antes de generar Contratos API. Corrija el Blueprint o regenérelo.",
+        code: "BLUEPRINT_DATA_MODEL_GAPS",
+        gaps: dm.gaps,
+      });
+    }
   }
 
   async patchStage(projectId: string, stageId: string, body: unknown) {
     const dto = patchStageBodySchema.parse(body);
+    const uid = getRequestUserId();
     const stage = await this.prisma.stage.findFirst({
-      where: { id: stageId, projectId },
+      where: { id: stageId, project: { id: projectId, userId: uid } },
       include: { estimation: true },
     });
     if (!stage) throw new NotFoundException("Etapa no encontrada");
@@ -428,7 +479,12 @@ export class ProjectsService {
     if (dto.key !== undefined) data.key = dto.key.trim();
     if (dto.ordinal !== undefined) {
       const clash = await this.prisma.stage.findFirst({
-        where: { projectId, ordinal: dto.ordinal, NOT: { id: stageId } },
+        where: {
+          projectId,
+          ordinal: dto.ordinal,
+          NOT: { id: stageId },
+          project: { userId: uid },
+        },
       });
       if (clash) throw new BadRequestException(`Ordinal ${dto.ordinal} ya está en uso`);
       data.ordinal = dto.ordinal;
@@ -438,12 +494,17 @@ export class ProjectsService {
       await this.prisma.stage.update({ where: { id: stageId }, data });
     }
 
-    return this.findOne(projectId);
+    const out = await this.prisma.stage.findFirst({
+      where: { id: stageId, project: { id: projectId, userId: uid } },
+      include: { estimation: true },
+    });
+    if (!out) throw new NotFoundException("Etapa no encontrada");
+    return { stage: out };
   }
 
   async generateBenchmark(projectId: string, userIdea: string, urls?: string[]) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -485,8 +546,8 @@ export class ProjectsService {
    * Útil para proyectos existentes que quieren re-valorar el nivel según el alcance documentado.
    */
   async reassessComplexity(projectId: string, options?: { note?: string }) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -530,7 +591,7 @@ export class ProjectsService {
 
   /** Aplica la propuesta pendiente a `complexity` y limpia HITL (tras confirmación explícita del usuario). */
   async confirmComplexityProposal(projectId: string) {
-    const row = await this.prisma.project.findUnique({ where: { id: projectId } });
+    const row = await this.prisma.project.findFirst({ where: this.projectWhereForUser(projectId) });
     if (!row) throw new NotFoundException("Project not found");
     const raw = row.complexityPending;
     if (raw == null || typeof raw !== "object" || !("level" in raw)) {
@@ -558,7 +619,7 @@ export class ProjectsService {
     projectId: string,
     message: string,
   ): Promise<{ confirmed: boolean; rejected: boolean }> {
-    const row = await this.prisma.project.findUnique({ where: { id: projectId } });
+    const row = await this.prisma.project.findFirst({ where: this.projectWhereForUser(projectId) });
     if (!row?.complexityPending) return { confirmed: false, rejected: false };
     const t = message.trim().toLowerCase();
     const confirm =
@@ -581,8 +642,8 @@ export class ProjectsService {
    * Guía UX/UI generada por LLM (mismo criterio que legacy, sin Relic).
    */
   async generateUxUiGuide(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -600,7 +661,7 @@ export class ProjectsService {
   }
 
   private async ensureBlueprintForApi(projectId: string): Promise<void> {
-    const project = await this.prisma.project.findUnique({ where: { id: projectId } });
+    const project = await this.prisma.project.findFirst({ where: this.projectWhereForUser(projectId) });
     if (!project) return;
     if ((project.blueprintContent ?? "").trim().length > 48) return;
     await this.generateBlueprint(projectId);
@@ -650,10 +711,14 @@ export class ProjectsService {
 
   /**
    * Enrutamiento dinámico: solo ejecuta generadores listados en `DELIVERABLES_BY_COMPLEXITY`.
+   * @param onProgress — opcional (p. ej. BullMQ `job.updateProgress`).
    */
-  async generateDeliverablesCascade(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+  async generateDeliverablesCascade(
+    projectId: string,
+    onProgress?: (p: { step: DeliverableKind; index: number; total: number }) => void,
+  ) {
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -667,8 +732,12 @@ export class ProjectsService {
     }
     const c = project.complexity ?? ComplexityLevel.HIGH;
     const deliverablesToRun = DELIVERABLES_BY_COMPLEXITY[c];
+    const total = deliverablesToRun.length;
+    let index = 0;
     for (const step of deliverablesToRun) {
+      onProgress?.({ step, index, total });
       await this.runDeliverableStep(step, projectId);
+      index += 1;
     }
     return this.findOne(projectId);
   }
@@ -677,8 +746,8 @@ export class ProjectsService {
     projectId: string,
     options: { userIdea?: string; urls?: string[]; includeBenchmark?: boolean },
   ) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -719,8 +788,8 @@ export class ProjectsService {
   }
 
   async generateSpec(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -741,8 +810,8 @@ export class ProjectsService {
   }
 
   async generateTasks(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -754,8 +823,8 @@ export class ProjectsService {
   }
 
   async generateArchitecturePreview(projectId: string): Promise<{ content: string }> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -767,8 +836,8 @@ export class ProjectsService {
   }
 
   async generateArchitecture(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -780,8 +849,8 @@ export class ProjectsService {
   }
 
   async generateUseCasesPreview(projectId: string): Promise<{ content: string }> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -790,8 +859,8 @@ export class ProjectsService {
   }
 
   async generateUseCases(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -800,8 +869,8 @@ export class ProjectsService {
   }
 
   async generateUserStoriesPreview(projectId: string): Promise<{ content: string }> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -814,8 +883,8 @@ export class ProjectsService {
   }
 
   async generateUserStories(projectId: string) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -828,8 +897,8 @@ export class ProjectsService {
   }
 
   async generateBlueprintPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -838,8 +907,8 @@ export class ProjectsService {
   }
 
   async generateBlueprint(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -855,11 +924,12 @@ export class ProjectsService {
   }
 
   async generateApiContractsPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
+    this.assertBlueprintCoversMddDataModel(project);
     const content = await this.ai.generateApiContracts(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -869,8 +939,8 @@ export class ProjectsService {
   }
 
   async generateInfraPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -883,11 +953,12 @@ export class ProjectsService {
   }
 
   async generateApiContracts(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
+    this.assertBlueprintCoversMddDataModel(project);
     const content = await this.ai.generateApiContracts(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -897,8 +968,8 @@ export class ProjectsService {
   }
 
   async generateLogicFlows(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -907,8 +978,8 @@ export class ProjectsService {
   }
 
   async generateInfra(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
@@ -925,19 +996,22 @@ export class ProjectsService {
     options?: { useLlm?: boolean },
   ): Promise<{
     blueprint: ConformanceResult;
+    blueprintDataModel: ConformanceResult;
     api: ApiConformanceResult;
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
   }> {
-    const p = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const p = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!p) throw new NotFoundException("Project not found");
     const mdd = this.constitutionMarkdown(p);
 
+    const blueprintDataModel = this.conformance.checkBlueprintDataModel(mdd, p.blueprintContent);
     const heuristic = {
       blueprint: this.conformance.checkBlueprint(mdd, p.blueprintContent),
+      blueprintDataModel,
       api: this.conformance.checkApi(mdd, p.apiContractsContent),
       logicFlows: this.conformance.checkLogicFlows(mdd, p.logicFlowsContent),
       infra: this.conformance.checkInfra(mdd, p.infraContent),
@@ -957,6 +1031,7 @@ export class ProjectsService {
 
     return {
       blueprint: blueprintLlm.ok ? { ok: true, gaps: [] } : { ok: false, gaps: blueprintLlm.gaps },
+      blueprintDataModel,
       api: apiLlm.ok
         ? { ok: true, missingInApi: [], extraInApi: [] }
         : { ok: false, missingInApi: apiLlm.gaps, extraInApi: [] },
@@ -969,8 +1044,8 @@ export class ProjectsService {
     projectId: string,
     deliverable: "blueprint" | "api" | "infra",
   ): Promise<string> {
-    const p = await this.prisma.project.findUnique({
-      where: { id: projectId },
+    const p = await this.prisma.project.findFirst({
+      where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!p) throw new NotFoundException("Project not found");

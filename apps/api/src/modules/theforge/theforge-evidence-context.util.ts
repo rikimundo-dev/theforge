@@ -39,6 +39,52 @@ export function isLegacyEvidenceFirstEnabled(): boolean {
   return envFlag("LEGACY_EVIDENCE_FIRST_CONTEXT", true);
 }
 
+/**
+ * Fase 3: paso intermedio "Legacy Analyzer" — MCP + ask_codebase compacto hacia el prompt principal
+ * (menos tokens que volcar extractos completos de archivo). Default: activo.
+ */
+export function isLegacyAnalyzerCompactEnabled(): boolean {
+  return envFlag("LEGACY_ANALYZER_COMPACT", true);
+}
+
+/** Si true, adjunta anexo recortado de evidencia bruta tras el análisis (debug). Default: false. */
+export function isLegacyAnalyzerAttachRawEnabled(): boolean {
+  return envFlag("LEGACY_ANALYZER_ATTACH_RAW", false);
+}
+
+const LEGACY_ANALYZER_INPUT_MAX = () => parsePositiveInt("LEGACY_ANALYZER_INPUT_MAX_CHARS", 14000);
+
+/**
+ * Agente intermedio: resumen estructurado desde evidencia MCP (sin archivos completos).
+ * El prompt principal (p. ej. Blueprint) recibe solo esta salida (+ anexo opcional).
+ */
+export async function runLegacyAnalyzerPass(
+  api: TheForgeEvidenceApi,
+  projectId: string,
+  evidenceMarkdown: string,
+): Promise<string> {
+  const clipped = clip(evidenceMarkdown.trim(), LEGACY_ANALYZER_INPUT_MAX());
+  const instructions =
+    "Eres **Legacy Analyzer**. Recibes SOLO el bloque de evidencia del índice TheForge/MCP " +
+    "(búsqueda semántica, rutas, firmas vía get_functions). " +
+    "NO inventes stack, archivos ni endpoints que no aparezcan.\n\n" +
+    "Responde en español con markdown usando **exactamente** estos encabezados:\n" +
+    "## Resumen de impacto\n(máximo 8 viñetas; cada una debe poder enlazarse a un fragmento de la evidencia)\n" +
+    "## Superficie API\n(rutas/endpoints o «no consta en evidencia»)\n" +
+    "## Modelo de datos y persistencia\n(entidades/tablas o «no consta»)\n" +
+    "## Riesgos y lagunas del índice\n" +
+    "## Paths citados\n(lista única de rutas de archivo que hayas mencionado arriba)\n\n" +
+    "Si un apartado no tiene soporte en la evidencia, escribe: *no consta en evidencia*.\n\n" +
+    "--- EVIDENCIA ---\n\n" +
+    clipped;
+
+  const out = await api.askCodebase(instructions, projectId, {
+    twoPhase: true,
+    responseMode: "evidence_first",
+  });
+  return (out ?? "").trim();
+}
+
 function parsePositiveInt(name: string, fallback: number): number {
   return envInt(name, fallback);
 }
@@ -112,12 +158,15 @@ export async function buildLegacyEvidenceMarkdown(
   projectId: string,
   options?: BuildLegacyEvidenceMarkdownOptions,
 ): Promise<string> {
+  const useAnalyzer = isLegacyAnalyzerCompactEnabled();
   const queries = options?.semanticQueries?.length ? options.semanticQueries : [...DEFAULT_SEMANTIC_QUERIES];
   const semanticLimit = parsePositiveInt("LEGACY_SEMANTIC_SEARCH_LIMIT", 12);
-  const maxPaths = parsePositiveInt("LEGACY_EVIDENCE_MAX_PATHS", 35);
-  const maxFnPaths = parsePositiveInt("LEGACY_EVIDENCE_FUNCTIONS_PATHS", 20);
-  const maxFullFiles = parsePositiveInt("LEGACY_EVIDENCE_FULL_FILE_PATHS", 3);
-  const sectionMax = parsePositiveInt("LEGACY_SEMANTIC_SECTION_MAX_CHARS", 6000);
+  const maxPaths = parsePositiveInt("LEGACY_EVIDENCE_MAX_PATHS", useAnalyzer ? 28 : 35);
+  const maxFnPaths = parsePositiveInt("LEGACY_EVIDENCE_FUNCTIONS_PATHS", useAnalyzer ? 16 : 20);
+  const maxFullFiles = useAnalyzer
+    ? 0
+    : parsePositiveInt("LEGACY_EVIDENCE_FULL_FILE_PATHS", 3);
+  const sectionMax = parsePositiveInt("LEGACY_SEMANTIC_SECTION_MAX_CHARS", useAnalyzer ? 4000 : 6000);
   const fileContentMax = parsePositiveInt("LEGACY_FILE_CONTENT_MAX_CHARS", 4000);
 
   const semanticChunks = await Promise.all(
@@ -168,6 +217,22 @@ export async function buildLegacyEvidenceMarkdown(
   const evidenceBody = sections.join("\n\n---\n\n");
 
   if (options?.includeSynthesis === false) return evidenceBody;
+
+  if (useAnalyzer) {
+    const analyzed = await runLegacyAnalyzerPass(api, projectId, evidenceBody);
+    const core = analyzed.length > 0 ? analyzed : "*Legacy Analyzer no devolvió texto; revisar MCP o límites.*";
+    let out =
+      "# Contexto TheForge — Legacy Analyzer (compacto)\n\n" +
+      "_Resumen estructurado desde índice MCP; los entregables deben anclarse a esto, no inventar fuera de evidencia._\n\n" +
+      core;
+    if (isLegacyAnalyzerAttachRawEnabled()) {
+      out +=
+        "\n\n---\n<details><summary>Anexo: evidencia bruta (recortada)</summary>\n\n" +
+        clip(evidenceBody, 8000) +
+        "\n\n</details>";
+    }
+    return out;
+  }
 
   const synthPrompt =
     "Below is EVIDENCE from the indexed graph (semantic search + symbols + optional file excerpts). " +

@@ -47,6 +47,8 @@ function DocEmptyState({
   onGenerate,
   loading,
   hasMdd,
+  generateBlocked,
+  generateBlockedReason,
 }: {
   icon: LucideIcon;
   title: string;
@@ -54,7 +56,11 @@ function DocEmptyState({
   onGenerate: () => void;
   loading: boolean;
   hasMdd: boolean;
+  /** ej. Blueprint §3 incompleto — bloquea generación aunque haya MDD */
+  generateBlocked?: boolean;
+  generateBlockedReason?: string;
 }) {
+  const blocked = !!generateBlocked;
   return (
     <div className="flex flex-col items-center justify-center min-h-[200px] text-[var(--foreground-muted)] text-center gap-4">
       <Icon className="w-12 h-12 text-[var(--foreground-subtle)]" />
@@ -62,13 +68,16 @@ function DocEmptyState({
       <Button
         variant="outline"
         onClick={onGenerate}
-        disabled={loading || !hasMdd}
+        disabled={loading || !hasMdd || blocked}
         loading={loading}
       >
         Generar {title} desde MDD
       </Button>
       {!hasMdd && (
         <p className="text-xs">Necesitas tener contenido en el MDD para generar este documento.</p>
+      )}
+      {blocked && generateBlockedReason && (
+        <p className="text-xs text-amber-400 max-w-md">{generateBlockedReason}</p>
       )}
     </div>
   );
@@ -89,7 +98,9 @@ export default function WorkshopView({
   const activeStageId = useWorkshopStore((s) => s.activeStageId);
   const setActiveStageId = useWorkshopStore((s) => s.setActiveStageId);
   const createWorkshopStage = useWorkshopStore((s) => s.createWorkshopStage);
-  const workshopStages = project?.stages ?? [];
+  const workshopStages = useWorkshopStore((s) => s.workshopStages);
+  const workshopStagesList =
+    workshopStages.length > 0 ? workshopStages : (project?.stages ?? []);
   const liveMetrics = useWorkshopStore((s) => s.liveMetrics);
   const mddContent = useWorkshopStore((s) => s.mddContent);
   const specContentField = useWorkshopStore((s) => s.specContent);
@@ -142,6 +153,9 @@ export default function WorkshopView({
   /* Use stable selectors to avoid loops */
   const conformanceRaw = useWorkshopStore((s) => s.conformance);
   const conformance = useMemo(() => conformanceRaw, [conformanceRaw]);
+  const apiBlueprintDmBlocked = conformance?.blueprintDataModel?.ok === false;
+  const apiBlueprintBlockedHint =
+    "El Blueprint no cubre el §3 Modelo de datos del MDD. Corrige o regenera el Blueprint; revisa el panel Conformance.";
 
   const precisionBreakdownRaw = useWorkshopStore((s) => s.precisionBreakdown);
   const precisionBreakdown = useMemo(() => precisionBreakdownRaw, [precisionBreakdownRaw]);
@@ -247,7 +261,8 @@ export default function WorkshopView({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
   const [newStageName, setNewStageName] = useState("");
-  const [copyMddForNewStage, setCopyMddForNewStage] = useState(true);
+  /** `""` = MDD en blanco; si no vacío, copia desde esa etapa */
+  const [copyMddSourceStageId, setCopyMddSourceStageId] = useState<string>("");
   const initialPanelSetForProject = useRef<string | null>(null);
   /** Flujo legacy: descripción y respuestas locales antes de enviar */
   const [legacyDescriptionInput, setLegacyDescriptionInput] = useState("");
@@ -337,6 +352,11 @@ export default function WorkshopView({
     setProjectId(projectId);
     fetchProject(projectId);
   }, [projectId, setProjectId, fetchProject]);
+
+  useEffect(() => {
+    if (!projectId || !project || project.id !== projectId) return;
+    void fetchConformance(projectId);
+  }, [projectId, project?.id, fetchConformance]);
 
   useEffect(() => {
     if (!project || project.id !== projectId) return;
@@ -655,19 +675,19 @@ export default function WorkshopView({
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
-          {workshopStages.length > 0 && (
+          {workshopStagesList.length > 0 && (
             <div className="flex items-center gap-1.5 mr-1">
               <Layers className="w-4 h-4 text-zinc-500 shrink-0" aria-hidden />
               <label htmlFor="workshop-stage-select" className="sr-only">
-                Etapa del proyecto
+                Vista en vivo: etapa del Workshop (MDD y semáforo)
               </label>
               <select
                 id="workshop-stage-select"
                 className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-200 max-w-[220px]"
-                value={activeStageId ?? workshopStages[0]?.id ?? ""}
+                value={activeStageId ?? workshopStagesList[0]?.id ?? ""}
                 onChange={(e) => setActiveStageId(e.target.value)}
               >
-                {workshopStages.map((st) => (
+                {workshopStagesList.map((st) => (
                   <option key={st.id} value={st.id}>
                     #{st.ordinal}{" "}
                     {(st.name ?? st.key ?? st.id.slice(0, 8)) + ` · ${st.workflowStatus}`}
@@ -678,7 +698,7 @@ export default function WorkshopView({
                 type="button"
                 onClick={() => {
                   setNewStageName("");
-                  setCopyMddForNewStage(true);
+                  setCopyMddSourceStageId(activeStageId ?? "");
                   setShowStageModal(true);
                 }}
                 className="text-xs px-2 py-1.5 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/80 whitespace-nowrap"
@@ -738,7 +758,7 @@ export default function WorkshopView({
               Nueva etapa
             </h2>
             <p className="text-sm text-zinc-400">
-              Se activará la nueva etapa (las demás pasan a SUPERSEDED). Opcionalmente copia el MDD de la etapa actual.
+              Se activará la nueva etapa (las demás pasan a SUPERSEDED). Puedes partir de un MDD en blanco o copiar uno de una etapa previa.
             </p>
             <div>
               <label className="block text-xs text-zinc-500 mb-1">Nombre</label>
@@ -750,14 +770,25 @@ export default function WorkshopView({
                 className="w-full bg-zinc-900 border border-zinc-600 rounded px-3 py-2 text-sm"
               />
             </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={copyMddForNewStage}
-                onChange={(e) => setCopyMddForNewStage(e.target.checked)}
-              />
-              Copiar MDD desde la etapa actual
-            </label>
+            <div>
+              <label htmlFor="copy-mdd-from-stage" className="block text-xs text-zinc-500 mb-1">
+                Copiar MDD desde
+              </label>
+              <select
+                id="copy-mdd-from-stage"
+                value={copyMddSourceStageId}
+                onChange={(e) => setCopyMddSourceStageId(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-600 rounded px-3 py-2 text-sm text-zinc-200"
+              >
+                <option value="">Sin copiar (MDD vacío)</option>
+                {workshopStagesList.map((st) => (
+                  <option key={st.id} value={st.id}>
+                    #{st.ordinal} {st.name ?? st.key ?? st.id.slice(0, 8)}
+                    {st.id === activeStageId ? " (vista actual)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -771,7 +802,7 @@ export default function WorkshopView({
                 onClick={async () => {
                   const res = await createWorkshopStage({
                     name: newStageName.trim() || undefined,
-                    copyMddFromCurrent: copyMddForNewStage,
+                    copyMddFromStageId: copyMddSourceStageId.trim() || undefined,
                   });
                   if (res) setShowStageModal(false);
                 }}
@@ -1140,8 +1171,12 @@ export default function WorkshopView({
                   <button
                     type="button"
                     onClick={() => generateApiContracts(projectId, { preview: true })}
-                    disabled={loading || mddReviewing || !mddContent?.trim()}
-                    title="Generar contratos API desde el MDD (vista previa antes de guardar)"
+                    disabled={loading || mddReviewing || !mddContent?.trim() || apiBlueprintDmBlocked}
+                    title={
+                      apiBlueprintDmBlocked
+                        ? apiBlueprintBlockedHint
+                        : "Generar contratos API desde el MDD (vista previa antes de guardar)"
+                    }
                     className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -1905,6 +1940,8 @@ export default function WorkshopView({
                   onGenerate={() => generateApiContracts(projectId, { preview: true })}
                   loading={loading || mddReviewing}
                   hasMdd={!!mddContent?.trim()}
+                  generateBlocked={apiBlueprintDmBlocked}
+                  generateBlockedReason={apiBlueprintBlockedHint}
                 />
               )
             )}
@@ -2078,6 +2115,32 @@ export default function WorkshopView({
                     Regenerar Blueprint con gaps
                   </button>
                 )}
+                <p
+                  className={
+                    conformance.blueprintDataModel?.ok !== false ? "text-green-400" : "text-red-400 font-medium"
+                  }
+                >
+                  Blueprint vs MDD §3 (modelo datos):{" "}
+                  {conformance.blueprintDataModel?.ok !== false
+                    ? "Cumple — se puede generar Contratos API"
+                    : `Bloquea generación API: ${(conformance.blueprintDataModel?.gaps ?? []).join("; ")}`}
+                </p>
+                {!conformance.blueprintDataModel?.ok &&
+                  (conformance.blueprintDataModel?.gaps?.length ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generateBlueprint(projectId!, {
+                          preview: true,
+                          gapsFeedback: conformance!.blueprintDataModel!.gaps.join("\n"),
+                        })
+                      }
+                      disabled={loading || mddReviewing}
+                      className="text-amber-400 hover:underline disabled:opacity-50"
+                    >
+                      Regenerar Blueprint (gaps §3)
+                    </button>
+                  )}
                 <p className={conformance.api.ok ? "text-green-400" : "text-amber-400"}>
                   API: {conformance.api.ok ? "Cumple" : `Faltan en el doc. de API (entregable): ${conformance.api.missingInApi.join(", ")}`}
                 </p>
@@ -2085,7 +2148,8 @@ export default function WorkshopView({
                   <button
                     type="button"
                     onClick={() => generateApiContracts(projectId!, { preview: true, gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n") })}
-                    disabled={loading || mddReviewing}
+                    disabled={loading || mddReviewing || apiBlueprintDmBlocked}
+                    title={apiBlueprintDmBlocked ? apiBlueprintBlockedHint : undefined}
                     className="text-amber-400 hover:underline disabled:opacity-50"
                   >
                     Regenerar API con gaps

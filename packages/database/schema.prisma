@@ -9,6 +9,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// Usuario de la aplicación (identidad JWT tras OTP). Propietario de proyectos y sesiones.
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  createdAt DateTime  @default(now())
+  projects  Project[]
+  sessions  Session[]
+}
+
 enum ProjectType {
   NEW
   LEGACY
@@ -86,6 +95,8 @@ enum EpisodicMemoryKind {
 
 model Project {
   id               String       @id @default(uuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   name             String
   /// Nivel de complejidad / riesgo: gobierna semáforo y qué documentos son obligatorios (efectivo tras confirmación).
   complexity       ComplexityLevel @default(HIGH)
@@ -113,6 +124,8 @@ model Project {
   legacyFlowState      Json?
   agentCheckpoints     AgentStateCheckpoint[]
   createdAt            DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// Hilo LangGraph: Fase 0 / DBGA usa `mddStageId` vacío; flujo MDD Manager por etapa usa el id de `Stage`.
@@ -141,11 +154,16 @@ model ArchitecturalPreference {
 
 model Session {
   id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   projectId   String
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   chatLog     Json
   contextStep String
   updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@index([projectId])
 }
 
 model Estimation {

@@ -2,7 +2,9 @@
 
 Prisma schema y client compartido.
 
-- **Schema:** `schema.prisma` — `Project` (incl. **`complexity`**: `ComplexityLevel` `LOW` \| `MEDIUM` \| `HIGH` — semáforo y entregables), `Session`, `Estimation`, `Status`, **`Stage`** (ciclo agéntico 1:N con proyecto), **`EpisodicMemory`** (memoria larga por etapa: razonamiento, Reflexion, rechazos del Evaluator), `ArchitecturalPreference`, `AgentStateCheckpoint`.
+- **Schema:** `schema.prisma` — **`User`** (email único; JWT `sub` tras OTP), `Project` (**`userId`** → propietario), `Session` (**`userId`** redundante con propietario del proyecto), `Estimation`, `Status`, **`Stage`**, **`EpisodicMemory`**, `ArchitecturalPreference`, `AgentStateCheckpoint`.
+- **Migración `20260326150000_user_project_session_ownership`:** crea `User`, enlaza proyectos/sesiones existentes al primer usuario insertado (`jorge.correa@kreoint.mx` si la tabla está vacía) y exige `userId` NOT NULL.
+- **Migración `20260327140000_ensure_pg_enums_idempotent`:** crea con `IF NOT EXISTS` los ENUM de Prisma (`Status`, `ProjectType`, `ComplexityLevel`, `StageStatus`, `EpisodicMemoryKind`) para desbloquear deploys donde faltaba el tipo antes de `ADD COLUMN …`.
 - **Client:** generado en `src/generated`; exportado por el package.
 
 `pnpm db:generate` (o `pnpm build`) genera el client. `pnpm db:push` aplica el schema a la DB. `pnpm db:migrate` ejecuta migraciones en producción.

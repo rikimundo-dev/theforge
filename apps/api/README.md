@@ -2,11 +2,17 @@
 
 Backend NestJS de TheForge.
 
-- **Módulos:** Projects (incluye `POST/PATCH …/projects/:id/stages`, **`POST …/generate-deliverables`** cascada por `complexity`, y MDD por etapa con `stageId` en PATCH), Sessions, AI (adapters OpenAI/Gemini), Engine (cost-calculator, semáforo). **Ai-orchestrator:** `POST /ai-orchestrator/welcome` acepta `stageId` opcional (contexto MDD alineado a la etapa). **Ai-analysis:** checkpoints LangGraph / `mdd/thread` por `projectId` + `mddStageId`.
+- **Módulos:** Projects (incluye **`GET/POST/PATCH …/projects/:projectId/stages`** — crear/actualizar etapa responden `{ stage }`; **`POST …/generate-deliverables`** cascada por `complexity`; generación/preview de **Contratos API** bloqueada si el Blueprint no cubre el §3 del MDD; MDD por etapa con `stageId` en PATCH), Sessions, AI (adapters OpenAI/Gemini), Engine (cost-calculator, semáforo, conformance). **Ai-orchestrator:** `POST /ai-orchestrator/welcome` acepta `stageId` opcional (contexto MDD alineado a la etapa). **Ai-analysis:** checkpoints LangGraph / `mdd/thread` por `projectId` + `mddStageId`.
 - **DB:** Prisma + PostgreSQL (schema en `packages/database`).
 - **IA:** `AI_PROVIDER=openai|google`; factory inyecta el adapter.
 
-Env: `DATABASE_URL`, `AI_PROVIDER`, `OPENAI_API_KEY` o `GOOGLE_GENERATIVE_AI_API_KEY`. Proyectos **legacy** + MCP: `THEFORGE_MCP_URL`, tokens MCP; pipeline evidencia-primero y topes en variables `LEGACY_*` (ver raíz `.env.example` y `docs/LEGACY-EVIDENCE-CONTEXT.md`).
+Env: `DATABASE_URL`, `AI_PROVIDER`, `OPENAI_API_KEY` o `GOOGLE_GENERATIVE_AI_API_KEY`. **Auth (Fase 1):** Passport **`JwtStrategy`** + `JwtAuthGuard` global; `UserContextInterceptor` + `AsyncLocalStorage` propagan `userId` del JWT a `ProjectsService` / `SessionsService` (filtrado por propiedad). `JWT_SECRET` obligatorio en producción. **OTP:** `EMAIL_OTP` (recomendado en Docker/Dokploy) o `AUTH_ALLOWED_OTP_EMAIL` — único correo que recibe el código; en producción uno de los dos es obligatorio al arranque. SMTP como en `.env.example`; tras verify, `User` en BD y **`sub` en JWT = `User.id`**.
+
+**CORS:** `CORS_ORIGINS` (coma) obligatorio si `NODE_ENV=production`; `docker-compose` define un default razonable para `WEB_DOMAIN` + localhost (Vite). Ajustar en Dokploy al dominio real del front.
+
+**BullMQ (opcional):** con `REDIS_URL`, la cascada `POST /projects/:id/generate-deliverables` se encola (`theforge-deliverables`); el cliente usa polling o `GET …/deliverables-jobs/:jobId/stream` (SSE). Sin Redis, la respuesta sigue siendo el proyecto actualizado en la misma petición.
+
+**SSRF (scrape):** `url-ssrf-guard.ts` — resolución DNS y `ip-range-check`; usado en `scrape-cheerio.tool.ts` y `ScraperService`. Proyectos **legacy** + MCP: `THEFORGE_MCP_URL`, tokens MCP; pipeline evidencia-primero y topes en variables `LEGACY_*` (ver raíz `.env.example` y `docs/LEGACY-EVIDENCE-CONTEXT.md`).
 
 ## Despliegue (Docker / Dokploy)
 

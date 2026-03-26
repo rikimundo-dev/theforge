@@ -7,11 +7,14 @@ import {
   FolderPlus,
   GitBranch,
   Loader2,
+  LogOut,
   Plus,
   RefreshCw,
   Trash2,
 } from "lucide-react";
 import WorkshopView from "./views/WorkshopView";
+import LoginView from "./views/LoginView";
+import { apiFetch, clearAccessToken, getAccessToken, API_BASE } from "./utils/apiClient";
 import {
   Button,
   Input,
@@ -35,8 +38,6 @@ import {
   AlertDialogTitle,
   EmptyState,
 } from "./components/ui";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
 type Status = "ROJO" | "AMARILLO" | "VERDE";
 
@@ -78,6 +79,7 @@ const statusDotColor: Record<Status, string> = {
 };
 
 export default function App() {
+  const [authed, setAuthed] = useState(() => !!getAccessToken());
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [newName, setNewName] = useState("");
@@ -108,7 +110,7 @@ export default function App() {
   async function loadProjects() {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/projects`);
+      const r = await apiFetch(`${API_BASE}/projects`);
       const data = await r.json();
       setProjects(data);
     } finally {
@@ -120,7 +122,7 @@ export default function App() {
     if (!newName.trim()) return;
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/projects`, {
+      const r = await apiFetch(`${API_BASE}/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newName.trim(), hasUxTeam: false, projectType: "NEW" }),
@@ -138,7 +140,7 @@ export default function App() {
   async function loadTheForgeProjects() {
     setTheForgeLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/theforge/projects`);
+      const r = await apiFetch(`${API_BASE}/theforge/projects`);
       const data = (await r.json()) as { projects: TheForgeProject[]; theforgeAvailable: boolean };
       setTheForgeProjects(data.projects ?? []);
       setTheForgeAvailable(data.theforgeAvailable ?? false);
@@ -156,7 +158,7 @@ export default function App() {
   async function createLegacyProject(source: { id: string; name: string }) {
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/projects`, {
+      const r = await apiFetch(`${API_BASE}/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -185,7 +187,7 @@ export default function App() {
     if (!projectToDelete) return;
     setLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectToDelete.id}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectToDelete.id}`, {
         method: "DELETE",
       });
       if (!r.ok) throw new Error("Error al borrar");
@@ -199,6 +201,25 @@ export default function App() {
   useEffect(() => {
     if (!workshopProject) loadProjects();
   }, [workshopProject]);
+
+  useEffect(() => {
+    function onAuthExpired() {
+      setAuthed(false);
+      setWorkshopProject(null);
+    }
+    window.addEventListener("theforge:auth-expired", onAuthExpired);
+    return () => window.removeEventListener("theforge:auth-expired", onAuthExpired);
+  }, []);
+
+  if (!authed) {
+    return <LoginView onLoggedIn={() => setAuthed(true)} />;
+  }
+
+  function logout() {
+    clearAccessToken();
+    setAuthed(false);
+    setWorkshopProject(null);
+  }
 
   if (workshopProject) {
     return (
@@ -343,14 +364,20 @@ export default function App() {
       </Dialog>
 
       <div className="max-w-4xl mx-auto space-y-6">
-        <header className="border-b border-[var(--border)] pb-6">
-          <h1 className="text-3xl font-bold text-[var(--primary)] flex items-center gap-2">
-            <Flame className="w-8 h-8" />
-            TheForge
-          </h1>
-          <p className="text-[var(--foreground-muted)] mt-1">
-            Software Factory — Entrevista proactiva → MDD → Semáforo → Estimación
-          </p>
+        <header className="border-b border-[var(--border)] pb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-[var(--primary)] flex items-center gap-2">
+              <Flame className="w-8 h-8" />
+              TheForge
+            </h1>
+            <p className="text-[var(--foreground-muted)] mt-1">
+              Software Factory — Entrevista proactiva → MDD → Semáforo → Estimación
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={logout} className="shrink-0">
+            <LogOut className="w-4 h-4" />
+            Salir
+          </Button>
         </header>
 
         <Card>

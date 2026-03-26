@@ -3,6 +3,7 @@ import * as cheerio from "cheerio";
 import { z } from "zod";
 import { htmlToMarkdown } from "../../scraper/html-to-markdown.js";
 import { TIMEOUT_MS, SCRAPER_USER_AGENT } from "../../scraper/constants.js";
+import { assertPublicHttpUrl } from "../../scraper/url-ssrf-guard.js";
 
 const MARKDOWN_SNIPPET_LENGTH = 4000;
 const MAX_BODY_BYTES = 512 * 1024;
@@ -17,6 +18,7 @@ export const createScrapeUrlTool = () =>
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
       try {
+        await assertPublicHttpUrl(url);
         const res = await fetch(url, {
           signal: controller.signal,
           headers: { "User-Agent": SCRAPER_USER_AGENT },

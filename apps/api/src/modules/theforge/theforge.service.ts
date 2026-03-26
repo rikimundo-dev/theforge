@@ -2,8 +2,10 @@ import { Injectable, Logger } from "@nestjs/common";
 import {
   buildLegacyEvidenceMarkdown,
   clipLegacySemanticSection,
+  DEFAULT_SEMANTIC_QUERIES,
   isLegacyEvidenceFirstEnabled,
 } from "./theforge-evidence-context.util.js";
+import { TheForgeContextCacheService } from "./theforge-context-cache.service.js";
 
 /** Repo (root) dentro de un proyecto multi-repo. */
 export interface TheForgeProjectRoot {
@@ -98,6 +100,8 @@ function extractJsonFromToolContent(text: string): string {
 @Injectable()
 export class TheForgeService {
   private readonly logger = new Logger(TheForgeService.name);
+
+  constructor(private readonly contextCache: TheForgeContextCacheService) {}
 
   private get baseUrl(): string {
     const url = process.env.THEFORGE_MCP_URL?.trim();
@@ -207,6 +211,19 @@ export class TheForgeService {
     if (!this.isConfigured()) return "";
     if (isLegacyEvidenceFirstEnabled()) {
       try {
+        if (this.contextCache.isEnabled()) {
+          const probe = await this.semanticSearch(DEFAULT_SEMANTIC_QUERIES[0], projectId, 8);
+          const fp = this.contextCache.fingerprintFromSemanticSlice(projectId, probe);
+          const key = this.contextCache.cacheKey(projectId, fp);
+          const hit = this.contextCache.get(key);
+          if (hit) {
+            this.logger.log(`[TheForge] getContextForDeliverables: cache hit (${projectId.slice(0, 8)}…)`);
+            return hit;
+          }
+          const built = await buildLegacyEvidenceMarkdown(this, projectId, { includeSynthesis: true });
+          this.contextCache.set(key, built);
+          return built;
+        }
         return await buildLegacyEvidenceMarkdown(this, projectId, { includeSynthesis: true });
       } catch (err) {
         this.logger.warn(

@@ -1,6 +1,11 @@
 import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { UserContextInterceptor } from "./common/interceptors/user-context.interceptor.js";
+import { JwtAuthGuard } from "./common/guards/jwt-auth.guard.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { HealthController } from "./health.controller.js";
+import { AuthModule } from "./modules/auth/auth.module.js";
 import { AiModule } from "./modules/ai/ai.module.js";
 import { EngineModule } from "./modules/engine/engine.module.js";
 import { ProjectsModule } from "./modules/projects/projects.module.js";
@@ -13,6 +18,8 @@ import { LegacyFlowModule } from "./modules/legacy-flow/legacy-flow.module.js";
 @Module({
   controllers: [HealthController],
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    AuthModule,
     PrismaModule,
     AiModule,
     EngineModule,
@@ -22,6 +29,10 @@ import { LegacyFlowModule } from "./modules/legacy-flow/legacy-flow.module.js";
     AiAnalysisModule,
     TheForgeModule,
     LegacyFlowModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: UserContextInterceptor },
   ],
 })
 export class AppModule { }

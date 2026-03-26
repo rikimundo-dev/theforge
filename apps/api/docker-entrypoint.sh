@@ -17,6 +17,7 @@ if npx prisma migrate resolve --rolled-back 20250311100000_add_legacy_flow_state
 fi
 
 # P3009: migración stage_sdd fallida en deploys viejos (enum Status). Idempotente: solo actúa si sigue en estado fallido.
+# Tras deploy con 20260327140000_ensure_pg_enums_idempotent los ENUM suelen existir incluso si una migración falló antes.
 if npx prisma migrate resolve --rolled-back 20250319140000_stage_sdd_deliverables 2>/dev/null; then
   echo "migrate resolve: cleared failed record for 20250319140000_stage_sdd_deliverables"
 fi

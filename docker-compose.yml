@@ -29,6 +29,20 @@ services:
       retries: 5
 
   # Grafo SDD (MDD, entregables, RAG agéntico). Aislado del índice de código en TheForge.
+  # Cola BullMQ (cascada generate-deliverables). Opcional: sin este servicio, REDIS_URL vacío → modo síncrono.
+  theforge-redis-queue:
+    image: redis:7-alpine
+    container_name: theforge-redis-queue
+    networks:
+      - default
+    volumes:
+      - theforge_redis_queue_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   theforge-falkor-sdd:
     image: falkordb/falkordb:latest
     container_name: theforge-falkor-sdd
@@ -63,6 +77,10 @@ services:
       - "traefik.http.routers.theforge-api.middlewares=theforge-api-strip"
     environment:
       DATABASE_URL: postgresql://theforge:theforge@theforge-db:5432/theforge
+      # BullMQ: definir REDIS_URL para encolar cascada de entregables (evita timeouts HTTP largos).
+      REDIS_URL: ${REDIS_URL:-redis://theforge-redis-queue:6379}
+      # Obligatorio en producción; en local Dokploy sustituir por secreto fuerte.
+      JWT_SECRET: ${JWT_SECRET:-local-dev-jwt-secret-replace-in-dokploy}
       # Grafo documental SDD (Cypher, MDD_Section). TheForge MCP va aparte (THEFORGE_MCP_URL).
       FALKORDB_SDD_URL: redis://theforge-falkor-sdd:6379
       FALKORDB_URL: redis://theforge-falkor-sdd:6379
@@ -79,8 +97,23 @@ services:
       THEFORGE_MCP_TIMEOUT_MS: ${THEFORGE_MCP_TIMEOUT_MS:-60000}
       # P3009: si una migración queda fallida, desbloquear antes de deploy (ej. 20260319130000_agent_checkpoint_mdd_stage).
       PRISMA_RESOLVE_ROLLED_BACK: ${PRISMA_RESOLVE_ROLLED_BACK:-}
+      # OTP: definir EMAIL_OTP (y SMTP*) en Dokploy / .env — único correo que recibe el código.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-0}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      # Único correo que puede solicitar/recibir OTP (obligatorio con NODE_ENV=production en la imagen API).
+      EMAIL_OTP: ${EMAIL_OTP:-}
+      # Alias retrocompatible; si falta EMAIL_OTP puedes usar solo esto.
+      AUTH_ALLOWED_OTP_EMAIL: ${AUTH_ALLOWED_OTP_EMAIL:-}
+      # Lista separada por comas; en Dokploy definir el/los orígenes reales del front (https://tu-dominio).
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${WEB_DOMAIN:-theforge.local},http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
       theforge-db:
+        condition: service_healthy
+      theforge-redis-queue:
         condition: service_healthy
       theforge-falkor-sdd:
         condition: service_healthy
@@ -124,4 +157,5 @@ services:
 
 volumes:
   theforge_db_data:
+  theforge_redis_queue_data:
   falkor_sdd_data:

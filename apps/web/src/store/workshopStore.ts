@@ -1,6 +1,5 @@
 import { create } from "zustand";
-
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+import { apiFetch, API_BASE } from "../utils/apiClient";
 
 function pickEvaluatorCritique(data: Record<string, unknown>): string | null {
   const c = data.evaluatorCritique;
@@ -292,9 +291,10 @@ interface WorkshopState {
   useCasesContent: string | null;
   userStoriesContent: string | null;
   infraContent: string | null;
-  /** Conformance (SDD Fase 2): Blueprint/API/Flujos/Infra vs MDD */
+  /** Conformance (SDD Fase 2): Blueprint/API/Flujos/Infra vs MDD; `blueprintDataModel` = §3 vs Blueprint (gating API). */
   conformance: {
     blueprint: ConformanceResult;
+    blueprintDataModel: ConformanceResult;
     api: ApiConformanceResult;
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
@@ -346,11 +346,13 @@ interface WorkshopState {
   mddJustGeneratedFromBenchmark: boolean;
   /** Decisiones Arquitectónicas (ADRs) asociadas al proyecto */
   adrs: any[] | null;
-  /** Etapa cuyo MDD edita el Workshop (debe existir en `project.stages`). */
+  /** Etapas del proyecto (sincronizado con API; fuente para selector y foco MDD). */
+  workshopStages: WorkshopStage[];
+  /** Etapa cuyo MDD edita el Workshop (vista en vivo). */
   activeStageId: string | null;
   setActiveStageId: (stageId: string | null) => void;
-  /** Crea etapa vía `POST /projects/:id/stages`; opcional copia MDD desde `activeStageId`. */
-  createWorkshopStage: (opts: { name?: string; key?: string; copyMddFromCurrent?: boolean }) => Promise<Project | null>;
+  /** `POST /projects/:id/stages` → `{ stage }`; opcional `copyMddFromStageId`. */
+  createWorkshopStage: (opts: { name?: string; key?: string; copyMddFromStageId?: string }) => Promise<Project | null>;
 
   setProjectId: (id: string | null) => void;
   setProject: (p: Project | null) => void;
@@ -461,6 +463,7 @@ const initialState = {
   infraContent: null as string | null,
   conformance: null as {
     blueprint: ConformanceResult;
+    blueprintDataModel: ConformanceResult;
     api: ApiConformanceResult;
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
@@ -494,6 +497,7 @@ const initialState = {
   } | null,
   mddJustGeneratedFromBenchmark: false,
   adrs: null as any[] | null,
+  workshopStages: [] as WorkshopStage[],
   activeStageId: null as string | null,
 };
 
@@ -503,7 +507,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   setProjectId: (id) => set({ projectId: id }),
   setProject: (p) => {
     if (!p) {
-      set({ project: null, activeStageId: null });
+      set({ project: null, activeStageId: null, workshopStages: [] });
       return;
     }
     const stages = p.stages ?? [];
@@ -511,7 +515,8 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     const activeStageId = prev && stages.some((s) => s.id === prev) ? prev : pickDefaultStageId(stages);
     const flat = workshopFlatFromStage(p, activeStageId);
     set({
-      project: { ...p, ...flat },
+      project: { ...p, ...flat, stages },
+      workshopStages: stages,
       activeStageId,
       mddContent: cleanDoc(flat.mddContent) ?? "",
       uxUiGuideContent: p.uxUiGuideContent ?? null,
@@ -534,19 +539,21 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   clearEvaluatorCritique: () => set({ evaluatorCritique: null }),
 
   setActiveStageId: (stageId) => {
-    const { project, projectId } = get();
+    const { project, projectId, workshopStages } = get();
     if (!project || !stageId) return;
-    if (!project.stages?.some((s) => s.id === stageId)) return;
-    const flat = workshopFlatFromStage(project, stageId);
+    const stages = workshopStages.length > 0 ? workshopStages : (project.stages ?? []);
+    if (!stages.some((s) => s.id === stageId)) return;
+    const merged = { ...project, stages };
+    const flat = workshopFlatFromStage(merged, stageId);
     set({
       activeStageId: stageId,
-      project: { ...project, ...flat },
+      project: { ...merged, ...flat },
       mddContent: cleanDoc(flat.mddContent) ?? "",
     });
     const pid = projectId ?? project.id;
     if (pid?.trim()) {
       const qs = new URLSearchParams({ projectId: pid.trim(), stageId });
-      void fetch(`${API_BASE}/ai-analysis/mdd/thread?${qs.toString()}`)
+      void apiFetch(`${API_BASE}/ai-analysis/mdd/thread?${qs.toString()}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { threadId?: string | null } | null) => {
           if (data?.threadId) set({ managerThreadId: data.threadId });
@@ -560,14 +567,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
 
   createWorkshopStage: async (opts) => {
-    const { projectId, activeStageId, fetchProject } = get();
+    const { projectId, project, workshopStages } = get();
     if (!projectId?.trim()) return null;
     const body: Record<string, unknown> = { activate: true };
     if (opts.name?.trim()) body.name = opts.name.trim();
     if (opts.key?.trim()) body.key = opts.key.trim();
-    if (opts.copyMddFromCurrent && activeStageId) body.copyMddFromStageId = activeStageId;
+    if (opts.copyMddFromStageId?.trim()) body.copyMddFromStageId = opts.copyMddFromStageId.trim();
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId.trim()}/stages`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/stages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -576,7 +583,34 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message ?? "No se pudo crear la etapa");
       }
-      return fetchProject(projectId.trim());
+      const data = (await r.json()) as { stage?: WorkshopStage } | Project;
+      const newStage = "stage" in data && data.stage ? data.stage : null;
+      if (newStage && project) {
+        const prev = workshopStages.length > 0 ? workshopStages : (project.stages ?? []);
+        const stages = [...prev.filter((s) => s.id !== newStage.id), newStage].sort((a, b) => a.ordinal - b.ordinal);
+        const nextProject: Project = { ...project, stages };
+        const activeStageId = newStage.id;
+        const flat = workshopFlatFromStage(nextProject, activeStageId);
+        set({
+          workshopStages: stages,
+          project: { ...nextProject, ...flat },
+          activeStageId,
+          mddContent: cleanDoc(flat.mddContent) ?? "",
+          error: null,
+        });
+        const pid = projectId.trim();
+        const threadQs = new URLSearchParams({ projectId: pid, stageId: activeStageId });
+        void apiFetch(`${API_BASE}/ai-analysis/mdd/thread?${threadQs.toString()}`)
+          .then((tr) => (tr.ok ? tr.json() : null))
+          .then((d: { threadId?: string | null } | null) => {
+            if (d?.threadId) set({ managerThreadId: d.threadId });
+            else set({ managerThreadId: null });
+          })
+          .catch(() => {});
+        void get().fetchEstimation(pid).catch(() => {});
+        return get().project;
+      }
+      return await get().fetchProject(projectId.trim());
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Error al crear etapa" });
       return null;
@@ -586,7 +620,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   fetchProject: async (projectId) => {
     try {
       set({ session: null, managerThreadId: null });
-      const r = await fetch(`${API_BASE}/projects/${projectId}`);
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`);
       if (!r.ok) throw new Error("Proyecto no encontrado");
       const data: Project = await r.json();
       const stages = data.stages ?? [];
@@ -594,7 +628,8 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const activeStageId = prev && stages.some((s) => s.id === prev) ? prev : pickDefaultStageId(stages);
       const flat = workshopFlatFromStage(data, activeStageId);
       set({
-        project: { ...data, ...flat },
+        project: { ...data, ...flat, stages },
+        workshopStages: stages,
         activeStageId,
         mddContent: cleanDoc(flat.mddContent) ?? "",
         uxUiGuideContent: cleanDoc(data.uxUiGuideContent ?? null),
@@ -611,7 +646,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         infraContent: cleanDoc(data.infraContent ?? null),
         error: null,
       });
-      const sessionsRes = await fetch(`${API_BASE}/sessions/project/${projectId}`);
+      const sessionsRes = await apiFetch(`${API_BASE}/sessions/project/${projectId}`);
       if (sessionsRes.ok) {
         const sessions: Session[] = await sessionsRes.json();
         set({ session: sessions.length > 0 ? sessions[0] : null });
@@ -619,7 +654,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const sid = get().activeStageId;
       const threadQs = new URLSearchParams({ projectId });
       if (sid) threadQs.set("stageId", sid);
-      const threadRes = await fetch(`${API_BASE}/ai-analysis/mdd/thread?${threadQs.toString()}`).catch(() => null);
+      const threadRes = await apiFetch(`${API_BASE}/ai-analysis/mdd/thread?${threadQs.toString()}`).catch(() => null);
       if (threadRes?.ok) {
         const threadData = (await threadRes.json()) as { threadId?: string | null };
         if (threadData.threadId) {
@@ -645,7 +680,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const stageWelcome = get().activeStageId;
-      const r = await fetch(`${API_BASE}/ai-orchestrator/welcome`, {
+      const r = await apiFetch(`${API_BASE}/ai-orchestrator/welcome`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -667,7 +702,8 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const flat = workshopFlatFromStage(p, activeStageId);
       set({
         session: data.session,
-        project: { ...p, ...flat },
+        project: { ...p, ...flat, stages },
+        workshopStages: stages,
         activeStageId,
         mddContent: cleanDoc(flat.mddContent ?? null) ?? get().mddContent,
         uxUiGuideContent: cleanDoc(p.uxUiGuideContent ?? null),
@@ -700,7 +736,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return;
     set({ loading: true, error: null, managerThreadId: null });
     try {
-      const r = await fetch(`${API_BASE}/ai-orchestrator/clear-chat`, {
+      const r = await apiFetch(`${API_BASE}/ai-orchestrator/clear-chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId, sessionId: session?.id }),
@@ -752,7 +788,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         agentProgress: [{ agent: "Regenerando sección", message: `§${regenerateSection}...` }],
       });
       try {
-        const appendRes = await fetch(`${API_BASE}/sessions/${session.id}/messages`, {
+        const appendRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: sessionMessageBody({ role: "user", content: msg, tab: "mdd" }, get().activeStageId),
@@ -763,7 +799,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         }
         const mddContent = (get().mddContent ?? get().project?.mddContent ?? "").trim();
         const regStage = get().activeStageId;
-        const r = await fetch(`${API_BASE}/ai-analysis/mdd/stream/regenerate-section`, {
+        const r = await apiFetch(`${API_BASE}/ai-analysis/mdd/stream/regenerate-section`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -809,7 +845,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     agentProgress: [],
                     evaluatorCritique: null,
                   });
-                  const assistantRes = await fetch(`${API_BASE}/sessions/${session.id}/messages`, {
+                  const assistantRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: sessionMessageBody(
@@ -879,7 +915,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         });
         try {
           if (!looksLikeMddDocument) {
-            const appendRes = await fetch(`${API_BASE}/sessions/${session.id}/messages`, {
+            const appendRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: sessionMessageBody({ role: "user", content: msg, tab: "mdd" }, get().activeStageId),
@@ -911,7 +947,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 mddContent: draftForMdd,
                 ...(mddStage ? { stageId: mddStage } : {}),
               };
-          const r = await fetch(url, {
+          const r = await apiFetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
@@ -1008,7 +1044,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     const messagesToPost: string[] = [clarifierContent];
                     let sess = get().session;
                     for (const content of messagesToPost) {
-                      const appendAssistant = await fetch(`${API_BASE}/sessions/${session.id}/messages`, {
+                      const appendAssistant = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: sessionMessageBody({ role: "assistant", content, tab: "mdd" }, get().activeStageId),
@@ -1059,7 +1095,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     }
 
                     const assistantContent = "MDD generado. Revisa el documento en el panel central.";
-                    const assistantRes = await fetch(`${API_BASE}/sessions/${session.id}/messages`, {
+                    const assistantRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: sessionMessageBody(
@@ -1143,7 +1179,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           const dbga = get().dbgaContent ?? get().project?.dbgaContent ?? null;
           if (dbga != null) body.dbgaContent = dbga;
         }
-        const r = await fetch(`${API_BASE}/ai-orchestrator/chat/stream`, {
+        const r = await apiFetch(`${API_BASE}/ai-orchestrator/chat/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -1302,7 +1338,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           const dbga = get().dbgaContent ?? get().project?.dbgaContent ?? null;
           if (dbga != null) body.dbgaContent = dbga;
         }
-        const r = await fetch(`${API_BASE}/ai-orchestrator/chat/stream`, {
+        const r = await apiFetch(`${API_BASE}/ai-orchestrator/chat/stream`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -1449,7 +1485,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uxUiGuideContent: cleanPath }),
@@ -1473,7 +1509,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blueprintContent: cleanPath }),
@@ -1496,7 +1532,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const body: { preview?: boolean; gapsFeedback?: string } = {};
       if (options?.preview) body.preview = true;
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-blueprint`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-blueprint`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1533,7 +1569,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ apiContractsContent: cleanPath }),
@@ -1550,19 +1586,38 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateApiContracts: async (projectId, options) => {
     if (!projectId?.trim()) return null;
+    await get().fetchConformance(projectId.trim());
+    const dm = get().conformance?.blueprintDataModel;
+    if (dm && !dm.ok) {
+      const hint = dm.gaps.length ? ` (${dm.gaps.slice(0, 2).join("; ")}${dm.gaps.length > 2 ? "…" : ""})` : "";
+      set({
+        error: `El Blueprint debe cubrir el modelo de datos del MDD (§3) antes de generar Contratos API.${hint}`,
+      });
+      return null;
+    }
     set({ loading: true, error: null });
     try {
       const body: { preview?: boolean; gapsFeedback?: string } = {};
       if (options?.preview) body.preview = true;
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-api-contracts`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-api-contracts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar contratos API");
+        const err = (await r.json().catch(() => ({}))) as {
+          message?: string | string[] | Record<string, unknown>;
+          gaps?: string[];
+        };
+        const rawMsg = err.message;
+        let msg = "Error al generar contratos API";
+        if (typeof rawMsg === "string") msg = rawMsg;
+        else if (Array.isArray(rawMsg)) msg = rawMsg.map(String).join("; ");
+        if (Array.isArray(err.gaps) && err.gaps.length > 0) {
+          msg = `${msg}\n${err.gaps.join("\n")}`;
+        }
+        throw new Error(msg);
       }
       const data = await r.json();
       if (options?.preview && data.content != null) {
@@ -1588,7 +1643,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ logicFlowsContent: cleanPath }),
@@ -1609,7 +1664,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     try {
       const body: { gapsFeedback?: string } = {};
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-logic-flows`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-logic-flows`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1641,7 +1696,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ infraContent: cleanPath }),
@@ -1663,7 +1718,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const body: { preview?: boolean; gapsFeedback?: string } = {};
       if (options?.preview) body.preview = true;
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-infra`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-infra`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1696,7 +1751,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ architectureContent: cleanPath }),
@@ -1718,7 +1773,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     try {
       const body: { preview?: boolean } = {};
       if (options?.preview) body.preview = true;
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-architecture`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-architecture`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1752,7 +1807,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ useCasesContent: cleanPath }),
@@ -1773,7 +1828,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     try {
       const body: { preview?: boolean } = {};
       if (options?.preview) body.preview = true;
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-use-cases`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-use-cases`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1805,7 +1860,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userStoriesContent: cleanPath }),
@@ -1826,7 +1881,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     try {
       const body: { preview?: boolean } = {};
       if (options?.preview) body.preview = true;
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-user-stories`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-user-stories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -1858,7 +1913,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ specContent: cleanPath }),
@@ -1875,7 +1930,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-spec`, { method: "POST" });
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-spec`, { method: "POST" });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.message ?? "Error al generar Spec");
@@ -1902,7 +1957,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false });
     try {
       const cleanPath = cleanDoc(content) || content;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tasksContent: cleanPath }),
@@ -1919,7 +1974,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-tasks`, { method: "POST" });
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-tasks`, { method: "POST" });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.message ?? "Error al generar Tasks");
@@ -1936,17 +1991,51 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateDeliverablesCascade: async (projectId) => {
     if (!projectId?.trim()) return null;
-    set({ loading: true, loadingReason: "deliverables-cascade", error: null });
+    const pid = projectId.trim();
+    set({ loading: true, loadingReason: "deliverables-cascade", error: null, agentProgress: [] });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/generate-deliverables`, { method: "POST" });
+      const r = await apiFetch(`${API_BASE}/projects/${pid}/generate-deliverables`, { method: "POST" });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message ?? "Error al generar entregables");
       }
-      await r.json();
-      return get().fetchProject(projectId);
+      const data = (await r.json()) as { queued?: boolean; jobId?: string; streamPath?: string };
+      if (data.queued === true && typeof data.jobId === "string") {
+        const deadline = Date.now() + 45 * 60 * 1000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 1200));
+          const st = await apiFetch(`${API_BASE}/projects/${pid}/deliverables-jobs/${data.jobId}`);
+          if (!st.ok) {
+            const err = await st.json().catch(() => ({}));
+            throw new Error((err as { message?: string }).message ?? "Error al consultar cola de entregables");
+          }
+          const j = (await st.json()) as {
+            state: string;
+            progress?: { step?: string; index?: number; total?: number };
+            failedReason?: string;
+          };
+          if (j.state === "failed") {
+            throw new Error(j.failedReason ?? "Cascada de entregables fallida");
+          }
+          if (j.state === "completed") break;
+          const prog = j.progress;
+          if (prog && typeof prog.index === "number" && typeof prog.total === "number") {
+            set({
+              agentProgress: [
+                {
+                  agent: "Entregables",
+                  message: `${String(prog.step ?? "paso")} (${prog.index + 1}/${prog.total})`,
+                },
+              ],
+            });
+          }
+        }
+        set({ agentProgress: [] });
+        return await get().fetchProject(pid);
+      }
+      return await get().fetchProject(pid);
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar entregables" });
+      set({ error: e instanceof Error ? e.message : "Error al generar entregables", agentProgress: [] });
       return null;
     } finally {
       set({ loading: false, loadingReason: null });
@@ -1957,7 +2046,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId.trim()}/confirm-complexity`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/confirm-complexity`, {
         method: "POST",
       });
       if (!r.ok) {
@@ -1977,7 +2066,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId.trim()}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clearComplexityPending: true }),
@@ -1999,7 +2088,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId.trim()}/reassess-complexity`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/reassess-complexity`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(note?.trim() ? { note: note.trim() } : {}),
@@ -2021,10 +2110,21 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return;
     const useLlm = options?.useLlm === true;
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/conformance${useLlm ? "?useLlm=true" : ""}`);
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/conformance${useLlm ? "?useLlm=true" : ""}`);
       if (r.ok) {
-        const data = await r.json();
-        set({ conformance: data });
+        const data = (await r.json()) as {
+          blueprint: ConformanceResult;
+          blueprintDataModel?: ConformanceResult;
+          api: ApiConformanceResult;
+          logicFlows: ConformanceResult;
+          infra: ConformanceResult;
+        };
+        set({
+          conformance: {
+            ...data,
+            blueprintDataModel: data.blueprintDataModel ?? { ok: true, gaps: [] },
+          },
+        });
       }
     } catch {
       set({ conformance: null });
@@ -2032,7 +2132,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   verifyDeliverable: async (projectId, deliverable) => {
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/verify-deliverable`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/verify-deliverable`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deliverable }),
@@ -2066,7 +2166,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId || !project || content === (project.dbgaContent ?? "")) return;
     set({ synced: false });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dbgaContent: content }),
@@ -2088,7 +2188,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, loadingReason: "benchmark", error: null, agentProgress: [] });
     try {
-      const r = await fetch(`${API_BASE}/ai-analysis/stream`, {
+      const r = await apiFetch(`${API_BASE}/ai-analysis/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2168,7 +2268,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ loading: true, loadingReason: "mdd", error: null, agentProgress: [] });
     try {
       const benchStage = get().activeStageId;
-      const r = await fetch(`${API_BASE}/ai-analysis/mdd/stream`, {
+      const r = await apiFetch(`${API_BASE}/ai-analysis/mdd/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2241,7 +2341,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId || !project || content === (project.phase0SummaryContent ?? "")) return;
     set({ synced: false });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phase0SummaryContent: content }),
@@ -2261,7 +2361,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, loadingReason: "phase0-deep-research", error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/phase0-deep-research`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/phase0-deep-research`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2303,7 +2403,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   clearDbgaContent: async (projectId) => {
     if (!projectId?.trim()) return;
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dbgaContent: null }),
@@ -2322,7 +2422,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     try {
       const currentMdd = (get().mddContent ?? get().project?.mddContent ?? "").trim();
       const sid = get().activeStageId;
-      const r = await fetch(`${API_BASE}/ai-analysis/estimation`, {
+      const r = await apiFetch(`${API_BASE}/ai-analysis/estimation`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2347,7 +2447,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   clearPhase0SummaryContent: async (projectId) => {
     if (!projectId?.trim()) return;
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phase0SummaryContent: null }),
@@ -2365,7 +2465,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, loadingReason: "legacy-codebase-doc", error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/legacy/generate-codebase-doc`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/generate-codebase-doc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -2386,7 +2486,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   legacyUpdateCodebaseDoc: async (projectId, codebaseDoc) => {
     if (!projectId?.trim()) return false;
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/legacy/codebase-doc`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/codebase-doc`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ codebaseDoc }),
@@ -2406,7 +2506,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim() || !description?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/legacy/start`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: description.trim() }),
@@ -2433,7 +2533,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return false;
     set({ loading: true, error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/legacy/answer`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ answers: answers ?? {} }),
@@ -2455,7 +2555,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, loadingReason: "legacy-mdd", error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/legacy/generate-mdd`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/generate-mdd`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -2482,7 +2582,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return false;
     set({ loading: true, loadingReason: "legacy-deliverables", error: null });
     try {
-      const r = await fetch(`${API_BASE}/projects/${projectId}/legacy/generate-deliverables`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/generate-deliverables`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -2506,7 +2606,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ synced: false, error: null });
     try {
       const stageId = get().activeStageId;
-      const r = await fetch(`${API_BASE}/projects/${projectId}`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mddContent: content, ...(stageId ? { stageId } : {}) }),
@@ -2522,7 +2622,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           synced: true,
           error: null,
         });
-        await fetch(`${API_BASE}/ai-analysis/estimation/clear-draft`, {
+        await apiFetch(`${API_BASE}/ai-analysis/estimation/clear-draft`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2556,7 +2656,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     set({ mddReviewing: true });
     try {
       await persistMddContent(content);
-      await fetch(`${API_BASE}/ai-analysis/mdd/review`, {
+      await apiFetch(`${API_BASE}/ai-analysis/mdd/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: projectId.trim(), mddContent: content }),
@@ -2569,7 +2669,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
   fetchAdrs: async (projectId) => {
     try {
-      const r = await fetch(`${API_BASE}/ai-analysis/mdd/adrs?projectId=${encodeURIComponent(projectId)}`);
+      const r = await apiFetch(`${API_BASE}/ai-analysis/mdd/adrs?projectId=${encodeURIComponent(projectId)}`);
       if (r.ok) {
         const data = await r.json();
         set({ adrs: data });

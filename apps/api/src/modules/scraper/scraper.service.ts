@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import * as cheerio from "cheerio";
 import { TIMEOUT_MS, MAX_BODY_KB, SCRAPER_USER_AGENT } from "./constants.js";
 import { htmlToMarkdown } from "./html-to-markdown.js";
+import { assertPublicHttpUrl } from "./url-ssrf-guard.js";
 
 export interface ScrapedPage {
   url: string;
@@ -35,6 +36,7 @@ export class ScraperService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
+      await assertPublicHttpUrl(url);
       const res = await fetch(url, {
         signal: controller.signal,
         headers: { "User-Agent": SCRAPER_USER_AGENT },

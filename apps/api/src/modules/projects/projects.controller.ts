@@ -1,4 +1,19 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  ForbiddenException,
+  Get,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from "@nestjs/common";
+import type { Response } from "express";
+import { getRequestUserId } from "../../common/request-user.store.js";
+import { DeliverablesQueueService } from "./deliverables-queue.service.js";
 import { ProjectsService } from "./projects.service.js";
 import {
   createProjectSchema,
@@ -8,7 +23,10 @@ import {
 
 @Controller("projects")
 export class ProjectsController {
-  constructor(private readonly projects: ProjectsService) { }
+  constructor(
+    private readonly projects: ProjectsService,
+    private readonly deliverablesQueue: DeliverablesQueueService,
+  ) {}
 
   @Post()
   create(@Body() body: unknown) {
@@ -20,18 +38,96 @@ export class ProjectsController {
     return this.projects.findAll();
   }
 
-  @Post(":id/stages")
-  createStage(@Param("id") projectId: string, @Body() body: unknown) {
+  @Get(":projectId/stages")
+  listStages(@Param("projectId") projectId: string) {
+    return this.projects.listStages(projectId);
+  }
+
+  @Post(":projectId/stages")
+  createStage(@Param("projectId") projectId: string, @Body() body: unknown) {
     return this.projects.createStage(projectId, body ?? {});
   }
 
-  @Patch(":id/stages/:stageId")
+  @Patch(":projectId/stages/:stageId")
   patchStage(
-    @Param("id") projectId: string,
+    @Param("projectId") projectId: string,
     @Param("stageId") stageId: string,
     @Body() body: unknown,
   ) {
     return this.projects.patchStage(projectId, stageId, body ?? {});
+  }
+
+  /** Estado de un job de cascada (polling); mismo path base que el stream SSE. */
+  @Get(":id/deliverables-jobs/:jobId")
+  async deliverablesJobStatus(
+    @Param("id") projectId: string,
+    @Param("jobId") jobId: string,
+  ) {
+    const job = await this.deliverablesQueue.getJob(jobId);
+    if (!job) throw new NotFoundException("Job no encontrado");
+    const data = job.data as { projectId: string; userId: string };
+    if (data.projectId !== projectId) throw new ForbiddenException();
+    if (data.userId !== getRequestUserId()) throw new ForbiddenException();
+    const state = await job.getState();
+    const progress = job.progress;
+    if (state === "completed") {
+      const returnvalue = await job.returnvalue;
+      return { state, progress, result: returnvalue ?? null };
+    }
+    if (state === "failed") {
+      return { state, progress, failedReason: await job.failedReason };
+    }
+    return { state, progress };
+  }
+
+  /** SSE: progreso de cascada de entregables en cola BullMQ (`REDIS_URL`). */
+  @Get(":id/deliverables-jobs/:jobId/stream")
+  async deliverablesJobStream(
+    @Param("id") projectId: string,
+    @Param("jobId") jobId: string,
+    @Res({ passthrough: false }) res: Response,
+  ): Promise<void> {
+    const job = await this.deliverablesQueue.getJob(jobId);
+    if (!job) throw new NotFoundException("Job no encontrado");
+    const data = job.data as { projectId: string; userId: string };
+    if (data.projectId !== projectId) throw new ForbiddenException();
+    if (data.userId !== getRequestUserId()) throw new ForbiddenException();
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders();
+
+    const tick = async () => {
+      const j = await this.deliverablesQueue.getJob(jobId);
+      if (!j) {
+        res.write(`event: error\ndata: ${JSON.stringify({ message: "job missing" })}\n\n`);
+        res.end();
+        return;
+      }
+      const state = await j.getState();
+      const progress = j.progress;
+      res.write(`event: progress\ndata: ${JSON.stringify({ state, progress })}\n\n`);
+      if (state === "completed") {
+        try {
+          const rv = await j.returnvalue;
+          res.write(`event: completed\ndata: ${JSON.stringify(rv ?? null)}\n\n`);
+        } catch {
+          res.write(`event: completed\ndata: {}\n\n`);
+        }
+        res.end();
+        return;
+      }
+      if (state === "failed") {
+        const reason = await j.failedReason;
+        res.write(`event: failed\ndata: ${JSON.stringify({ message: reason })}\n\n`);
+        res.end();
+        return;
+      }
+      setTimeout(() => void tick(), 900);
+    };
+    void tick();
   }
 
   @Get(":id")
@@ -69,9 +165,16 @@ export class ProjectsController {
     });
   }
 
-  /** Cascada de entregables según `Project.complexity` (LOW / MEDIUM / HIGH). */
+  /**
+   * Cascada de entregables según `Project.complexity`.
+   * Con `REDIS_URL`: encola BullMQ y responde `{ queued: true, jobId }` (seguimiento vía GET …/deliverables-jobs/:jobId/stream).
+   */
   @Post(":id/generate-deliverables")
-  generateDeliverablesCascade(@Param("id") id: string) {
+  async generateDeliverablesCascade(@Param("id") id: string) {
+    if (this.deliverablesQueue.isEnabled()) {
+      const jobId = await this.deliverablesQueue.enqueueCascade(id);
+      return { queued: true, jobId, streamPath: `/projects/${id}/deliverables-jobs/${jobId}/stream` };
+    }
     return this.projects.generateDeliverablesCascade(id);
   }
 

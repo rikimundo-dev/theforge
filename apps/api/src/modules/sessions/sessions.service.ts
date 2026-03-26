@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import type { Session } from "@theforge/database";
+import { getRequestUserId } from "../../common/request-user.store.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AiService } from "../ai/ai.service.js";
 import { PreferencesService } from "../ai/preferences.service.js";
@@ -25,10 +26,20 @@ export class SessionsService {
     private readonly parser: ChatResponseParserService,
   ) { }
 
+  private sessionScope(sessionId: string) {
+    return { id: sessionId, userId: getRequestUserId() };
+  }
+
   async create(data: { projectId: string; contextStep?: string; chatLog?: ChatMessage[] }) {
     const parsed = createSessionSchema.parse(data);
+    const userId = getRequestUserId();
+    const project = await this.prisma.project.findFirst({
+      where: { id: parsed.projectId, userId },
+    });
+    if (!project) throw new NotFoundException("Project not found");
     return this.prisma.session.create({
       data: {
+        userId,
         projectId: parsed.projectId,
         contextStep: parsed.contextStep,
         chatLog: (parsed.chatLog ?? []) as object,
@@ -38,14 +49,14 @@ export class SessionsService {
 
   async findByProject(projectId: string) {
     return this.prisma.session.findMany({
-      where: { projectId },
+      where: { projectId, userId: getRequestUserId() },
       orderBy: { updatedAt: "desc" },
     });
   }
 
   async findOne(id: string) {
-    const session = await this.prisma.session.findUnique({
-      where: { id },
+    const session = await this.prisma.session.findFirst({
+      where: this.sessionScope(id),
       include: { project: true },
     });
     if (!session) throw new NotFoundException("Session not found");
@@ -53,23 +64,23 @@ export class SessionsService {
   }
 
   async clearChat(sessionId: string) {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    const session = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
     if (!session) throw new NotFoundException("Session not found");
     await this.prisma.session.update({
       where: { id: sessionId },
       data: { chatLog: [] as object },
     });
-    return this.prisma.session.findUnique({
-      where: { id: sessionId },
+    return this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
   }
 
   async appendMessage(sessionId: string, data: AppendChatDto) {
     const parsed = appendChatSchema.parse(data);
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    const session = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
     if (!session) throw new NotFoundException("Session not found");
 
@@ -81,8 +92,8 @@ export class SessionsService {
       data: { chatLog: updated as object },
     });
 
-    return this.prisma.session.findUnique({
-      where: { id: sessionId },
+    return this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
   }
 
@@ -114,8 +125,8 @@ export class SessionsService {
     tasksContent?: string | null;
     infraContent?: string | null;
   }> {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    const session = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
     if (!session) throw new NotFoundException("Session not found");
 
@@ -241,8 +252,8 @@ export class SessionsService {
       infraLength: hasInfra ? infraSplit!.docPart.length : 0,
     });
 
-    const updatedSession = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    const updatedSession = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
     const cleanedMddPart = hasMdd ? this.parser.cleanDocumentContent(mddSplit!.mddPart) : "";
     const finalMdd = hasMdd ? this.parser.mergeMddSectionOrUseFull(options?.currentMddContent, cleanedMddPart) : undefined;
@@ -293,7 +304,9 @@ export class SessionsService {
       infraContent?: string | null;
     }
   > {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId } });
+    const session = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
+    });
     if (!session) throw new NotFoundException("Session not found");
 
     const fullLog = (session.chatLog as ChatMessage[]) ?? [];
@@ -401,7 +414,9 @@ export class SessionsService {
       data: { chatLog: updated as object },
     });
 
-    const updatedSession = await this.prisma.session.findUnique({ where: { id: sessionId } });
+    const updatedSession = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
+    });
     const cleanedMddPart = hasMdd ? this.parser.cleanDocumentContent(mddSplit!.mddPart) : "";
     const finalMdd = hasMdd ? this.parser.mergeMddSectionOrUseFull(options?.currentMddContent, cleanedMddPart) : undefined;
     yield {
@@ -436,8 +451,8 @@ export class SessionsService {
       stageId?: string;
     },
   ) {
-    const session = await this.prisma.session.findUnique({
-      where: { id: sessionId },
+    const session = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
     });
     if (!session) throw new NotFoundException("Session not found");
 
@@ -549,9 +564,15 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
     const step = contextStepEnum.includes(contextStep as (typeof contextStepEnum)[number])
       ? contextStep
       : "CONTEXT";
-    return this.prisma.session.update({
-      where: { id: sessionId },
+    const r = await this.prisma.session.updateMany({
+      where: this.sessionScope(sessionId),
       data: { contextStep: step },
     });
+    if (r.count === 0) throw new NotFoundException("Session not found");
+    const row = await this.prisma.session.findFirst({
+      where: this.sessionScope(sessionId),
+    });
+    if (!row) throw new NotFoundException("Session not found");
+    return row;
   }
 }

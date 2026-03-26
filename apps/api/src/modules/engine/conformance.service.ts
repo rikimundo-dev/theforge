@@ -151,6 +151,45 @@ function normEp(ep: { method: string; path: string }): string {
 const MIN_DOC_LENGTH = 80;
 
 /**
+ * Solo §3 Modelo de datos vs Blueprint (entidades/tablas). Usado para gate de generación de API.
+ */
+export function checkBlueprintDataModelVsMdd(
+  mddContent: string | null,
+  blueprintContent: string | null,
+): ConformanceResult {
+  const gaps: string[] = [];
+  if (!mddContent?.trim()) {
+    return { ok: true, gaps: [] };
+  }
+  if (!blueprintContent?.trim() || blueprintContent.trim().length < MIN_DOC_LENGTH) {
+    return {
+      ok: false,
+      gaps: ["Falta Blueprint con contenido suficiente para validar el modelo de datos (§3 MDD)"],
+    };
+  }
+  const section3 = extractSection(
+    mddContent,
+    /^#+\s*(?:3\.\s*)?(?:modelo\s+de\s+datos|datos\s*\/\s*entidades)/im,
+  );
+  if (section3.length <= 50) {
+    return { ok: true, gaps: [] };
+  }
+  const mddEntities = extractEntities(section3);
+  const blueprintEntities = extractEntities(blueprintContent);
+  for (const e of mddEntities) {
+    if (!e || e.length < 2) continue;
+    const exactMatch = blueprintEntities.has(e);
+    const partialMatch = Array.from(blueprintEntities).some(
+      (b) => b.includes(e) || e.includes(b),
+    );
+    if (!exactMatch && !partialMatch) {
+      gaps.push(`Entidad/tabla "${e}" del MDD §3 no está reflejada en el Blueprint`);
+    }
+  }
+  return { ok: gaps.length === 0, gaps };
+}
+
+/**
  * Comprueba conformidad del Blueprint con el MDD (§2 Arquitectura y Stack, §3 Modelo de Datos).
  */
 export function checkBlueprintVsMdd(mddContent: string | null, blueprintContent: string | null): ConformanceResult {
@@ -165,10 +204,6 @@ export function checkBlueprintVsMdd(mddContent: string | null, blueprintContent:
     mddContent,
     /^#+\s*(?:2\.\s*)?(?:arquitectura\s+y\s+stack|arquitectura\s+stack)/im,
   );
-  const section3 = extractSection(
-    mddContent,
-    /^#+\s*(?:3\.\s*)?(?:modelo\s+de\s+datos|datos\s*\/\s*entidades)/im,
-  );
   if (section2.length > 50) {
     const mddStack = extractStackKeywords(section2);
     const blueprintStack = extractStackKeywords(blueprintContent);
@@ -178,20 +213,8 @@ export function checkBlueprintVsMdd(mddContent: string | null, blueprintContent:
       }
     }
   }
-  if (section3.length > 50) {
-    const mddEntities = extractEntities(section3);
-    const blueprintEntities = extractEntities(blueprintContent);
-    for (const e of mddEntities) {
-      if (!e || e.length < 2) continue;
-      const exactMatch = blueprintEntities.has(e);
-      const partialMatch = Array.from(blueprintEntities).some(
-        (b) => b.includes(e) || e.includes(b),
-      );
-      if (!exactMatch && !partialMatch) {
-        gaps.push(`Entidad/tabla "${e}" en MDD no reflejada en Blueprint`);
-      }
-    }
-  }
+  const dataModel = checkBlueprintDataModelVsMdd(mddContent, blueprintContent);
+  gaps.push(...dataModel.gaps);
   return { ok: gaps.length === 0, gaps };
 }
 
@@ -317,6 +340,10 @@ export function checkLogicFlowsVsMdd(mddContent: string | null, logicFlowsConten
 
 @Injectable()
 export class ConformanceService {
+  checkBlueprintDataModel(mddContent: string | null, blueprintContent: string | null): ConformanceResult {
+    return checkBlueprintDataModelVsMdd(mddContent, blueprintContent);
+  }
+
   checkBlueprint(mddContent: string | null, blueprintContent: string | null): ConformanceResult {
     return checkBlueprintVsMdd(mddContent, blueprintContent);
   }
