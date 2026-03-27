@@ -163,8 +163,8 @@ Si hay error en la ejecución de la herramienta:
 | `get_project_analysis`  | `projectId`           | `mode` (diagnostico, duplicados, reingenieria, codigo_muerto) |
 | `ask_codebase`          | `question`            | `projectId`, `currentFilePath`, `scope`, `twoPhase`           |
 | `get_modification_plan` | `userDescription`     | `projectId`, `currentFilePath`, `scope`                       |
-| `get_definitions`       | `symbol`              | `projectId`, `currentFilePath`                                |
-| `get_references`        | `symbol`              | `projectId`, `currentFilePath`                                |
+| `get_definitions`       | `symbolName`          | `projectId`, `currentFilePath`                                |
+| `get_references`        | `symbolName`          | `projectId`, `currentFilePath`                                |
 | `get_functions_in_file` | `path`                | `projectId`, `currentFilePath`                                |
 | `get_import_graph`      | `filePath`            | `projectId`, `currentFilePath`                                |
 

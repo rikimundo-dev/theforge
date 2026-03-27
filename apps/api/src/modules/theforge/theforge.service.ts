@@ -588,7 +588,7 @@ export class TheForgeService implements OnModuleInit {
     projectId?: string,
     currentFilePath?: string,
   ): Promise<string> {
-    const args: Record<string, unknown> = { symbol: symbol.trim() };
+    const args: Record<string, unknown> = { symbolName: symbol.trim() };
     if (projectId?.trim()) args.projectId = projectId.trim();
     if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
     const out = await this.callTool("get_definitions", args);
@@ -604,7 +604,7 @@ export class TheForgeService implements OnModuleInit {
     projectId?: string,
     currentFilePath?: string,
   ): Promise<string> {
-    const args: Record<string, unknown> = { symbol: symbol.trim() };
+    const args: Record<string, unknown> = { symbolName: symbol.trim() };
     if (projectId?.trim()) args.projectId = projectId.trim();
     if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
     const out = await this.callTool("get_references", args);
