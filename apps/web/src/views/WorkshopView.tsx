@@ -679,6 +679,17 @@ export default function WorkshopView({
               </>
             )}
           </span>
+          {project?.projectType === "LEGACY" && project?.theforgeProjectId?.trim() && (
+            <span
+              className="w-full sm:w-auto min-w-0 font-mono text-[10px] sm:text-[11px] text-zinc-500 leading-tight"
+              title={`UUID enviado al MCP TheForge / Ariadne (ask_codebase, semantic_search, MDD inicial): ${project.theforgeProjectId}`}
+            >
+              <span className="text-zinc-600 select-none" aria-hidden>
+                MCP{" "}
+              </span>
+              <span className="text-zinc-400 break-all">{project.theforgeProjectId}</span>
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 justify-end w-full sm:w-auto">
           {workshopStagesList.length > 0 && (
