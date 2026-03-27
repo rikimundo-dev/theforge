@@ -28,7 +28,9 @@ import {
   Edit3,
   HelpCircle,
   Layers,
+  MessageSquare,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import ChatContainer from "../components/ChatContainer";
 import ComplexityPendingBanner from "../components/ComplexityPendingBanner";
@@ -256,6 +258,9 @@ export default function WorkshopView({
   const [conformanceUseLlm, setConformanceUseLlm] = useState(false);
   type DocPanel = "benchmark" | "legacy" | "mdd-inicial" | "spec" | "mdd" | "ux-ui-guide" | "blueprint" | "tasks" | "api-contracts" | "logic-flows" | "architecture" | "use-cases" | "user-stories" | "infra" | "adrs";
   const [centralPanel, setCentralPanel] = useState<DocPanel>("mdd");
+  /** Por debajo de `lg`: una columna con control de Chat / Documentos / Semáforo. */
+  type WorkshopMobileColumn = "chat" | "workspace" | "metrics";
+  const [mobileWorkshopColumn, setMobileWorkshopColumn] = useState<WorkshopMobileColumn>("workspace");
   const [revaluateBusy, setRevaluateBusy] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -638,52 +643,53 @@ export default function WorkshopView({
   }
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-900 text-zinc-100">
-      <header className="flex items-center justify-between px-4 py-2 border-b border-zinc-700 shrink-0">
-        <div className="flex items-center gap-3">
+    <div className="h-[100dvh] min-h-0 flex flex-col bg-zinc-900 text-zinc-100">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-3 sm:px-4 py-2 border-b border-zinc-700 shrink-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
           {onBack && (
             <button
+              type="button"
               onClick={onBack}
-              className="text-zinc-400 hover:text-zinc-100 text-sm"
+              className="text-zinc-400 hover:text-zinc-100 text-sm shrink-0 touch-manipulation min-h-[44px] sm:min-h-0 px-1 -ml-1"
             >
               ← Volver
             </button>
           )}
-          <h1 className="text-lg font-semibold text-amber-400">
+          <h1 className="text-base sm:text-lg font-semibold text-amber-400 truncate max-w-[min(100%,14rem)] sm:max-w-none">
             {projectName ?? project?.name ?? "Workshop"}
           </h1>
           {project?.projectType === "LEGACY" && (
             <span
-              className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-600 text-zinc-300 border border-zinc-500"
+              className="px-2 py-0.5 rounded text-xs font-medium bg-zinc-600 text-zinc-300 border border-zinc-500 shrink-0"
               title="Proyecto legacy: documentación de cambios con Relic"
             >
               Legacy
             </span>
           )}
-          <span className="flex items-center gap-1.5 text-xs text-zinc-500">
+          <span className="flex items-center gap-1.5 text-xs text-zinc-500 shrink-0" title={synced ? "Sincronizado" : "Sincronizando"}>
             {synced ? (
               <>
                 <Cloud className="w-3.5 h-3.5 text-green-500" />
-                Sincronizado
+                <span className="hidden sm:inline">Sincronizado</span>
               </>
             ) : (
               <>
                 <CloudOff className="w-3.5 h-3.5 text-amber-500" />
-                Sincronizando…
+                <span className="hidden sm:inline">Sincronizando…</span>
               </>
             )}
           </span>
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex flex-wrap items-center gap-2 justify-end w-full sm:w-auto">
           {workshopStagesList.length > 0 && (
-            <div className="flex items-center gap-1.5 mr-1">
-              <Layers className="w-4 h-4 text-zinc-500 shrink-0" aria-hidden />
+            <div className="flex flex-wrap items-center gap-1.5 sm:mr-1 w-full sm:w-auto min-w-0">
+              <Layers className="w-4 h-4 text-zinc-500 shrink-0 hidden sm:block" aria-hidden />
               <label htmlFor="workshop-stage-select" className="sr-only">
                 Vista en vivo: etapa del Workshop (MDD y semáforo)
               </label>
               <select
                 id="workshop-stage-select"
-                className="bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-sm text-zinc-200 max-w-[220px]"
+                className="bg-zinc-800 border border-zinc-600 rounded px-2 py-2 sm:py-1.5 text-sm text-zinc-200 min-w-0 flex-1 sm:flex-none max-w-full sm:max-w-[220px] touch-manipulation min-h-[44px] sm:min-h-0"
                 value={activeStageId ?? workshopStagesList[0]?.id ?? ""}
                 onChange={(e) => setActiveStageId(e.target.value)}
               >
@@ -701,7 +707,7 @@ export default function WorkshopView({
                   setCopyMddSourceStageId(activeStageId ?? "");
                   setShowStageModal(true);
                 }}
-                className="text-xs px-2 py-1.5 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/80 whitespace-nowrap"
+                className="text-xs px-3 py-2 sm:py-1.5 rounded border border-zinc-600 text-zinc-300 hover:bg-zinc-700/80 whitespace-nowrap touch-manipulation min-h-[44px] sm:min-h-0 shrink-0"
               >
                 Nueva etapa
               </button>
@@ -710,11 +716,11 @@ export default function WorkshopView({
           <button
             type="button"
             onClick={() => setShowHelpModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm"
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm touch-manipulation min-h-[44px] sm:min-h-0"
             title="Manual de uso del Workshop"
           >
-            <HelpCircle className="w-4 h-4" />
-            Ayuda
+            <HelpCircle className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Ayuda</span>
           </button>
           <button
             type="button"
@@ -737,11 +743,11 @@ export default function WorkshopView({
               if (ok) setError(null);
               else setError("No hay documentos con contenido para descargar.");
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm"
+            className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm touch-manipulation min-h-[44px] sm:min-h-0"
             title="Descargar todos los documentos del proyecto en un ZIP"
           >
-            <Download className="w-4 h-4" />
-            Descargar todo (ZIP)
+            <Download className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Descargar ZIP</span>
           </button>
         </div>
       </header>
@@ -833,9 +839,15 @@ export default function WorkshopView({
 
       <ComplexityPendingBanner />
 
-      <div className="flex-1 min-h-0 grid grid-cols-[380px_1fr_320px]">
+      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)_minmax(240px,320px)]">
         {/* Columna A: Chat (siempre a la izquierda, como en MDD) */}
-        <section className="flex flex-col border-r border-zinc-700 min-h-0 overflow-hidden">
+        <section
+          className={cn(
+            "border-r border-zinc-700 min-h-0 overflow-hidden lg:min-h-0",
+            "flex flex-col",
+            mobileWorkshopColumn === "chat" ? "flex flex-1 min-h-0" : "hidden lg:flex lg:flex-col",
+          )}
+        >
           <ChatContainer
             projectId={projectId}
             activeTab={centralPanel as import("../components/ChatContainer").ActiveTab}
@@ -857,7 +869,13 @@ export default function WorkshopView({
         </section>
 
         {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
-        <section className="flex flex-col min-w-0 min-h-0 border-r border-zinc-700 overflow-hidden">
+        <section
+          className={cn(
+            "min-w-0 min-h-0 border-r border-zinc-700 overflow-hidden lg:min-h-0",
+            "flex flex-col",
+            mobileWorkshopColumn === "workspace" ? "flex flex-1 min-h-0" : "hidden lg:flex lg:flex-col",
+          )}
+        >
           <div className="px-4 py-2 border-b border-zinc-700 flex flex-col gap-2 text-zinc-400 text-sm shrink-0">
             {/* Renglón 1: Todos los tabs de los documentos */}
             <div className="flex items-center gap-0.5 flex-nowrap overflow-x-auto scrollbar-hide pb-1">
@@ -2111,7 +2129,13 @@ export default function WorkshopView({
         </section>
 
         {/* Columna C: Semáforo + Costos (lógica cost-calculator) */}
-        <section className="flex flex-col min-h-0 overflow-y-auto bg-zinc-800/50 p-4 space-y-6">
+        <section
+          className={cn(
+            "min-h-0 overflow-y-auto bg-zinc-800/50 p-3 sm:p-4 space-y-6 lg:min-h-0",
+            "flex flex-col",
+            mobileWorkshopColumn === "metrics" ? "flex flex-1 min-h-0" : "hidden lg:flex lg:flex-col",
+          )}
+        >
           <div>
             <h3 className="text-sm font-medium text-zinc-400 mb-3 flex items-center gap-2">
               <Package className="w-4 h-4" />
@@ -2319,6 +2343,51 @@ export default function WorkshopView({
             </div>
           ) : null}
         </section>
+
+        <nav
+          className="lg:hidden shrink-0 grid grid-cols-3 border-t border-zinc-700 bg-zinc-950/95 backdrop-blur-sm pb-[max(4px,env(safe-area-inset-bottom))]"
+          aria-label="Cambiar panel del workshop"
+        >
+          <button
+            type="button"
+            onClick={() => setMobileWorkshopColumn("chat")}
+            className={cn(
+              "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation min-h-[52px]",
+              mobileWorkshopColumn === "chat"
+                ? "text-amber-400 bg-zinc-800/90 border-t-2 border-t-amber-500 -mt-px"
+                : "text-zinc-500 border-t-2 border-t-transparent active:bg-zinc-800/50",
+            )}
+          >
+            <MessageSquare className="w-5 h-5 shrink-0 opacity-90" aria-hidden />
+            Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileWorkshopColumn("workspace")}
+            className={cn(
+              "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation min-h-[52px]",
+              mobileWorkshopColumn === "workspace"
+                ? "text-amber-400 bg-zinc-800/90 border-t-2 border-t-amber-500 -mt-px"
+                : "text-zinc-500 border-t-2 border-t-transparent active:bg-zinc-800/50",
+            )}
+          >
+            <FileText className="w-5 h-5 shrink-0 opacity-90" aria-hidden />
+            Docs
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileWorkshopColumn("metrics")}
+            className={cn(
+              "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation min-h-[52px]",
+              mobileWorkshopColumn === "metrics"
+                ? "text-amber-400 bg-zinc-800/90 border-t-2 border-t-amber-500 -mt-px"
+                : "text-zinc-500 border-t-2 border-t-transparent active:bg-zinc-800/50",
+            )}
+          >
+            <Package className="w-5 h-5 shrink-0 opacity-90" aria-hidden />
+            Estado
+          </button>
+        </nav>
         {
           showAuditModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={() => setShowAuditModal(false)}>
@@ -2337,8 +2406,8 @@ export default function WorkshopView({
                   <div>
                     <h3 className="text-sm font-medium text-zinc-400 mb-3 uppercase tracking-wider">Desglose de Calificación</h3>
                     {precisionBreakdown ? (
-                      <div className="overflow-hidden rounded-lg border border-zinc-700">
-                        <table className="w-full text-sm text-left">
+                      <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 rounded-lg border border-zinc-700">
+                        <table className="w-full text-sm text-left min-w-[520px] sm:min-w-0">
                           <thead className="bg-zinc-800/50 text-zinc-400 border-b border-zinc-700">
                             <tr>
                               <th className="px-4 py-3 font-medium">Sección</th>

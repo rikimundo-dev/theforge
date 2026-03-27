@@ -232,7 +232,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] p-8">
+    <div className="min-h-[100dvh] bg-[var(--background)] text-[var(--foreground)] px-4 py-6 sm:p-6 lg:p-8 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -253,7 +253,7 @@ export default function App() {
       </AlertDialog>
 
       <Dialog open={showTheForgeModal} onOpenChange={setShowTheForgeModal}>
-        <DialogContent size="lg" className="max-h-[80vh] flex flex-col">
+        <DialogContent size="lg" className="max-h-[min(80vh,100dvh-2rem)] w-[calc(100vw-1.5rem)] sm:w-full flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle>Base de conocimientos (TheForge)</DialogTitle>
             <DialogDescription>
@@ -364,17 +364,17 @@ export default function App() {
       </Dialog>
 
       <div className="max-w-4xl mx-auto space-y-6">
-        <header className="border-b border-[var(--border)] pb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-[var(--primary)] flex items-center gap-2">
+        <header className="border-b border-[var(--border)] pb-4 sm:pb-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3 sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--primary)] flex items-center gap-2">
               <Flame className="w-8 h-8" />
               TheForge
             </h1>
-            <p className="text-[var(--foreground-muted)] mt-1">
+            <p className="text-[var(--foreground-muted)] mt-1 text-sm sm:text-base">
               Software Factory — Entrevista proactiva → MDD → Semáforo → Estimación
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={logout} className="shrink-0">
+          <Button variant="outline" size="sm" onClick={logout} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9">
             <LogOut className="w-4 h-4" />
             Salir
           </Button>
@@ -388,8 +388,8 @@ export default function App() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-4 items-end">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+              <div className="w-full sm:w-auto sm:min-w-[12rem] sm:max-w-md">
                 <label className="block text-sm text-[var(--foreground-muted)] mb-1 sr-only">
                   Nombre del proyecto
                 </label>
@@ -399,23 +399,28 @@ export default function App() {
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && createProject()}
                   placeholder="Nombre del proyecto"
-                  className="w-64"
+                  className="w-full min-h-[44px] sm:min-h-10"
                 />
               </div>
-              <Button onClick={createProject} disabled={loading || !newName.trim()}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Crear (proyecto nuevo)
-              </Button>
-              <Button variant="secondary" onClick={() => openTheForgeModal("projects")} disabled={loading}>
-                Proyecto existente (TheForge)
-              </Button>
-              <Button variant="secondary" onClick={() => openTheForgeModal("repos")} disabled={loading}>
-                Repositorio existente (TheForge)
-              </Button>
-              <Button variant="outline" onClick={loadProjects} disabled={loading}>
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                Refrescar
-              </Button>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap w-full sm:w-auto">
+                <Button className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10" onClick={createProject} disabled={loading || !newName.trim()}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  <span className="hidden sm:inline">Crear (proyecto nuevo)</span>
+                  <span className="sm:hidden">Crear nuevo</span>
+                </Button>
+                <Button variant="secondary" className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10 text-left sm:text-center whitespace-normal h-auto py-2.5 sm:py-2" onClick={() => openTheForgeModal("projects")} disabled={loading}>
+                  <span className="sm:hidden">TheForge · proyecto</span>
+                  <span className="hidden sm:inline">Proyecto existente (TheForge)</span>
+                </Button>
+                <Button variant="secondary" className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10 text-left sm:text-center whitespace-normal h-auto py-2.5 sm:py-2" onClick={() => openTheForgeModal("repos")} disabled={loading}>
+                  <span className="sm:hidden">TheForge · repo</span>
+                  <span className="hidden sm:inline">Repositorio existente (TheForge)</span>
+                </Button>
+                <Button variant="outline" className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10" onClick={loadProjects} disabled={loading}>
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                  Refrescar
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -450,26 +455,31 @@ export default function App() {
                       className="cursor-pointer"
                       onClick={() => setWorkshopProject(p)}
                     >
-                      <CardContent className="flex items-center gap-4 py-3 px-4">
-                        <span className={`w-3 h-3 rounded-full shrink-0 ${statusDotColor[p.status]}`} title={p.status} />
-                        <span className="font-medium flex-1 min-w-0">{p.name}</span>
-                        <span className="text-sm text-[var(--foreground-muted)] shrink-0">
-                          Precisión {p.precisionScore}%
-                        </span>
-                        <span className="text-sm text-[var(--foreground-muted)] shrink-0">
-                          {new Date(p.createdAt).toLocaleDateString("es-MX")}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => openDeleteConfirm(p, e)}
-                          disabled={loading}
-                          className="shrink-0 text-[var(--foreground-muted)] hover:text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                          title="Borrar proyecto"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                        <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0" />
+                      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 py-3 px-4">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <span className={`w-3 h-3 rounded-full shrink-0 ${statusDotColor[p.status]}`} title={p.status} />
+                          <span className="font-medium min-w-0 flex-1">{p.name}</span>
+                          <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0 sm:hidden" aria-hidden />
+                        </div>
+                        <div className="flex items-center justify-between gap-3 sm:justify-end sm:shrink-0 flex-wrap sm:flex-nowrap">
+                          <span className="text-sm text-[var(--foreground-muted)]">
+                            Precisión {p.precisionScore}%
+                          </span>
+                          <span className="text-sm text-[var(--foreground-muted)]">
+                            {new Date(p.createdAt).toLocaleDateString("es-MX")}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => openDeleteConfirm(p, e)}
+                            disabled={loading}
+                            className="shrink-0 touch-manipulation min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-9 text-[var(--foreground-muted)] hover:text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
+                            title="Borrar proyecto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                          <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0 hidden sm:block" aria-hidden />
+                        </div>
                       </CardContent>
                     </Card>
                   </li>
