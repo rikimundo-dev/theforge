@@ -2475,6 +2475,15 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       }
       const data = (await r.json()) as { codebaseDoc: string } | null;
       await get().fetchProject(projectId);
+      if (data == null) {
+        set({
+          loading: false,
+          loadingReason: null,
+          error:
+            "No se pudo generar el MDD inicial: TheForge MCP no está configurado en el backend o la respuesta fue vacía. Revisa THEFORGE_MCP_URL.",
+        });
+        return null;
+      }
       set({ loading: false, loadingReason: null, error: null });
       return data;
     } catch (e) {

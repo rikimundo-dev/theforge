@@ -1057,9 +1057,11 @@ export default function WorkshopView({
                   ? "Complejidad baja: Spec → H.U. → Tasks (MDD / Blueprint / API ocultos). Paso 0 opcional."
                   : complexity === "MEDIUM"
                     ? isLegacyProject
-                      ? "Complejidad media (legacy): MDD de cambio + Spec → API → Guía UX/UI → Tasks. Pestañas no incluidas en la matriz ocultas."
+                      ? "Complejidad media (legacy): MDD Inicial opcional (Ariadne); MDD de cambio + Spec → API → Guía UX/UI → Tasks."
                       : "Complejidad media (producto nuevo): sin MDD en barra — insumo Paso 0 / Spec. Entregables: Spec → API → Guía UX/UI → Tasks."
-                    : "Orden: MDD → Spec → Arq. → Casos → H.U. → Blueprint → Guía UX/UI → API → Flujos → Tasks → Infra (Paso 0 opcional)"}
+                    : isLegacyProject
+                      ? "Legacy: MDD Inicial opcional (Ariadne → doc. de partida); luego Modificación + MDD de cambio y entregables. Cada etapa del taller = una modificación con doc actualizada vía Ariadne."
+                      : "Orden: MDD → Spec → Arq. → Casos → H.U. → Blueprint → Guía UX/UI → API → Flujos → Tasks → Infra (Paso 0 opcional)"}
               </p>
               <div className="flex items-center gap-2">
                 {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra"] as const).includes(
@@ -1291,7 +1293,7 @@ export default function WorkshopView({
               <div className="rounded-lg bg-zinc-800/80 border border-zinc-600 p-6 text-zinc-300 text-sm space-y-4 flex flex-col min-h-0 flex-1">
                 <p className="font-medium text-amber-400/90 shrink-0">MDD Inicial — Documentación del codebase (partida)</p>
                 <p className="text-zinc-500 text-xs shrink-0">
-                  Contexto del codebase generado vía AriadneSpecs. Opcional pero recomendado antes de describir la modificación.
+                  Reconstrucción AS-IS desde el índice AriadneSpecs (equivalente al “primer paso” de documentación). Opcional: puedes ir directo a <strong>Modificación</strong> si solo quieres un cambio puntual; para volcar todo el conocimiento del repo aquí, usa el botón de abajo.
                 </p>
                 {project.legacyFlowState?.codebaseDoc || mddInicialLocalContent ? (
                   <>
@@ -1330,14 +1332,35 @@ export default function WorkshopView({
                     </div>
                   </>
                 ) : (
-                  <div className="rounded border border-dashed border-zinc-600 bg-zinc-900/50 p-8 text-center text-zinc-500">
+                  <div className="rounded border border-dashed border-zinc-600 bg-zinc-900/50 p-8 text-center text-zinc-500 space-y-4">
                     {loading && loadingReason === "legacy-codebase-doc" ? (
                       <p className="flex items-center justify-center gap-2 text-amber-300/80">
                         <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                         {legacyStepsCodebaseDoc[legacyStepIndex % legacyStepsCodebaseDoc.length]}
                       </p>
                     ) : (
-                      <p>Usa el botón &quot;Generar documentación de partida&quot; arriba para crear la documentación del codebase.</p>
+                      <>
+                        <p className="text-zinc-400 text-sm max-w-md mx-auto">
+                          Aún no hay documentación de partida. Genera un borrador largo desde AriadneSpecs (varias consultas al MCP); luego puedes usar <strong>Generar entregables</strong> para Spec, arquitectura, etc. (ingeniería inversa).
+                        </p>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await legacyGenerateCodebaseDoc(projectId);
+                            if (res?.codebaseDoc) setCentralPanel("mdd-inicial");
+                          }}
+                          disabled={loading}
+                          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500/25 text-amber-200 border border-amber-500/40 hover:bg-amber-500/35 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+                        >
+                          {loading && loadingReason === "legacy-codebase-doc" ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : null}
+                          Generar MDD inicial desde AriadneSpecs
+                        </button>
+                        <p className="text-xs text-zinc-600">
+                          También: &quot;Generar documentación de partida&quot; en la barra superior (misma acción).
+                        </p>
+                      </>
                     )}
                   </div>
                 )}
@@ -1346,6 +1369,44 @@ export default function WorkshopView({
             {centralPanel === "legacy" && project?.projectType === "LEGACY" && projectId && (
               <div className="rounded-lg bg-zinc-800/80 border border-zinc-600 p-6 text-zinc-300 text-sm space-y-6">
                 <p className="font-medium text-amber-400/90">Flujo de modificación (Legacy)</p>
+                {!project.legacyFlowState?.codebaseDoc?.trim() ? (
+                  <div className="rounded-lg border border-amber-500/35 bg-amber-950/25 px-4 py-3 space-y-3 text-amber-100/90 text-sm">
+                    <p>
+                      <strong className="text-amber-200">Primera documentación del repo:</strong> en la pestaña{" "}
+                      <strong>MDD Inicial</strong> puedes generar (o regenerar) un documento de partida desde AriadneSpecs —
+                      base para entregables AS-IS. Cada <strong>nueva etapa</strong> del taller es una modificación que mantiene
+                      actualizada la doc consultando Ariadne.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await legacyGenerateCodebaseDoc(projectId);
+                          if (res?.codebaseDoc?.trim()) setCentralPanel("mdd-inicial");
+                        }}
+                        disabled={loading}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-amber-500/30 text-amber-100 border border-amber-400/50 hover:bg-amber-500/40 text-xs font-medium disabled:opacity-50"
+                      >
+                        {loading && loadingReason === "legacy-codebase-doc" ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : null}
+                        Generar MDD inicial (Ariadne)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCentralPanel("mdd-inicial")}
+                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-zinc-500 text-zinc-300 hover:bg-zinc-700/50 text-xs"
+                      >
+                        Ir a MDD Inicial
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">
+                    Documentación de partida lista. Puedes regenerarla en <strong>MDD Inicial</strong>. Este panel es para el{" "}
+                    <strong>MDD de cambio</strong> de esta etapa.
+                  </p>
+                )}
                 {!project.legacyFlowState?.filesToModify?.length && !project.legacyFlowState?.questions?.length ? (
                   <>
                     <p>Describe la modificación que quieres hacer al proyecto. AriadneSpecs analizará el código y te devolverá archivos a modificar y preguntas para afinar.</p>
