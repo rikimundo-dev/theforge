@@ -6,15 +6,17 @@ ENV PNPM_HOME="/pnpm" PATH="$PNPM_HOME:$PATH"
 COPY package.json pnpm-workspace.yaml turbo.json ./
 COPY packages/database/package.json packages/database/
 COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/business-rules/package.json packages/business-rules/
 COPY packages/config/package.json packages/config/
 COPY apps/api/package.json apps/api/
 RUN pnpm install
 COPY packages/database packages/database
 COPY packages/shared-types packages/shared-types
+COPY packages/business-rules packages/business-rules
 COPY packages/config packages/config
 COPY apps/api apps/api
 ENV DATABASE_URL="postgresql://theforge:theforge@localhost:5432/theforge"
-RUN pnpm run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/api
+RUN pnpm run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
 
 # ========== Build Web ==========
 FROM node:20-alpine AS web-builder
@@ -23,9 +25,13 @@ RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
 ENV PNPM_HOME="/pnpm" PATH="$PNPM_HOME:$PATH"
 COPY package.json pnpm-workspace.yaml turbo.json ./
 COPY packages/config/package.json packages/config/
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/business-rules/package.json packages/business-rules/
 COPY apps/web/package.json apps/web/
 RUN pnpm install
 COPY packages/config packages/config
+COPY packages/shared-types packages/shared-types
+COPY packages/business-rules packages/business-rules
 COPY apps/web apps/web
 RUN pnpm run build --filter=@theforge/web
 

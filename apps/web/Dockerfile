@@ -9,11 +9,15 @@ ENV PATH="$PNPM_HOME:$PATH"
 
 COPY package.json pnpm-workspace.yaml turbo.json ./
 COPY packages/config/package.json packages/config/
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/business-rules/package.json packages/business-rules/
 COPY apps/web/package.json apps/web/
 
 RUN pnpm install
 
 COPY packages/config packages/config
+COPY packages/shared-types packages/shared-types
+COPY packages/business-rules packages/business-rules
 COPY apps/web apps/web
 
 RUN pnpm run build --filter=@theforge/web
