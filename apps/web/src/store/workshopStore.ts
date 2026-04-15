@@ -1094,6 +1094,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   } else if (event.type === "done" && event.markdown != null) {
                     set({ managerThreadId: null, pendingPlanApproval: null });
                     const markdownOk = event.markdown.trim().length > 80;
+                    const mddBeforeFetch = (get().mddContent ?? "").trim();
                     if (markdownOk) set({ mddContent: event.markdown });
 
                     const precisionBreakdown = (event as any).precisionBreakdown;
@@ -1120,6 +1121,17 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                         mddContent: event.markdown,
                         project: current.project ? { ...current.project, mddContent: event.markdown } : null,
                       });
+                    } else if (mddBeforeFetch.length > 80) {
+                      // `done` con markdown corto (p. ej. placeholder) no debe vaciar borradores ya mostrados por eventos `draft`.
+                      const current = get();
+                      const flat = workshopFlatFromStage(current.project as Project, get().activeStageId);
+                      const serverMdd = (cleanDoc(flat.mddContent) ?? "").trim();
+                      if (serverMdd.length < mddBeforeFetch.length) {
+                        set({
+                          mddContent: mddBeforeFetch,
+                          project: current.project ? { ...current.project, mddContent: mddBeforeFetch } : current.project,
+                        });
+                      }
                     }
 
                     const assistantContent = "MDD generado. Revisa el documento en el panel central.";
@@ -1179,175 +1191,22 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             streamingUserImages: null,
             evaluatorCritique: null,
           });
+          return;
         }
       }
 
+      // No encadenar `ai-orchestrator/chat/stream` tras el Manager MDD: un segundo stream vaciaba el
+      // panel (done del orquestador trae `project` sin MDD persistido) y duplicaba respuesta en chat.
       set({
-        loading: true,
-        error: null,
-        synced: false,
-        streamingUserMessage: msg || (images.length ? "(Imagen adjunta)" : ""),
-        streamingUserImages: images.length ? images : null,
-        streamingContent: "",
-        streamingTab: tab,
-        evaluatorCritique: null,
+        loading: false,
+        loadingReason: null,
+        agentProgress: [],
+        streamingUserMessage: null,
+        streamingUserImages: null,
+        streamingContent: null,
+        streamingTab: null,
       });
-      try {
-        const body: Record<string, unknown> = {
-          projectId,
-          sessionId: session?.id,
-          message: msg || "",
-          mddContent: get().mddContent || undefined,
-          uxUiGuideContent: get().uxUiGuideContent ?? undefined,
-          activeTab: tab,
-        };
-        const stageFocus = get().activeStageId;
-        if (stageFocus) body.stageId = stageFocus;
-        if (activeTab === "spec") {
-          const spec = get().specContent ?? get().project?.specContent ?? null;
-          if (spec != null) body.specContent = spec;
-        }
-        if (activeTab === "benchmark") {
-          const dbga = get().dbgaContent ?? get().project?.dbgaContent ?? null;
-          if (dbga != null) body.dbgaContent = dbga;
-        }
-        if (images.length) body.images = images;
-        const r = await apiFetch(`${API_BASE}/ai-orchestrator/chat/stream`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          throw new Error(err.message ?? "Error en la entrevista");
-        }
-        const reader = r.body?.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        if (!reader) throw new Error("No se pudo leer el stream");
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n\n");
-          buffer = lines.pop() ?? "";
-          for (const block of lines) {
-            let event = "";
-            let dataStr = "";
-            for (const line of block.split("\n")) {
-              if (line.startsWith("event:")) event = line.slice(6).trim();
-              else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
-            }
-            if (!event || !dataStr) continue;
-            try {
-              const data = JSON.parse(dataStr) as Record<string, unknown>;
-              if (event === "chunk" && typeof data.content === "string") {
-                set((s) => ({ streamingContent: (s.streamingContent ?? "") + data.content }));
-              } else if (event === "done") {
-                const sess = data.session as Session | undefined;
-                const proj = data.project as Project | undefined;
-                const uxFromApi = (data.uxUiGuideContent ?? proj?.uxUiGuideContent) as string | null | undefined;
-                const packed = projectWithUxAfterStream(proj, uxFromApi, get().activeStageId);
-                set({
-                  session: sess ?? get().session,
-                  project: packed?.project ?? get().project,
-                  activeStageId: packed?.activeStageId ?? get().activeStageId,
-                  mddContent: packed?.mddContent ?? get().mddContent,
-                  uxUiGuideContent: cleanDoc(uxFromApi ?? get().uxUiGuideContent ?? null),
-                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null),
-                  specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
-                  blueprintContent: cleanDoc(proj?.blueprintContent ?? null),
-                  apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null),
-                  logicFlowsContent: cleanDoc(proj?.logicFlowsContent ?? null),
-                  infraContent: cleanDoc(proj?.infraContent ?? null),
-                  streamingUserMessage: null,
-                  streamingUserImages: null,
-                  streamingContent: null,
-                  streamingTab: null,
-                  synced: true,
-                  error: null,
-                  evaluatorCritique: pickEvaluatorCritique(data),
-                });
-              } else if (event === "error" && data.error) {
-                set({
-                  error: String(data.error),
-                  streamingUserMessage: null,
-                  streamingUserImages: null,
-                  streamingContent: null,
-                  streamingTab: null,
-                  synced: true,
-                });
-              }
-            } catch (_) {
-              // ignore parse errors for partial chunks
-            }
-          }
-        }
-        if (buffer.trim()) {
-          let event = "";
-          let dataStr = "";
-          for (const line of buffer.split("\n")) {
-            if (line.startsWith("event:")) event = line.slice(6).trim();
-            else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
-          }
-          if (event && dataStr) {
-            try {
-              const data = JSON.parse(dataStr) as Record<string, unknown>;
-              if (event === "chunk" && typeof data.content === "string") {
-                set((s) => ({ streamingContent: (s.streamingContent ?? "") + data.content }));
-              } else if (event === "done") {
-                const sess = data.session as Session | undefined;
-                const proj = data.project as Project | undefined;
-                const uxFromApi = (data.uxUiGuideContent ?? proj?.uxUiGuideContent) as string | null | undefined;
-                const packed = projectWithUxAfterStream(proj, uxFromApi, get().activeStageId);
-                set({
-                  session: sess ?? get().session,
-                  project: packed?.project ?? get().project,
-                  activeStageId: packed?.activeStageId ?? get().activeStageId,
-                  mddContent: packed?.mddContent ?? get().mddContent,
-                  uxUiGuideContent: cleanDoc(uxFromApi ?? get().uxUiGuideContent ?? null),
-                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null),
-                  specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
-                  blueprintContent: cleanDoc(proj?.blueprintContent ?? null),
-                  apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null),
-                  logicFlowsContent: cleanDoc(proj?.logicFlowsContent ?? null),
-                  infraContent: cleanDoc(proj?.infraContent ?? null),
-                  streamingUserMessage: null,
-                  streamingUserImages: null,
-                  streamingContent: null,
-                  streamingTab: null,
-                  synced: true,
-                  error: null,
-                  evaluatorCritique: pickEvaluatorCritique(data),
-                });
-              } else if (event === "error" && data.error) {
-                set({
-                  error: String(data.error),
-                  streamingUserMessage: null,
-                  streamingUserImages: null,
-                  streamingContent: null,
-                  streamingTab: null,
-                  synced: true,
-                });
-              }
-            } catch (_) {
-              // ignore
-            }
-          }
-        }
-      } catch (e) {
-        set({
-          error: e instanceof Error ? e.message : "Error al enviar",
-          streamingUserMessage: null,
-          streamingUserImages: null,
-          streamingContent: null,
-          streamingTab: null,
-          synced: true,
-        });
-      } finally {
-        set({ loading: false });
-      }
+      return;
     } else {
       // Chat genérico para Guía UX/UI, benchmark, spec, etc. (tabs que no usan el flujo MDD/Manager)
       set({
