@@ -74,15 +74,6 @@ services:
     networks:
       - default
       - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.theforge-api.rule=Host(`${WEB_DOMAIN:-theforge.local}`) && PathPrefix(`/api`)"
-      - "traefik.http.routers.theforge-api.priority=100"
-      - "traefik.http.routers.theforge-api.entrypoints=websecure"
-      - "traefik.http.routers.theforge-api.tls.certResolver=letsencrypt"
-      - "traefik.http.services.theforge-api.loadbalancer.server.port=3000"
-      - "traefik.http.middlewares.theforge-api-strip.stripprefix.prefixes=/api"
-      - "traefik.http.routers.theforge-api.middlewares=theforge-api-strip"
     environment:
       DATABASE_URL: postgresql://theforge:theforge@theforge-db:5432/theforge
       # BullMQ: REDIS_URL apunta al Redis de cola (servicio siguiente). Requerido para entregables asíncronos resilientes.
@@ -147,13 +138,6 @@ services:
     networks:
       - default
       - dokploy-network
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.theforge-web.rule=Host(`${WEB_DOMAIN:-theforge.local}`)"
-      - "traefik.http.routers.theforge-web.priority=1"
-      - "traefik.http.routers.theforge-web.entrypoints=websecure"
-      - "traefik.http.routers.theforge-web.tls.certResolver=letsencrypt"
-      - "traefik.http.services.theforge-web.loadbalancer.server.port=80"
     depends_on:
       - theforge-api
     healthcheck:
