@@ -44,7 +44,7 @@ packages/config       tsconfig.base, eslint, tailwind
 ## Docker / Dokploy
 
 - **Un contenedor:** servicio `theforge-db` (Postgres + API + Nginx). Conexión interna `localhost:5432`.
-- **Env:** DATABASE_URL, AI_PROVIDER, OPENAI_API_KEY o GOOGLE_GENERATIVE_AI_API_KEY. Opcional: `LANGGRAPH_RECURSION_LIMIT` (10–500, default 100) para el grafo MDD. Nuevos servicios/variables → actualizar `docker-compose.yml`.
+- **Env:** DATABASE_URL, AI_PROVIDER, AI_API_KEY (alias OPENAI_API_KEY) o GOOGLE_GENERATIVE_AI_API_KEY. Opcional: `LANGGRAPH_RECURSION_LIMIT` (10–500, default 100) para el grafo MDD. Nuevos servicios/variables → actualizar `docker-compose.yml`.
 
 ## Reglas de código
 

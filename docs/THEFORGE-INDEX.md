@@ -85,7 +85,7 @@ La capa de **adapters** implementa una interfaz técnica común. No debe haber i
 
 ### 3.3 Variables de entorno por proveedor
 
-- **OpenAI:** `OPENAI_API_KEY` (y opcionalmente modelo).
+- **OpenAI-compatible:** `AI_API_KEY` (alias `OPENAI_API_KEY`) y opcionalmente modelo (`OPENAI_CHAT_MODEL`, etc.).
 - **Google:** `GOOGLE_GENERATIVE_AI_API_KEY` (y opcionalmente modelo).
 - **Común:** `AI_PROVIDER`.
 
@@ -145,7 +145,7 @@ El agente debe comprobar estado VERDE antes de generar código (architect-behavi
 
 - **Core:** `DATABASE_URL`, `PORT` (opcional)
 - **Cola asíncrona (obligatorio en stack Dokploy/compose de referencia):** `REDIS_URL` (p. ej. `redis://theforge-redis-queue:6379`) para **BullMQ**
-- **IA:** `AI_PROVIDER`, `OPENAI_API_KEY` / `GOOGLE_GENERATIVE_AI_API_KEY`, opcional `OPENAI_EMBEDDING_DIM`
+- **IA:** `AI_PROVIDER`, `AI_API_KEY` (alias `OPENAI_API_KEY`) / `GOOGLE_GENERATIVE_AI_API_KEY`, opcional `OPENAI_EMBEDDING_DIM`
 - **Grafo SDD:** `FALKORDB_SDD_URL` y/o `FALKORDB_URL` (en Docker: `redis://theforge-falkor-sdd:6379`) — **distinto** del Redis de cola
 - **TheForge (opcional, legacy):** `THEFORGE_MCP_URL`, `MCP_AUTH_TOKEN`, `THEFORGE_MCP_TIMEOUT_MS`
 - **Orquestador:** `AGENT_EVALUATOR_LEGACY` (opcional; crítica en respuesta chat)

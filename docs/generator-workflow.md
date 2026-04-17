@@ -54,6 +54,6 @@ npx ts-node scripts/generate-mdd.ts --interactive
 ### Supported Providers
 The system automatically detects your provider from `.env`:
 - **Gemini:** Set `AI_PROVIDER=gemini` and `GEMINI_API_KEY`.
-- **OpenAI:** Set `AI_PROVIDER=openai` and `OPENAI_API_KEY`.
+- **OpenAI:** Set `AI_PROVIDER=openai` and `AI_API_KEY` (or `OPENAI_API_KEY`).
 
 (Note: Script implementation pending in `scripts/generate-mdd.ts`)

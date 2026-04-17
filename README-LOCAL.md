@@ -42,7 +42,8 @@ Opcional (para chat con IA):
 
 ```env
 AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
+AI_API_KEY=sk-...
+# OPENAI_API_KEY=sk-...   # mismo efecto que AI_API_KEY (alias)
 ```
 
 O con Gemini:

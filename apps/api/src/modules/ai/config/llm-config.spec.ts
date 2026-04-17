@@ -13,8 +13,10 @@ test("normalizeLlmProviderId — alias gemini/moonshot", () => {
 });
 
 test("getLlmProvidersSnapshot — sin claves", () => {
+  const prevAi = process.env.AI_API_KEY;
   const prevOpen = process.env.OPENAI_API_KEY;
   const prevGo = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  delete process.env.AI_API_KEY;
   delete process.env.OPENAI_API_KEY;
   delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   try {
@@ -22,7 +24,10 @@ test("getLlmProvidersSnapshot — sin claves", () => {
     assert.equal(snap.find((s) => s.id === "openai")?.chatConfigured, false);
     assert.equal(snap.find((s) => s.id === "kimi")?.chatConfigured, false);
   } finally {
+    if (prevAi !== undefined) process.env.AI_API_KEY = prevAi;
+    else delete process.env.AI_API_KEY;
     if (prevOpen !== undefined) process.env.OPENAI_API_KEY = prevOpen;
+    else delete process.env.OPENAI_API_KEY;
     if (prevGo !== undefined) process.env.GOOGLE_GENERATIVE_AI_API_KEY = prevGo;
   }
 });

@@ -48,7 +48,7 @@ docker compose up --build
 - **Puerto:** 80 (Web + proxy `/api` → API en el mismo contenedor)
 - **Volumen:** `theforge_db_data` (datos de Postgres)
 
-Env opcionales: `LLM_PRIMARY_PROVIDER` o `AI_PROVIDER` (openai | google | kimi | …), `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` — ver `.env.example`.
+Env opcionales: `AI_PROVIDER` (openai | google | kimi | …), `AI_API_KEY` (alias `OPENAI_API_KEY`), `GOOGLE_GENERATIVE_AI_API_KEY` — ver `.env.example`.
 
 ### Compose multi-servicio (`docker-compose.yml`)
 

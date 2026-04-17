@@ -86,7 +86,7 @@ services:
       # Evaluador legacy + crítica en respuesta chat (opcional; por defecto desactivado).
       AGENT_EVALUATOR_LEGACY: ${AGENT_EVALUATOR_LEGACY:-}
       AI_PROVIDER: ${AI_PROVIDER:-openai}
-      LLM_PRIMARY_PROVIDER: ${LLM_PRIMARY_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-}

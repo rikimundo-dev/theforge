@@ -177,23 +177,24 @@ const model = new ChatOpenAI({
 
 ```typescript
 // .env
-// OPENAI_API_KEY=sk-YOUR_OPENAI_KEY
+// AI_API_KEY=sk-YOUR_OPENAI_KEY   # alias retrocompatible: OPENAI_API_KEY
 // LANGSMITH_API_KEY=ls__YOUR_LANGSMITH_KEY
 // MONGODB_URI=mongodb+srv://...
 
 // src/config.ts
 import "dotenv/config"; // Ensure dotenv is loaded early
 
-export const OPENAI_API_KEY = process.env.OPENAI_API_KEY!;
+export const AI_API_KEY =
+  process.env.AI_API_KEY ?? process.env.OPENAI_API_KEY!;
 export const LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY!;
 export const MONGODB_URI = process.env.MONGODB_URI!;
 
 // src/models/chatModel.ts
 import { ChatOpenAI } from "@langchain/openai";
-import { OPENAI_API_KEY } from "../config";
+import { AI_API_KEY } from "../config";
 
 export const chatModel = new ChatOpenAI({
-  openAIApiKey: OPENAI_API_KEY,
+  openAIApiKey: AI_API_KEY,
   temperature: 0.7,
   modelName: "gpt-4o",
 });
@@ -316,10 +317,10 @@ Implement streaming for LLM responses to improve user experience, especially for
 ```typescript
 // src/models/streamingChatModel.ts
 import { ChatOpenAI } from "@langchain/openai";
-import { OPENAI_API_KEY } from "../config";
+import { AI_API_KEY } from "../config";
 
 export const streamingChatModel = new ChatOpenAI({
-  openAIApiKey: OPENAI_API_KEY,
+  openAIApiKey: AI_API_KEY,
   temperature: 0.7,
   modelName: "gpt-4o",
   streaming: true, // Enable streaming
@@ -362,9 +363,9 @@ try {
 ```typescript
 import { ChatOpenAI } from "@langchain/openai";
 import pRetry from "p-retry";
-import { OPENAI_API_KEY } from "../config";
+import { AI_API_KEY } from "../config";
 
-const model = new ChatOpenAI({ openAIApiKey: OPENAI_API_KEY });
+const model = new ChatOpenAI({ openAIApiKey: AI_API_KEY });
 
 async function reliableLLMCall(prompt: string) {
   return pRetry(

@@ -55,7 +55,7 @@ function historyToOpenAiMessages(history: ChatMessage[]): OpenAI.Chat.ChatComple
 function getOpenAiCompatibleRuntimeStrict(): OpenAiCompatibleRuntime {
   const id = normalizeLlmProviderId();
   if (id === "google") {
-    throw new Error("OpenAIAdapter requires LLM_PRIMARY_PROVIDER/AI_PROVIDER openai or kimi");
+    throw new Error("OpenAIAdapter requires AI_PROVIDER openai or kimi");
   }
   return resolvePrimaryChatRuntime() as OpenAiCompatibleRuntime;
 }

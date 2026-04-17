@@ -68,7 +68,7 @@ interface DBGAState {
 ### Step 4: NestJS Integration
 
 - The `AiAnalysisService` must expose a method `startAnalysis(idea: string)`.
-- Use **Environment Variables** for API Keys (OPENAI_API_KEY, TAVILY_API_KEY).
+- Use **Environment Variables** for API Keys (AI_API_KEY / OPENAI_API_KEY, TAVILY_API_KEY).
 
 ## 6. Persistent Memory (Implemented)
 

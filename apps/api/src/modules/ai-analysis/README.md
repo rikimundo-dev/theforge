@@ -128,7 +128,7 @@ El flujo MDD actual se describe como **Supervisor + especialistas**, no como Pla
 1. **Boilerplate + State** – Hecho
 2. **LangGraph** – Hecho: `StateGraph` en `graph/dbga-graph.ts`, nodos en `nodes/` (Scout → Auditor → Critic → Synthesis). Critic tiene arista condicional a Scout (re-research) o Synthesis. Prompts en `prompts/`.
 3. **Tools** – Hecho: ToolRegistry en `tools/`. Scout usa TavilySearch + scrape_url (Cheerio); Auditor usa scrape_url. Nodos con loop agentic (bindTools + tool_calls). Env: `TAVILY_API_KEY` (opcional para búsqueda); scrape con Cheerio sin API key.
-4. **Modelo agnóstico** – Hecho: `createDbgaLLM()` lee `AI_PROVIDER` (openai | google). openai → OPENAI_API_KEY + ChatOpenAI; google → GOOGLE_GENERATIVE_AI_API_KEY + ChatGoogleGenerativeAI. Nodos tipados con `BaseChatModel`.
+4. **Modelo agnóstico** – Hecho: `createDbgaLLM()` lee `AI_PROVIDER` (openai | google). openai → `AI_API_KEY` + ChatOpenAI; google → GOOGLE_GENERATIVE_AI_API_KEY + ChatGoogleGenerativeAI. Nodos tipados con `BaseChatModel`.
 5. **Integración Workshop** – `POST /ai-analysis/stream` con body `{ idea, projectId }` devuelve stream NDJSON: eventos `{ type: "progress", agent, message }`, `{ type: "done", markdown }`, `{ type: "error", message }`. El frontend (Workshop) consume el stream, muestra el progreso de agentes en el chat y persiste el markdown final en `project.dbgaContent`.
 6. **Memoria persistente** – (1) Checkpointer: PostgresSaver en `checkpoint/checkpointer.service.ts`; tabla `AgentStateCheckpoint` (threadId por proyecto). Invocar con `projectId` para retomar Fase 0. (2) Memoria semántica: `POST /ai/preferences/learn-from-mdd` guarda preferencias; se inyectan en Scout y en el Master Prompt (HISTORIAL_DE_APRENDIZAJE).
 

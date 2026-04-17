@@ -4,8 +4,8 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { resolvePrimaryChatRuntime } from "../../ai/config/llm-config.js";
 
 /**
- * Factory for DBGA graph: mismo runtime que el adapter principal (LLM_PRIMARY_PROVIDER / AI_PROVIDER).
- * openai/kimi → ChatOpenAI (OPENAI_API_KEY + opcional OPENAI_BASE_URL); google → ChatGoogleGenerativeAI.
+ * Factory for DBGA graph: mismo runtime que el adapter principal (AI_PROVIDER).
+ * openai/kimi → ChatOpenAI (AI_API_KEY + opcional OPENAI_BASE_URL); google → ChatGoogleGenerativeAI.
  */
 export function createDbgaLLM(): BaseChatModel {
   const r = resolvePrimaryChatRuntime();

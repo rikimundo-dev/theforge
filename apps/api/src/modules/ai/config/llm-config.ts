@@ -5,9 +5,17 @@
 
 export type NormalizedLlmProviderId = "openai" | "google" | "kimi";
 
-/** Alias homologados: gemini→google, moonshot→kimi. Primary: LLM_PRIMARY_PROVIDER ?? AI_PROVIDER */
+/**
+ * Clave para APIs compatibles con OpenAI (OpenAI, Moonshot/Kimi, etc.).
+ * Prioridad: `AI_API_KEY` → `OPENAI_API_KEY` (alias retrocompatible).
+ */
+export function resolveAiCompatibleApiKey(): string {
+  return process.env.AI_API_KEY?.trim() ?? process.env.OPENAI_API_KEY?.trim() ?? "";
+}
+
+/** Alias homologados: gemini→google, moonshot→kimi. Fuente: AI_PROVIDER */
 export function normalizeLlmProviderId(raw?: string): NormalizedLlmProviderId {
-  const p = (raw ?? process.env.LLM_PRIMARY_PROVIDER ?? process.env.AI_PROVIDER ?? "openai").toLowerCase().trim();
+  const p = (raw ?? process.env.AI_PROVIDER ?? "openai").toLowerCase().trim();
   if (p === "google" || p === "gemini") return "google";
   if (p === "kimi" || p === "moonshot") return "kimi";
   return "openai";
@@ -43,7 +51,7 @@ export function resolvePrimaryChatRuntime(): PrimaryChatRuntime {
     const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
     if (!apiKey) {
       throw new Error(
-        "GOOGLE_GENERATIVE_AI_API_KEY or GEMINI_API_KEY is required when LLM_PRIMARY_PROVIDER/AI_PROVIDER is google",
+        "GOOGLE_GENERATIVE_AI_API_KEY or GEMINI_API_KEY is required when AI_PROVIDER is google",
       );
     }
     const chatModel =
@@ -53,10 +61,10 @@ export function resolvePrimaryChatRuntime(): PrimaryChatRuntime {
     return { providerId: "google", apiKey, chatModel };
   }
 
-  const apiKey = process.env.OPENAI_API_KEY ?? "";
+  const apiKey = resolveAiCompatibleApiKey();
   if (!apiKey) {
     throw new Error(
-      "OPENAI_API_KEY is required for openai/kimi (clave API OpenAI o clave compatible Moonshot/Kimi)",
+      "AI_API_KEY is required for openai/kimi (o OPENAI_API_KEY; OpenAI oficial o Moonshot/Kimi)",
     );
   }
 
@@ -84,7 +92,7 @@ export type ResolvedEmbeddingsBackend = "openai-official" | "gemini";
 
 /**
  * Embeddings: por defecto siguen al proveedor de chat (Google→Gemini; OpenAI→OpenAI).
- * Con kimi: si hay clave Google, embeddings Gemini; si no, OpenAI oficial con OPENAI_API_KEY (falla suave si la clave es solo Moonshot).
+ * Con kimi: si hay clave Google, embeddings Gemini; si no, OpenAI oficial con AI_API_KEY (falla suave si la clave es solo Moonshot).
  * Override opcional: LLM_EMBEDDINGS_PROVIDER=openai|google
  */
 export function resolveEmbeddingsBackend(): ResolvedEmbeddingsBackend {
@@ -118,7 +126,7 @@ export interface LlmProviderSnapshot {
 /** Vista rápida de qué proveedores tienen clave y cuál está activo (sin exponer secretos). */
 export function getLlmProvidersSnapshot(): LlmProviderSnapshot[] {
   const active = normalizeLlmProviderId();
-  const openaiKey = Boolean(process.env.OPENAI_API_KEY?.trim());
+  const openaiKey = Boolean(resolveAiCompatibleApiKey());
   const googleKey = Boolean(
     process.env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() || process.env.GEMINI_API_KEY?.trim(),
   );
