@@ -2,7 +2,7 @@
 
 Documentación para usar el conocimiento indexado por **AriadneSpecs** (grafo de código vía MCP) en la aplicación The Forge: desde **Cursor** y desde la **API Nest** (HTTP JSON-RPC `tools/call`, no stdio en el contenedor de la API).
 
-**Especificación canónica del servidor MCP** (monorepo **Ariadne**): `docs/MCP_AYUDA.md`, `docs/MCP_HTTPS.md`, `docs/mcp_server_specs.md` (SPEC-MCP-001). La tabla siguiente es documentación **cliente** The Forge alineada a esos archivos.
+**Especificación canónica del servidor MCP** (monorepo **Ariadne**): `docs/MCP_AYUDA.md`, `docs/MCP_HTTPS.md`, `docs/mcp_server_specs.md` (SPEC-MCP-001). En algunas ramas las mismas piezas viven también bajo `docs/notebooklm/` — mismo contenido. La tabla siguiente es documentación **cliente** The Forge alineada a esos archivos.
 
 | Documento | Descripción |
 |-----------|-------------|
@@ -17,7 +17,7 @@ Flujo legacy detallado (histórico): [../archive/PLAN-FLUJO-LEGACY-V2.md](../arc
 
 ## Uso en Cursor
 
-Configurar AriadneSpecs en `~/.cursor/mcp.json` (ver `theforge.md`). La regla `.cursor/rules/theforge-documentation.mdc` orienta doc de cambios con el grafo.
+Configurar AriadneSpecs en `~/.cursor/mcp.json` (ver `theforge.md`). La regla `.cursor/rules/ariadne-mcp.mdc` enlaza contrato HTTP, variables y resolución `projectId` frente al monorepo Ariadne.
 
 ## Uso en la aplicación web
 

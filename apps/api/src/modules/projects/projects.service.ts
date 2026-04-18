@@ -910,7 +910,14 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
-    const content = await this.ai.generateBlueprint(this.constitutionMarkdown(project), gapsFeedback);
+    const mddContent = this.constitutionMarkdown(project);
+    const p = project as { projectType?: string; theforgeProjectId?: string | null };
+    let legacyOpts: { theforgeContext: string } | undefined;
+    if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
+      const theforgeContext = await this.theforge.getContextForDeliverables(p.theforgeProjectId);
+      if (theforgeContext.trim()) legacyOpts = { theforgeContext };
+    }
+    const content = await this.ai.generateBlueprint(mddContent, gapsFeedback, legacyOpts);
     return { content: cleanDocumentContent(content) };
   }
 

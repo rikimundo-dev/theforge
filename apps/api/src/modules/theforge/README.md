@@ -1,8 +1,8 @@
 # Módulo TheForge (cliente MCP)
 
-Integración HTTP JSON-RPC con el MCP AriadneSpecs (`THEFORGE_MCP_URL`): proyectos, `get_modification_plan`, `ask_codebase`, búsqueda semántica, contenido de archivo y herramientas SDD (`validate_before_edit`, etc.).
+Integración HTTP JSON-RPC con el MCP AriadneSpecs (`THEFORGE_MCP_URL`): proyectos, `get_modification_plan`, `ask_codebase`, búsqueda semántica, contenido de archivo, **modelo C4** (`get_c4_model` → contexto de Blueprint legacy) y herramientas SDD (`validate_before_edit`, etc.).
 
-## `list_known_projects` → ids (canónico: repo Ariadne `docs/MCP_HTTPS.md`, SPEC-MCP-001)
+## `list_known_projects` → ids (canónico: repo Ariadne `docs/MCP_HTTPS.md` o `docs/notebooklm/MCP_HTTPS.md`, SPEC-MCP-001)
 
 - **`id`**: proyecto workspace Ariadne → rutas ingest **`/projects/:id/...`** (`get_modification_plan`, `ask_codebase` según spec).
 - **`roots[].id`**: repo → **`/repositories/:id/...`** y valor típico de `projectId` en nodos Falkor según sync.
@@ -31,6 +31,8 @@ Integración HTTP JSON-RPC con el MCP AriadneSpecs (`THEFORGE_MCP_URL`): proyect
 La API Nest `TheForgeService.getContextForDeliverables` y `LegacyCoordinatorService.generateCodebaseDoc` / `generateMdd` usan este pipeline cuando `LEGACY_EVIDENCE_FIRST_CONTEXT` está activo (default). `gatherLegacyIndexSignals` expone la misma fase sin LLM para cruzar con el grafo SDD en Falkor (ver `docs/LEGACY-EVIDENCE-CONTEXT.md` y `legacy-flow/README.md`).
 
 Variables relevantes: ver `.env.example` en la raíz del monorepo (prefijo `LEGACY_*`, `THEFORGE_CONTEXT_*`).
+
+**C4 en Blueprint (legacy):** `getContextForDeliverables` antepone (si hay respuesta) el markdown de `get_c4_model` antes de la evidencia semántica/Analyzer. Requiere que el **servidor MCP** tenga JWT válido hacia el API Nest (`ARIADNE_API_BEARER` / `ARIADNE_API_JWT`); si no, la herramienta falla y se continúa sin bloque C4. Desactivar: `LEGACY_C4_CONTEXT=0`. Recorte: `LEGACY_C4_MAX_CHARS` (default 5000). El prefacio TheForge en prompts usa `THEFORGE_CONTEXT_PREPEND_MAX_CHARS` (default 16000) para dar cabida a C4 + evidencia.
 
 **Contrato MCP (humo):** con `THEFORGE_MCP_URL` (y auth si aplica), `pnpm --filter @theforge/api test:mcp-alignment` llama `tools/list` y comprueba que cada `inputSchema.required` de las herramientas que usa el cliente esté cubierto por `THEFORGE_MCP_CLIENT_ARG_KEYS` (`theforge-mcp-client-contract.ts`). Sin URL, el test se omite.
 

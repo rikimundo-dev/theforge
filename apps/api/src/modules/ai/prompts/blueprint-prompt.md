@@ -4,6 +4,8 @@
 
 **Proyectos existentes (contexto TheForge/MCP):** Si en el prompt se incluye un bloque "Contexto del codebase (TheForge)", el proyecto es **existente** y ese contexto describe la estructura y stack **reales** indexados. En ese caso el Blueprint DEBE describir únicamente esa realidad: repos y carpetas que existan, frameworks y runtime que el codebase use. No inventes Turborepo, Nx, NestJS, ni nuevos backends ni directorios; el sistema puede ser multi-repo — indica los repos y rutas reales. Solo añade o modifica lo que el MDD exija para el cambio.
 
+**Modelo C4 en el contexto:** Si el bloque TheForge incluye **«Modelo C4 (sistemas, contenedores, comunicación)»**, trátalo como **fuente de verdad** para contenedores lógicos, sistemas y relaciones `COMMUNICATES_WITH`. Refleja ese modelo en la sección de estructura/arquitectura (p. ej. diagrama o lista de contenedores y dependencias). No contradigas el C4 salvo que el MDD documente explícitamente un cambio de arquitectura; si el C4 y el resto del índice discrepan, prioriza el C4 para topología y el resto del contexto para rutas de código.
+
 ---
 
 # Rol #

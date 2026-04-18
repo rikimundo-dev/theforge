@@ -35,8 +35,14 @@ export interface LegacyGenerateOptions {
 const LEGACY_NO_INVENTAR =
   "**Regla obligatoria (legacy):** No inventes nada. Apégate al MDD y únicamente al conocimiento del codebase (TheForge) proporcionado arriba. Todo lo que escribas debe estar respaldado por el MDD o por ese contexto; si algo no aparece en ninguno de los dos, no lo incluyas.";
 
+function trimTheForgeContextBlock(theforgeContext: string): string {
+  const max = parseInt(process.env.THEFORGE_CONTEXT_PREPEND_MAX_CHARS ?? "16000", 10);
+  const cap = Number.isFinite(max) && max > 2000 ? max : 16000;
+  return (theforgeContext ?? "").trim().slice(0, cap);
+}
+
 function prependTheForgePrompt(prompt: string, theforgeContext: string): string {
-  const block = (theforgeContext ?? "").trim().slice(0, 12000);
+  const block = trimTheForgeContextBlock(theforgeContext);
   if (!block) return prompt;
   return (
     "**Contexto del codebase (índice vía TheForge MCP) — priorizar y usar en su totalidad antes de elaborar el documento:**\n" +

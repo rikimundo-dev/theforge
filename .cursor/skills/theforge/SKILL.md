@@ -7,6 +7,7 @@ description: Guides work on The Forge monorepo (NestJS API, React Vite web, Pris
 
 ## Reference docs
 
+- **Ariadne MCP (legacy / grafo):** `docs/integración theforge/` — espejo de `MCP_HTTPS.md` / SPEC-MCP-001 (`Llamadas-HTTPS-MCP-AriadneSpecs.md`, `SPEC-MCP-001-THEFORGE.md`). API: `THEFORGE_MCP_URL`, `theforge.service.ts`, `ariadne-mcp-scope.util.ts`. Dos redes: token `MCP_AUTH_TOKEN` (cliente→`/mcp`) vs `ARIADNE_API_*` (solo proceso MCP→Nest).
 - **Architecture:** `docs/THEFORGE-INDEX.md` — flujo, IA agnóstica, Semáforo, estimación, Dokploy.
 - **Blueprint:** `blueprint.md` — estructura monorepo, Prisma, módulos AI/engine.
 - **MDD:** El MDD es la Constitución del proyecto (SDD); gobierna Blueprint, Contratos, Infra. Estructura canónica: 7 secciones. **Esqueleto constitución (YAGNI, §4.A antes que §4.B):** `apps/api/src/modules/ai-analysis/prompts/mdd/mdd-constitution-skeleton.md` (`MDD_CONSTITUTION_SKELETON_MARKDOWN` en `load-prompts.ts`). Ver `docs/ENTREGABLES-SDD-VALIDACION.md` §0.

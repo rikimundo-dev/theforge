@@ -1,6 +1,6 @@
 # SPEC-MCP-001 — Uso desde The Forge
 
-Resumen del contrato entre la **API The Forge** (flujo legacy) y el **MCP AriadneSpecs**. La definición normativa del servidor está en el monorepo **Ariadne**: **`docs/mcp_server_specs.md`** (SPEC-MCP-001), **`docs/MCP_HTTPS.md`**, **`docs/MCP_AYUDA.md`**. Este archivo describe solo el **uso cliente** The Forge.
+Resumen del contrato entre la **API The Forge** (flujo legacy) y el **MCP AriadneSpecs**. La definición normativa del servidor está en el monorepo **Ariadne**: **`docs/mcp_server_specs.md`** (SPEC-MCP-001), **`docs/MCP_HTTPS.md`**, **`docs/MCP_AYUDA.md`** (copias equivalentes posibles en **`docs/notebooklm/`**). Este archivo describe solo el **uso cliente** The Forge.
 
 ## Proyecto vs repo
 

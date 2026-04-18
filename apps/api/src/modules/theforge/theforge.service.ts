@@ -276,6 +276,7 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
    */
   async getContextForDeliverables(projectId: string): Promise<string> {
     if (!this.isConfigured()) return "";
+    const c4Block = await this.fetchC4ContextBlock(projectId);
     if (isLegacyEvidenceFirstEnabled()) {
       try {
         if (this.contextCache.isEnabled()) {
@@ -285,16 +286,16 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
           const hit = this.contextCache.get(key);
           if (hit) {
             this.logger.log(`[TheForge] getContextForDeliverables: cache hit (${projectId.slice(0, 8)}…)`);
-            return hit;
+            return this.mergeC4WithDeliverableContext(c4Block, hit);
           }
           const built = await buildLegacyEvidenceMarkdown(this, projectId, { includeSynthesis: true });
           if (built.trim()) {
             this.contextCache.set(key, built);
-            return built;
+            return this.mergeC4WithDeliverableContext(c4Block, built);
           }
         } else {
           const built = await buildLegacyEvidenceMarkdown(this, projectId, { includeSynthesis: true });
-          if (built.trim()) return built;
+          if (built.trim()) return this.mergeC4WithDeliverableContext(c4Block, built);
         }
       } catch (err) {
         this.logger.warn(
@@ -330,7 +331,57 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
     if (searchApi.trim()) searchParts.push("Búsqueda semántica API: " + clipLegacySemanticSection(searchApi.trim()));
     if (searchUi.trim()) searchParts.push("Búsqueda semántica UI: " + clipLegacySemanticSection(searchUi.trim()));
     if (searchParts.length > 0) parts.push("Índice semántico:\n" + searchParts.join("\n"));
-    return parts.join("\n\n---\n\n");
+    return this.mergeC4WithDeliverableContext(c4Block, parts.join("\n\n---\n\n"));
+  }
+
+  /**
+   * Modelo C4 agregado (MCP `get_c4_model` → API Nest GraphService). Requiere JWT Nest en el **proceso** MCP, no en el cliente The Forge.
+   */
+  async getC4Model(projectId: string): Promise<string> {
+    if (!this.isConfigured()) return "";
+    const ident = await this.resolveStoredToMcp(projectId);
+    const out = await this.callTool("get_c4_model", { projectId: ident.graphProjectId });
+    return (out ?? "").trim();
+  }
+
+  private isC4ContextEnabled(): boolean {
+    const v = process.env.LEGACY_C4_CONTEXT?.trim().toLowerCase();
+    if (v === undefined || v === "") return true;
+    return !["0", "false", "off", "no"].includes(v);
+  }
+
+  private c4ContextMaxChars(): number {
+    const n = parseInt(process.env.LEGACY_C4_MAX_CHARS ?? "5000", 10);
+    return Number.isFinite(n) && n > 0 ? n : 5000;
+  }
+
+  private async fetchC4ContextBlock(projectId: string): Promise<string> {
+    if (!this.isC4ContextEnabled()) return "";
+    try {
+      const raw = await this.getC4Model(projectId);
+      return raw;
+    } catch (err) {
+      this.logger.warn(
+        `[TheForge] get_c4_model omitido: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return "";
+    }
+  }
+
+  /** Antepone C4 al contexto de entregables (Blueprint); prioridad ante el recorte global del prompt. */
+  private mergeC4WithDeliverableContext(c4Markdown: string, rest: string): string {
+    const c4 = (c4Markdown ?? "").trim();
+    if (!c4) return rest;
+    const max = this.c4ContextMaxChars();
+    const clipped =
+      c4.length > max ? c4.slice(0, max) + "\n… [recortado por LEGACY_C4_MAX_CHARS]" : c4;
+    return (
+      "## Modelo C4 (sistemas, contenedores, comunicación)\n\n" +
+      "_Fuente: índice Ariadne / GraphService (`get_c4_model`). Usa como verdad de contenedores y relaciones `COMMUNICATES_WITH` entre sistemas._\n\n" +
+      clipped +
+      "\n\n---\n\n" +
+      rest
+    );
   }
 
   /**

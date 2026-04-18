@@ -23,6 +23,7 @@ Referencia de herramientas del MCP **AriadneSpecs** alineada a **`mcp_server_spe
 | **get_legacy_impact** | Qué se rompe si se modifica un nodo. | ✅ Fallback cuando validate_before_edit no existe o devuelve vacío. |
 | **get_contract_specs** | Props reales de un componente. | Disponible en TheForgeService; no usado en flujo automático. |
 | **get_component_graph** | Árbol de dependencias de un componente. | Disponible en TheForgeService; no usado en flujo automático. |
+| **get_c4_model** | Modelo C4 (sistemas, contenedores, `COMMUNICATES_WITH`) vía `GET /api/graph/c4-model` en el proceso MCP (JWT Nest). | ✅ `TheForgeService.getC4Model` / prefijo en `getContextForDeliverables` para **Blueprint** (y preview) en proyectos LEGACY. Sin JWT Nest en el MCP, la tool suele fallar (se omite el bloque). |
 | **get_functions_in_file** | Funciones y componentes que contiene un archivo. | ✅ TheForgeService; usado en generateMdd y agente ReAct. |
 | **get_import_graph** | Grafo de imports de un archivo (qué importa/exporta). | No implementado; uso futuro. |
 | **get_file_context** | Contenido + imports + exports (paso: search → get_file_context → validate). | No implementado; alternativa enriquecida a get_file_content. |

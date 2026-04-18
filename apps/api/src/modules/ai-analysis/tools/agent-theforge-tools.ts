@@ -112,6 +112,25 @@ export function getLegacyTheForgeAgentTools(theforge: TheForgeService, theforgeP
         }),
       },
     ),
+    tool(
+      async () => {
+        const raw = await theforge.getC4Model(pid);
+        const t = raw.trim();
+        if (!t) {
+          return (
+            "(vacío) Modelo C4 no disponible: revisa THEFORGE_MCP_URL, que el proceso MCP tenga JWT hacia el API Nest " +
+            "(ARIADNE_API_BEARER / ARIADNE_API_JWT en Ariadne) y que el proyecto esté indexado."
+          );
+        }
+        return t;
+      },
+      {
+        name: "get_c4_model",
+        description:
+          "Modelo C4 agregado (sistemas, contenedores, relaciones COMMUNICATES_WITH) desde GraphService vía MCP. Úsalo para topología de alto nivel, límites entre sistemas y dependencias antes de proponer cambios arquitectónicos.",
+        schema: z.object({}),
+      },
+    ),
   ];
 }
 
@@ -122,6 +141,24 @@ export function getLegacyTheForgeAgentTools(theforge: TheForgeService, theforgeP
 export function getMddArchitectTheForgeTools(theforge: TheForgeService, theforgeProjectId: string): StructuredToolInterface[] {
   const pid = theforgeProjectId.trim();
   return [
+    tool(
+      async () => {
+        const raw = await theforge.getC4Model(pid);
+        const t = raw.trim();
+        if (!t) {
+          return (
+            "(vacío) C4 no disponible vía MCP — validar JWT Nest en el servidor Ariadne o índice del proyecto."
+          );
+        }
+        return t;
+      },
+      {
+        name: "get_c4_model",
+        description:
+          "Modelo C4 del codebase indexado: contenedores y comunicación entre sistemas. Consulta antes de redactar §2 (Arquitectura) o límites entre servicios en un proyecto legacy.",
+        schema: z.object({}),
+      },
+    ),
     tool(
       async ({ componentName, currentFilePath }) =>
         theforge.getContractSpecs(componentName.trim(), pid, currentFilePath),
