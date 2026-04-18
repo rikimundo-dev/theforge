@@ -8,7 +8,7 @@ Backend NestJS de TheForge.
 
 Env: `DATABASE_URL`, claves existentes (`AI_API_KEY` o `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY` / `GEMINI_API_KEY`). Ver `.env.example`. **Auth (Fase 1):** Passport **`JwtStrategy`** + `JwtAuthGuard` global; `UserContextInterceptor` + `AsyncLocalStorage` propagan `userId` del JWT a `ProjectsService` / `SessionsService` (filtrado por propiedad). `JWT_SECRET` obligatorio en producción. **OTP:** `EMAIL_OTP` (recomendado en Docker/Dokploy) o `AUTH_ALLOWED_OTP_EMAIL` — único correo que recibe el código; en producción uno de los dos es obligatorio al arranque. SMTP como en `.env.example`; tras verify, `User` en BD y **`sub` en JWT = `User.id`**.
 
-**CORS:** `CORS_ORIGINS` (coma) obligatorio si `NODE_ENV=production`; `docker-compose` define un default razonable para `WEB_DOMAIN` + localhost (Vite). Ajustar en Dokploy al dominio real del front.
+**CORS:** `CORS_ORIGINS` (coma) obligatorio si `NODE_ENV=production`; `docker-compose` incluye por defecto `https://theforge.kreoint.mx`, `WEB_DOMAIN` y localhost (Vite). Sobreescribe en Dokploy si el front vive en otro origen.
 
 **BullMQ (opcional):** con `REDIS_URL`, la cascada `POST /projects/:id/generate-deliverables` se encola (`theforge-deliverables`); el cliente usa polling o `GET …/deliverables-jobs/:jobId/stream` (SSE). Sin Redis, la respuesta sigue siendo el proyecto actualizado en la misma petición.
 

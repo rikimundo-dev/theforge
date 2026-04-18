@@ -119,8 +119,8 @@ services:
       EMAIL_OTP: ${EMAIL_OTP:-}
       # Alias retrocompatible; si falta EMAIL_OTP puedes usar solo esto.
       AUTH_ALLOWED_OTP_EMAIL: ${AUTH_ALLOWED_OTP_EMAIL:-}
-      # Lista separada por comas; en Dokploy definir el/los orígenes reales del front (https://tu-dominio).
-      CORS_ORIGINS: ${CORS_ORIGINS:-https://${WEB_DOMAIN:-theforge.local},http://localhost:5173,http://127.0.0.1:5173}
+      # Lista separada por comas. Por defecto incluye producción kreoint + WEB_DOMAIN + Vite local.
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${WEB_DOMAIN:-theforge.local},https://theforge.kreoint.mx,http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
       theforge-db:
         condition: service_healthy
