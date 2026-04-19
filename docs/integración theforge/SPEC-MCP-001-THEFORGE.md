@@ -29,6 +29,10 @@ Para `POST /projects/:projectId/legacy/start` con `{ description }`:
 
 **No inventar.** Toda la documentación generada para proyectos legacy (Spec, MDD, Blueprint, Arquitectura, Casos de uso, Historias, API, Flujos, Infra, Tasks, Guía UX/UI) debe **apegarse al MDD y al conocimiento obtenido vía MCP AriadneSpecs**. Si algo no está en el MDD ni en el contexto del codebase, no se incluye. Esta regla se inyecta en todos los prompts cuando se pasa `relicContext` (AiService: `prependRelicPrompt` + instrucción explícita en Blueprint y Guía UX/UI).
 
+## ask_codebase y `responseMode: evidence_first`
+
+El servidor Ariadne puede devolver con **`evidence_first`** un **JSON estructurado** (MDD parcial / evidencia) en lugar de solo prosa; puede anidarse en **`mddDocument`**. La API The Forge (`TheForgeService.askCodebase`) convierte ese JSON a **markdown** antes de usarlo en Legacy Analyzer y documentación de partida, para no romper prompts que esperan texto.
+
 ## Protocolo recomendado (MCP)
 
 1. `list_known_projects` al inicio.

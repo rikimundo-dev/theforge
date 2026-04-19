@@ -55,7 +55,11 @@ export interface GetModificationPlanOptions {
 export interface AskCodebaseOptions {
   scope?: TheForgeScope;
   twoPhase?: boolean;
-  /** Propaga al ingest Ariadne: prompt SDD con ## Evidencia primero (listados anclados). */
+  /**
+   * `evidence_first`: el ingest (LLM + orchestrator) puede devolver **JSON MDD** con claves tipo
+   * `summary`, `entities`, `evidence_paths`, etc., o envolverlo en `mddDocument`. `TheForgeService.askCodebase`
+   * lo normaliza a markdown antes de devolverlo. `default`: prosa/markdown clásico.
+   */
   responseMode?: "default" | "evidence_first";
   currentFilePath?: string;
 }
@@ -77,6 +81,95 @@ function extractJsonFromToolContent(text: string): string {
   if (t.startsWith("{")) return t;
   const jsonBlock = /```(?:json)?\s*([\s\S]*?)```/.exec(t);
   return jsonBlock ? jsonBlock[1].trim() : t;
+}
+
+/** Claves del JSON MDD que el ingest puede devolver con `ask_codebase` + `responseMode: evidence_first` (Ariadne mcp_server_specs). */
+const MDD_EVIDENCE_JSON_KEYS = [
+  "summary",
+  "openapi_spec",
+  "entities",
+  "api_contracts",
+  "business_logic",
+  "infrastructure",
+  "risk_report",
+  "evidence_paths",
+] as const;
+
+const MDD_EVIDENCE_SECTION_TITLE: Record<(typeof MDD_EVIDENCE_JSON_KEYS)[number], string> = {
+  summary: "Resumen",
+  openapi_spec: "OpenAPI / especificación",
+  entities: "Entidades y modelo de datos",
+  api_contracts: "Contratos API",
+  business_logic: "Lógica de negocio",
+  infrastructure: "Infraestructura",
+  risk_report: "Riesgos",
+  evidence_paths: "Rutas de evidencia",
+};
+
+function mddEvidencePayloadHasContent(o: Record<string, unknown>): boolean {
+  for (const k of MDD_EVIDENCE_JSON_KEYS) {
+    const v = o[k];
+    if (v === undefined || v === null) continue;
+    if (typeof v === "string" && v.trim().length > 0) return true;
+    if (Array.isArray(v) && v.length > 0) return true;
+    if (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length > 0) return true;
+  }
+  return false;
+}
+
+function unwrapMddEvidenceJson(parsed: unknown): Record<string, unknown> | null {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const root = parsed as Record<string, unknown>;
+  const nested = root.mddDocument;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const n = nested as Record<string, unknown>;
+    if (mddEvidencePayloadHasContent(n)) return n;
+  }
+  if (mddEvidencePayloadHasContent(root)) return root;
+  return null;
+}
+
+function formatMddEvidenceSectionValue(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number], v: unknown): string {
+  if (v === undefined || v === null) return "";
+  if (typeof v === "string") return v.trim();
+  if (Array.isArray(v)) {
+    if (key === "evidence_paths") {
+      return v
+        .map((x) => {
+          const s = String(x).trim();
+          return s ? `- \`${s.replace(/`/g, "\\`")}\`` : "";
+        })
+        .filter(Boolean)
+        .join("\n");
+    }
+    return v.map((x) => `- ${typeof x === "string" ? x : JSON.stringify(x)}`).join("\n");
+  }
+  return "```json\n" + JSON.stringify(v, null, 2).slice(0, 16000) + "\n```";
+}
+
+/**
+ * Convierte JSON MDD de `evidence_first` a markdown legible para Legacy Analyzer / prompts.
+ * Si no es JSON MDD, devuelve el texto original.
+ */
+function normalizeAskCodebaseEvidenceFirstContent(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  try {
+    const jsonStr = extractJsonFromToolContent(trimmed);
+    const parsed = JSON.parse(jsonStr) as unknown;
+    const payload = unwrapMddEvidenceJson(parsed);
+    if (!payload) return text;
+
+    const parts: string[] = ["## Evidencia (MDD estructurado — ingest / LLM)\n"];
+    for (const key of MDD_EVIDENCE_JSON_KEYS) {
+      const body = formatMddEvidenceSectionValue(key, payload[key]);
+      if (!body) continue;
+      parts.push(`### ${MDD_EVIDENCE_SECTION_TITLE[key]}\n\n${body}`);
+    }
+    return parts.join("\n\n").trim();
+  } catch {
+    return text;
+  }
 }
 
 function truncateForMcpDebug(s: string, max: number): string {
@@ -584,8 +677,12 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
         this.logger.warn(`TheForge ask_codebase tool error: ${errText ?? "(no message)"}`);
         return "";
       }
-      const text = data.result?.content?.find((c) => c.type === "text")?.text ?? "";
-      return typeof text === "string" ? text : "";
+      let text = data.result?.content?.find((c) => c.type === "text")?.text ?? "";
+      if (typeof text !== "string") return "";
+      if (opts?.responseMode === "evidence_first") {
+        text = normalizeAskCodebaseEvidenceFirstContent(text);
+      }
+      return text;
     } catch (err) {
       this.logger.error(`TheForge askCodebase failed: ${err instanceof Error ? err.message : String(err)}`);
       return "";

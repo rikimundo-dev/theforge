@@ -129,7 +129,7 @@ function clip(s: string, max: number): string {
 /**
  * True si hay señal útil del índice MCP (semantic_search + rutas extraídas).
  * Si todo está vacío y aún así pasamos a Legacy Analyzer con `evidence_first`, Ariadne suele
- * responder «sin datos en índice…» aunque el repo exista en UI: ID de proyecto/repo incorrecto,
+ * responder «sin datos en índice…» aunque el repo exista en UI (o JSON MDD vacío). ID de proyecto/repo incorrecto,
  * desfase de instancia MCP, o índice vectorial aún sin poblar para ese scope.
  */
 export function legacyIndexHasUsableGraphEvidence(semanticChunks: string[], chosenPaths: string[]): boolean {
