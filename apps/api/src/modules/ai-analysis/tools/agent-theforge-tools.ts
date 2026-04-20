@@ -6,6 +6,51 @@ import { TheForgeService } from "../../theforge/theforge.service.js";
 /**
  * Herramientas TheForge (MCP) fijadas a un `theforgeProjectId` — para Coordinador Legacy / ReAct.
  */
+/**
+ * Solo `ask_codebase`, `semantic_search`, `get_file_content` — descubrimiento escalonado MDD legacy (Plan-and-Execute).
+ */
+export function getStagedDiscoveryTheForgeTools(theforge: TheForgeService, theforgeProjectId: string): StructuredToolInterface[] {
+  const pid = theforgeProjectId;
+  const defaultLimit = parseInt(process.env.LEGACY_SEMANTIC_SEARCH_LIMIT ?? "12", 10);
+  const lim = Number.isFinite(defaultLimit) && defaultLimit > 0 ? defaultLimit : 12;
+  return [
+    tool(
+      async ({ question }) => theforge.askCodebase(question, pid),
+      {
+        name: "ask_codebase",
+        description:
+          "Fase 1: pregunta abierta sobre el codebase indexado (topología, módulos, carpetas). Usa la raíz del proyecto.",
+        schema: z.object({ question: z.string() }),
+      },
+    ),
+    tool(
+      async ({ query, limit }) => theforge.semanticSearch(query, pid, limit ?? lim),
+      {
+        name: "semantic_search",
+        description:
+          "Fase 2: búsqueda semántica enfocada (backend: modelo/API; frontend: pantallas/flujos). Repite por componente.",
+        schema: z.object({
+          query: z.string(),
+          limit: z.number().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ path, ref, currentFilePath }) =>
+        theforge.getFileContent(path, pid, ref, currentFilePath),
+      {
+        name: "get_file_content",
+        description: "Lee implementación exacta de un archivo crítico mencionado en el índice.",
+        schema: z.object({
+          path: z.string(),
+          ref: z.string().optional(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+  ];
+}
+
 export function getLegacyTheForgeAgentTools(theforge: TheForgeService, theforgeProjectId: string): StructuredToolInterface[] {
   const pid = theforgeProjectId;
   return [

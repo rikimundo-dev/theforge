@@ -181,7 +181,9 @@ export interface LegacyIndexSignalsGathered {
 }
 
 /**
- * Recopila señales del índice MCP (sin llamadas a LLM). Útil para cruzar con Falkor SDD antes de sintetizar.
+ * Recopila señales del índice MCP (sin llamadas a LLM).
+ * - **Puerta SDD** (`assertLegacyIndexSddGate` / `evaluateLegacyIndexSddGate`): debe seguir usando esta función para no depender del LLM.
+ * - **`buildLegacyEvidenceMarkdown`**: pipeline monolítico opcional (p. ej. `getContextForDeliverables` en TheForgeService) — independiente del descubrimiento escalonado del coordinador legacy.
  */
 export async function gatherLegacyIndexSignals(
   api: TheForgeEvidenceApi,

@@ -28,7 +28,7 @@ Integración HTTP JSON-RPC con el MCP AriadneSpecs (`THEFORGE_MCP_URL`): proyect
 
 **Caché:** `TheForgeContextCacheService` (memoria) deduplica `getContextForDeliverables` por `projectId` + huella del primer índice semántico + `THEFORGE_CONTEXT_REVISION` opcional. Desactivar: `THEFORGE_CONTEXT_CACHE=0`.
 
-La API Nest `TheForgeService.getContextForDeliverables` y `LegacyCoordinatorService.generateCodebaseDoc` / `generateMdd` usan este pipeline cuando `LEGACY_EVIDENCE_FIRST_CONTEXT` está activo (default). `gatherLegacyIndexSignals` expone la misma fase sin LLM para cruzar con el grafo SDD en Falkor (ver `docs/LEGACY-EVIDENCE-CONTEXT.md` y `legacy-flow/README.md`).
+`TheForgeService.getContextForDeliverables` sigue usando `buildLegacyEvidenceMarkdown` (pipeline anterior) cuando `LEGACY_EVIDENCE_FIRST_CONTEXT` está activo. **`LegacyCoordinatorService.generateCodebaseDoc` / `generateMdd`** usan en su lugar **descubrimiento escalonado** (LLM + `ask_codebase` / `semantic_search` / `get_file_content`, prompt `legacy-flow/prompts/staged-discovery-mdd-prompt.md`) con el mismo flag. `gatherLegacyIndexSignals` sigue siendo la fase **sin LLM** para la puerta índice↔SDD en Falkor (ver `docs/LEGACY-EVIDENCE-CONTEXT.md` y `legacy-flow/README.md`).
 
 Variables relevantes: ver `.env.example` en la raíz del monorepo (prefijo `LEGACY_*`, `THEFORGE_CONTEXT_*`).
 

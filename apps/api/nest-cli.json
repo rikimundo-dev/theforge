@@ -8,7 +8,8 @@
     "assets": [
       { "include": "modules/ai/prompts/*.md", "outDir": "dist" },
       { "include": "modules/ai-analysis/prompts/**/*.md", "outDir": "dist" },
-      { "include": "modules/legacy-flow/knowledge/*.md", "outDir": "dist" }
+      { "include": "modules/legacy-flow/knowledge/*.md", "outDir": "dist" },
+      { "include": "modules/legacy-flow/prompts/*.md", "outDir": "dist" }
     ]
   }
 }

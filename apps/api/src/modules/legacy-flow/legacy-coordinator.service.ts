@@ -6,7 +6,6 @@ import { ProjectsService } from "../projects/projects.service.js";
 import type { TheForgeFileToModify } from "../theforge/theforge.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import {
-  buildLegacyEvidenceMarkdown,
   DEFAULT_SEMANTIC_QUERIES,
   gatherLegacyIndexSignals,
   isLegacyEvidenceFirstEnabled,
@@ -14,6 +13,8 @@ import {
   legacyAnalyzerIndicatesEmptyIndex,
   legacyIndexHasUsableGraphEvidence,
 } from "../theforge/theforge-evidence-context.util.js";
+import { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.service.js";
+import { runLegacyStagedDiscoveryMddAgent } from "./legacy-staged-discovery-agent.js";
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
 import { evaluateLegacyIndexSddGate } from "./legacy-index-sdd-alignment.util.js";
 import { pickPrimaryStage } from "../projects/stage-helpers.js";
@@ -110,6 +111,7 @@ export class LegacyCoordinatorService {
     private readonly ai: AiService,
     private readonly reviewer: LegacyReviewerService,
     private readonly graphMemory: GraphMemoryService,
+    private readonly agentSupervisor: AgentSupervisorService,
   ) {}
 
   /**
@@ -213,25 +215,31 @@ export class LegacyCoordinatorService {
 
     if (isLegacyEvidenceFirstEnabled()) {
       try {
-        const body = await buildLegacyEvidenceMarkdown(this.theforge, theforgeId, { includeSynthesis: true });
+        const body = await runLegacyStagedDiscoveryMddAgent({
+          theforge: this.theforge,
+          projectId,
+          theforgeProjectId: theforgeId,
+          agentSupervisor: this.agentSupervisor,
+          mode: "initial",
+          logger: this.logger,
+        });
         const trimmed = body.trim();
         if (trimmed && legacyAnalyzerIndicatesEmptyIndex(trimmed)) {
           this.logger.warn(
-            `generateCodebaseDoc: Legacy Analyzer devolvió «sin datos en índice» (evidencia insuficiente o responseMode evidence_first sin contexto). ` +
-              `No se persiste ese texto; se intenta modo clásico ask_codebase. theforgeId=${theforgeId} — confirma que el UUID coincide con el repo indexado en Ariadne.`,
+            `generateCodebaseDoc: descubrimiento escalonado devolvió «sin datos en índice» (evidencia insuficiente). ` +
+              `No se persiste ese texto; se intenta modo clásico ask_codebase. theforgeId=${theforgeId} — confirma UUID/repo en Ariadne.`,
           );
         } else if (trimmed) {
-          codebaseDoc = "# Documentación del Codebase (partida)\n\n" + trimmed;
+          codebaseDoc = "# MDD inicial (Legacy) — documentación de partida\n\n" + trimmed;
         } else {
           this.logger.warn(
-            `generateCodebaseDoc: pipeline evidencia compacta devolvió vacío (semantic_search sin texto útil o sin rutas). ` +
-              `Probable causa: theforgeProjectId no coincide con el proyecto/repo indexado en Ariadne, o índice sin RAG para ese ID. ` +
+            `generateCodebaseDoc: descubrimiento escalonado devolvió vacío (sin texto tras herramientas). ` +
               `Siguiente paso: modo clásico ask_codebase. theforgeId=${theforgeId.slice(0, 8)}…`,
           );
         }
       } catch (err) {
         this.logger.warn(
-          `generateCodebaseDoc: evidencia-primero falló, modo clásico. ${err instanceof Error ? err.message : String(err)}`,
+          `generateCodebaseDoc: descubrimiento escalonado falló, modo clásico. ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
@@ -457,21 +465,23 @@ export class LegacyCoordinatorService {
     const theforgeParts: string[] = [];
     if (description && isLegacyEvidenceFirstEnabled()) {
       try {
-        const descTerms = description.slice(0, 160).replace(/[^\w\s]/g, " ").trim();
-        const semanticQueries =
-          descTerms.length > 2
-            ? [`${descTerms} modules services handlers components routes`, ...DEFAULT_SEMANTIC_QUERIES]
-            : [...DEFAULT_SEMANTIC_QUERIES];
-        const changeEvidence = await buildLegacyEvidenceMarkdown(this.theforge, theforgeId, {
-          semanticQueries,
-          includeSynthesis: false,
+        const changeEvidence = await runLegacyStagedDiscoveryMddAgent({
+          theforge: this.theforge,
+          projectId,
+          theforgeProjectId: theforgeId,
+          agentSupervisor: this.agentSupervisor,
+          mode: "change",
+          changeDescription: description,
+          logger: this.logger,
         });
         if (changeEvidence.trim()) {
-          theforgeParts.push("Evidencia del índice TheForge (cambio + ejes modelo/API/UI):\n\n" + changeEvidence.trim());
+          theforgeParts.push(
+            "Evidencia TheForge — descubrimiento escalonado (MDD AS-IS / foco cambio):\n\n" + changeEvidence.trim(),
+          );
         }
       } catch (err) {
         this.logger.warn(
-          `generateMdd: bloque evidencia falló; se continúa sin él. ${err instanceof Error ? err.message : String(err)}`,
+          `generateMdd: descubrimiento escalonado falló; se continúa sin ese bloque. ${err instanceof Error ? err.message : String(err)}`,
         );
       }
     }
