@@ -24,7 +24,8 @@ export function getStagedDiscoveryTheForgeTools(theforge: TheForgeService, thefo
       {
         name: "ask_codebase",
         description:
-          "Fase 1: pregunta abierta sobre el codebase indexado (topología, módulos, carpetas). Usa la raíz del proyecto.",
+          "Fase 0–1: pregunta NL **acotada** (inventario de repos/roles, límites entre repos, topología verbal). " +
+          "No uses una sola pregunta para ‘listar exhaustivamente’ todo el modelo, APIs y UI. Después de Fase 0–1, solo preguntas focalizadas por repo o dominio.",
         schema: z.object({
           question: z.string(),
           projectId: projectIdField(),
@@ -36,7 +37,8 @@ export function getStagedDiscoveryTheForgeTools(theforge: TheForgeService, thefo
       {
         name: "semantic_search",
         description:
-          "Fase 2: búsqueda semántica enfocada (backend: modelo/API; frontend: pantallas/flujos). Repite por componente.",
+          "Fase 2 (no al inicio): búsqueda semántica **corta y específica** por repo/tema ya identificado (ej. entidades de X, rutas de Y). " +
+          "Evita varias consultas genéricas en paralelo antes de haber cerrado roles de repos y arquitectura de alto nivel.",
         schema: z.object({
           query: z.string(),
           projectId: projectIdField(),
@@ -49,7 +51,8 @@ export function getStagedDiscoveryTheForgeTools(theforge: TheForgeService, thefo
         theforge.getFileContent(path, pid, ref, currentFilePath),
       {
         name: "get_file_content",
-        description: "Lee implementación exacta de un archivo crítico mencionado en el índice.",
+        description:
+          "Fase 2: lee un archivo **concreto** ya citado en evidencia previa; no descargues decenas de archivos de exploración.",
         schema: z.object({
           path: z.string(),
           projectId: projectIdField(),

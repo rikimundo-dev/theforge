@@ -20,11 +20,18 @@ export function loadStagedDiscoveryMddPrompt(): string {
 }
 
 const PLACEHOLDER = "{{theforgeProjectId}}";
+const PLACEHOLDER_REPOS = "{{ariadneRepositoriesCatalog}}";
 
 /**
- * Sustituye `{{theforgeProjectId}}` en el prompt cargado para que el modelo repita el UUID en cada tool call (requerido por Ariadne MCP).
+ * Sustituye `{{theforgeProjectId}}` y `{{ariadneRepositoriesCatalog}}` en el prompt cargado.
+ * El catálogo (markdown) viene de `list_known_projects` en runtime; el modelo debe partir de ahí para roles por repo.
  */
-export function hydrateStagedDiscoveryMddPrompt(template: string, theforgeProjectId: string): string {
+export function hydrateStagedDiscoveryMddPrompt(
+  template: string,
+  theforgeProjectId: string,
+  repositoriesCatalogMarkdown: string,
+): string {
   if (!template) return "";
-  return template.split(PLACEHOLDER).join(theforgeProjectId.trim());
+  const catalog = (repositoriesCatalogMarkdown ?? "").trim() || "_Catálogo de repositorios no disponible._";
+  return template.split(PLACEHOLDER).join(theforgeProjectId.trim()).split(PLACEHOLDER_REPOS).join(catalog);
 }

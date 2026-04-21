@@ -7,6 +7,7 @@ import { getStagedDiscoveryTheForgeTools } from "../ai-analysis/tools/agent-thef
 import type { TheForgeService } from "../theforge/theforge.service.js";
 import type { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.service.js";
 import { hydrateStagedDiscoveryMddPrompt, loadStagedDiscoveryMddPrompt } from "./staged-discovery-mdd.loader.js";
+import { buildAriadneRepositoriesCatalogMarkdown } from "./staged-discovery-catalog.util.js";
 
 export type StagedDiscoveryMode = "initial" | "change";
 
@@ -30,10 +31,11 @@ function envPositiveInt(name: string, fallback: number): number {
 
 function buildHumanInstruction(mode: StagedDiscoveryMode, changeDescription?: string): string {
   let s =
-    "Ejecuta las tres fases en orden estricto. No te saltes fases. " +
-    "Usa `ask_codebase` para topología (Fase 1). " +
-    "Por cada componente relevante usa `semantic_search` y, si hace falta, `get_file_content` (Fase 2). " +
-    "Al terminar la recolección, escribe el MDD completo en Markdown (Fase 3) con las 7 secciones indicadas en el system prompt. " +
+    "Ejecuta las fases **0 → 1 → 2 → 3** en orden estricto. No te saltes fases. " +
+    "**Fase 0:** interpreta el catálogo MCP del system prompt (repos y roles); como mucho **una** `ask_codebase` solo para inventario/roles si hace falta. **Sin** búsquedas masivas ni lecturas masivas de archivos. " +
+    "**Fase 1:** arquitectura de alto nivel entre repos (una `ask_codebase` acotada o una `semantic_search` muy específica si aplica). " +
+    "**Fase 2:** profundiza **por tópicos o repos**, una cosa a la vez: `semantic_search` focalizada y `get_file_content` solo donde la evidencia lo exija. " +
+    "**Fase 3:** MDD Markdown completo con las 7 secciones. " +
     "Tu respuesta final debe ser ÚNICAMENTE el documento Markdown del MDD (sin preámbulos ni comentarios meta).";
   if (mode === "change") {
     s +=
@@ -131,7 +133,8 @@ export async function runLegacyStagedDiscoveryMddAgent(opts: RunLegacyStagedDisc
     logger?.warn?.("runLegacyStagedDiscoveryMddAgent: staged-discovery-mdd-prompt.md vacío o no encontrado.");
     return "";
   }
-  const system = hydrateStagedDiscoveryMddPrompt(rawPrompt, tfPid);
+  const reposCatalog = await buildAriadneRepositoriesCatalogMarkdown(theforge, tfPid);
+  const system = hydrateStagedDiscoveryMddPrompt(rawPrompt, tfPid, reposCatalog);
 
   const tools = getStagedDiscoveryTheForgeTools(theforge, tfPid);
   const maxRounds = envPositiveInt("LEGACY_STAGED_DISCOVERY_MAX_TOOL_ROUNDS", 18);
