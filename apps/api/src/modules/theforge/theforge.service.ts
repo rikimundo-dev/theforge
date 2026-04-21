@@ -59,15 +59,12 @@ export interface AskCodebaseOptions {
   scope?: TheForgeScope;
   twoPhase?: boolean;
   /**
-   * `evidence_first`: el ingest (LLM + orchestrator) puede devolver **JSON MDD** con claves tipo
-   * `summary`, `entities`, `evidence_paths`, etc., o envolverlo en `mddDocument`. `TheForgeService.askCodebase`
-   * lo normaliza a markdown antes de devolverlo. `raw_evidence`: JSON crudo del ingest (sin normalizar).
-   * `default`: prosa/markdown clásico.
+   * Por defecto en `askCodebase`: **`raw_evidence`** + `deterministicRetriever: true` (retrieve determinista, Ariadne).
+   * `evidence_first`: JSON MDD → markdown vía normalizador MDD. `default`: prosa/markdown clásico sin esos flags.
    */
   responseMode?: "default" | "evidence_first" | "raw_evidence";
   /**
-   * Solo con `responseMode: raw_evidence`; si true, retrieve sin LLM cuando el ingest lo soporta
-   * (Ariadne `deterministicRetriever` + orchestrator `raw-evidence-deterministic`).
+   * Con `raw_evidence` (default): **true** salvo `false` explícito. Reenviado al MCP según SPEC Ariadne.
    */
   deterministicRetriever?: boolean;
   currentFilePath?: string;
@@ -174,6 +171,45 @@ function normalizeAskCodebaseEvidenceFirstContent(text: string): string {
       const body = formatMddEvidenceSectionValue(key, payload[key]);
       if (!body) continue;
       parts.push(`### ${MDD_EVIDENCE_SECTION_TITLE[key]}\n\n${body}`);
+    }
+    return parts.join("\n\n").trim();
+  } catch {
+    return text;
+  }
+}
+
+const RAW_EVIDENCE_MARKDOWN_KEYS = [
+  "gatheredContext",
+  "collectedResults",
+  "cypher",
+  "deterministicRetriever",
+  "answer",
+] as const;
+
+/**
+ * Convierte JSON típico de `responseMode: raw_evidence` (Ariadne ingest) a markdown legible para prompts Nest.
+ * Si el cuerpo ya parece MDD `evidence_first`, reutiliza el normalizador MDD.
+ */
+function normalizeAskCodebaseRawEvidenceContent(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const mddTry = normalizeAskCodebaseEvidenceFirstContent(text);
+  if (mddTry.startsWith("## Evidencia (MDD estructurado")) return mddTry;
+  try {
+    const jsonStr = extractJsonFromToolContent(trimmed);
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return text;
+    const parts: string[] = ["## Evidencia (raw_evidence — Ariadne ingest)\n"];
+    let any = false;
+    for (const k of RAW_EVIDENCE_MARKDOWN_KEYS) {
+      if (!(k in parsed)) continue;
+      any = true;
+      const v = parsed[k];
+      const body = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+      parts.push(`### ${k}\n\n\`\`\`\n${body.slice(0, 16000)}\n\`\`\``);
+    }
+    if (!any) {
+      parts.push("### JSON\n\n```json\n" + JSON.stringify(parsed, null, 2).slice(0, 24000) + "\n```");
     }
     return parts.join("\n\n").trim();
   } catch {
@@ -699,19 +735,26 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
   async askCodebase(question: string, projectId: string, opts?: AskCodebaseOptions): Promise<string> {
     if (!this.isConfigured()) return "";
     try {
+      /** Defaults Ariadne: retrieve determinista + JSON evidencia (SPEC `ask_codebase`). Override con `opts`. */
+      const merged: AskCodebaseOptions = {
+        twoPhase: true,
+        responseMode: "raw_evidence",
+        deterministicRetriever: true,
+        ...opts,
+      };
       const ident = await this.resolveStoredToMcp(projectId);
-      const scope = mergeAriadneCodebaseScope(ident.scopeForScopedTools, opts?.scope);
+      const scope = mergeAriadneCodebaseScope(ident.scopeForScopedTools, merged.scope);
       const args: Record<string, unknown> = {
         question,
         projectId: ident.workspaceProjectId,
-        twoPhase: opts?.twoPhase ?? true,
+        twoPhase: merged.twoPhase ?? true,
       };
-      if (opts?.currentFilePath?.trim()) args.currentFilePath = opts.currentFilePath.trim();
+      if (merged.currentFilePath?.trim()) args.currentFilePath = merged.currentFilePath.trim();
       if (scope && Object.keys(scope).length > 0) args.scope = scope;
-      if (opts?.responseMode && opts.responseMode !== "default") {
-        args.responseMode = opts.responseMode;
+      if (merged.responseMode && merged.responseMode !== "default") {
+        args.responseMode = merged.responseMode;
       }
-      if (opts?.deterministicRetriever === true) {
+      if (merged.responseMode === "raw_evidence" && merged.deterministicRetriever !== false) {
         args.deterministicRetriever = true;
       }
       const response = await this.postTheForgeMcp({
@@ -737,8 +780,10 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
       }
       let text = data.result?.content?.find((c) => c.type === "text")?.text ?? "";
       if (typeof text !== "string") return "";
-      if (opts?.responseMode === "evidence_first") {
+      if (merged.responseMode === "evidence_first") {
         text = normalizeAskCodebaseEvidenceFirstContent(text);
+      } else if (merged.responseMode === "raw_evidence") {
+        text = normalizeAskCodebaseRawEvidenceContent(text);
       }
       return text;
     } catch (err) {

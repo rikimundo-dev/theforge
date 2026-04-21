@@ -12,6 +12,12 @@ Guía **cliente** (API Nest `TheForgeService` + agentes legacy) para no quedarse
 - **`ask_codebase`** y **`get_modification_plan`**: The Forge envía el **UUID del workspace** (`list_known_projects[].id`) + `scope.repoIds` con todos los `roots[].id` cuando el catálogo lo permite (`ariadne-mcp-scope.util.ts`).
 - **`semantic_search`**, **`get_file_content`**, **`validate_before_edit`**, etc.: usan un **repo** (`graphProjectId`, típ. un `roots[].id`). En multi-root, `TheForgeService.semanticSearch` **repite** la búsqueda por cada root y concatena — el `projectId` que ves en trazas por repo es correcto.
 
+### 2.1 `ask_codebase` — modo por defecto hacia Ariadne
+
+- **`TheForgeService.askCodebase`** envía por defecto **`responseMode: raw_evidence`** y **`deterministicRetriever: true`** (retrieve determinista según SPEC / ingest). El caller puede sobreescribir con `AskCodebaseOptions` (p. ej. `evidence_first` para JSON MDD ya sintetizado, o `default` para prosa).
+- El JSON de `raw_evidence` se **normaliza a markdown** en la API (`normalizeAskCodebaseRawEvidenceContent`) para que coordinadores y prompts sigan recibiendo texto utilizable.
+- **`LEGACY_ASK_CODEBASE_EVIDENCE_FIRST=0`**: `getLegacyAskCodebaseOptions()` fuerza `responseMode: default` (sin `raw_evidence` / deterministic en ese flujo).
+
 ## 3. `semantic_search`: queries y `limit`
 
 - Términos genéricos en inglés (`data models entities database schema tables`) en un **Next público** sin capa de datos pueden devolver **vacío**; es índice keyword/grafo, no magia. Preferir términos de **dominio** (p. ej. `paciente`, `cita`, `disponibilidad`) o mover la pregunta de entidades al repo **backend** del catálogo.

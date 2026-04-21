@@ -70,13 +70,14 @@ export function isLegacyAnalyzerAttachRawEnabled(): boolean {
 
 /**
  * Opciones MCP para `ask_codebase` en flujos legacy / entregables (TheForgeService).
- * Por defecto `responseMode: evidence_first` + `twoPhase: true`. Desactivar evidencia MDD: `LEGACY_ASK_CODEBASE_EVIDENCE_FIRST=0`.
+ * Con `LEGACY_ASK_CODEBASE_EVIDENCE_FIRST=1` (default): `raw_evidence` + `deterministicRetriever: true` + `twoPhase: true`.
+ * Con `=0`: `responseMode: default` (prosa clásica; sin retrieve determinista forzado).
  */
 export function getLegacyAskCodebaseOptions(): AskCodebaseOptions {
   if (!envFlag("LEGACY_ASK_CODEBASE_EVIDENCE_FIRST", true)) {
-    return { twoPhase: true };
+    return { twoPhase: true, responseMode: "default" };
   }
-  return { twoPhase: true, responseMode: "evidence_first" };
+  return { twoPhase: true, responseMode: "raw_evidence", deterministicRetriever: true };
 }
 
 const LEGACY_ANALYZER_INPUT_MAX = () => parsePositiveInt("LEGACY_ANALYZER_INPUT_MAX_CHARS", 14000);
@@ -105,10 +106,7 @@ export async function runLegacyAnalyzerPass(
     "--- EVIDENCIA ---\n\n" +
     clipped;
 
-  const out = await api.askCodebase(instructions, projectId, {
-    twoPhase: true,
-    responseMode: "evidence_first",
-  });
+  const out = await api.askCodebase(instructions, projectId);
   return (out ?? "").trim();
 }
 
@@ -359,10 +357,7 @@ export async function buildLegacyEvidenceMarkdown(
     "If the evidence does not mention a topic, write '(no consta en el índice)' for that topic — do NOT invent stacks, files, or APIs.\n\n---\n\n" +
     clip(evidenceBody, parsePositiveInt("LEGACY_SYNTHESIS_INPUT_MAX_CHARS", 28000));
 
-  const synthesis = await api.askCodebase(synthPrompt, projectId, {
-    twoPhase: true,
-    responseMode: "evidence_first",
-  });
+  const synthesis = await api.askCodebase(synthPrompt, projectId);
   if (!synthesis?.trim()) return evidenceBody;
 
   return evidenceBody + "\n\n---\n\n" + synthesis.trim();
