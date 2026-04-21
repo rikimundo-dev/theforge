@@ -20,7 +20,7 @@ Integración HTTP JSON-RPC con el MCP AriadneSpecs (`THEFORGE_MCP_URL`): proyect
 
 `theforge-evidence-context.util.ts` arma Markdown de contexto para **SDD legacy**:
 
-1. Varios `semantic_search` (`LEGACY_SEMANTIC_SEARCH_LIMIT`, default **80** hits por query; recorte markdown `LEGACY_SEMANTIC_SECTION_MAX_CHARS`, default **16000**).
+1. Varios `semantic_search` (`LEGACY_SEMANTIC_SEARCH_LIMIT`, default **80** hits por query; recorte markdown `LEGACY_SEMANTIC_SECTION_MAX_CHARS`, default **16000**). El armado de **doc. partida** §5 (`generate-codebase-doc` modo clásico) usa `clipLegacySemanticSectionForCodebaseDoc` → `LEGACY_CODEBASE_DOC_SEMANTIC_MAX_CHARS` (default **48000**).
 2. Extracción heurística de rutas desde el texto MCP (`extractCandidatePathsFromMcpText`).
 3. `get_functions_in_file` por rutas candidatas (tope configurable).
 4. Con **`LEGACY_ANALYZER_COMPACT=1` (default):** no se vuelcan extractos completos de archivo; un paso **Legacy Analyzer** (`runLegacyAnalyzerPass`) devuelve secciones fijas (impacto, API, datos, riesgos) vía `ask_codebase` solo sobre la evidencia recortada. Con `LEGACY_ANALYZER_COMPACT=0` se restaura el flujo anterior (extractos de archivo + síntesis larga).

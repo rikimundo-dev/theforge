@@ -11,7 +11,7 @@ import {
   getLegacySemanticSearchLimit,
   isLegacyEvidenceFirstEnabled,
   clipLegacySemanticSection,
-  filterNoiseFromLegacySemanticChunk,
+  clipLegacySemanticSectionForCodebaseDoc,
   legacyAnalyzerIndicatesEmptyIndex,
   legacyIndexHasUsableGraphEvidence,
 } from "../theforge/theforge-evidence-context.util.js";
@@ -50,6 +50,10 @@ const CODEBASE_DOC_CLASSIC_Q = {
   q4:
     "What are the main business rules, validations, naming conventions, and key patterns used across the codebase? Include any domain-specific logic, constants, or shared utilities.",
 } as const;
+
+/** Prefacio cuando solo se pudo rellenar la §5 (grafo); las síntesis ask_codebase quedaron vacías. */
+const CODEBASE_DOC_SEMANTIC_ONLY_PREFACE =
+  "> **Por qué ves solo el índice semántico (§5):** en esta ejecución **`ask_codebase` no devolvió texto** para las secciones 1–4 ni para la síntesis de respaldo (suele ser **timeout** del MCP: sube `THEFORGE_MCP_TIMEOUT_MS` en el API, p. ej. `180000`–`300000`; revisa logs Nest/ingest o carga concurrente). Lo que sigue **no es un resumen deliberado**: es la salida combinada de **`semantic_search`** por cada repo multi-root, con límite por query (`LEGACY_SEMANTIC_SEARCH_LIMIT`) y recorte global (`LEGACY_CODEBASE_DOC_SEMANTIC_MAX_CHARS`). Activa `LEGACY_CODEBASE_DOC_MCP_DEBUG_UI` para ver las llamadas MCP o vuelve a generar cuando el orchestrator responda.";
 
 /** Respuesta de `generate-codebase-doc` cuando el API tiene trazas MCP (debug UI). */
 export type GenerateCodebaseDocResponse = { codebaseDoc: string; mcpDebugTrace?: McpUiDebugEntry[] };
@@ -279,15 +283,20 @@ export class LegacyCoordinatorService {
       if (r3.trim()) parts.push("## 3. Stack y estructura\n\n" + r3.trim());
       if (r4.trim()) parts.push("## 4. Reglas de negocio y convenciones\n\n" + r4.trim());
 
+      let synthesisFallback = "";
       if (!r1.trim() && !r2.trim() && !r3.trim() && !r4.trim()) {
         this.logger.warn(
           "generateCodebaseDoc: las cuatro rondas ask_codebase (clásico) vinieron vacías; síntesis única de respaldo (revisa THEFORGE_MCP_TIMEOUT_MS si persiste).",
         );
         const fb = await this.theforge.askCodebase(CODEBASE_DOC_FALLBACK_SYNTHESIS_PROMPT, theforgeId);
-        if (fb.trim()) {
-          parts.unshift("## 1–4. Panorama del codebase (síntesis)\n\n" + fb.trim());
+        synthesisFallback = fb?.trim() ?? "";
+        if (synthesisFallback) {
+          parts.unshift("## 1–4. Panorama del codebase (síntesis)\n\n" + synthesisFallback);
         }
       }
+
+      const hasAskProse =
+        [r1, r2, r3, r4].some((x) => x.trim()) || synthesisFallback.length > 0;
 
       const [searchModels, searchApi, searchUi] = await Promise.all([
         this.theforge.semanticSearch("data models entities database schema tables", theforgeId, semanticLim),
@@ -295,7 +304,7 @@ export class LegacyCoordinatorService {
         this.theforge.semanticSearch("UI components screens pages views", theforgeId, semanticLim),
       ]);
       const searchParts: string[] = [];
-      const clipSem = (chunk: string) => clipLegacySemanticSection(filterNoiseFromLegacySemanticChunk(chunk.trim()));
+      const clipSem = (chunk: string) => clipLegacySemanticSectionForCodebaseDoc(chunk);
       if (searchModels.trim()) {
         searchParts.push("Modelos/entidades (búsqueda semántica):\n" + clipSem(searchModels));
       }
@@ -305,7 +314,11 @@ export class LegacyCoordinatorService {
       }
       if (searchParts.length > 0) parts.push("## 5. Índice semántico del grafo\n\n" + searchParts.join("\n\n"));
 
-      codebaseDoc = parts.length > 0 ? "# Documentación del Codebase (partida)\n\n" + parts.join("\n\n---\n\n") : "";
+      let docBody = parts.length > 0 ? parts.join("\n\n---\n\n") : "";
+      if (docBody && !hasAskProse) {
+        docBody = `${CODEBASE_DOC_SEMANTIC_ONLY_PREFACE}\n\n${docBody}`;
+      }
+      codebaseDoc = docBody.length > 0 ? "# Documentación del Codebase (partida)\n\n" + docBody : "";
     }
 
     const state = ((await this.projects.findOne(projectId)) as { legacyFlowState?: LegacyFlowState | null }).legacyFlowState ?? {};

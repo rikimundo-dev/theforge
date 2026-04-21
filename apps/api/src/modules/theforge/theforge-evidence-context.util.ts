@@ -176,6 +176,19 @@ export function clipLegacySemanticSection(s: string): string {
   return clip(s.trim(), max);
 }
 
+const DEFAULT_CODEBASE_DOC_SEMANTIC_MAX = 48_000;
+
+/**
+ * Recorte del índice semántico **solo** al armar «MDD Inicial / doc. partida» (tope mayor que `clipLegacySemanticSection` genérico).
+ * `LEGACY_CODEBASE_DOC_SEMANTIC_MAX_CHARS` (default 48k).
+ */
+export function clipLegacySemanticSectionForCodebaseDoc(s: string): string {
+  const max = parsePositiveInt("LEGACY_CODEBASE_DOC_SEMANTIC_MAX_CHARS", DEFAULT_CODEBASE_DOC_SEMANTIC_MAX);
+  const t = filterNoiseFromLegacySemanticChunk(s.trim());
+  if (t.length <= max) return t;
+  return t.slice(0, max) + `\n\n… [recortado: LEGACY_CODEBASE_DOC_SEMANTIC_MAX_CHARS=${max}]`;
+}
+
 /**
  * Quita líneas de `semantic_search` que suelen ser ruido (instrucciones LLM, docs de diseño indexados como nodos Markdown).
  * Conservar `**MarkdownDoc:**`: `LEGACY_SEMANTIC_KEEP_MARKDOWN_DOCS=1`.
