@@ -216,3 +216,81 @@ export function formatCollectedResultsForMarkdown(v: unknown): string {
   }
   return lines.join("\n");
 }
+
+/** Claves del bundle `raw_evidence` que se expanden a secciones markdown (alineado con `ask_codebase` / Ariadne). */
+const RAW_EVIDENCE_MARKDOWN_KEYS = [
+  "gatheredContext",
+  "collectedResults",
+  "cypher",
+  "deterministicRetriever",
+  "answer",
+] as const;
+
+/**
+ * Formatea un objeto ya parseado `mode: raw_evidence` (misma salida que tras `askCodebase` + normalización).
+ */
+export function formatRawEvidenceObjectToMarkdown(parsed: Record<string, unknown>): string {
+  const parts: string[] = [
+    "## Evidencia (raw_evidence — Ariadne ingest)\n",
+    "> Para **JSON MDD ya troceado** (7 claves), usa `responseMode: evidence_first` en `ask_codebase` / UI doc. partida. `raw_evidence` es el bundle determinista del ingest; aquí se **reestructura** en tablas/listas para el LLM.\n",
+  ];
+  let any = false;
+  for (const k of RAW_EVIDENCE_MARKDOWN_KEYS) {
+    if (!(k in parsed)) continue;
+    any = true;
+    const v = parsed[k];
+    let section: string;
+    if (k === "gatheredContext" && typeof v === "string") {
+      section = formatGatheredContextForMarkdown(v);
+    } else if (k === "collectedResults") {
+      section = formatCollectedResultsForMarkdown(v);
+    } else {
+      const body = typeof v === "string" ? v : JSON.stringify(v, null, 2);
+      section = `\`\`\`\n${body.slice(0, 20000)}\n\`\`\``;
+    }
+    parts.push(`### ${k}\n\n${section}`);
+  }
+  if (!any) {
+    parts.push("### JSON\n\n```json\n" + JSON.stringify(parsed, null, 2).slice(0, 24000) + "\n```");
+  }
+  return parts.join("\n\n").trim();
+}
+
+const RAW_EVIDENCE_EMBED_HEAD_RE = /\{\s*"mode"\s*:\s*"raw_evidence"/g;
+
+/**
+ * Reemplaza en markdown cualquier objeto JSON embebido `{ "mode": "raw_evidence", ... }` (p. ej. pegado por un LLM en el MDD)
+ * por el markdown compacto de `formatRawEvidenceObjectToMarkdown`. Idempotente si ya está formateado (no hay ese patrón).
+ */
+export function normalizeRawEvidenceJsonBlocksInMarkdown(md: string): string {
+  if (!md.includes("raw_evidence")) return md;
+  const re = new RegExp(RAW_EVIDENCE_EMBED_HEAD_RE.source, "g");
+  let out = "";
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(md)) !== null) {
+    const start = m.index;
+    const end = indexOfMatchingJsonObjectEnd(md, start);
+    if (end < 0) {
+      out += md.slice(last);
+      last = md.length;
+      break;
+    }
+    out += md.slice(last, start);
+    const slice = md.slice(start, end + 1);
+    try {
+      const parsed = JSON.parse(slice) as Record<string, unknown>;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && parsed.mode === "raw_evidence") {
+        out += formatRawEvidenceObjectToMarkdown(parsed);
+      } else {
+        out += slice;
+      }
+    } catch {
+      out += slice;
+    }
+    last = end + 1;
+    re.lastIndex = last;
+  }
+  out += md.slice(last);
+  return out;
+}

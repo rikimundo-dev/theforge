@@ -37,6 +37,7 @@ import {
   runWithMcpUiDebug,
   type McpUiDebugEntry,
 } from "../theforge/mcp-ui-debug.context.js";
+import { normalizeRawEvidenceJsonBlocksInMarkdown } from "../theforge/theforge-raw-evidence-markdown.js";
 
 const KNOWLEDGE = loadLegacyKnowledgePack();
 
@@ -351,6 +352,10 @@ export class LegacyCoordinatorService {
         docBody = `${CODEBASE_DOC_SEMANTIC_ONLY_PREFACE}\n\n${docBody}`;
       }
       codebaseDoc = docBody.length > 0 ? "# Documentación del Codebase (partida)\n\n" + docBody : "";
+    }
+
+    if (codebaseDoc.trim()) {
+      codebaseDoc = normalizeRawEvidenceJsonBlocksInMarkdown(codebaseDoc);
     }
 
     const state = ((await this.projects.findOne(projectId)) as { legacyFlowState?: LegacyFlowState | null }).legacyFlowState ?? {};

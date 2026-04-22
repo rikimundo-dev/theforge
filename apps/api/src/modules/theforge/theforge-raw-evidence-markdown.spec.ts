@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   formatCollectedResultsForMarkdown,
   formatGatheredContextForMarkdown,
+  formatRawEvidenceObjectToMarkdown,
   indexOfMatchingJsonObjectEnd,
+  normalizeRawEvidenceJsonBlocksInMarkdown,
 } from "./theforge-raw-evidence-markdown.js";
 
 test("indexOfMatchingJsonObjectEnd cierra objeto con strings", () => {
@@ -43,4 +45,32 @@ test("formatCollectedResultsForMarkdown tabla compacta", () => {
   assert.match(md, /\| tipo \| path \| name \| repoId \|/);
   assert.match(md, /\| Model \|/);
   assert.match(md, /solo-path/);
+});
+
+test("normalizeRawEvidenceJsonBlocksInMarkdown reemplaza JSON pegado por el LLM", () => {
+  const inner = `[deterministic:get_graph_summary]
+Conteos: {"File":2}. Muestras: {"File":[{"path":"a.ts"}]}`;
+  const blob = {
+    mode: "raw_evidence",
+    deterministicRetriever: true,
+    gatheredContext: inner,
+    collectedResults: [{ tipo: "Model", path: "m.ts", name: "M" }],
+    cypher: "MATCH (n) RETURN n LIMIT 1",
+  };
+  const md = `## 1. Foo\n\n${JSON.stringify(blob, null, 2)}\n\n## 2. Bar\n\nprosa`;
+  const out = normalizeRawEvidenceJsonBlocksInMarkdown(md);
+  assert.match(out, /## Evidencia \(raw_evidence/);
+  assert.match(out, /\*\*Conteos \(nodos por etiqueta\)\*\*/);
+  assert.match(out, /### cypher/);
+  assert.match(out, /## 2\. Bar/);
+  assert.ok(!out.includes('"mode": "raw_evidence"'));
+});
+
+test("formatRawEvidenceObjectToMarkdown coincide con claves esperadas", () => {
+  const s = formatRawEvidenceObjectToMarkdown({
+    mode: "raw_evidence",
+    gatheredContext: "[deterministic:x]\nConteos: {\"A\":1}. Muestras: {\"A\":[{\"path\":\"p\"}]}",
+  });
+  assert.match(s, /### gatheredContext/);
+  assert.match(s, /\| A \| 1 \|/);
 });

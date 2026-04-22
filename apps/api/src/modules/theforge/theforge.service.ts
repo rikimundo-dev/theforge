@@ -16,10 +16,7 @@ import {
   resolveAriadneCodebaseMcpTarget,
   type AriadneCodebaseResolution,
 } from "./ariadne-mcp-scope.util.js";
-import {
-  formatCollectedResultsForMarkdown,
-  formatGatheredContextForMarkdown,
-} from "./theforge-raw-evidence-markdown.js";
+import { formatRawEvidenceObjectToMarkdown } from "./theforge-raw-evidence-markdown.js";
 
 /** Repo (root) dentro de un proyecto multi-repo. */
 export interface TheForgeProjectRoot {
@@ -182,14 +179,6 @@ function normalizeAskCodebaseEvidenceFirstContent(text: string): string {
   }
 }
 
-const RAW_EVIDENCE_MARKDOWN_KEYS = [
-  "gatheredContext",
-  "collectedResults",
-  "cypher",
-  "deterministicRetriever",
-  "answer",
-] as const;
-
 /**
  * Convierte JSON típico de `responseMode: raw_evidence` (Ariadne ingest) a markdown legible para prompts Nest.
  * Si el cuerpo ya parece MDD `evidence_first`, reutiliza el normalizador MDD.
@@ -203,30 +192,7 @@ function normalizeAskCodebaseRawEvidenceContent(text: string): string {
     const jsonStr = extractJsonFromToolContent(trimmed);
     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return text;
-    const parts: string[] = [
-      "## Evidencia (raw_evidence — Ariadne ingest)\n",
-      "> Para **JSON MDD ya troceado** (7 claves), usa `responseMode: evidence_first` en `ask_codebase` / UI doc. partida. `raw_evidence` es el bundle determinista del ingest; aquí se **reestructura** en tablas/listas para el LLM.\n",
-    ];
-    let any = false;
-    for (const k of RAW_EVIDENCE_MARKDOWN_KEYS) {
-      if (!(k in parsed)) continue;
-      any = true;
-      const v = parsed[k];
-      let section: string;
-      if (k === "gatheredContext" && typeof v === "string") {
-        section = formatGatheredContextForMarkdown(v);
-      } else if (k === "collectedResults") {
-        section = formatCollectedResultsForMarkdown(v);
-      } else {
-        const body = typeof v === "string" ? v : JSON.stringify(v, null, 2);
-        section = `\`\`\`\n${body.slice(0, 20000)}\n\`\`\``;
-      }
-      parts.push(`### ${k}\n\n${section}`);
-    }
-    if (!any) {
-      parts.push("### JSON\n\n```json\n" + JSON.stringify(parsed, null, 2).slice(0, 24000) + "\n```");
-    }
-    return parts.join("\n\n").trim();
+    return formatRawEvidenceObjectToMarkdown(parsed);
   } catch {
     return text;
   }
