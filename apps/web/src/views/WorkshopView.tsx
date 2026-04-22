@@ -33,6 +33,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { CodebaseDocResponseMode } from "@theforge/shared-types";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import ChatContainer from "../components/ChatContainer";
 import ComplexityPendingBanner from "../components/ComplexityPendingBanner";
@@ -290,6 +291,8 @@ export default function WorkshopView({
   const [mddInicialLocalContent, setMddInicialLocalContent] = useState("");
   const [mddInicialSaving, setMddInicialSaving] = useState(false);
   const [mddInicialCopyOk, setMddInicialCopyOk] = useState(false);
+  /** `ask_codebase` / Ariadne al generar doc. partida (`POST …/legacy/generate-codebase-doc`). */
+  const [codebaseDocResponseMode, setCodebaseDocResponseMode] = useState<CodebaseDocResponseMode>("evidence_first");
   const copyMddInicialMarkdown = useCallback(async () => {
     const text = (mddInicialLocalContent || project?.legacyFlowState?.codebaseDoc || "").trim();
     if (!text) return;
@@ -1270,7 +1273,9 @@ export default function WorkshopView({
                   <button
                     type="button"
                     onClick={async () => {
-                      const res = await legacyGenerateCodebaseDoc(projectId);
+                      const res = await legacyGenerateCodebaseDoc(projectId, {
+                        responseMode: codebaseDocResponseMode,
+                      });
                       if (res) setCentralPanel("mdd-inicial");
                     }}
                     disabled={loading}
@@ -1355,6 +1360,57 @@ export default function WorkshopView({
                       Reconstrucción AS-IS desde el índice AriadneSpecs (equivalente al “primer paso” de documentación). Opcional: puedes ir directo a <strong>Modificación</strong> si solo quieres un cambio puntual; para volcar todo el conocimiento del repo aquí, usa el botón de abajo.
                     </p>
                   </div>
+                  <fieldset
+                    disabled={loading && loadingReason === "legacy-codebase-doc"}
+                    className="shrink-0 space-y-2.5 rounded-lg border border-zinc-600/60 bg-zinc-900/35 p-3 text-left"
+                  >
+                    <legend className="px-1 text-[11px] font-medium text-zinc-400">Modo ingest (ask_codebase)</legend>
+                    <label className="flex cursor-pointer gap-2.5 items-start">
+                      <input
+                        type="radio"
+                        name="codebase-doc-response-mode"
+                        className="mt-1 accent-amber-500"
+                        checked={codebaseDocResponseMode === "default"}
+                        onChange={() => setCodebaseDocResponseMode("default")}
+                      />
+                      <span>
+                        <span className="text-sm text-zinc-200">Chat normal</span>
+                        <span className="mt-0.5 block text-xs text-zinc-500">
+                          Prosa; ReAct en retrieve (hasta 4 vueltas LLM en backend).
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-2.5 items-start">
+                      <input
+                        type="radio"
+                        name="codebase-doc-response-mode"
+                        className="mt-1 accent-amber-500"
+                        checked={codebaseDocResponseMode === "evidence_first"}
+                        onChange={() => setCodebaseDocResponseMode("evidence_first")}
+                      />
+                      <span>
+                        <span className="text-sm text-zinc-200">MDD / SDD (recomendado)</span>
+                        <span className="mt-0.5 block text-xs text-zinc-500">
+                          Una petición: JSON MDD 7 secciones desde Ariadne (menos idas y vueltas que varios MCP).
+                        </span>
+                      </span>
+                    </label>
+                    <label className="flex cursor-pointer gap-2.5 items-start">
+                      <input
+                        type="radio"
+                        name="codebase-doc-response-mode"
+                        className="mt-1 accent-amber-500"
+                        checked={codebaseDocResponseMode === "raw_evidence"}
+                        onChange={() => setCodebaseDocResponseMode("raw_evidence")}
+                      />
+                      <span>
+                        <span className="text-sm text-zinc-200">Evidencia bruta (barato)</span>
+                        <span className="mt-0.5 block text-xs text-zinc-500">
+                          Sin LLM en retrieve; JSON para sintetizar fuera o depurar 429.
+                        </span>
+                      </span>
+                    </label>
+                  </fieldset>
                   {(mddInicialLocalContent || project?.legacyFlowState?.codebaseDoc)?.trim() ? (
                     <button
                       type="button"
@@ -1419,7 +1475,9 @@ export default function WorkshopView({
                         <button
                           type="button"
                           onClick={async () => {
-                            const res = await legacyGenerateCodebaseDoc(projectId);
+                            const res = await legacyGenerateCodebaseDoc(projectId, {
+                              responseMode: codebaseDocResponseMode,
+                            });
                             if (res?.codebaseDoc) setCentralPanel("mdd-inicial");
                           }}
                           disabled={loading}
@@ -1454,7 +1512,9 @@ export default function WorkshopView({
                       <button
                         type="button"
                         onClick={async () => {
-                          const res = await legacyGenerateCodebaseDoc(projectId);
+                          const res = await legacyGenerateCodebaseDoc(projectId, {
+                            responseMode: codebaseDocResponseMode,
+                          });
                           if (res?.codebaseDoc?.trim()) setCentralPanel("mdd-inicial");
                         }}
                         disabled={loading}

@@ -8,5 +8,6 @@ DTOs e interfaces compartidas (Zod).
 - createProjectSchema, updateProjectSchema, sessionResponseSchema, etc.
 - `ComplexityLevelEnum` (`LOW` | `MEDIUM` | `HIGH`): política de adopción SDD y semáforo (campo `complexity` en proyecto).
 - `orchestrator.ts`: `chatOrchestratorResponseSchema` (respuesta stream/orquestador; incluye `evaluatorCritique` opcional).
+- **`legacy-codebase-doc.ts`:** `codebaseDocResponseModeSchema`, `generateCodebaseDocRequestSchema` (body `POST …/legacy/generate-codebase-doc`).
 
 Usado por API y (opcional) por web.

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ChatImagePart } from "@theforge/shared-types";
+import type { ChatImagePart, CodebaseDocResponseMode } from "@theforge/shared-types";
 import { apiFetch, API_BASE } from "../utils/apiClient";
 
 function pickEvaluatorCritique(data: Record<string, unknown>): string | null {
@@ -453,7 +453,10 @@ interface WorkshopState {
   ) => Promise<Project | null>;
   clearPhase0SummaryContent: (projectId: string) => Promise<void>;
   /** Flujo legacy: documentación de partida (opcional); puede incluir `mcpDebugTrace` si el API tiene debug activo. */
-  legacyGenerateCodebaseDoc: (projectId: string) => Promise<{ codebaseDoc: string; mcpDebugTrace?: LegacyMcpDebugEntry[] } | null>;
+  legacyGenerateCodebaseDoc: (
+    projectId: string,
+    opts?: { responseMode?: CodebaseDocResponseMode },
+  ) => Promise<{ codebaseDoc: string; mcpDebugTrace?: LegacyMcpDebugEntry[] } | null>;
   /** Flujo legacy: actualizar documentación de partida (edición manual) */
   legacyUpdateCodebaseDoc: (projectId: string, codebaseDoc: string) => Promise<boolean>;
   /** Flujo legacy: analizar con AriadneSpecs → archivos + preguntas */
@@ -2382,13 +2385,16 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     }
   },
 
-  legacyGenerateCodebaseDoc: async (projectId) => {
+  legacyGenerateCodebaseDoc: async (projectId, opts) => {
     if (!projectId?.trim()) return null;
     set({ loading: true, loadingReason: "legacy-codebase-doc", error: null });
     try {
+      const body =
+        opts?.responseMode !== undefined ? JSON.stringify({ responseMode: opts.responseMode }) : JSON.stringify({});
       const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/generate-codebase-doc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body,
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
