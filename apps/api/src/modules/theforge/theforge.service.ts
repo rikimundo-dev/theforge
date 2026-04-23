@@ -840,6 +840,25 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
   }
 
   /**
+   * Firma, tipos y endpoints asociados a un símbolo (herramienta MCP get_implementation_details).
+   * Preferible a búsqueda semántica genérica cuando ya conoces el nombre del símbolo en el índice.
+   */
+  async getImplementationDetails(
+    symbolName: string,
+    projectId?: string,
+    currentFilePath?: string,
+  ): Promise<string> {
+    const args: Record<string, unknown> = { symbolName: symbolName.trim() };
+    if (projectId?.trim()) {
+      const ident = await this.resolveStoredToMcp(projectId.trim());
+      args.projectId = ident.graphProjectId;
+    }
+    if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
+    const out = await this.callTool("get_implementation_details", args);
+    return out ?? "";
+  }
+
+  /**
    * Recupera el árbol de dependencias de un componente (herramienta MCP get_component_graph).
    * depth por defecto 2. Evita asumir que un componente es aislado.
    */

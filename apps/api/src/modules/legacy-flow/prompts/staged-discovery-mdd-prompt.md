@@ -9,6 +9,8 @@ IMPORTANTE: Para TODAS tus llamadas a herramientas como `ask_codebase`, `semanti
 3. **`semantic_search`:** es búsqueda en el **grafo** (keyword / embed según Ariadne). Si devuelve “No se encontraron resultados”, cambia la **query** a términos del negocio del producto (español, nombres de entidad reales) o cambia de **repo** según el rol (p. ej. no busques “prisma tables” en un front estático).
 4. **`limit` en `semantic_search`:** **omite** el argumento si no tienes un motivo fuerte; The Forge aplica un **mínimo** para no pedir índices ridículamente cortos. No intentes “ahorrar tokens” bajando el límite.
 5. **Multi-repo:** una misma pregunta de modelos puede aplicar solo al backend; documenta **qué repo** alimenta cada sección del MDD para no mezclar evidencias incompatibles.
+6. **`get_contract_specs`:** cuando necesites **props o contrato exacto** de un componente UI/React ya nombrado en evidencia, llámala en lugar de una `semantic_search` genérica o de adivinar la interfaz.
+7. **`get_implementation_details`:** cuando necesites **firma, tipos o endpoints** de una función/clase/handler **ya identificada por nombre** en el índice (manual To-Be, §3–§4 del MDD de cambio), llámala antes que búsquedas semánticas amplias.
 
 ---
 
@@ -48,7 +50,8 @@ Eres el Agente Supervisor Arquitectónico de The Forge. Tu objetivo es analizar 
 
 1. `semantic_search` con consultas **cortas y específicas** al dominio que toca (ej. entidades de facturación en el repo backend X; pantallas de checkout en el repo front Y).
 2. `get_file_content` solo para archivos **citados explícitamente** en resultados previos y críticos para el MDD.
-3. Evita repetir la misma pregunta amplia en `ask_codebase`; si necesitas más contexto, **acota** por repo, carpeta o flujo ya mencionado en evidencia.
+3. Si ya tienes **nombre exacto** de componente UI o de símbolo backend, usa **`get_contract_specs`** o **`get_implementation_details`** (grafo determinista) en lugar de nuevas búsquedas semánticas genéricas.
+4. Evita repetir la misma pregunta amplia en `ask_codebase`; si necesitas más contexto, **acota** por repo, carpeta o flujo ya mencionado en evidencia.
 
 ---
 

@@ -348,6 +348,57 @@ export class GraphMemoryService implements OnModuleInit, OnModuleDestroy {
     }
 
     /**
+     * Ingiere líneas-objetivo del BRD como nodos `BusinessObjective` (idempotente por etapa).
+     */
+    async ingestBrdObjectivesFromMarkdown(projectId: string, stageId: string, brdMarkdown: string): Promise<void> {
+        if (!this.graph) return;
+        const pid = (projectId ?? "").trim();
+        const sid = (stageId ?? "").trim();
+        if (!pid || !sid) return;
+        const md = (brdMarkdown ?? "").trim();
+        if (md.length < 20) return;
+
+        const lines = md.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+        const titles: string[] = [];
+        for (const line of lines) {
+            const bullet = line.match(/^[-*]\s+(.+)$/);
+            if (bullet && bullet[1]!.trim().length > 5) {
+                titles.push(bullet[1]!.trim().slice(0, 480));
+            }
+            if (titles.length >= 24) break;
+        }
+        if (titles.length === 0) {
+            for (const line of lines) {
+                if (/^#+\s/.test(line)) continue;
+                if (line.length > 20) titles.push(line.slice(0, 480));
+                if (titles.length >= 12) break;
+            }
+        }
+        if (titles.length === 0) return;
+
+        const params = { projectId: pid, stageId: sid };
+        try {
+            await this.graph.query(
+                `MATCH (o:BusinessObjective) WHERE o.projectId = $projectId AND o.stageId = $stageId DELETE o`,
+                { params },
+            );
+            for (let i = 0; i < titles.length; i++) {
+                const title = titles[i]!;
+                const key = `bo_${i}_${title.slice(0, 40).replace(/\W+/g, "_")}`;
+                await this.graph.query(
+                    `CREATE (:BusinessObjective {projectId: $projectId, stageId: $stageId, title: $title, objectiveKey: $key})`,
+                    { params: { ...params, title, key } },
+                );
+            }
+            this.logger.log(`[GraphMemory] BusinessObjective ingestados: ${titles.length} (project=${pid} stage=${sid})`);
+        } catch (err) {
+            this.logger.warn(
+                `[GraphMemory] ingestBrdObjectivesFromMarkdown: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
+    /**
      * Evalúa coherencia de dependencias modelo↔API en el subgrafo SDD (FalkorDB / OpenCypher).
      * Un endpoint sin :CONSUMES hacia entidad o una entidad sin consumidor se considera huérfano respecto al dominio enlazado.
      */
@@ -359,6 +410,7 @@ export class GraphMemoryService implements OnModuleInit, OnModuleDestroy {
         endpointCount: number;
         orphanEntityCount: number;
         orphanEndpointCount: number;
+        businessObjectiveCount: number;
         isCoherent: boolean;
     } | null> {
         if (!this.graph) return null;
@@ -396,29 +448,40 @@ export class GraphMemoryService implements OnModuleInit, OnModuleDestroy {
           AND NOT (:API_Endpoint)-[:CONSUMES]->(t)
         RETURN count(t) AS c
       `;
-            const [rEnt, rEp, rOe, rOt] = await Promise.all([
+            const qBusinessObjectives = `
+        MATCH (o:BusinessObjective)
+        WHERE o.projectId = $projectId AND o.stageId = $stageId
+        RETURN count(o) AS c
+      `;
+            const [rEnt, rEp, rOe, rOt, rBo] = await Promise.all([
                 this.graph.query(qEntityTotal, { params }),
                 this.graph.query(qEndpointTotal, { params }),
                 this.graph.query(qOrphanEndpoints, { params }),
                 this.graph.query(qOrphanEntities, { params }),
+                this.graph.query(qBusinessObjectives, { params }),
             ]);
 
             const entityCount = pickCount(rEnt?.data?.[0], "c");
             const endpointCount = pickCount(rEp?.data?.[0], "c");
             const orphanEndpointCount = pickCount(rOe?.data?.[0], "c");
             const orphanEntityCount = pickCount(rOt?.data?.[0], "c");
+            const businessObjectiveCount = pickCount(rBo?.data?.[0], "c");
 
-            const isCoherent =
+            let isCoherent =
                 entityCount > 0 &&
                 endpointCount > 0 &&
                 orphanEndpointCount === 0 &&
                 orphanEntityCount === 0;
+            if (businessObjectiveCount > 0 && entityCount === 0) {
+                isCoherent = false;
+            }
 
             return {
                 entityCount,
                 endpointCount,
                 orphanEntityCount,
                 orphanEndpointCount,
+                businessObjectiveCount,
                 isCoherent,
             };
         } catch (err) {

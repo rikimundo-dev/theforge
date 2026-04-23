@@ -78,6 +78,39 @@ export function getStagedDiscoveryTheForgeTools(
         }),
       },
     ),
+    tool(
+      async ({ componentName, currentFilePath }) =>
+        theforge.getContractSpecs(componentName.trim(), pid, currentFilePath),
+      {
+        name: "get_contract_specs",
+        description:
+          "Fase 2: **props y contrato exactos** de un componente UI/React ya identificado (grafo MCP, determinista). " +
+          "Úsalo antes de documentar interfaces de front o To-Be de pantallas; **no** sustituye Fase 0–1. " +
+          "Si devuelve vacío o NOT_FOUND_IN_GRAPH, no inventes props.",
+        schema: z.object({
+          componentName: z.string().describe("Nombre del componente o símbolo UI en el índice"),
+          projectId: projectIdField(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ symbolName, currentFilePath }) =>
+        theforge.getImplementationDetails(symbolName.trim(), pid, currentFilePath),
+      {
+        name: "get_implementation_details",
+        description:
+          "Fase 2: **firma, tipos y endpoints** que usa un símbolo backend (función, clase, handler) vía grafo MCP. " +
+          "Prefiere esto frente a `semantic_search` cuando ya tienes el nombre exacto del símbolo y necesitas precisión para §3–§4 o manual To-Be.",
+        schema: z.object({
+          symbolName: z
+            .string()
+            .describe("Nombre del símbolo en el índice (clase, función, método exportado)"),
+          projectId: projectIdField(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
   ];
 }
 
@@ -195,6 +228,34 @@ export function getLegacyTheForgeAgentTools(theforge: TheForgeService, theforgeP
       },
     ),
     tool(
+      async ({ componentName, currentFilePath }) =>
+        theforge.getContractSpecs(componentName.trim(), pid, currentFilePath),
+      {
+        name: "get_contract_specs",
+        description:
+          "Props y contrato de un componente UI en el índice (grafo). Úsalo cuando necesites la interfaz exacta antes de proponer cambios de front o To-Be.",
+        schema: z.object({
+          componentName: z.string(),
+          projectId: projectIdField(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ symbolName, currentFilePath }) =>
+        theforge.getImplementationDetails(symbolName.trim(), pid, currentFilePath),
+      {
+        name: "get_implementation_details",
+        description:
+          "Firma, tipos y endpoints asociados a un símbolo backend (determinista vía grafo). Prefiere esto a `semantic_search` cuando ya conoces el nombre del símbolo.",
+        schema: z.object({
+          symbolName: z.string(),
+          projectId: projectIdField(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
       async () => {
         const raw = await theforge.getC4Model(pid);
         const t = raw.trim();
@@ -262,6 +323,19 @@ export function getMddArchitectTheForgeTools(theforge: TheForgeService, theforge
           "Impacto en el grafo si se toca un nodo/símbolo. Para cada entidad o módulo legacy citado en modelo o API, valida que el impacto sea coherente con el cambio descrito.",
         schema: z.object({
           nodeName: z.string(),
+          currentFilePath: z.string().optional(),
+        }),
+      },
+    ),
+    tool(
+      async ({ symbolName, currentFilePath }) =>
+        theforge.getImplementationDetails(symbolName.trim(), pid, currentFilePath),
+      {
+        name: "get_implementation_details",
+        description:
+          "Extracción determinista de firma, tipos y endpoints de un símbolo backend. Úsalo junto a `get_contract_specs` cuando documentes §3–§4 o manual To-Be y ya tengas el nombre en el índice.",
+        schema: z.object({
+          symbolName: z.string(),
           currentFilePath: z.string().optional(),
         }),
       },

@@ -52,6 +52,12 @@ import type {
   LegacyDeliverablesStrategyContext,
   LegacyDeliverablesStrategyResolution,
 } from "./legacy-deliverables-strategy/legacy-deliverables-strategy.types.js";
+import {
+  brdTobeGateFailureMessage,
+  composeBrdToBeAsIsPreamble,
+  isBrdTobeGateEnabled,
+  isBrdTobeGateSatisfied,
+} from "../ai-analysis/utils/brd-tobe-gate.util.js";
 
 const KNOWLEDGE = loadLegacyKnowledgePack();
 
@@ -159,7 +165,9 @@ export interface LegacyFlowState {
 
 const COORDINATOR_SYSTEM =
   "Eres el coordinador del flujo legacy. Orquestas análisis del código (TheForge), preguntas al usuario y generación de documentos (MDD, SPEC, etc.). " +
-  "Usa el conocimiento base para mantener coherencia y cascada specification-driven.\n\nConocimiento base:\n---\n" +
+  "Usa el conocimiento base para mantener coherencia y cascada specification-driven.\n\n" +
+  "Cuando el análisis deba anclarse a interfaces reales (manual To-Be, MDD de cambio, contratos UI o firmas backend), prioriza en el discurso y en las peticiones al pipeline el uso de herramientas deterministas del grafo TheForge — **`get_contract_specs`** (props de componentes UI) y **`get_implementation_details`** (firma/tipos/endpoints de símbolos backend) — frente a **`semantic_search`** genérico o inferencias sin nombre de símbolo concreto.\n\n" +
+  "Conocimiento base:\n---\n" +
   KNOWLEDGE +
   "\n---";
 
@@ -484,6 +492,60 @@ export class LegacyCoordinatorService {
       throw new BadRequestException("El proyecto legacy debe tener theforgeProjectId configurado.");
     }
     return { project, theforgeId };
+  }
+
+  /**
+   * Etapa legacy para BRD/To-Be/As-Is: prioriza `isLegacy`; si no hay ninguna, etapa primaria del proyecto.
+   */
+  private async resolveLegacyGateStage(projectId: string) {
+    const row = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: { stages: { orderBy: { ordinal: "asc" } } },
+    });
+    if (!row?.stages?.length) return null;
+    const legacyMarked = row.stages.filter((s) => s.isLegacy);
+    const pool = legacyMarked.length > 0 ? legacyMarked : row.stages;
+    const picked = pickPrimaryStage(pool);
+    if (!picked?.id) return null;
+    return this.prisma.stage.findUnique({ where: { id: picked.id } });
+  }
+
+  private async enforceLegacyBrdTobeGate(projectId: string): Promise<void> {
+    if (!isBrdTobeGateEnabled()) return;
+    const st = await this.resolveLegacyGateStage(projectId);
+    if (!st) {
+      throw new BadRequestException("No hay etapa para validar BRD/To-Be. Crea etapa en el proyecto.");
+    }
+    if (!isBrdTobeGateSatisfied(st)) {
+      throw new BadRequestException(brdTobeGateFailureMessage());
+    }
+  }
+
+  /**
+   * Sintetiza un manual As-Is en markdown desde `legacyFlowState.codebaseDoc` y lo persiste en `Stage.asIsManualContent`.
+   */
+  async generateAsIsManual(projectId: string): Promise<{ asIsManualContent: string; stageId: string }> {
+    const { project } = await this.getLegacyProject(projectId);
+    const state = ((project as { legacyFlowState?: LegacyFlowState | null }).legacyFlowState ?? {}) as LegacyFlowState;
+    const codebaseDoc = String(state.codebaseDoc ?? "").trim();
+    if (codebaseDoc.length < 400) {
+      throw new BadRequestException(
+        "Se requiere documentación de partida del codebase (mín. ~400 caracteres). Ejecuta primero generate-codebase-doc.",
+      );
+    }
+    const stage = await this.resolveLegacyGateStage(projectId);
+    if (!stage?.id) {
+      throw new BadRequestException("No hay etapa para persistir el mapa As-Is.");
+    }
+    const prompt =
+      "Eres analista de negocio y arquitecto de software. A partir del siguiente documento del codebase (índice / evidencia), produce un **Manual As-Is** en español en Markdown con:\n" +
+      "## 1. Resumen ejecutivo del sistema actual\n## 2. Dominios y capacidades observadas\n## 3. Flujos críticos (AS-IS) con referencia a rutas o archivos citados del texto fuente cuando sea posible\n## 4. Datos y contratos existentes mencionados\n## 5. Riesgos técnicos o deuda detectados\n\n" +
+      "Reglas: no inventes módulos que no aparezcan en el documento; si falta evidencia, indica «no consta». Usa listas breves donde ayude.\n\n--- DOCUMENTO FUENTE ---\n\n" +
+      codebaseDoc.slice(0, 120_000);
+    const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
+    const asIs = cleanDocumentContent((mddDraft ?? "").trim()) || "(As-Is generado vacío.)";
+    await this.prisma.stage.update({ where: { id: stage.id }, data: { asIsManualContent: asIs } });
+    return { asIsManualContent: asIs, stageId: stage.id };
   }
 
   private hasLegacyIndexSddResolution(state: LegacyFlowState): boolean {
@@ -847,6 +909,9 @@ export class LegacyCoordinatorService {
         ? [`${descTermsGate} modules services handlers components routes`, ...DEFAULT_SEMANTIC_QUERIES]
         : [...DEFAULT_SEMANTIC_QUERIES];
     await this.assertLegacyIndexSddGate(projectId, theforgeId, state, { semanticQueries: gateSemanticQueries });
+    await this.enforceLegacyBrdTobeGate(projectId);
+    const gateStage = await this.resolveLegacyGateStage(projectId);
+    const brdPre = gateStage ? composeBrdToBeAsIsPreamble(gateStage) : "";
 
     // Múltiples consultas a TheForge para contexto amplio (evidencia del índice + ask_codebase + refactor seguro)
     const theforgeParts: string[] = [];
@@ -927,6 +992,7 @@ export class LegacyCoordinatorService {
         files.map((f) => (f.repoId ? `${f.path} (repoId: ${f.repoId})` : f.path)).join("\n") + "\n\n"
       : "";
     const prompt =
+      (brdPre ? brdPre + "\n\n" : "") +
       "Genera un documento MDD de cambio (Markdown) para un proyecto legacy. Según Specification-Driven Development, el MDD es la **Constitución del cambio** y debe tener **exactamente 7 secciones** en este orden: 1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, 4. Contratos de API, 5. Lógica y Edge Cases, 6. Seguridad, 7. Infraestructura. Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra).\n\n" +
       "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona antes de elaborar el documento. Usa TODO ese contexto; infiere todas las modificaciones necesarias en módulos, entidades, APIs y pantallas existentes que el cambio afecte; no te limites al requerimiento literal. El MDD debe reflejar el conocimiento real de la aplicación indexada (qué hay hoy y qué debe cambiar).\n\n" +
       "Descripción del cambio:\n---\n" +
@@ -1106,6 +1172,8 @@ export class LegacyCoordinatorService {
         "Hay una propuesta de complejidad pendiente de confirmación. Confirma o rechaza en el Workshop antes de generar entregables.",
       );
     }
+
+    await this.enforceLegacyBrdTobeGate(projectId);
 
     const codebaseDoc = String((project as { legacyFlowState?: LegacyFlowState }).legacyFlowState?.codebaseDoc ?? "").trim();
     const mddContent = String(project.mddContent ?? "").trim();

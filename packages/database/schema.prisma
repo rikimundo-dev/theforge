@@ -46,6 +46,16 @@ model Stage {
   workflowStatus   StageStatus  @default(DRAFT)
   /// Constitución SDD (markdown): Master Design Document de 7 secciones para esta etapa.
   mddContent       String?      @db.Text
+  /// BRD (markdown): problema, KPIs, alcance de negocio — fase previa al MDD técnico.
+  brdContent            String?   @db.Text
+  /// Manual To-Be (markdown): lógica y comportamiento deseado.
+  toBeManualContent     String?   @db.Text
+  /// Mapa / manual As-Is (markdown); útil en legacy o documentación del proceso actual.
+  asIsManualContent     String?   @db.Text
+  /// Marca de aprobación cliente (HITL) del BRD.
+  brdApprovedAt         DateTime?
+  /// Marca de aprobación cliente (HITL) del To-Be.
+  toBeApprovedAt        DateTime?
   /// Semáforo SDD (ROJO / AMARILLO / VERDE) derivado del MDD.
   status           Status       @default(ROJO)
   precisionScore   Int          @default(0)

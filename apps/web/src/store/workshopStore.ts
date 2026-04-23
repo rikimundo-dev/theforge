@@ -196,6 +196,11 @@ export interface WorkshopStage {
   name: string | null;
   workflowStatus: string;
   mddContent?: string | null;
+  brdContent?: string | null;
+  toBeManualContent?: string | null;
+  asIsManualContent?: string | null;
+  brdApprovedAt?: string | null;
+  toBeApprovedAt?: string | null;
   status: Status;
   precisionScore: number;
   estimation: Estimation | null;
@@ -380,6 +385,7 @@ interface WorkshopState {
     | "phase0-deep-research"
     | "legacy-codebase-doc"
     | "legacy-mdd"
+    | "legacy-as-is"
     | "legacy-deliverables"
     | "deliverables-cascade"
     | null;
@@ -432,6 +438,11 @@ interface WorkshopState {
   setActiveStageId: (stageId: string | null) => void;
   /** `POST /projects/:id/stages` → `{ stage }`; opcional `copyMddFromStageId`. */
   createWorkshopStage: (opts: { name?: string; key?: string; copyMddFromStageId?: string }) => Promise<Project | null>;
+  /** `PATCH /projects/:id/stages/:stageId` — BRD/To-Be/As-Is, aprobaciones, etc. */
+  patchWorkshopStage: (
+    stageId: string,
+    body: Record<string, string | boolean | undefined>,
+  ) => Promise<boolean>;
 
   setProjectId: (id: string | null) => void;
   setProject: (p: Project | null) => void;
@@ -524,6 +535,8 @@ interface WorkshopState {
   legacyStart: (projectId: string, description: string) => Promise<{ filesToModify: (string | { path: string; repoId?: string })[]; questions: string[]; suggestedAnswers?: Record<string, string> } | null>;
   legacyAnswer: (projectId: string, answers: Record<string, string>) => Promise<boolean>;
   legacyGenerateMdd: (projectId: string) => Promise<{ mddContent: string } | null>;
+  /** POST …/legacy/generate-as-is-manual → persiste `asIsManualContent` en la etapa legacy/primaria. */
+  legacyGenerateAsIsManual: (projectId: string) => Promise<{ asIsManualContent: string; stageId: string } | null>;
   legacyGenerateDeliverables: (projectId: string) => Promise<boolean>;
   fetchEstimation: (projectId: string) => Promise<LiveMetricsResult | null>;
   fetchAdrs: (projectId: string) => Promise<void>;
@@ -561,6 +574,7 @@ const initialState = {
     | "phase0-deep-research"
     | "legacy-codebase-doc"
     | "legacy-mdd"
+    | "legacy-as-is"
     | "legacy-deliverables"
     | "deliverables-cascade"
     | null,
@@ -706,6 +720,32 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Error al crear etapa" });
       return null;
+    }
+  },
+
+  patchWorkshopStage: async (stageId, body) => {
+    const { projectId } = get();
+    if (!projectId?.trim() || !stageId?.trim()) {
+      set({ error: "Falta proyecto o etapa" });
+      return false;
+    }
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/stages/${stageId.trim()}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => ({}))) as { message?: string | string[] };
+        const msg = Array.isArray(err.message) ? err.message.join("; ") : err.message;
+        throw new Error(msg ?? "PATCH etapa falló");
+      }
+      await get().fetchProject(projectId.trim());
+      set({ error: null });
+      return true;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Error al actualizar etapa" });
+      return false;
     }
   },
 
@@ -959,6 +999,15 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     const sess = (await assistantRes.json()) as Session;
                     set({ session: sess });
                   }
+                  return;
+                } else if (event.type === "blocked" && event.message) {
+                  set({
+                    error: String(event.message),
+                    loading: false,
+                    loadingReason: null,
+                    agentProgress: [],
+                    evaluatorCritique: null,
+                  });
                   return;
                 } else if (event.type === "error" && event.message) {
                   set({ error: event.message, loading: false, loadingReason: null, agentProgress: [], evaluatorCritique: null });
@@ -1239,6 +1288,20 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                       streamingUserImages: null,
                       streamingContent: null,
                       pendingPlanApproval: null,
+                      evaluatorCritique: null,
+                    });
+                    return;
+                  } else if (event.type === "blocked" && event.message) {
+                    set({
+                      managerThreadId: null,
+                      pendingPlanApproval: null,
+                      error: String(event.message),
+                      loading: false,
+                      loadingReason: null,
+                      agentProgress: [],
+                      streamingUserMessage: null,
+                      streamingUserImages: null,
+                      streamingContent: null,
                       evaluatorCritique: null,
                     });
                     return;
@@ -2292,6 +2355,8 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 set({ mddContent: event.markdown });
               } else if (event.type === "done" && event.markdown != null) {
                 finalMarkdown = event.markdown;
+              } else if (event.type === "blocked" && event.message) {
+                throw new Error(String(event.message));
               } else if (event.type === "error" && event.message) {
                 throw new Error(event.message);
               }
@@ -2588,6 +2653,32 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       return data;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Error al generar MDD legacy", loading: false, loadingReason: null });
+      return null;
+    }
+  },
+
+  legacyGenerateAsIsManual: async (projectId) => {
+    if (!projectId?.trim()) return null;
+    set({ loading: true, loadingReason: "legacy-as-is", error: null });
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/legacy/generate-as-is-manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message ?? "Error al generar As-Is");
+      }
+      const data = (await r.json()) as { asIsManualContent: string; stageId: string };
+      await get().fetchProject(projectId.trim());
+      set({ loading: false, loadingReason: null, error: null });
+      return data;
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : "Error al generar manual As-Is",
+        loading: false,
+        loadingReason: null,
+      });
       return null;
     }
   },

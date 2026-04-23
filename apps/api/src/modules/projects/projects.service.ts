@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ComplexityLevel, Prisma, StageStatus, Status } from "@theforge/database";
 import type { Estimation, Project, Stage } from "@theforge/database";
 import { getRequestUserId } from "../../common/request-user.store.js";
@@ -14,6 +14,7 @@ import { AiService } from "../ai/ai.service.js";
 import { DiscoveryService } from "../ai/discovery.service.js";
 import { ScraperService } from "../scraper/scraper.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
+import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
 import type { IOrchestratorProjectsPort } from "./projects-service.port.js";
 import { resolveUrls } from "../scraper/url-utils.js";
 import {
@@ -40,6 +41,8 @@ function toApiProject<P extends { stages: StageWithEst[] } & Record<string, unkn
 
 @Injectable()
 export class ProjectsService implements IOrchestratorProjectsPort {
+  private readonly logger = new Logger(ProjectsService.name);
+
   /** Scope de proyecto autenticado (AsyncLocalStorage). */
   private projectWhereForUser(projectId: string) {
     return { id: projectId, userId: getRequestUserId() };
@@ -55,6 +58,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     private readonly mddUpdatePipeline: MddUpdatePipelineService,
     private readonly semaphore: SemaphoreService,
     private readonly theforge: TheForgeService,
+    private readonly graphMemory: GraphMemoryService,
   ) {}
 
   private buildSemaphoreBase(
@@ -483,6 +487,11 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     const data: Prisma.StageUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.key !== undefined) data.key = dto.key.trim();
+    if (dto.brdContent !== undefined) data.brdContent = dto.brdContent.trim() || null;
+    if (dto.toBeManualContent !== undefined) data.toBeManualContent = dto.toBeManualContent.trim() || null;
+    if (dto.asIsManualContent !== undefined) data.asIsManualContent = dto.asIsManualContent.trim() || null;
+    if (dto.approveBrd === true) data.brdApprovedAt = new Date();
+    if (dto.approveToBe === true) data.toBeApprovedAt = new Date();
     if (dto.ordinal !== undefined) {
       const clash = await this.prisma.stage.findFirst({
         where: {
@@ -505,6 +514,15 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       include: { estimation: true },
     });
     if (!out) throw new NotFoundException("Etapa no encontrada");
+    if (dto.approveBrd === true && (out.brdContent ?? "").trim().length > 0) {
+      try {
+        await this.graphMemory.ingestBrdObjectivesFromMarkdown(projectId, stageId, out.brdContent ?? "");
+      } catch (err) {
+        this.logger.warn(
+          `[Projects] ingestBrdObjectivesFromMarkdown: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     return { stage: out };
   }
 

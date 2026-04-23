@@ -19,6 +19,13 @@ export const patchStageBodySchema = z.object({
   ordinal: z.number().int().min(1).optional(),
   /** Poner esta etapa como única ACTIVE del proyecto */
   activate: z.boolean().optional(),
+  brdContent: z.string().optional(),
+  toBeManualContent: z.string().optional(),
+  asIsManualContent: z.string().optional(),
+  /** Si true, fija `brdApprovedAt` a ahora (no limpia contenido). */
+  approveBrd: z.boolean().optional(),
+  /** Si true, fija `toBeApprovedAt` a ahora. */
+  approveToBe: z.boolean().optional(),
 });
 
 export type CreateStageBody = z.infer<typeof createStageBodySchema>;

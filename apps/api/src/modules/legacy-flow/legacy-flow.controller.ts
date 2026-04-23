@@ -94,6 +94,14 @@ export class LegacyFlowController {
   }
 
   /**
+   * Genera mapa As-Is (markdown) desde `codebaseDoc` y lo guarda en `Stage.asIsManualContent` (etapa legacy o primaria).
+   */
+  @Post("generate-as-is-manual")
+  async generateAsIsManual(@Param("projectId") projectId: string) {
+    return this.coordinator.generateAsIsManual(projectId);
+  }
+
+  /**
    * Genera en cascada todos los entregables (SPEC, Arquitectura, Casos de uso, Historias, Blueprint, Guía UX/UI, API, Flujos, Infra, Tasks) desde el MDD.
    * @param projectId - ID del proyecto (debe tener mddContent generado previamente).
    * @returns Confirmación de que la cascada terminó.

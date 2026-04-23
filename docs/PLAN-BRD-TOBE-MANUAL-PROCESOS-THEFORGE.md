@@ -2,7 +2,7 @@
 
 Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be en greenfield; As-Is + BRD/To-Be antes del MDD de cambio en legacy), alineado con el stack actual (NestJS, Prisma, FalkorDB, `AgentSupervisorService`, `AiOrchestratorService`, `LegacyCoordinatorService`, MCP Ariadne/TheForge).
 
-**Estado:** planificación — ejecutar por fases; no es obligatorio cerrar todo en un solo sprint.
+**Estado:** en curso — G0/G1/L1/L2 parcialmente implementados en código; F1/F2 pendientes.
 
 ---
 
@@ -20,17 +20,17 @@ Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be 
 
 ## 1. Modelo de datos (PostgreSQL + Prisma)
 
-**Archivo base:** `packages/database/schema.prisma` (`Stage`, `Project`, `legacyFlowState` Json).
+**Archivo base:** `packages/database/schema.prisma` (`Stage`, `Project`; `legacyFlowState` Json solo para flujo MCP legacy, **no** para BRD/To-Be).
 
-### 1.1 Opción A (recomendada inicial): campos en `Stage`
+### 1.1 Campos en `Stage` (fuente única)
 
 - `brdContent String? @db.Text` — BRD (markdown).
 - `toBeManualContent String? @db.Text` — Manual To-Be (markdown).
-- `asIsManualContent String? @db.Text` — opcional; útil en etapas legacy o “proceso actual”.
+- `asIsManualContent String? @db.Text` — mapa As-Is (legacy / proceso actual).
 - `brdApprovedAt DateTime?`, `toBeApprovedAt DateTime?` — validación cliente (HITL).
-- Opcional: `brdStatus` / `toBeStatus` enum (`DRAFT | SUBMITTED | APPROVED`) si no bastan timestamps.
+- Opcional futuro: `brdStatus` / `toBeStatus` enum si no bastan timestamps.
 
-**Ventaja:** ya existe la noción de “constitución por etapa” (`Stage.mddContent`); BRD/To-Be son **precursor** de la misma etapa o de la etapa previa según `ordinal`/`key`.
+**Ventaja:** la constitución SDD ya es por etapa (`Stage.mddContent`); BRD/To-Be/As-Is son **precursores** de la misma etapa (o etapa `isLegacy` / orden `ordinal`).
 
 ---
 
@@ -42,24 +42,23 @@ Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be 
 
 **Cambios conceptuales:**
 
-1. **Nueva “fase de ruta” o `activeTab` / `contextStep`** (según diseño UI): entrevista enfocada a **BRD** y luego **To-Be**, sin saltar a entidades técnicas hasta gate pasado.
-2. **System prompts / grafo Manager:** primeros nodos o instrucciones del Manager recogen **problema, KPIs, diagramas lógicos de negocio** (plantillas markdown fijas para consistencia y parsing posterior a Falkor).
-3. **Guardarraíl:** antes de invocar nodos que redactan **§3 modelo / §4 API** (o el Manager equivalente), comprobar:
-   - `brdContent` no vacío y `brdApprovedAt` no null (o estado `APPROVED`).
-   - `toBeManualContent` no vacío y `toBeApprovedAt` no null.
-   - Si falla → respuesta HTTP 400 o evento NDJSON `blocked` con mensaje claro (sin llamada LLM de síntesis técnica).
+1. **UI / `activeTab`:** pasos Workshop **BRD → To-Be → MDD** con edición y aprobación en etapa activa.
+2. **System prompts / grafo Manager:** el Manager sigue la entrevista; el **gate** corta antes de nodos técnicos del grafo si falta aprobación.
+3. **Guardarraíl (`THEFORGE_BRD_TOBE_GATE`, default on):** antes de nodos que redactan **§3 modelo / §4 API** (y equivalentes en el grafo con Manager), comprobar en la `Stage` resuelta:
+   - `brdContent` y `toBeManualContent` con longitud mínima (`BRD_TOBE_MIN_BODY_CHARS`).
+   - `brdApprovedAt` y `toBeApprovedAt` no null.
+   - Si falla → evento NDJSON `blocked` (streams) sin llamada LLM de síntesis técnica en ese paso.
 
-**Referencias de patrón:** bloqueo lógico similar a legacy sin MDD para use cases; aplicar en **Manager stream** y, si aplica, en `streamMddAnalysis` entrada.
+**Referencias de patrón:** aplicado en **Manager stream**, **resume**, **`streamMddAnalysis`**, **`streamMddRegenerateSection`** (§2–7) y preámbulo `composeBrdToBeAsIsPreamble` en `dbgaContent`.
 
 ### 2.2 Transición al MDD
 
-- Tras aprobación: construir **bloque de contexto reforzado** (prepend al user message o `shortTermContext` en `Stage`) con resúmenes/secciones BRD + To-Be.
-- **Síntesis MDD:** primera generación o actualización del MDD de 7 secciones usa DBGA/Benchmark **más** BRD + To-Be aprobados (orden documentado en prompt).
+- Tras aprobación: **prepend** al benchmark/MDD base (`dbgaContent`) con BRD + To-Be + As-Is aprobados cuando existan (`composeBrdToBeAsIsPreamble`).
 
 ### 2.3 UI (web)
 
-- Pestañas o pasos Workshop: **BRD → To-Be → MDD** con botones “Enviar a revisión” / “Aprobar”.
-- Indicadores de bloqueo en tab MDD hasta cumplir gates (mensaje alineado con API `blocked`).
+- Panel BRD / To-Be / As-Is en Workshop (etapa activa): edición + PATCH + botones aprobar BRD / To-Be.
+- Mensaje alineado con evento `blocked` del stream MDD.
 
 ---
 
@@ -67,21 +66,19 @@ Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be 
 
 ### 3.1 As-Is automatizado
 
-- **Entrada:** MCP ya usado en `LegacyCoordinatorService` / `TheForgeService` (`ask_codebase`, `semantic_search`, evidencia en `codebaseDoc` / rollup MDD).
-- **Producto:** persistir **As-Is** en `Stage.asIsManualContent` o en `legacyFlowState` (clave explícita `asIsManual`) generado/asistido por LLM **solo** si hay evidencia suficiente (longitud mínima / citas de rutas).
-- **Paso 1 manual de procesos:** plantilla markdown “Mapa As-Is” rellenada desde herramientas + opción de edición humana.
+- **Entrada:** evidencia en `legacyFlowState.codebaseDoc` (tras `generate-codebase-doc`).
+- **Producto:** persistir **solo** en `Stage.asIsManualContent` vía `POST …/legacy/generate-as-is-manual` (LLM con insumo mínimo de caracteres).
+- **Edición humana:** PATCH etapa `asIsManualContent`.
 
 ### 3.2 BRD + To-Be antes del MDD de cambio
 
-- **UI / API legacy:** flujos `generate-mdd` / entregables: exigir BRD + To-Be aprobados (o flags en `legacyFlowState`) **antes** de `generate-mdd` que produce constitución de cambio.
-- **Guardarraíl índice/SDD:** mantener y **documentar orden** respecto a BRD/To-Be:
-  - `assertLegacyIndexSddGate` (`legacy-coordinator.service.ts`) sigue siendo la puerta índice ↔ grafo SDD.
-  - Añadir mensajes cuando el índice esté vacío o haya mismatch: **antes** de invitar a To-Be detallado, el usuario debe resolver 409 o completar codebase doc.
+- **`generate-mdd` y `generate-deliverables`:** si el gate está activo, exigen la misma `Stage` (etapa `isLegacy` si existe, si no la primaria) con BRD/To-Be aprobados (`enforceLegacyBrdTobeGate`).
+- **Guardarraíl índice/SDD:** `assertLegacyIndexSddGate` sigue **antes** del MDD; orden: índice/SDD resuelto → BRD/To-Be → MDD técnico.
 
 ### 3.3 MDD de cambio
 
-- Prompt de `generateMdd` / rollup: inyectar **As-Is + BRD + To-Be aprobados** + evidencia indexada.
-- Objetivo: MDD de cambio con trazabilidad explícita “decisión To-Be → impacto en §3/§4”.
+- Prompt `generateMdd`: preámbulo `composeBrdToBeAsIsPreamble` + evidencia TheForge.
+- Objetivo: trazabilidad To-Be → §3/§4.
 
 ---
 
@@ -91,16 +88,13 @@ Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be 
 
 ### 4.1 Fase 1 (valor rápido)
 
-- Al aprobar BRD: job o paso sincronizado que **parsea** objetivos/KPIs (regex o LLM estructurado **acotado**) y escribe nodos/relaciones en Falkor con prefijo estable (`BusinessObjective`, `KPI`, `links_to_stage`).
-- Documentar esquema de nodos/aristas en `docs/STAGE-SDD.md` o nuevo doc de grafo BRD.
+- Al aprobar BRD: ingesta sincronizada de objetivos (`ingestBrdObjectivesFromMarkdown`).
 
 ### 4.2 Fase 2 (semáforo)
 
-- Extender `evaluateSddDependencyHealth` (o capa previa) para comprobar cadena:
-  - `BusinessObjective` → requisito To-Be → entidad/API en MDD ingerido.
-- Fallos → contribuir a **ROJO** / warnings con texto accionable en Workshop.
+- Extender cadena BRD → MDD en salud SDD (pendiente de diseño fino).
 
-**Riesgo:** duplicar fuente de verdad entre markdown y grafo; mitigar con “ingesta idempotente” desde el markdown aprobado (versionado por `updatedAt`).
+**Riesgo:** duplicar fuente de verdad entre markdown y grafo; mitigar con ingesta idempotente desde markdown aprobado.
 
 ---
 
@@ -108,32 +102,33 @@ Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be 
 
 | Fase   | Entrega                                                                      | Criterio de “hecho”                           |
 | ------ | ---------------------------------------------------------------------------- | --------------------------------------------- |
-| **G0** | Prisma: campos BRD/To-Be/(As-Is) + migración; PATCH API mínimo por `stageId` | Datos persisten y se leen en Workshop         |
-| **G1** | Gates en Manager stream + mensajes sin LLM técnico si faltan aprobaciones    | 400/`blocked` reproducible en tests manuales  |
-| **G2** | Prompts: inyección BRD+To-Be en primera síntesis MDD                         | MDD generado referencia secciones BRD/To-Be   |
-| **L1** | `legacyFlowState` o `Stage` legacy: BRD/To-Be + UI legacy                    | Usuario no genera MDD de cambio sin completar |
-| **L2** | As-Is asistido desde MCP en paso dedicado                                    | `asIsManual` poblado con citas                |
+| **G0** | Prisma: campos BRD/To-Be/(As-Is) + migración; PATCH API por `stageId`        | Datos persisten y se leen en Workshop         |
+| **G1** | Gates en streams MDD + `blocked` sin LLM técnico si faltan aprobaciones      | `blocked` / flujo visible en Workshop         |
+| **G2** | Preámbulo BRD+To-Be+As-Is en síntesis MDD                                    | MDD referencia contexto aprobado             |
+| **L1** | `Stage` legacy: gate + UI/panel BRD-To-Be                                    | Sin MDD legacy / entregables sin gate cumplido |
+| **L2** | `POST …/legacy/generate-as-is-manual`                                        | `asIsManualContent` poblado desde codebase   |
 | **F1** | Ingesta Falkor desde BRD aprobado                                            | Nodos consultables por Cypher                 |
-| **F2** | Semáforo / `evaluateSddDependencyHealth` extendido                           | ROJO si falta enlace BRD→MDD                  |
+| **F2** | `evaluateSddDependencyHealth` extendido                                      | ROJO si falta enlace BRD→MDD                  |
 
 ---
 
-## 6. Riesgos y decisiones pendientes
+## 6. Riesgos y decisiones
 
-- **Duplicidad BRD vs DBGA:** clarificar si BRD sustituye parte de Fase 0 o convive; evitar tres fuentes sin jerarquía.
-- **Legacy vs Stage:** hoy mucho legacy vive en `Project` + `legacyFlowState`; decidir si BRD/To-Be van a **Stage** `isLegacy` o solo a JSON legacy para el primer MVP.
-- **Coste LLM:** As-Is + BRD + To-Be añaden pasos; reutilizar rollup/throttle ya existente en legacy entregables donde aplique.
-- **Privacidad:** BRD puede contener datos sensibles; mismas políticas de almacenamiento que `mddContent`.
+- **Duplicidad BRD vs DBGA:** conviven; DBGA sigue siendo benchmark de mercado; BRD ancla negocio interno.
+- **Legacy vs Stage:** BRD/To-Be/As-Is viven en **`Stage`**; `legacyFlowState` solo para MCP/descubrimiento (codebaseDoc, respuestas, debug).
+- **Coste LLM:** As-Is + BRD + To-Be añaden pasos; reutilizar throttles existentes en entregables.
+- **Privacidad:** mismas políticas que `mddContent`.
 
 ---
 
 ## 7. Referencias rápidas en repo
 
-- Manager MDD (nuevo): `apps/api/src/modules/ai-analysis/ai-analysis.controller.ts` (`streamMddManager`), `ai-analysis.service.ts` (`streamMddAnalysis`, contexto por `AgentSupervisor`).
-- Legacy: `apps/api/src/modules/legacy-flow/legacy-coordinator.service.ts` (`assertLegacyIndexSddGate`, `generateDeliverables`, rollup MDD).
-- Grafo / salud SDD: `apps/api/src/modules/ai-analysis/graph-memory/graph-memory.service.ts` (`evaluateSddDependencyHealth`).
-- Esquema etapa: `packages/database/schema.prisma` (`Stage`, `Project`).
+- Manager MDD: `apps/api/src/modules/ai-analysis/ai-analysis.controller.ts`, `ai-analysis.service.ts`.
+- Gate util: `apps/api/src/modules/ai-analysis/utils/brd-tobe-gate.util.ts`.
+- Legacy: `legacy-coordinator.service.ts` (`enforceLegacyBrdTobeGate`, `generateAsIsManual`), `legacy-flow.controller.ts`.
+- Grafo: `graph-memory.service.ts` (`evaluateSddDependencyHealth`, `ingestBrdObjectivesFromMarkdown`).
+- Esquema: `packages/database/schema.prisma` (`Stage`).
 
 ---
 
-_Última actualización: plan guardado para ejecución por fases; ajustar prioridades según negocio (p. ej. L1 antes de F1 si Falkor puede esperar)._
+_Última actualización: alineado a fuente única `Stage`; priorizar L1/L2 antes de F2 si hace falta._

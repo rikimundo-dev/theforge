@@ -41,6 +41,7 @@ import ComplexityPendingBanner from "../components/ComplexityPendingBanner";
 import MddViewer from "../components/MddViewer";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
 import LegacyMcpDebugPanel from "../components/LegacyMcpDebugPanel/LegacyMcpDebugPanel";
+import { BrdTobeStagePanel } from "../components/BrdTobeStagePanel";
 import { calculateCostFromMdd } from "../utils/costCalculator";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
@@ -113,6 +114,14 @@ export default function WorkshopView({
   const workshopStages = useWorkshopStore((s) => s.workshopStages);
   const workshopStagesList =
     workshopStages.length > 0 ? workshopStages : (project?.stages ?? []);
+  const activeWorkshopStage = useMemo(
+    () => workshopStagesList.find((s) => s.id === activeStageId),
+    [workshopStagesList, activeStageId],
+  );
+  const codebaseDocCharCount = useMemo(
+    () => (project?.legacyFlowState?.codebaseDoc ?? "").trim().length,
+    [project?.legacyFlowState?.codebaseDoc],
+  );
   const liveMetrics = useWorkshopStore((s) => s.liveMetrics);
   const mddContent = useWorkshopStore((s) => s.mddContent);
   /** MDD en store o persistido en proyecto (evita botones Generar/Regenerar deshabilitados si el store quedó vacío). */
@@ -1847,6 +1856,13 @@ export default function WorkshopView({
                     </button>
                   </div>
                 )}
+                <BrdTobeStagePanel
+                  projectId={projectId}
+                  activeStageId={activeStageId}
+                  stage={activeWorkshopStage}
+                  isLegacyProject={isLegacyProject}
+                  codebaseDocChars={codebaseDocCharCount}
+                />
                 {mddDirty && (
                   <div className="shrink-0 flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-3">
                     <span className="text-sm text-amber-200/90">Tienes cambios sin guardar. Graba para revisar consistencia (ER, etc.).</span>

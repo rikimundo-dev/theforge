@@ -8,9 +8,10 @@ import { EngineModule } from "../engine/engine.module.js";
 import { AiModule } from "../ai/ai.module.js";
 import { ScraperModule } from "../scraper/scraper.module.js";
 import { TheForgeModule } from "../theforge/theforge.module.js";
+import { GraphMemoryModule } from "../ai-analysis/graph-memory/graph-memory.module.js";
 
 @Module({
-  imports: [EngineModule, AiModule, ScraperModule, TheForgeModule],
+  imports: [EngineModule, AiModule, ScraperModule, TheForgeModule, GraphMemoryModule],
   controllers: [ProjectsController],
   providers: [
     ProjectsService,
