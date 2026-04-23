@@ -51,9 +51,13 @@ function normalizeMermaidForRender(content: string): string {
     .trim();
 }
 
-/** Tipos de diagrama Mermaid válidos (insensible a mayúsculas). Coincide al inicio del bloque, con o sin etiqueta de lenguaje. */
+/**
+ * Tipos de diagrama Mermaid válidos (insensible a mayúsculas).
+ * No usar `graph\b`: rutas `graph-internal/…` activan \b entre `h` y `-` y se parsean como Mermaid.
+ * graph/flowchart legados exigen `TD|TB|LR|RL|BT`; el resto exige separador real (\s, \n o fin).
+ */
 const MERMAID_DIAGRAM_START =
-  /^\s*(erDiagram|flowchart|graph\b|sequenceDiagram|stateDiagram(-v2)?|classDiagram|pie\b|gantt|journey|gitGraph|mindmap|timeline|blockDiagram|quadrantChart|xychart|requirementDiagram)/i;
+  /^\s*(erDiagram(?:\s+|\n|$)|flowchart\s+(?:TD|TB|LR|RL|BT)\b|graph\s+(?:TD|TB|LR|RL|BT)\b|sequenceDiagram(?:\s+|\n|$)|stateDiagram(?:-v2)?(?:\s+|\n|$)|classDiagram(?:\s+|\n|$)|pie(?:\s+|\n|$)|gantt(?:\s+|\n|$)|journey(?:\s+|\n|$)|gitGraph(?:\s+|\n|$)|mindmap(?:\s+|\n|$)|timeline(?:\s+|\n|$)|blockDiagram(?:\s+|\n|$)|quadrantChart(?:\s+|\n|$)|xychart(?:\s+|\n|$)|requirementDiagram(?:\s+|\n|$))/i;
 
 /** True si el contenido parece un diagrama Mermaid (empieza por un tipo válido o tiene clase language-mermaid). */
 function looksLikeMermaidBlock(source: string, className?: string): boolean {

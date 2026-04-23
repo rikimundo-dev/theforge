@@ -1,26 +1,32 @@
 /**
  * Convierte el JSON de `ask_codebase` + `responseMode: raw_evidence` (Ariadne ingest)
- * en markdown compacto para prompts Nest (evita volcar `gatheredContext` como un solo JSON escapado).
+ * en markdown legible para prompts Nest (evita volcar `gatheredContext` como un solo JSON escapado).
+ *
+ * Por defecto **no** hay truncado ni troceo: todo el contenido. Solo si defines la variable de entorno
+ * con un entero **> 0** se aplica ese tope (capacidad operativa en despliegues muy grandes).
  */
+function rawEvidenceLimitFromEnv(envKey: string): number {
+  const raw = process.env[envKey];
+  if (raw === undefined || raw.trim() === "") return Number.POSITIVE_INFINITY;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) return Number.POSITIVE_INFINITY;
+  return n;
+}
 
 function rawEvidenceGatheredMaxChars(): number {
-  const n = parseInt(process.env.RAW_EVIDENCE_GATHERED_MAX_CHARS ?? "48000", 10);
-  return Number.isFinite(n) && n > 0 ? n : 48000;
+  return rawEvidenceLimitFromEnv("RAW_EVIDENCE_GATHERED_MAX_CHARS");
 }
 
 function rawEvidenceChunkTailMax(): number {
-  const n = parseInt(process.env.RAW_EVIDENCE_CHUNK_TAIL_MAX ?? "6000", 10);
-  return Number.isFinite(n) && n > 0 ? n : 6000;
+  return rawEvidenceLimitFromEnv("RAW_EVIDENCE_CHUNK_TAIL_MAX");
 }
 
 function rawEvidenceMuestrasPerKey(): number {
-  const n = parseInt(process.env.RAW_EVIDENCE_MUESTRAS_PER_KEY ?? "25", 10);
-  return Number.isFinite(n) && n > 0 ? n : 25;
+  return rawEvidenceLimitFromEnv("RAW_EVIDENCE_MUESTRAS_PER_KEY");
 }
 
 function rawEvidenceCollectedMaxRows(): number {
-  const n = parseInt(process.env.RAW_EVIDENCE_COLLECTED_MAX_ROWS ?? "120", 10);
-  return Number.isFinite(n) && n > 0 ? n : 120;
+  return rawEvidenceLimitFromEnv("RAW_EVIDENCE_COLLECTED_MAX_ROWS");
 }
 
 /** Cierra el objeto JSON que empieza en `openBraceIndex` (primer carácter `{`). */
@@ -94,7 +100,7 @@ function formatMuestrasMarkdown(muestras: Record<string, unknown[]>): string {
   const perKey = rawEvidenceMuestrasPerKey();
   const lines: string[] = [];
   for (const [label, arr] of Object.entries(muestras)) {
-    const take = Math.min(arr.length, perKey);
+    const take = Number.isFinite(perKey) && perKey > 0 ? Math.min(arr.length, perKey) : arr.length;
     lines.push(`##### ${label} (${take} de ${arr.length})`);
     lines.push("");
     for (let i = 0; i < take; i++) {
@@ -109,9 +115,9 @@ function formatMuestrasMarkdown(muestras: Record<string, unknown[]>): string {
         else if (pathTemplate && method) lines.push(`- \`${method} ${pathTemplate}\``);
         else if (p) lines.push(`- \`${p}\``);
         else if (n) lines.push(`- ${n}`);
-        else lines.push(`- ${JSON.stringify(row).slice(0, 160)}`);
+        else lines.push(`- ${JSON.stringify(row)}`);
       } else {
-        lines.push(`- ${String(row).slice(0, 200)}`);
+        lines.push(`- ${String(row)}`);
       }
     }
     lines.push("");
@@ -150,11 +156,13 @@ function formatGatheredChunk(chunk: string): string {
 
   if (!conteos && !muestras) {
     const max = rawEvidenceChunkTailMax();
-    parts.push(
-      inner.length > max
-        ? `${inner.slice(0, max)}\n\n_… recorte local (${inner.length} caracteres); sube RAW_EVIDENCE_CHUNK_TAIL_MAX si hace falta._`
-        : inner,
-    );
+    if (Number.isFinite(max) && max > 0 && inner.length > max) {
+      parts.push(
+        `${inner.slice(0, max)}\n\n_… recorte local (${inner.length} caracteres); RAW_EVIDENCE_CHUNK_TAIL_MAX._`,
+      );
+    } else {
+      parts.push(inner);
+    }
   } else {
     const tailMax = rawEvidenceChunkTailMax();
     const muestrasIdx = inner.search(/\bMuestras:\s*\{/);
@@ -164,10 +172,14 @@ function formatGatheredChunk(chunk: string): string {
         const end = indexOfMatchingJsonObjectEnd(inner, braceStart);
         if (end > braceStart) {
           const after = inner.slice(end + 1).trim();
-          if (after.length > 120) {
-            parts.push("**Resto del bloque (recortado)**");
+          if (after.length > 0) {
+            parts.push("**Resto del bloque**");
             parts.push("");
-            parts.push(after.slice(0, tailMax) + (after.length > tailMax ? "\n\n_…_" : ""));
+            if (Number.isFinite(tailMax) && tailMax > 0 && after.length > tailMax) {
+              parts.push(`${after.slice(0, tailMax)}\n\n_… RAW_EVIDENCE_CHUNK_TAIL_MAX._`);
+            } else {
+              parts.push(after);
+            }
           }
         }
       }
@@ -186,7 +198,7 @@ export function formatGatheredContextForMarkdown(raw: string): string {
   const chunks = t.split(/\n---\s*\n/).map((c) => c.trim()).filter(Boolean);
   const body = chunks.map(formatGatheredChunk).filter(Boolean).join("\n\n---\n\n");
   const max = rawEvidenceGatheredMaxChars();
-  if (body.length <= max) return body;
+  if (!Number.isFinite(max) || max <= 0 || body.length <= max) return body;
   return `${body.slice(0, max)}\n\n_… recorte global gatheredContext (${body.length} caracteres); RAW_EVIDENCE_GATHERED_MAX_CHARS._`;
 }
 
@@ -195,22 +207,23 @@ export function formatGatheredContextForMarkdown(raw: string): string {
  */
 export function formatCollectedResultsForMarkdown(v: unknown): string {
   if (!Array.isArray(v)) {
-    return "```json\n" + JSON.stringify(v, null, 2).slice(0, 12000) + "\n```";
+    return "```json\n" + JSON.stringify(v, null, 2) + "\n```";
   }
   const maxRows = rawEvidenceCollectedMaxRows();
-  const rows = v.slice(0, maxRows) as Record<string, unknown>[];
+  const rows =
+    Number.isFinite(maxRows) && maxRows > 0 ? (v.slice(0, maxRows) as Record<string, unknown>[]) : (v as Record<string, unknown>[]);
   const lines = [
     "| tipo | path | name | repoId |",
     "| --- | --- | --- | --- |",
   ];
   for (const r of rows) {
     const tipo = String(r.tipo ?? r.type ?? "");
-    const path = String(r.path ?? "").slice(0, 160);
-    const name = String(r.name ?? "").slice(0, 120);
-    const repo = String(r.repoId ?? "").slice(0, 12);
+    const path = String(r.path ?? "");
+    const name = String(r.name ?? "");
+    const repo = String(r.repoId ?? "");
     lines.push(`| ${tipo.replace(/\|/g, "\\|")} | \`${path.replace(/`/g, "'")}\` | ${name.replace(/\|/g, "\\|")} | \`${repo}\` |`);
   }
-  if (v.length > maxRows) {
+  if (Number.isFinite(maxRows) && maxRows > 0 && v.length > maxRows) {
     lines.push("");
     lines.push(`_… +${v.length - maxRows} filas (RAW_EVIDENCE_COLLECTED_MAX_ROWS)._`);
   }
@@ -232,7 +245,7 @@ const RAW_EVIDENCE_MARKDOWN_KEYS = [
 export function formatRawEvidenceObjectToMarkdown(parsed: Record<string, unknown>): string {
   const parts: string[] = [
     "## Evidencia (raw_evidence — Ariadne ingest)\n",
-    "> Para **JSON MDD ya troceado** (7 claves), usa `responseMode: evidence_first` en `ask_codebase` / UI doc. partida. `raw_evidence` es el bundle determinista del ingest; aquí se **reestructura** en tablas/listas para el LLM.\n",
+    "> Para **JSON MDD ya troceado** (7 claves), usa `responseMode: evidence_first` en `ask_codebase` / UI doc. partida. `raw_evidence` es el bundle determinista del ingest; aquí se **reestructura** en tablas/listas (sin truncar salvo `RAW_EVIDENCE_*` > 0).\n",
   ];
   let any = false;
   for (const k of RAW_EVIDENCE_MARKDOWN_KEYS) {
@@ -246,12 +259,12 @@ export function formatRawEvidenceObjectToMarkdown(parsed: Record<string, unknown
       section = formatCollectedResultsForMarkdown(v);
     } else {
       const body = typeof v === "string" ? v : JSON.stringify(v, null, 2);
-      section = `\`\`\`\n${body.slice(0, 20000)}\n\`\`\``;
+      section = `\`\`\`\n${body}\n\`\`\``;
     }
     parts.push(`### ${k}\n\n${section}`);
   }
   if (!any) {
-    parts.push("### JSON\n\n```json\n" + JSON.stringify(parsed, null, 2).slice(0, 24000) + "\n```");
+    parts.push("### JSON\n\n```json\n" + JSON.stringify(parsed, null, 2) + "\n```");
   }
   return parts.join("\n\n").trim();
 }
@@ -260,7 +273,7 @@ const RAW_EVIDENCE_EMBED_HEAD_RE = /\{\s*"mode"\s*:\s*"raw_evidence"/g;
 
 /**
  * Reemplaza en markdown cualquier objeto JSON embebido `{ "mode": "raw_evidence", ... }` (p. ej. pegado por un LLM en el MDD)
- * por el markdown compacto de `formatRawEvidenceObjectToMarkdown`. Idempotente si ya está formateado (no hay ese patrón).
+ * por el markdown de `formatRawEvidenceObjectToMarkdown`. Idempotente si ya está formateado (no hay ese patrón).
  */
 export function normalizeRawEvidenceJsonBlocksInMarkdown(md: string): string {
   if (!md.includes("raw_evidence")) return md;
