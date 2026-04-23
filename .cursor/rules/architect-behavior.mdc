@@ -5,7 +5,7 @@ globs: apps/api/src/modules/engine/**, apps/api/src/modules/ai/**
 
 # Architect Behavior Rules
 
-**Referencia:** Reglas del Semáforo y despliegue en `docs/THE-FORGE-INDEX.md`.
+**Referencia:** Reglas del Semáforo y despliegue en `docs/notebooklm/THEFORGE-INDEX.md`.
 
 - **Validación Proactiva:** Antes de generar código, verifica si el MDD está en estado "VERDE" según las reglas del Semáforo (§4 del índice).
 - **Resiliencia:** Siempre incluye manejo de errores (`try/catch`) y logs estructurados, especialmente en integraciones con OpenAI y Gemini.

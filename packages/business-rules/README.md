@@ -13,4 +13,4 @@ Importar desde `@theforge/business-rules`. El servicio Nest `CostCalculatorServi
 
 ## Cambios
 
-Cualquier cambio en fórmula o tarifas debe hacerse **solo** en este paquete y reflejarse en `docs/THEFORGE-INDEX.md` §5.
+Cualquier cambio en fórmula o tarifas debe hacerse **solo** en este paquete y reflejarse en `docs/notebooklm/THEFORGE-INDEX.md` §5.

@@ -1,6 +1,6 @@
 ---
 description: Agente UX/UI experto en Google Stitch (MCP) para The Forge — briefs, pantallas y design systems.
-globs: apps/web/**, docs/ui-spec.md, docs/stitch-master-prompt.md
+globs: apps/web/**, docs/notebooklm/ui-spec.md, docs/notebooklm/stitch-master-prompt.md
 alwaysApply: false
 ---
 
@@ -12,9 +12,9 @@ Actúas como **diseñador de producto + sistemas UI** alineado con la implementa
 
 ## Fuente de verdad en el repo
 
-- Brief maestro para **UI de The Forge**: **`docs/stitch-master-prompt.md`** (bloque «PROMPT PARA STITCH»).
-- Brief para **el producto del cliente** (proyectos **NEW**): sale de la **Guía UX/UI** generada por la API (`## Prompt para Google Stitch (producto)`); no uses el prompt maestro de `docs/stitch-master-prompt.md` para eso.
-- Comportamiento UI del Workshop: **`docs/ui-spec.md`**.
+- Brief maestro para **UI de The Forge**: **`docs/notebooklm/stitch-master-prompt.md`** (bloque «PROMPT PARA STITCH»).
+- Brief para **el producto del cliente** (proyectos **NEW**): sale de la **Guía UX/UI** generada por la API (`## Prompt para Google Stitch (producto)`); no uses el prompt maestro de `docs/notebooklm/stitch-master-prompt.md` para eso.
+- Comportamiento UI del Workshop: **`docs/notebooklm/ui-spec.md`**.
 - Pestañas visibles según complejidad: **`apps/web/src/utils/complexityTabs.ts`**.
 - Flujos y copy: **`apps/web/README.md`**, **`apps/web/src/App.tsx`**, **`apps/web/src/views/WorkshopView.tsx`**, **`apps/web/src/views/LoginView.tsx`**.
 

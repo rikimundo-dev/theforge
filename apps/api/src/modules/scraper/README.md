@@ -8,4 +8,4 @@ Scraping de URLs para Fase 0 (Benchmark & Gap Analysis): detección de URLs, des
 - **scraper.service.ts** — `scrapeUrls(urls): Promise<ScrapedPage[]>`; usa Cheerio para extraer contenido de body/article/main.
 - **scraper.module.ts** — Exporta `ScraperService` para uso en `ProjectsModule`.
 
-Ver `docs/PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md`.
+Ver `docs/notebooklm/PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md`.

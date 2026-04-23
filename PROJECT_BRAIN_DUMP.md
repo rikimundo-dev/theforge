@@ -13,7 +13,7 @@
 - **Backend:** NestJS 10, Prisma 5 + PostgreSQL, grafo documental en **FalkorDB** (Cypher), colas **BullMQ** opcionales vía Redis, integración **HTTP JSON-RPC** con MCP externo **AriadneSpecs / TheForge** para código indexado (`THEFORGE_MCP_URL`).
 - **IA:** Patrón **strategy** (`LLMProvider`: OpenAIAdapter / GeminiAdapter); **LangGraph** para grafos de agentes; **AgentSupervisor** como capa de orquestación del chat y la etapa (`Stage`).
 
-**Fuentes canónicas en repo:** `docs/THEFORGE-INDEX.md`, `docs/MCP-ARQUITECTURA-THEFORGE.md`, `docs/STAGE-SDD.md`, `blueprint.md`, `.cursor/skills/theforge/SKILL.md`.
+**Fuentes canónicas en repo:** `docs/notebooklm/THEFORGE-INDEX.md`, `docs/notebooklm/MCP-ARQUITECTURA-THEFORGE.md`, `docs/notebooklm/STAGE-SDD.md`, `blueprint.md`, `.cursor/skills/theforge/SKILL.md`.
 
 ---
 
@@ -202,7 +202,7 @@ flowchart LR
 
 ## 6. Lógica de Negocio Crítica (reglas embebidas)
 
-1. **MDD de 7 secciones:** Orden y semántica acotan semáforo y flujos (ver `docs/THEFORGE-INDEX.md` §4 y `ENTREGABLES-SDD-VALIDACION.md`).
+1. **MDD de 7 secciones:** Orden y semántica acotan semáforo y flujos (ver `docs/notebooklm/THEFORGE-INDEX.md` §4 y `docs/notebooklm/ENTREGABLES-SDD-VALIDACION.md`).
 2. **Semáforo:** ROJO si faltan entidades o `business_core`; AMARILLO con gaps; VERDE checklist completo (~95% precisión según reglas del engine).
 3. **Generar entregables en cascada:** Condicionado a complejidad (`LOW` / `MEDIUM` / `HIGH`) y a semáforo VERDE donde aplica; LEGACY tiene caminos alternos (codebase doc, ingeniería inversa).
 4. **IA agnóstica:** Ningún servicio de negocio debe importar `openai` o `@google/generative-ai` directamente.
@@ -213,7 +213,7 @@ flowchart LR
 
 ## 7. Puntos de Extensión y Refactorización
 
-- **Duplicación documentación vs código:** `docs/THEFORGE-INDEX.md` §6.1 menciona compose “sin Redis BullMQ”; el `docker-compose.yml` actual incluye **theforge-redis-queue** — conviene **alinear docs** con el stack real.
+- **Duplicación documentación vs código:** `docs/notebooklm/THEFORGE-INDEX.md` §6.1 menciona compose “sin Redis BullMQ”; el `docker-compose.yml` actual incluye **theforge-redis-queue** — conviene **alinear docs** con el stack real.
 - **Índice THE-FORGE vs THEFORGE:** Algunos paths históricos (`THE-FORGE-INDEX` eliminado o renombrado a `THEFORGE-INDEX.md`); buscar referencias rotas.
 - **Agentic AI:** LangGraph + checkpoints en Postgres; complejidad alta — candidato a diagramas de secuencia por “tipo de mensaje” y tests de contrato en rutas críticas.
 - **MCP:** Contrato evoluciona (`theforge-mcp-tools-alignment.spec.ts`); mantener `THEFORGE_MCP_CLIENT_ARG_KEYS` sincronizado.
@@ -242,7 +242,7 @@ flowchart LR
 | Cliente MCP | `apps/api/src/modules/theforge/theforge.service.ts` |
 | Legacy | `apps/api/src/modules/legacy-flow/legacy-coordinator.service.ts` |
 | Workshop | `apps/web/src/views/WorkshopView.tsx`, `apps/web/src/store/workshopStore.ts` |
-| Índice arquitectura | `docs/THEFORGE-INDEX.md` |
+| Índice arquitectura | `docs/notebooklm/THEFORGE-INDEX.md` |
 | Docker | `docker-compose.yml`, `.env.example` |
 
 ---

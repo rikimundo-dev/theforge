@@ -37,7 +37,7 @@ Cada petición es un **JSON-RPC 2.0** con `method: "tools/call"` y `params: { na
 
 **Timeout y reintentos:** `THEFORGE_MCP_TIMEOUT_MS` limita la duración de cada `POST` (por defecto **60000** ms). El cliente **no** reintenta automáticamente si hay timeout o error HTTP; una nueva acción del usuario o del flujo dispara otra llamada.
 
-**MCP en el IDE vs API:** El servidor MCP que configures en Cursor/IDE (`~/.cursor/mcp.json`, etc.) es **independiente** de `THEFORGE_MCP_URL` de la API: sirve al editor, no sustituye la variable de entorno del backend. Cómo TheForge separa TheForge, Falkor SDD y un MCP propio hipotético: [`docs/MCP-ARQUITECTURA-THEFORGE.md`](../MCP-ARQUITECTURA-THEFORGE.md).
+**MCP en el IDE vs API:** El servidor MCP que configures en Cursor/IDE (`~/.cursor/mcp.json`, etc.) es **independiente** de `THEFORGE_MCP_URL` de la API: sirve al editor, no sustituye la variable de entorno del backend. Cómo TheForge separa TheForge, Falkor SDD y un MCP propio hipotético: [MCP-ARQUITECTURA-THEFORGE.md](../MCP-ARQUITECTURA-THEFORGE.md).
 
 ---
 

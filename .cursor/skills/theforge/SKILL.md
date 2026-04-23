@@ -7,11 +7,11 @@ description: Guides work on The Forge monorepo (NestJS API, React Vite web, Pris
 
 ## Reference docs
 
-- **Ariadne MCP (legacy / grafo):** `docs/integración theforge/` — espejo de `MCP_HTTPS.md` / SPEC-MCP-001 (`Llamadas-HTTPS-MCP-AriadneSpecs.md`, `SPEC-MCP-001-THEFORGE.md`). API: `THEFORGE_MCP_URL`, `theforge.service.ts`, `ariadne-mcp-scope.util.ts`. Dos redes: token `MCP_AUTH_TOKEN` (cliente→`/mcp`) vs `ARIADNE_API_*` (solo proceso MCP→Nest).
-- **Architecture:** `docs/THEFORGE-INDEX.md` — flujo, IA agnóstica, Semáforo, estimación, Dokploy.
+- **Ariadne MCP (legacy / grafo):** `docs/notebooklm/integracion-theforge/` — espejo de `MCP_HTTPS.md` / SPEC-MCP-001 (`Llamadas-HTTPS-MCP-AriadneSpecs.md`, `SPEC-MCP-001-THEFORGE.md`). API: `THEFORGE_MCP_URL`, `theforge.service.ts`, `ariadne-mcp-scope.util.ts`. Dos redes: token `MCP_AUTH_TOKEN` (cliente→`/mcp`) vs `ARIADNE_API_*` (solo proceso MCP→Nest).
+- **Architecture:** `docs/notebooklm/THEFORGE-INDEX.md` — flujo, IA agnóstica, Semáforo, estimación, Dokploy.
 - **Blueprint:** `blueprint.md` — estructura monorepo, Prisma, módulos AI/engine.
-- **MDD:** El MDD es la Constitución del proyecto (SDD); gobierna Blueprint, Contratos, Infra. Estructura canónica: 7 secciones. **Esqueleto constitución (YAGNI, §4.A antes que §4.B):** `apps/api/src/modules/ai-analysis/prompts/mdd/mdd-constitution-skeleton.md` (`MDD_CONSTITUTION_SKELETON_MARKDOWN` en `load-prompts.ts`). Ver `docs/ENTREGABLES-SDD-VALIDACION.md` §0.
-- **UI:** `docs/ui-spec.md` — Workshop tres columnas, chat, MDD viewer, Semáforo. Brief Google Stitch: `docs/stitch-master-prompt.md`.
+- **MDD:** El MDD es la Constitución del proyecto (SDD); gobierna Blueprint, Contratos, Infra. Estructura canónica: 7 secciones. **Esqueleto constitución (YAGNI, §4.A antes que §4.B):** `apps/api/src/modules/ai-analysis/prompts/mdd/mdd-constitution-skeleton.md` (`MDD_CONSTITUTION_SKELETON_MARKDOWN` en `load-prompts.ts`). Ver `docs/notebooklm/ENTREGABLES-SDD-VALIDACION.md` §0.
+- **UI:** `docs/notebooklm/ui-spec.md` — Workshop tres columnas, chat, MDD viewer, Semáforo. Brief Google Stitch: `docs/notebooklm/stitch-master-prompt.md`.
 - **Rules:** `.cursor/rules/` — tech-stack, architect-behavior, the-forge-flow.
 
 ## Monorepo structure
@@ -33,8 +33,8 @@ packages/config       tsconfig.base, eslint, tailwind
 
 ## Semáforo y estimación
 
-- **Semáforo:** Depende de `ComplexityLevel` (LOW/MEDIUM/HIGH). HIGH: ROJO/AMARILLO/VERDE según MDD JSON + opcional `sddDomainGraphOk` + puertas **Constitución Cursor** si `constitution.template_detected`. Detalle: `docs/THEFORGE-INDEX.md` §4.
-- **Costos:** Fuente única `packages/business-rules` (consumen `CostCalculatorService` y `costCalculator.ts` en web). No alterar fórmula/tarifas sin acuerdo: ver `docs/THEFORGE-INDEX.md` §5. Motor de estimación siempre activo en UI; botón "Generar Entregables" solo en VERDE.
+- **Semáforo:** Depende de `ComplexityLevel` (LOW/MEDIUM/HIGH). HIGH: ROJO/AMARILLO/VERDE según MDD JSON + opcional `sddDomainGraphOk` + puertas **Constitución Cursor** si `constitution.template_detected`. Detalle: `docs/notebooklm/THEFORGE-INDEX.md` §4.
+- **Costos:** Fuente única `packages/business-rules` (consumen `CostCalculatorService` y `costCalculator.ts` en web). No alterar fórmula/tarifas sin acuerdo: ver `docs/notebooklm/THEFORGE-INDEX.md` §5. Motor de estimación siempre activo en UI; botón "Generar Entregables" solo en VERDE.
 
 ## Workshop (frontend)
 

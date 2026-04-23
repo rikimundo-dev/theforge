@@ -1,40 +1,20 @@
 # docs
 
-Documentación de arquitectura y operación de TheForge. **Entrada recomendada:** [THEFORGE-INDEX.md](THEFORGE-INDEX.md).
+Punto de entrada para humanos y agentes. **Arquitectura y producto (NotebookLM):** carpeta **[notebooklm/](notebooklm/README.md)** — ahí vive el índice principal, SDD, MCP, despliegue y planes vigentes.
 
-## Índice principal
+## Enlaces rápidos
 
-| Documento | Uso |
-|-----------|-----|
-| [THEFORGE-INDEX.md](THEFORGE-INDEX.md) | Flujo producto, IA agnóstica, semáforo, estimación MXN, Docker/Dokploy, Prisma, checklist. |
-| [STAGE-SDD.md](STAGE-SDD.md) | **Stage** vs **Project**: MDD/semáforo/estimación por etapa, API aplanada, enlace a Falkor SDD (diagrama ER). |
-| [WORKSHOP-STAGES-IMPLEMENTATION-PLAN.md](WORKSHOP-STAGES-IMPLEMENTATION-PLAN.md) | Plan **front + API**: selector de etapa, nueva etapa, clonado MDD; brechas (estimación, orquestador, chat). |
-| [THEFORGE-QUE-HACE-EL-PROYECTO.md](THEFORGE-QUE-HACE-EL-PROYECTO.md) | Detalle técnico: módulos API, flujos nuevo vs legacy, Relic, entregables. |
-| [MCP-ARQUITECTURA-THEFORGE.md](MCP-ARQUITECTURA-THEFORGE.md) | MCP **AriadneSpecs** (HTTP, código indexado) vs Falkor SDD local vs MCP propio hipotético. Especificación servidor: monorepo Ariadne (`MCP_HTTPS.md`, `mcp_server_specs.md`). |
-| [ENTREGABLES-SDD-VALIDACION.md](ENTREGABLES-SDD-VALIDACION.md) | SDD, conformance, orden de generación en UI. |
-| [THEFORGE-MCP.md](THEFORGE-MCP.md) | Uso del MCP AriadneSpecs desde **Cursor** para doc de cambios en repos indexados. |
-| [APRENDIZAJES.md](APRENDIZAJES.md) | Errores, pivotes, referencias para el equipo. |
-| [THEFORGE-DOCUMENTACION-ESTRATEGICA.md](THEFORGE-DOCUMENTACION-ESTRATEGICA.md) | Tesis de valor / negocio (no técnico). |
+| Necesitas… | Documento |
+|------------|-------------|
+| Visión técnica única (flujo, semáforo, costos, Docker) | [notebooklm/THEFORGE-INDEX.md](notebooklm/THEFORGE-INDEX.md) |
+| Etapas `Stage`, API aplanada, Falkor | [notebooklm/STAGE-SDD.md](notebooklm/STAGE-SDD.md) |
+| Cliente HTTP The Forge ↔ MCP AriadneSpecs | [notebooklm/integracion-theforge/README.md](notebooklm/integracion-theforge/README.md) |
+| Histórico / roadmaps no prioritarios | [archive/README.md](archive/README.md) |
 
-## Carpetas
+## Raíz del monorepo (no están en `docs/`)
 
-| Carpeta | Uso |
-|---------|-----|
-| [integración theforge/](integración%20theforge/README.md) | Cliente HTTP The Forge ↔ MCP AriadneSpecs (alineado a `MCP_HTTPS.md` / SPEC-MCP-001 en repo Ariadne). |
-| [archive/](archive/README.md) | Roadmaps y análisis históricos (no sustituyen al código). |
+- `blueprint.md`, `mdd.md` — especificación de producto viva.
 
-## Planes y especificaciones sueltas
+## Limpieza reciente (2026-04)
 
-| Archivo | Nota |
-|---------|------|
-| [PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md](PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md) | Paso 0: URLs, scraping, deep research. |
-| [PLAN-IMPLEMENTACION-MAXPRIME-A-THEFORGE.md](PLAN-IMPLEMENTACION-MAXPRIME-A-THEFORGE.md) | Sincronizar mejoras del monorepo MaxPrime (constitución/semáforo, parser MDD, estimación en vivo, LangGraph, prompts, web) sin perder auth, business-rules ni cola Redis. |
-| [PLAN-MDD-ARQUITECTO-NO-ACTUALIZA-MODELO.md](PLAN-MDD-ARQUITECTO-NO-ACTUALIZA-MODELO.md) | Post-mortem §3 / merge estructurado (estado: implementado P0–P4). |
-| [MDD-PATRONES-FLUJO.md](MDD-PATRONES-FLUJO.md) | Patrones Manager, delegación, §6/§7. |
-| [ui-spec.md](ui-spec.md) | Especificación UI Workshop (referencia). |
-| [stitch-master-prompt.md](stitch-master-prompt.md) | **Prompt maestro** para Google Stitch (todas las pantallas + variantes). |
-| [generator-workflow.md](generator-workflow.md) | Filosofía Constitution / loop interactivo (inglés). |
-| [ai-agents-dbga.md](ai-agents-dbga.md) | Agentes benchmark / DBGA. |
-| [DEPLOY-DOCKER-NETWORK-POOLS.md](DEPLOY-DOCKER-NETWORK-POOLS.md) | Redes Docker / Dokploy. |
-
-Fuentes de producto en la raíz del repo: `blueprint.md`, `mdd.md`.
+Se **eliminaron** planes ya cubiertos por el código o duplicados: post-mortem §3 implementado, notas sueltas Ariadne+Forge, plan de etapas Workshop desactualizado, plan web TheForge-Web (la integración vive en `apps/api` + `apps/web`). El detalle operativo sigue en **notebooklm** e **archive**.

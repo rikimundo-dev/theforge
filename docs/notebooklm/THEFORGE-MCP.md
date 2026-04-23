@@ -66,7 +66,7 @@ En resumen: **proyecto no en TheForge = trabajar normal, sin TheForge; sugerir i
 | "Cómo funciona X" para la doc | `ask_codebase(question, projectId)` |
 | Mejoras sugeridas con evidencia | `find_similar_implementations`, `semantic_search` |
 
-La **regla de Cursor** `theforge-documentation.mdc` aplica a `docs/**`, `CHANGELOG*` y `APRENDIZAJES.md`: el agente resuelve `projectId` por indicación del usuario (nombre de proyecto), por `.theforge-project` opcional o por match con el workspace; no inventa datos si el grafo devuelve `[NOT_FOUND_IN_GRAPH]`.
+La **regla de Cursor** `theforge-documentation.mdc` aplica a `docs/**` (incl. `docs/notebooklm/`), `CHANGELOG*` y `docs/notebooklm/APRENDIZAJES.md`: el agente resuelve `projectId` por indicación del usuario (nombre de proyecto), por `.theforge-project` opcional o por match con el workspace; no inventa datos si el grafo devuelve `[NOT_FOUND_IN_GRAPH]`.
 
 ---
 

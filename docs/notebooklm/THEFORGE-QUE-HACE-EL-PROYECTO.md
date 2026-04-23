@@ -32,7 +32,7 @@ En ambos casos el **MDD es la Constitución**: todo se valida contra él (SDD). 
 │   ├── database/     # Prisma schema (Project, Stage, Session, Estimation→Stage, etc.) y client
 │   ├── shared-types/ # DTOs e interfaces compartidas (Zod)
 │   └── config/       # TypeScript, ESLint, Tailwind base
-├── docs/             # Documentación (índice, planes, integración AriadneSpecs)
+├── docs/             # docs/README.md + notebooklm/ (corpus) + archive/ (histórico)
 ├── blueprint.md      # Guía de implementación técnica (Constitución → plan)
 ├── mdd.md            # MDD del producto TheForge (7 secciones)
 ├── docker-compose.yml
@@ -63,9 +63,9 @@ En ambos casos el **MDD es la Constitución**: todo se valida contra él (SDD). 
 
 ## 6. Integración AriadneSpecs (proyectos legacy)
 
-- **AriadneSpecs** indexa repos/proyectos en un grafo (FalkorDB) y expone un MCP Streamable HTTP. The Forge llama al MCP por **HTTP** (JSON-RPC `tools/call`, headers `MCP-Protocol-Version`, Bearer o `X-M2M-Token`) desde `TheForgeService`. Contrato: monorepo Ariadne (`MCP_HTTPS.md`, `mcp_server_specs.md`); resumen cliente: `docs/integración theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md`.
+- **AriadneSpecs** indexa repos/proyectos en un grafo (FalkorDB) y expone un MCP Streamable HTTP. The Forge llama al MCP por **HTTP** (JSON-RPC `tools/call`, headers `MCP-Protocol-Version`, Bearer o `X-M2M-Token`) desde `TheForgeService`. Contrato: monorepo Ariadne (`MCP_HTTPS.md`, `mcp_server_specs.md`); resumen cliente: [integracion-theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md](./integracion-theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md).
 - **Flujo:** Usuario crea proyecto legacy eligiendo un **proyecto** o **repositorio** indexado → se guarda **`theforgeProjectId`**. En «Modificación» describe el cambio → `get_modification_plan` devuelve `filesToModify` (path + repoId) y `questionsToRefine` → el usuario responde (con sugerencias desde `ask_codebase`) → al generar MDD se usa `validate_before_edit` (o `get_legacy_impact`), `get_file_content` y varias `ask_codebase` para contexto. Luego misma cascada de entregables que en proyecto nuevo.
-- **Herramientas MCP usadas:** list_known_projects, get_modification_plan, ask_codebase, validate_before_edit, get_file_content, get_legacy_impact; disponibles get_contract_specs, get_component_graph. Ver `docs/integración theforge/HERRAMIENTAS-MCP-THEFORGE.md`.
+- **Herramientas MCP usadas:** list_known_projects, get_modification_plan, ask_codebase, validate_before_edit, get_file_content, get_legacy_impact; disponibles get_contract_specs, get_component_graph. Ver [integracion-theforge/HERRAMIENTAS-MCP-THEFORGE.md](./integracion-theforge/HERRAMIENTAS-MCP-THEFORGE.md).
 
 ---
 
@@ -81,7 +81,7 @@ Orden de generación (cuando el proyecto está en VERDE o equivalente para legac
 6. **Guía UX/UI**, **Contratos API**, **Flujos de lógica**, **Infraestructura** — documentos dedicados.
 7. **Tasks** — tareas de implementación.
 
-Cada entregable se valida (Revisor) y se persiste en el proyecto. La estructura canónica del MDD y el mapeo SDD están en `docs/ENTREGABLES-SDD-VALIDACION.md`.
+Cada entregable se valida (Revisor) y se persiste en el proyecto. La estructura canónica del MDD y el mapeo SDD están en [ENTREGABLES-SDD-VALIDACION.md](./ENTREGABLES-SDD-VALIDACION.md).
 
 ---
 
@@ -97,12 +97,12 @@ Cada entregable se valida (Revisor) y se persiste en el proyecto. La estructura 
 
 | Documento | Uso |
 |-----------|-----|
-| **docs/THEFORGE-INDEX.md** | Índice de arquitectura: flujo, IA, semáforo, estimación, Docker. |
-| **blueprint.md** | Guía de implementación técnica (Constitución → plan). |
-| **mdd.md** | MDD del producto TheForge (7 secciones). |
-| **docs/THEFORGE-DOCUMENTACION-ESTRATEGICA.md** | Valor ejecutivo (tesis, negocio, ROI). |
-| **docs/ENTREGABLES-SDD-VALIDACION.md** | Estructura canónica del MDD, mapeo SDD, validación frente a Architecting Agentic Systems. |
-| **docs/integración theforge/** | Cliente The Forge ↔ MCP AriadneSpecs, herramientas, flujo legacy. |
+| **THEFORGE-INDEX.md** (esta carpeta) | Índice de arquitectura: flujo, IA, semáforo, estimación, Docker. |
+| **../../blueprint.md** | Guía de implementación técnica (Constitución → plan). |
+| **../../mdd.md** | MDD del producto TheForge (7 secciones). |
+| **THEFORGE-DOCUMENTACION-ESTRATEGICA.md** | Valor ejecutivo (tesis, negocio, ROI). |
+| **ENTREGABLES-SDD-VALIDACION.md** | Estructura canónica del MDD, mapeo SDD, validación frente a Architecting Agentic Systems. |
+| **integracion-theforge/** | Cliente The Forge ↔ MCP AriadneSpecs, herramientas, flujo legacy. |
 
 ---
 

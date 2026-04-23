@@ -79,9 +79,9 @@ En el **Workshop**, el **selector de etapa** (cuando hay más de una) define el 
 |---------|----------------|
 | **Varias etapas en un proyecto** | Releases o líneas de diseño paralelas con MDD separado por etapa (selector + API `stageId`). |
 | **Varios proyectos** | Aislar por completo historial, chat y alcance cuando no quieres compartir nada. |
-| **API / scripts** | `PATCH` con `stageId`, creación de `Stage` vía REST; detalle en `docs/STAGE-SDD.md`. |
+| **API / scripts** | `PATCH` con `stageId`, creación de `Stage` vía REST; detalle en `docs/notebooklm/STAGE-SDD.md`. |
 
-**Plan técnico** de etapas Workshop: `docs/WORKSHOP-STAGES-IMPLEMENTATION-PLAN.md`.
+**Etapas Workshop** (selector, REST, MDD por `stageId`): `docs/notebooklm/STAGE-SDD.md`.
 
 ---
 
@@ -94,4 +94,4 @@ En el **Workshop**, el **selector de etapa** (cuando hay más de una) define el 
 
 ## 8. Más documentación
 
-En el repositorio del producto: `docs/STAGE-SDD.md`, `docs/THEFORGE-INDEX.md`, `docs/ENTREGABLES-SDD-VALIDACION.md` (flujo SDD y validación).
+En el repositorio del producto: `docs/notebooklm/STAGE-SDD.md`, `docs/notebooklm/THEFORGE-INDEX.md`, `docs/notebooklm/ENTREGABLES-SDD-VALIDACION.md` (flujo SDD y validación).

@@ -58,4 +58,4 @@ El servidor Ariadne puede devolver con **`evidence_first`** un **JSON estructura
 
 - **Catálogo completo de herramientas:** [HERRAMIENTAS-MCP-THEFORGE.md](./HERRAMIENTAS-MCP-THEFORGE.md) (todas las herramientas MCP y uso en TheForge).
 - Especificación completa del MCP: guía “Ayuda — MCP AriadneSpecs” (theforge.obp.mx).
-- Configuración en TheForge: `docs/THEFORGE-MCP.md`, `apps/api/src/modules/theforge/theforge.service.ts`.
+- Configuración en TheForge: [THEFORGE-MCP.md](../THEFORGE-MCP.md), `apps/api/src/modules/theforge/theforge.service.ts`.

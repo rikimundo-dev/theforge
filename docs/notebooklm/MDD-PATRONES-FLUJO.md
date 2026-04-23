@@ -69,4 +69,4 @@ flowchart LR
 - Cuaderno NotebookLM: _Architecting Agentic Systems: Frameworks, Patterns, and Advanced Workflows_.
 - Cuaderno NotebookLM: _Specification-Driven Development and the Evolution of AI Engineering_.
 - Cuaderno: _Arquitectura de Prompts y Patrones_.
-- Repo: [plan-mdd-planner-executor.md](archive/plan-mdd-planner-executor.md), [ENTREGABLES-SDD-VALIDACION.md](ENTREGABLES-SDD-VALIDACION.md), [apps/api/src/modules/ai-analysis/README.md](../apps/api/src/modules/ai-analysis/README.md).
+- Repo: [plan-mdd-planner-executor.md](../archive/plan-mdd-planner-executor.md), [ENTREGABLES-SDD-VALIDACION.md](ENTREGABLES-SDD-VALIDACION.md), [apps/api/src/modules/ai-analysis/README.md](../../apps/api/src/modules/ai-analysis/README.md).

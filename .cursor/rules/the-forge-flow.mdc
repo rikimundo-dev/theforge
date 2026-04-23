@@ -6,9 +6,9 @@ alwaysApply: false
 
 # The Forge — Flujo, IA y Despliegue
 
-**Índice de arquitectura:** Consultar `docs/THE-FORGE-INDEX.md` para flujo, contrato IA y criterios Dokploy.
+**Índice de arquitectura:** Consultar `docs/notebooklm/THEFORGE-INDEX.md` para flujo, contrato IA y criterios Dokploy.
 
 - **IA agnóstica:** Contrato en adapters (`generateResponse`, `parseChecklist`). Factory por `AI_PROVIDER` (`openai` | `google`). Sin imports de SDKs fuera de `ai/adapters/`.
 - **Dokploy:** `docker-compose.yml` con api, web, db, redis. Dockerfiles multi-stage. Env documentados en el índice.
-- En cada iteración del chat ve actualizando el archivo de docs/APRENDIZAJES.md
+- En cada iteración del chat ve actualizando el archivo de `docs/notebooklm/APRENDIZAJES.md`
 - Siempre , al terminar, valida tus cambios del backend con un build

@@ -5,7 +5,7 @@ TheForge **no** implementa el mismo protocolo ni el mismo despliegue que el MCP 
 ## 1. MCP AriadneSpecs (código indexado) — **ajeno** al repo The Forge
 
 - **Qué es:** Servidor **AriadneSpecs Oracle** (MCP), p. ej. JSON-RPC **Streamable HTTP** sobre `POST https://<host>/mcp`. Indexa el **código** del cliente en FalkorDB + ingest. Especificación: monorepo **Ariadne** — `docs/MCP_HTTPS.md` (contrato cliente HTTP), `docs/mcp_server_specs.md` (SPEC-MCP-001, herramientas, `projectId` proyecto vs `roots[].id`), `docs/MCP_AYUDA.md` (Cursor, `.ariadne-project`, troubleshooting).
-- **Cómo lo usa The Forge:** La API Nest (`TheForgeService`) hace **HTTP POST** a `THEFORGE_MCP_URL` con JSON-RPC `tools/call`, headers `MCP-Protocol-Version: 2025-03-26`, `Accept: application/json, text/event-stream` (véase `MCP_HTTPS.md` §3). Herramientas típicas: `list_known_projects`, `get_modification_plan`, `ask_codebase`, `validate_before_edit`, `get_file_content`, `get_legacy_impact`, `semantic_search`, etc. El servidor es **stateless** (no depende de `initialize` entre llamadas). Detalle: [integración theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md](integración%20theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md).
+- **Cómo lo usa The Forge:** La API Nest (`TheForgeService`) hace **HTTP POST** a `THEFORGE_MCP_URL` con JSON-RPC `tools/call`, headers `MCP-Protocol-Version: 2025-03-26`, `Accept: application/json, text/event-stream` (véase `MCP_HTTPS.md` §3). Herramientas típicas: `list_known_projects`, `get_modification_plan`, `ask_codebase`, `validate_before_edit`, `get_file_content`, `get_legacy_impact`, `semantic_search`, etc. El servidor es **stateless** (no depende de `initialize` entre llamadas). Detalle: [integracion-theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md](integracion-theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md).
 - **Autenticación:** `MCP_AUTH_TOKEN` → `Authorization: Bearer`; o `MCP_X_M2M_TOKEN` → header `X-M2M-Token` (alternativa documentada en Ariadne).
 - **Timeouts:** `THEFORGE_MCP_TIMEOUT_MS` (default 60000). El grafo y la latencia son ajenos a nuestro control.
 - **Depuración:** `DEBUG_MCP=1` hace que la API registre cada petición JSON-RPC y la respuesta cruda del MCP (ver también `DEBUG_MCP_MAX_REQUEST_CHARS` / `DEBUG_MCP_MAX_RESPONSE_CHARS`). En Docker: variable en el servicio `theforge-api`.
@@ -33,4 +33,4 @@ Sería un **servidor MCP distinto** (herramientas sobre el Grafo SDD, proyectos,
 | FalkorDB SDD     | Redis/FalkorDB  | MDD y artefactos SDD      |
 | MCP TheForge (?) | STDIO/HTTP MCP  | Futuro; no es TheForge       |
 
-Ver también: `docs/THEFORGE-MCP.md`, `docs/integración theforge/`.
+Ver también: [THEFORGE-MCP.md](./THEFORGE-MCP.md), carpeta [integracion-theforge/](./integracion-theforge/README.md).

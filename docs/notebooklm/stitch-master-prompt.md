@@ -80,4 +80,4 @@ Cuando termines, devuelve un **resumen** de decisiones de diseño y cualquier su
 
 Si el equipo genera pantallas desde el IDE: un proyecto Stitch → una llamada de generación **por pantalla** (o prompts iterativos), con `deviceType` **DESKTOP** para Workshop desktop y **MOBILE** para la variante móvil. Después, aplicar el mismo **design system** a todas las pantallas para unificar tokens.
 
-Referencias del repo: `docs/ui-spec.md`, `apps/web/README.md`, `apps/web/src/utils/complexityTabs.ts`.
+Referencias del repo: `docs/notebooklm/ui-spec.md`, `apps/web/README.md`, `apps/web/src/utils/complexityTabs.ts`.

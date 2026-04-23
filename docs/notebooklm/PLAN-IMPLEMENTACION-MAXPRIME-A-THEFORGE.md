@@ -55,7 +55,7 @@ Diff actual (resumen):
 1. Mantenga el criterio de negocio de MaxPrime para checklist clásico + constitución.
 2. Preserve el bypass/atenuación por **grafo de dominio OK** de The Forge donde ya esté cableado (evitar regresión en proyectos que dependen de esa señal).
 
-Documentar la regla combinada en `docs/THEFORGE-INDEX.md` (sección semáforo) cuando se implemente.
+Documentar la regla combinada en `docs/notebooklm/THEFORGE-INDEX.md` (sección semáforo) cuando se implemente.
 
 ### 2.4 Estimación en vivo (`estimation.service.ts`)
 
@@ -138,7 +138,7 @@ Opcional: MaxPrime y The Forge solo levantan Postgres + Falkor. The Forge en pro
 
 1. Fusionar `SemaphoreService`: reglas MaxPrime (MEDIUM estricto, HIGH + constitución) **+** `sddDomainGraphOk` de The Forge.
 2. Revisar todos los call sites que arman `SemaphoreEvaluationInput` (p. ej. tras ingest SDD) para pasar `sddDomainGraphOk` cuando corresponda.
-3. Actualizar documentación del semáforo en `docs/THEFORGE-INDEX.md`.
+3. Actualizar documentación del semáforo en `docs/notebooklm/THEFORGE-INDEX.md`.
 
 **Criterio de hecho:** mismos casos de prueba mental que en MaxPrime (plantilla §1 nueva → AMARILLO si faltan señales); proyectos que ya usan alivio por grafo no quedan peor que hoy.
 

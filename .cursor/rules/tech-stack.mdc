@@ -6,7 +6,7 @@ alwaysApply: false
 
 # Tech Stack & Architecture Rules
 
-- **Monorepo:** Usar estrictamente la estructura de Turborepo definida en `docs/THE-FORGE-INDEX.md` (y `blueprint.md`).
+- **Monorepo:** Usar estrictamente la estructura de Turborepo definida en `docs/notebooklm/THEFORGE-INDEX.md` (y `blueprint.md`).
 - **Backend:** NestJS con arquitectura modular. Prohibido usar lógica de negocio en Controllers; usar Services.
 - **Frontend:** React + Tailwind CSS. Priorizar componentes funcionales y Hooks personalizados.
 - **Type Safety:** - Prohibido el uso de `any`.

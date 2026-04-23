@@ -72,7 +72,7 @@ Revisión de la generación de MDD frente al patrón **Planner–Executor** desc
 ### 4.5 Documentar la arquitectura actual como “Supervisor + especialistas”
 
 - **Objetivo:** Dejar claro que el diseño actual es “Manager (supervisor) + nodos especialistas” y no “Planner + Executor” en sentido estricto, y en qué puntos se acerca o se desvía del patrón del cuaderno.
-- **Cambios:** Actualizar `apps/api/src/modules/ai-analysis/README.md` (o docs/ai-agents-dbga.md) con una subsección “Patrón Planner–Executor” que enlace a este plan y resuma: qué tenemos (re-planning por score, herramientas por nodo, Manager sin tools), qué no tenemos (plan explícito, re-planning por fallo, least privilege por paso), y referencias a este plan para futuras mejoras.
+- **Cambios:** Actualizar `apps/api/src/modules/ai-analysis/README.md` (o `docs/notebooklm/ai-agents-dbga.md`) con una subsección “Patrón Planner–Executor” que enlace a este plan y resuma: qué tenemos (re-planning por score, herramientas por nodo, Manager sin tools), qué no tenemos (plan explícito, re-planning por fallo, least privilege por paso), y referencias a este plan para futuras mejoras.
 
 ### 4.6 Priorización sugerida
 

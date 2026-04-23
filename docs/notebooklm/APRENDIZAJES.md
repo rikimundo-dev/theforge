@@ -19,17 +19,17 @@ Conocimiento y experiencia del proyecto para traspaso a juniors: qué pedimos, c
 - **Workshop:** Vista 3 columnas (chat, MDD viewer, Semáforo + costos); estado Zustand; API `POST /ai-orchestrator/chat` y streams de ai-analysis.
 - **Etapas (Stage):** El MDD, el semáforo (`Status`), `precisionScore` y `Estimation` viven en **Prisma `Stage`** (no en `Project`). El API aplanó esos campos en `GET/PATCH /projects` para no romper el front; `PATCH` puede llevar `stageId`. Falkor SDD se ingiere por `stageId` (nodos `Stage`, `MDD_Section`, `DB_Entity`, `API_Endpoint`). Documentación: [STAGE-SDD.md](STAGE-SDD.md), [THEFORGE-INDEX.md §7](THEFORGE-INDEX.md), [MCP-ARQUITECTURA-THEFORGE.md](MCP-ARQUITECTURA-THEFORGE.md).
 
-**Referencias:** [THEFORGE-INDEX.md](THEFORGE-INDEX.md), [../mdd.md](../mdd.md), [../blueprint.md](../blueprint.md).
+**Referencias:** [THEFORGE-INDEX.md](THEFORGE-INDEX.md), [../../mdd.md](../../mdd.md), [../../blueprint.md](../../blueprint.md).
 
 ---
 
 ## 3. Cómo lo pedimos (patrones que funcionan)
 
-- **Planes por feature:** Documentos `docs/PLAN-*.md` (alcance, capas, dependencias, orden de implementación). Ejemplos: [PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md](archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md) (referencia en archivo), [PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md](PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md).
+- **Planes por feature:** Markdown en `docs/notebooklm/` (alcance, capas, dependencias). Ejemplos: [../archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md](../archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md), [PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md](PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md).
 - **Reglas de Cursor:** `.cursor/rules/` (the-forge-flow, architect-behavior, tech-stack, nestjs, langchain, **theforge-documentation**) para que el agente respete IA agnóstica, Semáforo, estimación, Docker y use TheForge para doc de cambios/mejoras.
-- **Skill del proyecto:** [.cursor/skills/theforge/SKILL.md](../.cursor/skills/theforge/SKILL.md) como referencia única (índice, monorepo, IA, Workshop, checklist).
+- **Skill del proyecto:** [.cursor/skills/theforge/SKILL.md](../../.cursor/skills/theforge/SKILL.md) como referencia única (índice, monorepo, IA, Workshop, checklist).
 - **Documentación de cambios con TheForge:** Si se pide changelog, doc de refactor o mejoras, el agente debe usar el MCP AriadneSpecs (grafo indexado) con `projectId` de `.theforge-project`. Ver [THEFORGE-MCP.md](THEFORGE-MCP.md).
-- **Especificaciones de producto:** [../mdd.md](../mdd.md), [../blueprint.md](../blueprint.md), [ui-spec.md](ui-spec.md).
+- **Especificaciones de producto:** [../../mdd.md](../../mdd.md), [../../blueprint.md](../../blueprint.md), [ui-spec.md](ui-spec.md).
 
 ### Ejemplos de prompts que funcionaron
 
@@ -106,7 +106,7 @@ _Rellenar: ejemplos de "pedí X en una frase y el agente hizo Y"; p. ej. "Para c
 
 - **Manager como entrevistador de estados**
 
-  - Manager no es "pasapapeles": Caso 1 (sin Bench ni MDD) → ask_initial_topic; Caso 2 (refinamiento) → entrevista guiada por auditorFeedback; Caso 3 (con Benchmark) → delegar a especialistas. Documentado en [apps/api/src/modules/ai-analysis/README.md](../apps/api/src/modules/ai-analysis/README.md) y prompts `mdd/manager-prompt.md`.
+  - Manager no es "pasapapeles": Caso 1 (sin Bench ni MDD) → ask_initial_topic; Caso 2 (refinamiento) → entrevista guiada por auditorFeedback; Caso 3 (con Benchmark) → delegar a especialistas. Documentado en [apps/api/src/modules/ai-analysis/README.md](../../apps/api/src/modules/ai-analysis/README.md) y prompts `mdd/manager-prompt.md`.
 
 - **Manager con múltiples flujos (clarifier_only + sections)**
 
@@ -207,7 +207,7 @@ _Rellenar con datos reales._
 ## 7. Cómo mantener APRENDIZAJES.md actualizado
 
 - **Al cerrar una sesión de trabajo relevante:** Añadir una entrada en "Errores y soluciones", "Pivotes" o "Tiempo" con: fecha (opcional), qué se hizo, qué falló (si aplica), qué se cambió, tiempo aproximado.
-- **Nota para Cursor:** Al terminar una sesión significativa en TheForge, actualizar `docs/APRENDIZAJES.md` con errores, pivotes o tiempos si los hubo.
+- **Nota para Cursor:** Al terminar una sesión significativa en TheForge, actualizar `docs/notebooklm/APRENDIZAJES.md` con errores, pivotes o tiempos si los hubo.
 
 ---
 
@@ -219,5 +219,5 @@ _Rellenar con datos reales._
 | Docs / archivo      | [archive/README.md](archive/README.md) — roadmaps y análisis no prioritarios              |
 | Plan MDD structured | [archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md](archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md) |
 | Plan Fase 0         | [PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md](PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md)                |
-| Skill TheForge     | [.cursor/skills/theforge/SKILL.md](../.cursor/skills/theforge/SKILL.md)                     |
-| Flujo MDD y agentes | [apps/api/src/modules/ai-analysis/README.md](../apps/api/src/modules/ai-analysis/README.md) |
+| Skill TheForge     | [.cursor/skills/theforge/SKILL.md](../../.cursor/skills/theforge/SKILL.md)                     |
+| Flujo MDD y agentes | [apps/api/src/modules/ai-analysis/README.md](../../apps/api/src/modules/ai-analysis/README.md) |

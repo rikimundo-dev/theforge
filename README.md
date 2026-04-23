@@ -56,6 +56,6 @@ Variables de entorno: referencia completa (qué hace cada una, valores posibles 
 
 ## Docs
 
-- [Índice de arquitectura](docs/THEFORGE-INDEX.md)
+- [Índice de arquitectura](docs/notebooklm/THEFORGE-INDEX.md)
 - [Blueprint](blueprint.md)
 - [MDD](mdd.md)

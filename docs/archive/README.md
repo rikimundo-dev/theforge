@@ -1,6 +1,6 @@
 # Archivo de documentación
 
-Material **no prioritario para el día a día** del repo: roadmaps aspiracionales y análisis de patrones que no sustituyen al código ni a [THEFORGE-INDEX.md](../THEFORGE-INDEX.md).
+Material **no prioritario para el día a día** del repo: roadmaps aspiracionales y análisis de patrones que no sustituyen al código ni al corpus principal en [../notebooklm/](../notebooklm/README.md) (p. ej. [THEFORGE-INDEX.md](../notebooklm/THEFORGE-INDEX.md)).
 
 | Archivo | Contenido |
 |--------|-----------|

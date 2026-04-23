@@ -38,7 +38,7 @@ Cursor debe tener configurado el servidor MCP de AriadneSpecs. Opciones típicas
 
 Sin esta conexión, las herramientas no están disponibles.
 
-**Uso desde la API:** La conectividad con TheForge desde el backend requiere un **token de autenticación**. Se configura con la variable de entorno `MCP_AUTH_TOKEN` (inyectada en Docker); el cliente debe enviarlo en cada petición al MCP (header `Authorization: Bearer <token>`). No commitear el token; solo en `.env` o secrets del despliegue. Ver `PLAN-IMPLEMENTACION-THEFORGE-WEB.md`.
+**Uso desde la API:** La conectividad con TheForge desde el backend requiere un **token de autenticación**. Se configura con la variable de entorno `MCP_AUTH_TOKEN` (inyectada en Docker); el cliente debe enviarlo en cada petición al MCP (header `Authorization: Bearer <token>`). No commitear el token; solo en `.env` o secrets del despliegue. Ver código en `apps/api/src/modules/theforge/` y [THEFORGE-COMO-INVOCA-THEFORGE-MCP.md](./THEFORGE-COMO-INVOCA-THEFORGE-MCP.md).
 
 ### 2.2 Decirle a Cursor qué proyecto (grafo) usar: `projectId`
 

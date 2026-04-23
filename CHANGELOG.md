@@ -25,7 +25,7 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 - **`LegacyCoordinatorService`**: inyección de `GraphMemoryService`; manejo de `ConflictException` para el gate índice/SDD.
 - **`AiOrchestratorService`**: depende de puertos `IOrchestratorProjectsPort` / `IOrchestratorTheForgePort` en lugar de clases concretas.
 - **`ProjectsModule` / `TheForgeModule`**: exportan tokens de puerto para consumo del orquestador.
-- **Documentación**: actualizaciones en `docs/THEFORGE-INDEX.md`, `docs/LEGACY-EVIDENCE-CONTEXT.md`, skill The Forge; ajustes en `docker-compose.yml`, `vite.config.ts` y paths TS del web según el paquete compartido.
+- **Documentación**: actualizaciones en `docs/notebooklm/THEFORGE-INDEX.md`, `docs/notebooklm/LEGACY-EVIDENCE-CONTEXT.md`, skill The Forge; ajustes en `docker-compose.yml`, `vite.config.ts` y paths TS del web según el paquete compartido.
 
 ### Fixed
 
