@@ -27,6 +27,19 @@ function sessionHistoryToLlm(history: ChatMessage[]): LlmChatMessage[] {
   }));
 }
 
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Gemini / Vertex suelen devolver 429 con mensaje "Resource exhausted" o status en el error. */
+function isGeminiRateLimitError(err: unknown): boolean {
+  if (err && typeof err === "object" && "status" in err && (err as { status?: number }).status === 429) {
+    return true;
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  return /429|Too Many Requests|Resource exhausted/i.test(msg);
+}
+
 @Injectable()
 export class SessionsService {
   constructor(
@@ -510,6 +523,51 @@ export class SessionsService {
     };
   }
 
+  /** Reintentos con backoff ante 429 (welcome disparado al cambiar de tab puede encadenar peticiones). */
+  private async invokeWelcomeLlmWithRetries(
+    syntheticPrompt: string,
+    activeTab?: string,
+  ): Promise<string> {
+    const opts: GenerateResponseOptions = { activeTab: activeTab?.trim() || undefined };
+    const maxAttempts = 4;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this.ai.generateResponse(syntheticPrompt, [], opts);
+      } catch (e) {
+        lastErr = e;
+        if (!isGeminiRateLimitError(e) || attempt === maxAttempts - 1) {
+          throw e;
+        }
+        const backoffMs = 700 * 2 ** attempt + Math.floor(Math.random() * 400);
+        console.warn(
+          `[SessionsService.generateWelcome] LLM 429, reintento ${attempt + 2}/${maxAttempts} en ${backoffMs}ms`,
+        );
+        await sleepMs(backoffMs);
+      }
+    }
+    throw lastErr;
+  }
+
+  private static fallbackWelcomeAfterRateLimit(activeTabNorm: string, projectName?: string): string {
+    const name = projectName?.trim();
+    const p = name ? ` **${name}**` : "";
+    const tail =
+      "\n\n_El proveedor de IA devolvió límite temporal de uso; se reintentó varias veces._ Escribe aquí cuando quieras y seguimos, o edita en el panel y usa **Guardar**.";
+    if (activeTabNorm === "brd") {
+      return `Hola${p}. En esta pestaña trabajamos el **BRD de la etapa**: problema, objetivos, alcance, riesgos (markdown en el panel + **Guardar** / **Aprobar BRD**).${tail}`;
+    }
+    if (activeTabNorm === "to-be") {
+      return `Hola${p}. En **Manual To-Be** describes cómo debe **comportarse** el producto o el cambio (flujos, reglas, pantallas). El panel tiene **Guardar** / **Aprobar To-Be**; aquí refinamos por chat.${tail}`;
+    }
+    if (activeTabNorm === "ux-ui-guide") {
+      return `Hola${p}. Trabajaremos la **Guía UX/UI** (estilo, tokens, accesibilidad, etc.).${tail}`;
+    }
+    if (activeTabNorm === "benchmark") {
+      return `Hola${p}. En **Paso 0** refinamos el benchmark y las brechas.${tail}`;
+    }
+    return `Hola${p}. Continuamos cuando quieras con el documento activo.${tail}`;
+  }
 
   /**
    * Genera mensaje de bienvenida (y primera pregunta si no hay contenido, o continuación si ya hay MDD/historial)
@@ -712,7 +770,21 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
       syntheticPrompt += toBeWelcomeExtras;
     }
 
-    const response = await this.ai.generateResponse(syntheticPrompt, []);
+    const activeTabForLlm = context.activeTab?.trim() || undefined;
+    let response: string;
+    try {
+      response = await this.invokeWelcomeLlmWithRetries(syntheticPrompt, activeTabForLlm);
+    } catch (err) {
+      if (isGeminiRateLimitError(err)) {
+        const at = (context.activeTab ?? "mdd").trim().toLowerCase();
+        console.warn(
+          "[SessionsService.generateWelcome] LLM 429 tras reintentos; mensaje estático de bienvenida.",
+        );
+        response = SessionsService.fallbackWelcomeAfterRateLimit(at, context.projectName);
+      } else {
+        throw err;
+      }
+    }
     const mddSplit = this.parser.splitMddAndChat(response);
     const uxSplit = this.parser.splitUxUiGuideAndChat(response);
     const brdWelcomeSplit = this.parser.splitDocAndChat(response, "BRD");
