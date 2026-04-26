@@ -32,3 +32,5 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+state.db-wal
+sessions/session_20260426_132533_e5ceb0.json
