@@ -17,6 +17,12 @@ const verifyOtpSchema = z
   })
   .strict();
 
+const mcpLoginSchema = z
+  .object({
+    secret: z.string().min(1),
+  })
+  .strict();
+
 function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
   const r = schema.safeParse(body);
   if (!r.success) {
@@ -43,5 +49,12 @@ export class AuthController {
   verify(@Body() body: unknown) {
     const parsed = parseBody(verifyOtpSchema, body);
     return this.auth.verifyOtp(parsed.code);
+  }
+
+  @Post("mcp-login")
+  @HttpCode(200)
+  mcpLogin(@Body() body: unknown) {
+    const parsed = parseBody(mcpLoginSchema, body);
+    return this.auth.mcpLogin(parsed.secret);
   }
 }

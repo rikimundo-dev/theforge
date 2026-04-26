@@ -178,4 +178,24 @@ export class AuthService {
       user: { email: user.email, role: ADMIN_ROLE },
     };
   }
+
+  /**
+   * MCP M2M login: intercambia un secreto compartido por un JWT.
+   * El MCP server envía MCP_M2M_SECRET y recibe un token con role "mcp".
+   */
+  async mcpLogin(secret: string): Promise<{ accessToken: string }> {
+    const expected = this.config.get<string>("MCP_M2M_SECRET");
+    if (!expected) {
+      throw new UnauthorizedException("MCP M2M no configurado (MCP_M2M_SECRET)");
+    }
+    if (secret !== expected) {
+      throw new UnauthorizedException("Secreto MCP inválido");
+    }
+    const accessToken = await this.jwt.signAsync({
+      sub: "mcp-server",
+      email: "mcp@theforge.internal",
+      role: "mcp",
+    });
+    return { accessToken };
+  }
 }
