@@ -168,8 +168,8 @@ services:
   # Hermes se conecta vía URL (StreamableHTTP) en lugar de stdio local
   theforge-mcp:
     build:
-      context: .
-      dockerfile: packages/mcp-server/Dockerfile
+      context: packages/mcp-server
+      dockerfile: Dockerfile
     container_name: theforge-mcp
     networks:
       - default

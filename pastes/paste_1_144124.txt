@@ -1,0 +1,673 @@
+Initializing deployment
+Cloning Repo bitbucket.org/jacorrea/theforge.git to /etc/dokploy/compose/personales-jorge-theforge-burqre/code: ✅
+Cloning into '/etc/dokploy/compose/personales-jorge-theforge-burqre/code'...
+remote: Enumerating objects: 1328, done.
+remote: Counting objects:   0% (1/1328)        
+remote: Counting objects:   1% (14/1328)        
+remote: Counting objects:   2% (27/1328)        
+remote: Counting objects:   3% (40/1328)        
+remote: Counting objects:   4% (54/1328)        
+remote: Counting objects:   5% (67/1328)        
+remote: Counting objects:   6% (80/1328)        
+remote: Counting objects:   7% (93/1328)        
+remote: Counting objects:   8% (107/1328)        
+remote: Counting objects:   9% (120/1328)        
+remote: Counting objects:  10% (133/1328)        
+remote: Counting objects:  11% (147/1328)        
+remote: Counting objects:  12% (160/1328)        
+remote: Counting objects:  13% (173/1328)        
+remote: Counting objects:  14% (186/1328)        
+remote: Counting objects:  15% (200/1328)        
+remote: Counting objects:  16% (213/1328)        
+remote: Counting objects:  17% (226/1328)        
+remote: Counting objects:  18% (240/1328)        
+remote: Counting objects:  19% (253/1328)        
+remote: Counting objects:  20% (266/1328)        
+remote: Counting objects:  21% (279/1328)        
+remote: Counting objects:  22% (293/1328)        
+remote: Counting objects:  23% (306/1328)        
+remote: Counting objects:  24% (319/1328)        
+remote: Counting objects:  25% (332/1328)        
+remote: Counting objects:  26% (346/1328)        
+remote: Counting objects:  27% (359/1328)        
+remote: Counting objects:  28% (372/1328)        
+remote: Counting objects:  29% (386/1328)        
+remote: Counting objects:  30% (399/1328)        
+remote: Counting objects:  31% (412/1328)        
+remote: Counting objects:  32% (425/1328)        
+remote: Counting objects:  33% (439/1328)        
+remote: Counting objects:  34% (452/1328)        
+remote: Counting objects:  35% (465/1328)        
+remote: Counting objects:  36% (479/1328)        
+remote: Counting objects:  37% (492/1328)        
+remote: Counting objects:  38% (505/1328)        
+remote: Counting objects:  39% (518/1328)        
+remote: Counting objects:  40% (532/1328)        
+remote: Counting objects:  41% (545/1328)        
+remote: Counting objects:  42% (558/1328)        
+remote: Counting objects:  43% (572/1328)        
+remote: Counting objects:  44% (585/1328)        
+remote: Counting objects:  45% (598/1328)        
+remote: Counting objects:  46% (611/1328)        
+remote: Counting objects:  47% (625/1328)        
+remote: Counting objects:  48% (638/1328)        
+remote: Counting objects:  49% (651/1328)        
+remote: Counting objects:  50% (664/1328)        
+remote: Counting objects:  51% (678/1328)        
+remote: Counting objects:  52% (691/1328)        
+remote: Counting objects:  53% (704/1328)        
+remote: Counting objects:  54% (718/1328)        
+remote: Counting objects:  55% (731/1328)        
+remote: Counting objects:  56% (744/1328)        
+remote: Counting objects:  57% (757/1328)        
+remote: Counting objects:  58% (771/1328)        
+remote: Counting objects:  59% (784/1328)        
+remote: Counting objects:  60% (797/1328)        
+remote: Counting objects:  61% (811/1328)        
+remote: Counting objects:  62% (824/1328)        
+remote: Counting objects:  63% (837/1328)        
+remote: Counting objects:  64% (850/1328)        
+remote: Counting objects:  65% (864/1328)        
+remote: Counting objects:  66% (877/1328)        
+remote: Counting objects:  67% (890/1328)        
+remote: Counting objects:  68% (904/1328)        
+remote: Counting objects:  69% (917/1328)        
+remote: Counting objects:  70% (930/1328)        
+remote: Counting objects:  71% (943/1328)        
+remote: Counting objects:  72% (957/1328)        
+remote: Counting objects:  73% (970/1328)        
+remote: Counting objects:  74% (983/1328)        
+remote: Counting objects:  75% (996/1328)        
+remote: Counting objects:  76% (1010/1328)        
+remote: Counting objects:  77% (1023/1328)        
+remote: Counting objects:  78% (1036/1328)        
+remote: Counting objects:  79% (1050/1328)        
+remote: Counting objects:  80% (1063/1328)        
+remote: Counting objects:  81% (1076/1328)        
+remote: Counting objects:  82% (1089/1328)        
+remote: Counting objects:  83% (1103/1328)        
+remote: Counting objects:  84% (1116/1328)        
+remote: Counting objects:  85% (1129/1328)        
+remote: Counting objects:  86% (1143/1328)        
+remote: Counting objects:  87% (1156/1328)        
+remote: Counting objects:  88% (1169/1328)        
+remote: Counting objects:  89% (1182/1328)        
+remote: Counting objects:  90% (1196/1328)        
+remote: Counting objects:  91% (1209/1328)        
+remote: Counting objects:  92% (1222/1328)        
+remote: Counting objects:  93% (1236/1328)        
+remote: Counting objects:  94% (1249/1328)        
+remote: Counting objects:  95% (1262/1328)        
+remote: Counting objects:  96% (1275/1328)        
+remote: Counting objects:  97% (1289/1328)        
+remote: Counting objects:  98% (1302/1328)        
+remote: Counting objects:  99% (1315/1328)        
+remote: Counting objects: 100% (1328/1328)        
+remote: Counting objects: 100% (1328/1328), done.
+remote: Compressing objects:   0% (1/1184)        
+remote: Compressing objects:   1% (12/1184)        
+remote: Compressing objects:   2% (24/1184)        
+remote: Compressing objects:   3% (36/1184)        
+remote: Compressing objects:   4% (48/1184)        
+remote: Compressing objects:   5% (60/1184)        
+remote: Compressing objects:   6% (72/1184)        
+remote: Compressing objects:   7% (83/1184)        
+remote: Compressing objects:   8% (95/1184)        
+remote: Compressing objects:   9% (107/1184)        
+remote: Compressing objects:  10% (119/1184)        
+remote: Compressing objects:  11% (131/1184)        
+remote: Compressing objects:  12% (143/1184)        
+remote: Compressing objects:  13% (154/1184)        
+remote: Compressing objects:  14% (166/1184)        
+remote: Compressing objects:  15% (178/1184)        
+remote: Compressing objects:  16% (190/1184)        
+remote: Compressing objects:  17% (202/1184)        
+remote: Compressing objects:  18% (214/1184)        
+remote: Compressing objects:  19% (225/1184)        
+remote: Compressing objects:  20% (237/1184)        
+remote: Compressing objects:  21% (249/1184)        
+remote: Compressing objects:  22% (261/1184)        
+remote: Compressing objects:  23% (273/1184)        
+remote: Compressing objects:  24% (285/1184)        
+remote: Compressing objects:  25% (296/1184)        
+remote: Compressing objects:  26% (308/1184)        
+remote: Compressing objects:  27% (320/1184)        
+remote: Compressing objects:  28% (332/1184)        
+remote: Compressing objects:  29% (344/1184)        
+remote: Compressing objects:  30% (356/1184)        
+remote: Compressing objects:  31% (368/1184)        
+remote: Compressing objects:  32% (379/1184)        
+remote: Compressing objects:  33% (391/1184)        
+remote: Compressing objects:  34% (403/1184)        
+remote: Compressing objects:  35% (415/1184)        
+remote: Compressing objects:  36% (427/1184)        
+remote: Compressing objects:  37% (439/1184)        
+remote: Compressing objects:  38% (450/1184)        
+remote: Compressing objects:  39% (462/1184)        
+remote: Compressing objects:  40% (474/1184)        
+remote: Compressing objects:  41% (486/1184)        
+remote: Compressing objects:  42% (498/1184)        
+remote: Compressing objects:  43% (510/1184)        
+remote: Compressing objects:  44% (521/1184)        
+remote: Compressing objects:  45% (533/1184)        
+remote: Compressing objects:  46% (545/1184)        
+remote: Compressing objects:  47% (557/1184)        
+remote: Compressing objects:  48% (569/1184)        
+remote: Compressing objects:  49% (581/1184)        
+remote: Compressing objects:  50% (592/1184)        
+remote: Compressing objects:  51% (604/1184)        
+remote: Compressing objects:  52% (616/1184)        
+remote: Compressing objects:  53% (628/1184)        
+remote: Compressing objects:  54% (640/1184)        
+remote: Compressing objects:  55% (652/1184)        
+remote: Compressing objects:  56% (664/1184)        
+remote: Compressing objects:  57% (675/1184)        
+remote: Compressing objects:  58% (687/1184)        
+remote: Compressing objects:  59% (699/1184)        
+remote: Compressing objects:  60% (711/1184)        
+remote: Compressing objects:  61% (723/1184)        
+remote: Compressing objects:  62% (735/1184)        
+remote: Compressing objects:  63% (746/1184)        
+remote: Compressing objects:  64% (758/1184)        
+remote: Compressing objects:  65% (770/1184)        
+remote: Compressing objects:  66% (782/1184)        
+remote: Compressing objects:  67% (794/1184)        
+remote: Compressing objects:  68% (806/1184)        
+remote: Compressing objects:  69% (817/1184)        
+remote: Compressing objects:  70% (829/1184)        
+remote: Compressing objects:  71% (841/1184)        
+remote: Compressing objects:  72% (853/1184)        
+remote: Compressing objects:  73% (865/1184)        
+remote: Compressing objects:  74% (877/1184)        
+remote: Compressing objects:  75% (888/1184)        
+remote: Compressing objects:  76% (900/1184)        
+remote: Compressing objects:  77% (912/1184)        
+remote: Compressing objects:  78% (924/1184)        
+remote: Compressing objects:  79% (936/1184)        
+remote: Compressing objects:  80% (948/1184)        
+remote: Compressing objects:  81% (960/1184)        
+remote: Compressing objects:  82% (971/1184)        
+remote: Compressing objects:  83% (983/1184)        
+remote: Compressing objects:  84% (995/1184)        
+remote: Compressing objects:  85% (1007/1184)        
+remote: Compressing objects:  86% (1019/1184)        
+remote: Compressing objects:  87% (1031/1184)        
+remote: Compressing objects:  88% (1042/1184)        
+remote: Compressing objects:  89% (1054/1184)        
+remote: Compressing objects:  90% (1066/1184)        
+remote: Compressing objects:  91% (1078/1184)        
+remote: Compressing objects:  92% (1090/1184)        
+remote: Compressing objects:  93% (1102/1184)        
+remote: Compressing objects:  94% (1113/1184)        
+remote: Compressing objects:  95% (1125/1184)        
+remote: Compressing objects:  96% (1137/1184)        
+remote: Compressing objects:  97% (1149/1184)        
+remote: Compressing objects:  98% (1161/1184)        
+remote: Compressing objects:  99% (1173/1184)        
+remote: Compressing objects: 100% (1184/1184)        
+remote: Compressing objects: 100% (1184/1184), done.
+Receiving objects:   0% (1/1328)
+Receiving objects:   1% (14/1328)
+Receiving objects:   2% (27/1328)
+Receiving objects:   3% (40/1328)
+Receiving objects:   4% (54/1328)
+Receiving objects:   5% (67/1328)
+Receiving objects:   6% (80/1328)
+Receiving objects:   7% (93/1328)
+Receiving objects:   8% (107/1328)
+Receiving objects:   9% (120/1328)
+Receiving objects:  10% (133/1328)
+Receiving objects:  11% (147/1328)
+Receiving objects:  12% (160/1328)
+Receiving objects:  13% (173/1328)
+Receiving objects:  14% (186/1328)
+Receiving objects:  15% (200/1328)
+Receiving objects:  16% (213/1328)
+Receiving objects:  17% (226/1328)
+Receiving objects:  18% (240/1328)
+Receiving objects:  19% (253/1328)
+Receiving objects:  20% (266/1328)
+Receiving objects:  21% (279/1328)
+Receiving objects:  22% (293/1328)
+Receiving objects:  23% (306/1328)
+Receiving objects:  24% (319/1328)
+Receiving objects:  25% (332/1328)
+Receiving objects:  26% (346/1328)
+Receiving objects:  27% (359/1328)
+Receiving objects:  28% (372/1328)
+Receiving objects:  29% (386/1328)
+Receiving objects:  30% (399/1328)
+Receiving objects:  31% (412/1328)
+Receiving objects:  32% (425/1328)
+Receiving objects:  33% (439/1328)
+Receiving objects:  34% (452/1328)
+Receiving objects:  35% (465/1328)
+Receiving objects:  36% (479/1328)
+Receiving objects:  37% (492/1328)
+Receiving objects:  38% (505/1328)
+Receiving objects:  39% (518/1328)
+Receiving objects:  40% (532/1328)
+Receiving objects:  41% (545/1328)
+Receiving objects:  42% (558/1328)
+Receiving objects:  43% (572/1328)
+Receiving objects:  44% (585/1328)
+Receiving objects:  45% (598/1328)
+Receiving objects:  46% (611/1328)
+Receiving objects:  47% (625/1328)
+Receiving objects:  48% (638/1328)
+Receiving objects:  49% (651/1328)
+Receiving objects:  50% (664/1328)
+Receiving objects:  51% (678/1328)
+Receiving objects:  52% (691/1328)
+Receiving objects:  53% (704/1328)
+Receiving objects:  54% (718/1328)
+Receiving objects:  55% (731/1328)
+Receiving objects:  56% (744/1328)
+Receiving objects:  57% (757/1328)
+Receiving objects:  58% (771/1328)
+Receiving objects:  59% (784/1328)
+Receiving objects:  60% (797/1328)
+Receiving objects:  61% (811/1328)
+Receiving objects:  62% (824/1328)
+Receiving objects:  63% (837/1328)
+Receiving objects:  64% (850/1328)
+Receiving objects:  65% (864/1328)
+Receiving objects:  66% (877/1328)
+Receiving objects:  67% (890/1328)
+Receiving objects:  68% (904/1328)
+Receiving objects:  69% (917/1328)
+Receiving objects:  70% (930/1328)
+Receiving objects:  71% (943/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  72% (957/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  73% (970/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  74% (983/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  75% (996/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  76% (1010/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  77% (1023/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  78% (1036/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  79% (1050/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  80% (1063/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  81% (1076/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  82% (1089/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  83% (1103/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  84% (1116/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  85% (1129/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  86% (1143/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  87% (1156/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  88% (1169/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  89% (1182/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  90% (1196/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  91% (1209/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  92% (1222/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  93% (1236/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  94% (1249/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  95% (1262/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  96% (1275/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  97% (1289/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  98% (1302/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects:  99% (1315/1328), 6.58 MiB | 13.15 MiB/s
+remote: Total 1328 (delta 54), reused 927 (delta 41), pack-reused 0 (from 0)
+Receiving objects: 100% (1328/1328), 6.58 MiB | 13.15 MiB/s
+Receiving objects: 100% (1328/1328), 8.90 MiB | 14.03 MiB/s, done.
+Resolving deltas:   0% (0/54)
+Resolving deltas:   1% (1/54)
+Resolving deltas:   3% (2/54)
+Resolving deltas:   5% (3/54)
+Resolving deltas:   7% (4/54)
+Resolving deltas:   9% (5/54)
+Resolving deltas:  11% (6/54)
+Resolving deltas:  12% (7/54)
+Resolving deltas:  14% (8/54)
+Resolving deltas:  16% (9/54)
+Resolving deltas:  20% (11/54)
+Resolving deltas:  22% (12/54)
+Resolving deltas:  24% (13/54)
+Resolving deltas:  25% (14/54)
+Resolving deltas:  27% (15/54)
+Resolving deltas:  29% (16/54)
+Resolving deltas:  31% (17/54)
+Resolving deltas:  33% (18/54)
+Resolving deltas:  35% (19/54)
+Resolving deltas:  37% (20/54)
+Resolving deltas:  38% (21/54)
+Resolving deltas:  40% (22/54)
+Resolving deltas:  42% (23/54)
+Resolving deltas:  44% (24/54)
+Resolving deltas:  46% (25/54)
+Resolving deltas:  48% (26/54)
+Resolving deltas:  50% (27/54)
+Resolving deltas:  51% (28/54)
+Resolving deltas:  53% (29/54)
+Resolving deltas:  55% (30/54)
+Resolving deltas:  57% (31/54)
+Resolving deltas:  59% (32/54)
+Resolving deltas:  61% (33/54)
+Resolving deltas:  62% (34/54)
+Resolving deltas:  64% (35/54)
+Resolving deltas:  66% (36/54)
+Resolving deltas:  68% (37/54)
+Resolving deltas:  70% (38/54)
+Resolving deltas:  72% (39/54)
+Resolving deltas:  74% (40/54)
+Resolving deltas:  75% (41/54)
+Resolving deltas:  77% (42/54)
+Resolving deltas:  79% (43/54)
+Resolving deltas:  81% (44/54)
+Resolving deltas:  85% (46/54)
+Resolving deltas:  87% (47/54)
+Resolving deltas:  88% (48/54)
+Resolving deltas:  90% (49/54)
+Resolving deltas:  92% (50/54)
+Resolving deltas:  94% (51/54)
+Resolving deltas:  96% (52/54)
+Resolving deltas:  98% (53/54)
+Resolving deltas: 100% (54/54)
+Resolving deltas: 100% (54/54), done.
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║ App Name: personales-jorge-theforge-burqre                                   ║
+║ Build Compose 🐳                                                             ║
+║ Detected: 0 mounts 📂                                                        ║
+║ Command: docker compose -p personales-jorge-theforge-burqre -f               ║
+║ ./docker-compose.yml up -d --build --remove-orphans                          ║
+║ Source Type: docker bitbucket ✅                                             ║
+║ Compose Type: docker-compose ✅                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+Image personales-jorge-theforge-burqre-theforge-api Building
+Image personales-jorge-theforge-burqre-theforge-web Building
+Image personales-jorge-theforge-burqre-theforge-mcp Building
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.79kB done
+#1 DONE 0.0s
+#2 [theforge-mcp internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.04kB done
+#2 DONE 0.0s
+#3 [theforge-web internal] load build definition from Dockerfile
+#3 transferring dockerfile: 1.10kB done
+#3 DONE 0.0s
+#4 [theforge-api internal] load build definition from Dockerfile
+#4 transferring dockerfile: 1.69kB done
+#4 DONE 0.1s
+#5 [theforge-api internal] load metadata for docker.io/library/node:20-alpine
+#5 ...
+#6 [theforge-web internal] load metadata for docker.io/library/nginx:alpine
+#6 DONE 0.3s
+#5 [theforge-mcp internal] load metadata for docker.io/library/node:20-alpine
+#5 DONE 0.3s
+#7 [theforge-mcp internal] load .dockerignore
+#7 transferring context: 2B done
+#7 DONE 0.0s
+#8 [theforge-web builder 1/8] FROM docker.io/library/node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293
+#8 DONE 0.0s
+#9 [theforge-web builder 2/8] WORKDIR /app
+#9 CACHED
+#10 [theforge-mcp internal] load build context
+#10 transferring context: 34.93kB done
+#10 DONE 0.1s
+#11 [theforge-web internal] load build context
+#11 transferring context: 474.08kB 0.0s done
+#11 DONE 0.1s
+#12 [theforge-web runner 1/4] FROM docker.io/library/nginx:alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+#12 resolve docker.io/library/nginx:alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de 0.1s done
+#12 DONE 0.1s
+#13 [theforge-api internal] load build context
+#13 transferring context: 1.63MB 0.0s done
+#13 DONE 0.1s
+#14 [theforge-web builder 3/8] RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
+#14 CACHED
+#15 [theforge-web builder 4/8] COPY package.json pnpm-workspace.yaml turbo.json ./
+#15 CACHED
+#16 [theforge-web builder  4/14] COPY package.json pnpm-workspace.yaml turbo.json ./
+#16 CACHED
+#17 [theforge-web builder  7/14] COPY packages/business-rules/package.json packages/business-rules/
+#17 CACHED
+#18 [theforge-web builder  9/14] RUN pnpm install
+#18 CACHED
+#19 [theforge-web builder 11/14] COPY packages/shared-types packages/shared-types
+#19 CACHED
+#20 [theforge-web builder 13/14] COPY apps/web apps/web
+#20 CACHED
+#21 [theforge-web runner 2/4] RUN apk add --no-cache wget
+#21 CACHED
+#22 [theforge-web builder 14/14] RUN pnpm run build --filter=@theforge/web
+#22 CACHED
+#23 [theforge-web runner 3/4] COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+#23 CACHED
+#24 [theforge-web builder  5/14] COPY packages/config/package.json packages/config/
+#24 CACHED
+#25 [theforge-web builder  6/14] COPY packages/shared-types/package.json packages/shared-types/
+#25 CACHED
+#26 [theforge-web builder 12/14] COPY packages/business-rules packages/business-rules
+#26 CACHED
+#27 [theforge-web builder  8/14] COPY apps/web/package.json apps/web/
+#27 CACHED
+#28 [theforge-web builder 10/14] COPY packages/config packages/config
+#28 CACHED
+#29 [theforge-web runner 4/4] COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+#29 CACHED
+#30 [theforge-api builder 12/17] COPY packages/database packages/database
+#30 CACHED
+#31 [theforge-api builder  2/17] RUN apk add --no-cache openssl
+#31 CACHED
+#32 [theforge-api builder 14/17] COPY packages/business-rules packages/business-rules
+#32 CACHED
+#33 [theforge-api builder  6/17] COPY packages/database/package.json packages/database/
+#33 CACHED
+#34 [theforge-api builder  4/17] RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
+#34 CACHED
+#35 [theforge-api builder  3/17] WORKDIR /app
+#35 CACHED
+#36 [theforge-api builder 10/17] COPY apps/api/package.json apps/api/
+#36 CACHED
+#37 [theforge-api builder 11/17] RUN pnpm install
+#37 CACHED
+#38 [theforge-api builder  9/17] COPY packages/config/package.json packages/config/
+#38 CACHED
+#39 [theforge-api builder 13/17] COPY packages/shared-types packages/shared-types
+#39 CACHED
+#40 [theforge-api builder  5/17] COPY package.json pnpm-workspace.yaml turbo.json ./
+#40 CACHED
+#41 [theforge-api builder  8/17] COPY packages/business-rules/package.json packages/business-rules/
+#41 CACHED
+#42 [theforge-api builder  7/17] COPY packages/shared-types/package.json packages/shared-types/
+#42 CACHED
+#43 [theforge-api builder 15/17] COPY packages/config packages/config
+#43 CACHED
+#44 [theforge-web] exporting to image
+#44 exporting layers done
+#44 writing image sha256:6d713479c1ca2caa4473012d7d539462add0fbe47d33f48c8a4a1bdd39251362 0.0s done
+#44 naming to docker.io/library/personales-jorge-theforge-burqre-theforge-web 0.0s done
+#44 DONE 0.0s
+#45 [theforge-api builder 16/17] COPY apps/api apps/api
+#45 ...
+#46 [theforge-mcp builder 5/8] COPY packages/mcp-server/package.json packages/mcp-server/
+#46 DONE 0.4s
+#45 [theforge-api builder 16/17] COPY apps/api apps/api
+#45 DONE 0.3s
+#47 [theforge-web] resolving provenance for metadata file
+#47 DONE 0.0s
+#48 [theforge-api builder 17/17] RUN pnpm run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
+#48 1.354
+#48 1.354 > theforge@0.1.0 build /app
+#48 1.354 > turbo run build "--filter=@theforge/database" "--filter=@theforge/shared-types" "--filter=@theforge/business-rules" "--filter=@theforge/api"
+#48 1.354
+#48 1.416
+#48 1.416 Attention:
+#48 1.416 Turborepo now collects completely anonymous telemetry regarding usage.
+#48 1.416 This information is used to shape the Turborepo roadmap and prioritize features.
+#48 1.416 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#48 1.416 https://turborepo.dev/docs/telemetry
+#48 1.416
+#48 1.416 • turbo 2.9.6
+#48 1.423
+#48 1.423    • Packages in scope: @theforge/api, @theforge/business-rules, @theforge/database, @theforge/shared-types
+#48 1.423    • Running build in 4 packages
+#48 1.423    • Remote caching disabled
+#48 1.423
+#48 1.435 @theforge/database:build: cache miss, executing 75fbb4f003b76dea
+#48 1.435 @theforge/shared-types:build: cache miss, executing 87f175ef82b583be
+#48 2.229 @theforge/shared-types:build:
+#48 2.229 @theforge/shared-types:build: > @theforge/shared-types@0.0.0 build /app/packages/shared-types
+#48 2.229 @theforge/shared-types:build: > tsc
+#48 2.229 @theforge/shared-types:build:
+#48 2.330 @theforge/database:build:
+#48 2.330 @theforge/database:build: > @theforge/database@0.0.0 build /app/packages/database
+#48 2.330 @theforge/database:build: > prisma generate && tsc && node -e "require('fs').cpSync('src/generated', 'dist/generated', { recursive: true })"
+#48 2.330 @theforge/database:build:
+#48 3.941 @theforge/database:build: Prisma schema loaded from schema.prisma
+#48 5.436 @theforge/business-rules:build: cache miss, executing 95ec6f20106b6205
+#48 6.134 @theforge/business-rules:build:
+#48 6.134 @theforge/business-rules:build: > @theforge/business-rules@0.1.0 build /app/packages/business-rules
+#48 6.134 @theforge/business-rules:build: > tsc
+#48 6.135 @theforge/business-rules:build:
+#48 6.320 @theforge/database:build:
+#48 6.320 @theforge/database:build: ✔ Generated Prisma Client (v5.22.0) to ./src/generated in 275ms
+#48 6.320 @theforge/database:build:
+#48 6.320 @theforge/database:build: Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+#48 6.320 @theforge/database:build:
+#48 6.320 @theforge/database:build: Tip: Curious about the SQL queries Prisma ORM generates? Optimize helps you enhance your visibility: https://pris.ly/tip-2-optimize
+#48 6.320 @theforge/database:build:
+#48 7.935 @theforge/api:build: cache miss, executing b2a755733d22dcb7
+#48 8.490 @theforge/api:build:
+#48 8.490 @theforge/api:build: > @theforge/api@0.1.0 build /app/apps/api
+#48 8.490 @theforge/api:build: > nest build
+#48 8.490 @theforge/api:build:
+#48 ...
+#49 [theforge-mcp builder 6/8] RUN pnpm install --filter @theforge/mcp-server
+#49 2.143 Progress: resolved 1, reused 0, downloaded 0, added 0
+#49 2.263
+#49 2.263    ╭───────────────────────────────────────────────────────────────────╮
+#49 2.263    │                                                                   │
+#49 2.263    │                Update available! 9.14.2 → 10.33.2.                │
+#49 2.263    │   Changelog: https://github.com/pnpm/pnpm/releases/tag/v10.33.2   │
+#49 2.263    │         Run "corepack install -g pnpm@10.33.2" to update.         │
+#49 2.263    │                                                                   │
+#49 2.263    ╰───────────────────────────────────────────────────────────────────╯
+#49 2.263
+#49 3.147 Progress: resolved 15, reused 0, downloaded 7, added 0
+#49 4.225 Progress: resolved 72, reused 0, downloaded 35, added 0
+#49 5.225 Progress: resolved 129, reused 0, downloaded 100, added 0
+#49 7.540 Progress: resolved 130, reused 0, downloaded 100, added 0
+#49 8.503 .                                        | +101 ++++++++++
+#49 8.540 Progress: resolved 132, reused 0, downloaded 100, added 1
+#49 8.725 Progress: resolved 132, reused 0, downloaded 101, added 101, done
+#49 8.762 .../esbuild@0.27.7/node_modules/esbuild postinstall$ node install.js
+#49 8.934 .../esbuild@0.27.7/node_modules/esbuild postinstall: Done
+#49 9.530 Done in 8.7s
+#49 DONE 10.1s
+#50 [theforge-mcp builder 7/8] COPY packages/mcp-server packages/mcp-server
+#50 DONE 0.2s
+#48 [theforge-api builder 17/17] RUN pnpm run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
+#48 ...
+#51 [theforge-mcp builder 8/8] RUN pnpm run build --filter=@theforge/mcp-server
+#51 1.488
+#51 1.488 > theforge@0.1.0 build /app
+#51 1.488 > turbo run build "--filter=@theforge/mcp-server"
+#51 1.488
+#51 1.607
+#51 1.607 Attention:
+#51 1.607 Turborepo now collects completely anonymous telemetry regarding usage.
+#51 1.607 This information is used to shape the Turborepo roadmap and prioritize features.
+#51 1.607 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#51 1.607 https://turborepo.dev/docs/telemetry
+#51 1.607
+#51 1.608 • turbo 2.9.6
+#51 1.628
+#51 1.628    • Packages in scope: @theforge/mcp-server
+#51 1.628    • Running build in 1 packages
+#51 1.628    • Remote caching disabled
+#51 1.628
+#51 1.635 @theforge/mcp-server:build: cache miss, executing e1fe4f2645d4620d
+#51 2.608 @theforge/mcp-server:build:
+#51 2.608 @theforge/mcp-server:build: > @theforge/mcp-server@0.1.0 build /app/packages/mcp-server
+#51 2.608 @theforge/mcp-server:build: > tsc
+#51 2.608 @theforge/mcp-server:build:
+#51 17.29 @theforge/mcp-server:build: error TS5083: Cannot read file '/app/packages/config/tsconfig.base.json'.
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v3/errors.d.cts(2,8): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v3/locales/en"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(1,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ar"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(2,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/az"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(3,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/be"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(4,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/bg"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(5,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ca"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(6,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/cs"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(7,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/da"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(8,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/de"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(9,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/en"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(10,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/eo"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(11,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/es"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(12,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/fa"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(13,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/fi"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(14,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/fr"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(15,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/fr-CA"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(16,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/he"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(17,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/hu"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(18,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/hy"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(19,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/id"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(20,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/is"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(21,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/it"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(22,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ja"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(23,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ka"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(24,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/kh"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(25,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/km"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(26,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ko"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(27,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/lt"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(28,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/mk"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(29,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ms"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(30,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/nl"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(31,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/no"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(32,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ota"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(33,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ps"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(34,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/pl"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(35,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/pt"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(36,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ru"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(37,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/sl"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(38,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/sv"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(39,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ta"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(40,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/th"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(41,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/tr"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(42,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ua"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(43,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/uk"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(44,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/ur"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(45,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/uz"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(46,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/vi"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(47,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/zh-CN"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(48,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/zh-TW"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.29 @theforge/mcp-server:build: ../../node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/index.d.cts(49,21): error TS1259: Module '"/app/node_modules/.pnpm/zod@4.3.6/node_modules/zod/v4/locales/yo"' can only be default-imported using the 'esModuleInterop' flag
+#51 17.33 @theforge/mcp-server:build:  ELIFECYCLE  Command failed with exit code 2.
+#51 17.41  ERROR  @theforge/mcp-server#build: command (/app/packages/mcp-server) /usr/local/bin/pnpm run build exited (2)
+#51 17.41
+#51 17.41  Tasks:    0 successful, 1 total
+#51 17.41 Cached:    0 cached, 1 total
+#51 17.41   Time:    15.795s
+#51 17.41 Failed:    @theforge/mcp-server#build
+#51 17.41
+#51 17.41  ERROR  run failed: command  exited (2)
+#51 17.42  ELIFECYCLE  Command failed with exit code 2.
+#51 ERROR: process "/bin/sh -c pnpm run build --filter=@theforge/mcp-server" did not complete successfully: exit code: 2
+#48 [theforge-api builder 17/17] RUN pnpm run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
+#48 CANCELED
+------
+> [theforge-mcp builder 8/8] RUN pnpm run build --filter=@theforge/mcp-server:
+17.33 @theforge/mcp-server:build:  ELIFECYCLE  Command failed with exit code 2.
+17.41  ERROR  @theforge/mcp-server#build: command (/app/packages/mcp-server) /usr/local/bin/pnpm run build exited (2)
+17.41
+17.41  Tasks:    0 successful, 1 total
+17.41 Cached:    0 cached, 1 total
+17.41   Time:    15.795s
+17.41 Failed:    @theforge/mcp-server#build
+17.41
+17.41  ERROR  run failed: command  exited (2)
+17.42  ELIFECYCLE  Command failed with exit code 2.
+------
+Dockerfile:21
+--------------------
+|
+|     # Build
+| >>> RUN pnpm run build --filter=@theforge/mcp-server
+|
+|     # Production stage
+--------------------
+target theforge-mcp: failed to solve: process "/bin/sh -c pnpm run build --filter=@theforge/mcp-server" did not complete successfully: exit code: 2
+Error: ❌ Docker command failed
+Error occurred ❌, check the logs for details.

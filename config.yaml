@@ -291,25 +291,16 @@ sessions:
 onboarding:
   seen:
     tool_progress_prompt: true
+    busy_input_prompt: true
 _config_version: 22
 session_reset:
   mode: both
   idle_minutes: 1440
   at_hour: 4
-
-# MCP servers — se auto-cargan al iniciar Hermes con este perfil
-# Modo desarrollo (local): descomenta el bloque stdio
-# Modo producción (remoto en Dokploy): usa el bloque URL
 mcp_servers:
   theforge:
-    url: "https://theforge-mcp.kreoint.mx"
+    url: https://theforge-mcp.kreoint.mx
     headers:
-      Content-Type: "application/json"
+      Content-Type: application/json
     timeout: 180
     connect_timeout: 30
-#  theforge:
-#    command: "node"
-#    args: ["/Volumes/HDJorge/Desarrollos/jacj/theforge/packages/mcp-server/dist/index.js"]
-#    env:
-#      THEFORGE_API_URL: "http://localhost:3000"
-#      MCP_M2M_SECRET: "dev-secret"
