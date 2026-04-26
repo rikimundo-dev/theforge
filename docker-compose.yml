@@ -124,6 +124,8 @@ services:
       AUTH_ALLOWED_OTP_EMAIL: ${AUTH_ALLOWED_OTP_EMAIL:-}
       # Lista separada por comas. Por defecto incluye producción kreoint + WEB_DOMAIN + Vite local.
       CORS_ORIGINS: ${CORS_ORIGINS:-https://${WEB_DOMAIN:-theforge.local},https://theforge.kreoint.mx,http://localhost:5173,http://127.0.0.1:5173}
+      # Secreto compartido para validar login MCP (POST /auth/mcp-login)
+      MCP_M2M_SECRET: ${MCP_M2M_SECRET:-}
     depends_on:
       theforge-db:
         condition: service_healthy
@@ -160,6 +162,31 @@ services:
       interval: 10s
       timeout: 5s
       start_period: 5s
+      retries: 3
+
+  # MCP server — expone la API de TheForge como herramientas MCP sobre HTTP
+  # Hermes se conecta vía URL (StreamableHTTP) en lugar de stdio local
+  theforge-mcp:
+    build:
+      context: .
+      dockerfile: packages/mcp-server/Dockerfile
+    container_name: theforge-mcp
+    networks:
+      - default
+      - dokploy-network
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Apunta a la API NestJS internamente (misma red Docker)
+      THEFORGE_API_URL: "http://theforge-api:3000"
+      # Secreto compartido para obtener JWT del endpoint /auth/mcp-login
+      MCP_M2M_SECRET: ${MCP_M2M_SECRET:-}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/ | head -c 1 > /dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
       retries: 3
 
 volumes:

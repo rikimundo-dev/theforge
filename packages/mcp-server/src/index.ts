@@ -2,25 +2,24 @@
 /**
  * TheForge MCP Server — TypeScript
  *
- * Expone la API REST de TheForge (NestJS) como herramientas MCP.
- * Se integra con Hermes Agent via mcp_servers en config.yaml.
+ * Expone la API REST de TheForge (NestJS) como herramientas MCP sobre HTTP (StreamableHTTP).
+ * Se autentica contra la API vía MCP_M2M_SECRET → JWT, con auto-refresh en 401.
  *
- * Arquitectura:
- *   Cursor ──MCP──► Hermes (profile theforge)
- *                         │
- *               ┌─────────┴──────────┐
- *               │  theforge MCP      │
- *               │  (este servidor)   │
- *               └─────────┬──────────┘
- *                         │ HTTP
- *               ┌─────────┴──────────┐
- *               │  NestJS API        │
- *               │  localhost:3000    │
- *               └────────────────────┘
+ * Transportes:
+ *   - HTTP (StreamableHTTP): ideal para despliegue en Docker/Traefik
+ *   - Stdio: para desarrollo local con Hermes como subproceso
+ *
+ * Args:
+ *   --http          Modo HTTP (StreamableHTTP). Puerto vía PORT (default 3100).
+ *   sin args        Modo stdio (por defecto).
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+// HTTP transport — import dinámico para no romper si no se usa
+let HttpTransport: typeof import("@modelcontextprotocol/sdk/server/streamableHttp.js").StreamableHTTPServerTransport | undefined;
+
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -30,29 +29,62 @@ import {
 // ── Config ─────────────────────────────────────────────────────────────
 
 const API_BASE = process.env.THEFORGE_API_URL ?? "http://localhost:3000";
-const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN ?? "";
+const M2M_SECRET = process.env.MCP_M2M_SECRET ?? "";
 const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
+const PORT = Number(process.env.PORT) || 3100;
+const USE_HTTP = process.argv.includes("--http");
 
-function headers(): Record<string, string> {
+// ── JWT Auth Client ────────────────────────────────────────────────────
+
+let jwtToken: string | null = null;
+
+async function login(): Promise<string> {
+  if (!M2M_SECRET) {
+    throw new Error("MCP_M2M_SECRET no está configurada — el MCP server no puede autenticarse contra la API");
+  }
+  const res = await fetch(`${API_BASE}/auth/mcp-login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret: M2M_SECRET }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`MCP login failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+  const data = (await res.json()) as { accessToken: string };
+  jwtToken = data.accessToken;
+  return jwtToken;
+}
+
+function authHeaders(): Record<string, string> {
   const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (AUTH_TOKEN) h["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+  if (jwtToken) h["Authorization"] = `Bearer ${jwtToken}`;
   return h;
 }
 
-// ── HTTP Helpers ───────────────────────────────────────────────────────
+// ── HTTP Client (with auto-retry on 401) ───────────────────────────────
 
 async function apiFetch(
   method: string,
   path: string,
   body?: unknown,
+  retried = false,
 ): Promise<unknown> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     method,
-    headers: headers(),
+    headers: authHeaders(),
     body: body != null ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+
+  // 401 → re-login y reintentar una vez
+  if (res.status === 401 && !retried) {
+    await login();
+    return apiFetch(method, path, body, true);
+  }
+
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`HTTP ${res.status} ${res.statusText}: ${text.slice(0, 500)}`);
@@ -73,7 +105,7 @@ function apiDelete(path: string): Promise<unknown> {
   return apiFetch("DELETE", path);
 }
 
-// ── Tool Definitions ───────────────────────────────────────────────────
+// ── Tool Definitions (43 tools) ────────────────────────────────────────
 
 const TOOLS: Tool[] = [
   // ── Projects ──
@@ -190,7 +222,6 @@ const TOOLS: Tool[] = [
       required: ["projectId"],
     },
   },
-
   // ── Deliverables ──
   {
     name: "generate_deliverables",
@@ -318,7 +349,6 @@ const TOOLS: Tool[] = [
       required: ["projectId"],
     },
   },
-
   // ── AI Analysis ──
   {
     name: "start_analysis",
@@ -377,7 +407,6 @@ const TOOLS: Tool[] = [
       required: ["projectId"],
     },
   },
-
   // ── AI Orchestrator ──
   {
     name: "orchestrator_chat",
@@ -425,7 +454,6 @@ const TOOLS: Tool[] = [
       required: ["projectId"],
     },
   },
-
   // ── Sessions ──
   {
     name: "create_session",
@@ -472,7 +500,6 @@ const TOOLS: Tool[] = [
       required: ["sessionId", "message"],
     },
   },
-
   // ── Legacy Flow ──
   {
     name: "legacy_start",
@@ -580,7 +607,6 @@ const TOOLS: Tool[] = [
       required: ["projectId", "choice"],
     },
   },
-
   // ── TheForge Integration ──
   {
     name: "list_theforge_projects",
@@ -648,7 +674,6 @@ const handlers: Record<string, Handler> = {
     if (args.stageId) body.stageId = args.stageId;
     return JSON.stringify(await apiPost(`/projects/${args.projectId}/suggest-brd-tobe-from-dbga`, body));
   },
-
   // Deliverables
   async generate_deliverables(args) {
     return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-deliverables`));
@@ -710,7 +735,6 @@ const handlers: Record<string, Handler> = {
       }),
     );
   },
-
   // AI Analysis
   async start_analysis(args) {
     const body: Record<string, unknown> = { idea: args.idea };
@@ -735,7 +759,6 @@ const handlers: Record<string, Handler> = {
     if (args.mddContent) body.mddContent = args.mddContent;
     return JSON.stringify(await apiPost("/ai-analysis/mdd/review", body));
   },
-
   // Orchestrator
   async orchestrator_chat(args) {
     return JSON.stringify(
@@ -771,7 +794,6 @@ const handlers: Record<string, Handler> = {
       }),
     );
   },
-
   // Sessions
   async create_session(args) {
     return JSON.stringify(
@@ -797,7 +819,6 @@ const handlers: Record<string, Handler> = {
       }),
     );
   },
-
   // Legacy
   async legacy_start(args) {
     return JSON.stringify(
@@ -848,14 +869,13 @@ const handlers: Record<string, Handler> = {
       }),
     );
   },
-
   // TheForge
   async list_theforge_projects() {
     return JSON.stringify(await apiGet("/theforge/projects"));
   },
 };
 
-// ── Server Bootstrap ───────────────────────────────────────────────────
+// ── Server Setup ───────────────────────────────────────────────────────
 
 const server = new Server(
   { name: "theforge-mcp", version: "0.1.0" },
@@ -882,12 +902,82 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+// ── Bootstrap ──────────────────────────────────────────────────────────
+
+async function main(): Promise<void> {
+  // Login al arrancar
+  if (M2M_SECRET) {
+    try {
+      await login();
+      console.error(`[theforge-mcp] JWT obtenido, API en ${API_BASE}`);
+    } catch (err) {
+      console.error(`[theforge-mcp] Error de login inicial: ${err instanceof Error ? err.message : err}`);
+      console.error(`[theforge-mcp] Continuando — se reintentará en cada llamado`);
+    }
+  } else {
+    console.error("[theforge-mcp] Sin MCP_M2M_SECRET — llamadas sin auth (solo dev)");
+  }
+
+  if (USE_HTTP) {
+    // ── HTTP StreamableTransport (Node.js) ──
+    try {
+      HttpTransport = (await import("@modelcontextprotocol/sdk/server/streamableHttp.js")).StreamableHTTPServerTransport;
+    } catch {
+      console.error("[theforge-mcp] Error cargando streamableHttp transport");
+      process.exit(1);
+    }
+    const httpTransport = new HttpTransport();
+
+    const { createServer } = await import("node:http");
+    const httpServer = createServer(async (req, res) => {
+      // CORS
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Session-ID");
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      // Solo POST
+      if (req.method !== "POST") {
+        res.writeHead(405);
+        res.end("Method Not Allowed");
+        return;
+      }
+
+      // Leer body
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = Buffer.concat(chunks).toString();
+
+      // Delegar al transport MCP
+      try {
+        await httpTransport.handleRequest(req, res, body);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: msg }));
+        }
+      }
+    });
+
+    httpServer.listen(PORT, () => {
+      console.error(`[theforge-mcp] HTTP escuchando en puerto ${PORT}`);
+    });
+
+    await server.connect(httpTransport);
+  } else {
+    // ── Stdio Transport ──
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+  }
 }
 
 main().catch((err) => {
-  console.error("Fatal:", err);
+  console.error("[theforge-mcp] Fatal:", err);
   process.exit(1);
 });
