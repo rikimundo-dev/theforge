@@ -1,0 +1,893 @@
+#!/usr/bin/env node
+/**
+ * TheForge MCP Server — TypeScript
+ *
+ * Expone la API REST de TheForge (NestJS) como herramientas MCP.
+ * Se integra con Hermes Agent via mcp_servers en config.yaml.
+ *
+ * Arquitectura:
+ *   Cursor ──MCP──► Hermes (profile theforge)
+ *                         │
+ *               ┌─────────┴──────────┐
+ *               │  theforge MCP      │
+ *               │  (este servidor)   │
+ *               └─────────┬──────────┘
+ *                         │ HTTP
+ *               ┌─────────┴──────────┐
+ *               │  NestJS API        │
+ *               │  localhost:3000    │
+ *               └────────────────────┘
+ */
+
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  type Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+
+// ── Config ─────────────────────────────────────────────────────────────
+
+const API_BASE = process.env.THEFORGE_API_URL ?? "http://localhost:3000";
+const AUTH_TOKEN = process.env.MCP_AUTH_TOKEN ?? "";
+const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
+
+function headers(): Record<string, string> {
+  const h: Record<string, string> = { "Content-Type": "application/json" };
+  if (AUTH_TOKEN) h["Authorization"] = `Bearer ${AUTH_TOKEN}`;
+  return h;
+}
+
+// ── HTTP Helpers ───────────────────────────────────────────────────────
+
+async function apiFetch(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<unknown> {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
+    method,
+    headers: headers(),
+    body: body != null ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${res.statusText}: ${text.slice(0, 500)}`);
+  }
+  return res.json();
+}
+
+function apiGet(path: string): Promise<unknown> {
+  return apiFetch("GET", path);
+}
+function apiPost(path: string, body?: unknown): Promise<unknown> {
+  return apiFetch("POST", path, body);
+}
+function apiPatch(path: string, body?: unknown): Promise<unknown> {
+  return apiFetch("PATCH", path, body);
+}
+function apiDelete(path: string): Promise<unknown> {
+  return apiFetch("DELETE", path);
+}
+
+// ── Tool Definitions ───────────────────────────────────────────────────
+
+const TOOLS: Tool[] = [
+  // ── Projects ──
+  {
+    name: "list_projects",
+    description: "Lista todos los proyectos registrados en TheForge",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+  {
+    name: "get_project",
+    description: "Obtiene un proyecto por su ID",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string", description: "ID del proyecto" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "create_project",
+    description: "Crea un nuevo proyecto (NEW=greenfield, LEGACY=existente)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nombre del proyecto" },
+        projectType: { type: "string", enum: ["NEW", "LEGACY"], description: "Tipo de proyecto" },
+        hasUxTeam: { type: "boolean", description: "Equipo UX disponible" },
+        theforgeProjectId: { type: "string", description: "UUID del proyecto en TheForge/Ariadne (requerido si LEGACY)" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "delete_project",
+    description: "Elimina un proyecto",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_project_stages",
+    description: "Lista las etapas (stages) de un proyecto",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_conformance",
+    description: "Reporte de conformidad del proyecto contra el MDD",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        useLlm: { type: "boolean", description: "Usar LLM para el análisis" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "patch_project",
+    description: "Actualiza campos del proyecto (mddContent, dbgaContent, blueprintContent, etc.)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        fields: {
+          type: "object",
+          description: "Campos a actualizar (mddContent, dbgaContent, blueprintContent, specContent, etc.)",
+          additionalProperties: true,
+        },
+      },
+      required: ["projectId", "fields"],
+    },
+  },
+  {
+    name: "generate_benchmark",
+    description: "Genera benchmark / análisis de mercado para un proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        userIdea: { type: "string", description: "Idea del usuario" },
+        urls: { type: "array", items: { type: "string" }, description: "URLs de referencia" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "phase0_deep_research",
+    description: "Ejecuta investigación profunda Fase 0: benchmark + DBGA",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        userIdea: { type: "string" },
+        urls: { type: "array", items: { type: "string" } },
+        includeBenchmark: { type: "boolean" },
+      },
+      required: ["projectId", "userIdea"],
+    },
+  },
+  {
+    name: "suggest_brd_tobe_from_dbga",
+    description: "Genera borradores BRD y To-Be desde DBGA (greenfield)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        stageId: { type: "string", description: "ID de etapa opcional" },
+      },
+      required: ["projectId"],
+    },
+  },
+
+  // ── Deliverables ──
+  {
+    name: "generate_deliverables",
+    description: "Cascada completa de entregables: SPEC, Arquitectura, Casos de uso, Historias, Blueprint, API, Infra, Tasks",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_spec",
+    description: "Genera el documento SPEC del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_blueprint",
+    description: "Genera el Implementation Blueprint",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        preview: { type: "boolean", description: "Solo previsualizar" },
+        gapsFeedback: { type: "string", description: "Feedback para cubrir gaps" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_architecture",
+    description: "Genera el documento de arquitectura",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        preview: { type: "boolean" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_api_contracts",
+    description: "Genera los contratos de API",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        preview: { type: "boolean" },
+        gapsFeedback: { type: "string" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_use_cases",
+    description: "Genera los casos de uso",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        preview: { type: "boolean" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_user_stories",
+    description: "Genera las historias de usuario",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        preview: { type: "boolean" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_logic_flows",
+    description: "Genera los flujos de lógica de negocio",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        gapsFeedback: { type: "string" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "generate_infra",
+    description: "Genera el documento de infraestructura",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        preview: { type: "boolean" },
+        gapsFeedback: { type: "string" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "confirm_complexity",
+    description: "Confirma la complejidad propuesta del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "reassess_complexity",
+    description: "Re-evalúa la complejidad del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        note: { type: "string", description: "Nota opcional para contextualizar" },
+      },
+      required: ["projectId"],
+    },
+  },
+
+  // ── AI Analysis ──
+  {
+    name: "start_analysis",
+    description: "Inicia un análisis DBGA (Domain-Based Goal Analysis) desde una idea",
+    inputSchema: {
+      type: "object",
+      properties: {
+        idea: { type: "string", description: "La idea del proyecto a analizar" },
+        projectId: { type: "string", description: "ID del proyecto opcional (para persistir estado)" },
+      },
+      required: ["idea"],
+    },
+  },
+  {
+    name: "get_estimation",
+    description: "Métricas de estimación: semáforo + horas + costo MXN",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        stageId: { type: "string", description: "ID de etapa opcional" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_mdd_thread",
+    description: "Obtiene el threadId del flujo MDD activo",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        stageId: { type: "string" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_adrs",
+    description: "Decisiones arquitectónicas (ADRs) del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "review_mdd",
+    description: "Revisa consistencia del MDD y re-deriva diagramas",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        mddContent: { type: "string", description: "Contenido MDD opcional" },
+      },
+      required: ["projectId"],
+    },
+  },
+
+  // ── AI Orchestrator ──
+  {
+    name: "orchestrator_chat",
+    description: "Chat con el orquestador IA con contexto completo del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        message: { type: "string", description: "Mensaje del usuario" },
+        sessionId: { type: "string" },
+        mddContent: { type: "string" },
+        activeTab: { type: "string" },
+        stageId: { type: "string" },
+        dbgaContent: { type: "string" },
+        uxUiGuideContent: { type: "string" },
+        brdContent: { type: "string" },
+        toBeManualContent: { type: "string" },
+      },
+      required: ["projectId", "message"],
+    },
+  },
+  {
+    name: "orchestrator_welcome",
+    description: "Mensaje de bienvenida del orquestador para un proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        sessionId: { type: "string" },
+        activeTab: { type: "string" },
+        stageId: { type: "string" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "orchestrator_clear_chat",
+    description: "Limpia el historial de chat del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        sessionId: { type: "string" },
+      },
+      required: ["projectId"],
+    },
+  },
+
+  // ── Sessions ──
+  {
+    name: "create_session",
+    description: "Crea una nueva sesión de chat en un proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        title: { type: "string", description: "Título de la sesión" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_project_sessions",
+    description: "Lista las sesiones de un proyecto",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_session",
+    description: "Obtiene una sesión por ID",
+    inputSchema: {
+      type: "object",
+      properties: { sessionId: { type: "string" } },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "chat_in_session",
+    description: "Envía un mensaje en una sesión existente con contexto completo",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string" },
+        message: { type: "string" },
+        activeTab: { type: "string" },
+        stageId: { type: "string" },
+        mddContent: { type: "string" },
+      },
+      required: ["sessionId", "message"],
+    },
+  },
+
+  // ── Legacy Flow ──
+  {
+    name: "legacy_start",
+    description: "Inicia flujo legacy: envía descripción a AriadneSpecs para obtener archivos y preguntas",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto (debe ser tipo LEGACY)" },
+        description: { type: "string", description: "Descripción de la modificación deseada" },
+      },
+      required: ["projectId", "description"],
+    },
+  },
+  {
+    name: "legacy_answer",
+    description: "Responde preguntas del flujo legacy",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        answers: {
+          type: "object",
+          description: "Mapa índice → respuesta (ej. { \"0\": \"10\", \"1\": \"30\" })",
+          additionalProperties: { type: "string" },
+        },
+      },
+      required: ["projectId", "answers"],
+    },
+  },
+  {
+    name: "legacy_generate_mdd",
+    description: "Genera MDD de cambio desde el estado del flujo legacy",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "legacy_generate_codebase_doc",
+    description: "Genera documentación del codebase vía AriadneSpecs MCP",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        theforgeProjectId: { type: "string", description: "ID del proyecto en TheForge/Ariadne" },
+        specificFiles: { type: "array", items: { type: "string" }, description: "Archivos específicos a documentar" },
+        refresh: { type: "boolean", description: "Forzar regeneración" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "legacy_generate_deliverables",
+    description: "Cascada de entregables del flujo legacy",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "legacy_update_codebase_doc",
+    description: "Actualiza manualmente la documentación del codebase",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        codebaseDoc: { type: "string", description: "Contenido Markdown" },
+      },
+      required: ["projectId", "codebaseDoc"],
+    },
+  },
+  {
+    name: "legacy_generate_as_is_manual",
+    description: "Genera mapa As-Is desde codebaseDoc",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "legacy_suggest_brd_tobe",
+    description: "Genera borradores BRD y To-Be desde codebaseDoc (legacy)",
+    inputSchema: {
+      type: "object",
+      properties: { projectId: { type: "string" } },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "legacy_resolve_index_sdd_conflict",
+    description: "Resuelve conflicto entre índice MCP y SDD",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        choice: {
+          type: "string",
+          enum: ["trust_index", "trust_sdd", "proceed_with_warnings"],
+          description: "Cómo resolver el conflicto",
+        },
+      },
+      required: ["projectId", "choice"],
+    },
+  },
+
+  // ── TheForge Integration ──
+  {
+    name: "list_theforge_projects",
+    description: "Lista proyectos indexados en TheForge/Ariadne (multi-root)",
+    inputSchema: { type: "object", properties: {}, required: [] },
+  },
+];
+
+// ── Handler Map ────────────────────────────────────────────────────────
+
+type Handler = (args: Record<string, unknown>) => Promise<string>;
+
+const handlers: Record<string, Handler> = {
+  // Projects
+  async list_projects() {
+    return JSON.stringify(await apiGet("/projects"));
+  },
+  async get_project(args) {
+    return JSON.stringify(await apiGet(`/projects/${args.projectId}`));
+  },
+  async create_project(args) {
+    return JSON.stringify(
+      await apiPost("/projects", {
+        name: args.name,
+        projectType: args.projectType ?? "NEW",
+        hasUxTeam: args.hasUxTeam ?? false,
+        theforgeProjectId: args.theforgeProjectId ?? undefined,
+      }),
+    );
+  },
+  async delete_project(args) {
+    return JSON.stringify(await apiDelete(`/projects/${args.projectId}`));
+  },
+  async get_project_stages(args) {
+    return JSON.stringify(await apiGet(`/projects/${args.projectId}/stages`));
+  },
+  async get_conformance(args) {
+    return JSON.stringify(
+      await apiGet(`/projects/${args.projectId}/conformance?useLlm=${args.useLlm === true ? "true" : "false"}`),
+    );
+  },
+  async patch_project(args) {
+    const { projectId, fields } = args as { projectId: string; fields: Record<string, unknown> };
+    return JSON.stringify(await apiPatch(`/projects/${projectId}`, fields));
+  },
+  async generate_benchmark(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/generate-benchmark`, {
+        userIdea: args.userIdea ?? "",
+        urls: (args.urls as string[]) ?? [],
+      }),
+    );
+  },
+  async phase0_deep_research(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/phase0-deep-research`, {
+        userIdea: args.userIdea ?? "",
+        urls: (args.urls as string[]) ?? [],
+        includeBenchmark: args.includeBenchmark ?? false,
+      }),
+    );
+  },
+  async suggest_brd_tobe_from_dbga(args) {
+    const body: Record<string, unknown> = {};
+    if (args.stageId) body.stageId = args.stageId;
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/suggest-brd-tobe-from-dbga`, body));
+  },
+
+  // Deliverables
+  async generate_deliverables(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-deliverables`));
+  },
+  async generate_spec(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-spec`));
+  },
+  async generate_blueprint(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-blueprint`, {
+      preview: args.preview ?? false,
+      gapsFeedback: (args.gapsFeedback as string) ?? "",
+    }));
+  },
+  async generate_architecture(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-architecture`, {
+      preview: args.preview ?? false,
+    }));
+  },
+  async generate_api_contracts(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/generate-api-contracts`, {
+        preview: args.preview ?? false,
+        gapsFeedback: (args.gapsFeedback as string) ?? "",
+      }),
+    );
+  },
+  async generate_use_cases(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-use-cases`, {
+      preview: args.preview ?? false,
+    }));
+  },
+  async generate_user_stories(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/generate-user-stories`, {
+      preview: args.preview ?? false,
+    }));
+  },
+  async generate_logic_flows(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/generate-logic-flows`, {
+        gapsFeedback: (args.gapsFeedback as string) ?? "",
+      }),
+    );
+  },
+  async generate_infra(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/generate-infra`, {
+        preview: args.preview ?? false,
+        gapsFeedback: (args.gapsFeedback as string) ?? "",
+      }),
+    );
+  },
+  async confirm_complexity(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/confirm-complexity`));
+  },
+  async reassess_complexity(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/reassess-complexity`, {
+        note: (args.note as string) ?? "",
+      }),
+    );
+  },
+
+  // AI Analysis
+  async start_analysis(args) {
+    const body: Record<string, unknown> = { idea: args.idea };
+    if (args.projectId) body.projectId = args.projectId;
+    return JSON.stringify(await apiPost("/ai-analysis/start", body));
+  },
+  async get_estimation(args) {
+    let path = `/ai-analysis/estimation?projectId=${args.projectId}`;
+    if (args.stageId) path += `&stageId=${args.stageId}`;
+    return JSON.stringify(await apiGet(path));
+  },
+  async get_mdd_thread(args) {
+    let path = `/ai-analysis/mdd/thread?projectId=${args.projectId}`;
+    if (args.stageId) path += `&stageId=${args.stageId}`;
+    return JSON.stringify(await apiGet(path));
+  },
+  async get_adrs(args) {
+    return JSON.stringify(await apiGet(`/ai-analysis/mdd/adrs?projectId=${args.projectId}`));
+  },
+  async review_mdd(args) {
+    const body: Record<string, unknown> = { projectId: args.projectId };
+    if (args.mddContent) body.mddContent = args.mddContent;
+    return JSON.stringify(await apiPost("/ai-analysis/mdd/review", body));
+  },
+
+  // Orchestrator
+  async orchestrator_chat(args) {
+    return JSON.stringify(
+      await apiPost("/ai-orchestrator/chat", {
+        projectId: args.projectId,
+        message: args.message,
+        sessionId: (args.sessionId as string) ?? "",
+        mddContent: (args.mddContent as string) ?? null,
+        activeTab: (args.activeTab as string) ?? "",
+        stageId: (args.stageId as string) ?? "",
+        dbgaContent: (args.dbgaContent as string) ?? null,
+        uxUiGuideContent: (args.uxUiGuideContent as string) ?? null,
+        brdContent: (args.brdContent as string) ?? null,
+        toBeManualContent: (args.toBeManualContent as string) ?? null,
+      }),
+    );
+  },
+  async orchestrator_welcome(args) {
+    return JSON.stringify(
+      await apiPost("/ai-orchestrator/welcome", {
+        projectId: args.projectId,
+        sessionId: (args.sessionId as string) ?? "",
+        activeTab: (args.activeTab as string) ?? "",
+        stageId: (args.stageId as string) ?? "",
+      }),
+    );
+  },
+  async orchestrator_clear_chat(args) {
+    return JSON.stringify(
+      await apiPost("/ai-orchestrator/clear-chat", {
+        projectId: args.projectId,
+        sessionId: (args.sessionId as string) ?? "",
+      }),
+    );
+  },
+
+  // Sessions
+  async create_session(args) {
+    return JSON.stringify(
+      await apiPost("/sessions", {
+        projectId: args.projectId,
+        title: (args.title as string) ?? "Nueva sesión",
+      }),
+    );
+  },
+  async get_project_sessions(args) {
+    return JSON.stringify(await apiGet(`/sessions/project/${args.projectId}`));
+  },
+  async get_session(args) {
+    return JSON.stringify(await apiGet(`/sessions/${args.sessionId}`));
+  },
+  async chat_in_session(args) {
+    return JSON.stringify(
+      await apiPost(`/sessions/${args.sessionId}/chat`, {
+        message: args.message,
+        activeTab: (args.activeTab as string) ?? "",
+        stageId: (args.stageId as string) ?? "",
+        mddContent: (args.mddContent as string) ?? null,
+      }),
+    );
+  },
+
+  // Legacy
+  async legacy_start(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/legacy/start`, {
+        description: args.description,
+      }),
+    );
+  },
+  async legacy_answer(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/legacy/answer`, {
+        answers: args.answers,
+      }),
+    );
+  },
+  async legacy_generate_mdd(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/generate-mdd`));
+  },
+  async legacy_generate_codebase_doc(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/legacy/generate-codebase-doc`, {
+        theforgeProjectId: (args.theforgeProjectId as string) ?? "",
+        specificFiles: (args.specificFiles as string[]) ?? [],
+        refresh: args.refresh ?? false,
+      }),
+    );
+  },
+  async legacy_generate_deliverables(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/generate-deliverables`));
+  },
+  async legacy_update_codebase_doc(args) {
+    return JSON.stringify(
+      await apiPatch(`/projects/${args.projectId}/legacy/codebase-doc`, {
+        codebaseDoc: args.codebaseDoc,
+      }),
+    );
+  },
+  async legacy_generate_as_is_manual(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/generate-as-is-manual`));
+  },
+  async legacy_suggest_brd_tobe(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/suggest-brd-tobe-from-codebase-doc`));
+  },
+  async legacy_resolve_index_sdd_conflict(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/legacy/resolve-index-sdd-conflict`, {
+        choice: args.choice,
+      }),
+    );
+  },
+
+  // TheForge
+  async list_theforge_projects() {
+    return JSON.stringify(await apiGet("/theforge/projects"));
+  },
+};
+
+// ── Server Bootstrap ───────────────────────────────────────────────────
+
+const server = new Server(
+  { name: "theforge-mcp", version: "0.1.0" },
+  { capabilities: { tools: {} } },
+);
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+  const handler = handlers[name];
+  if (!handler) {
+    throw new Error(`Unknown tool: ${name}`);
+  }
+  try {
+    const result = await handler(args ?? {});
+    return { content: [{ type: "text", text: result }] };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      isError: true,
+      content: [{ type: "text", text: `Error: ${message}` }],
+    };
+  }
+});
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch((err) => {
+  console.error("Fatal:", err);
+  process.exit(1);
+});
