@@ -4,7 +4,7 @@
  * - `roots[].id` = repo indexado (ingest: `/repositories/:id/...`, nodo `projectId` en Falkor según sync).
  *
  * `get_modification_plan` → `POST /projects/:projectId/modification-plan` → **projectId = workspace `id`**.
- * `ask_codebase` → `POST /projects/:id/chat` primero → **projectId = workspace `id`** + `scope.repoIds`: si el id guardado es un **root**, se envían **todos** los `roots[].id` del proyecto (código del proyecto Ariadne), no solo ese repo.
+ * `ask_codebase` → `POST /projects/:id/chat` primero → **projectId = workspace `id`** + `scope.repoIds`: si el id guardado es un **root**, se envía **solo ese root** en el scope (`[raw]`), no todos los roots del workspace. Esto evita mezclar código de otros repos al generar documentación de partida.
  * `semantic_search` en MCP **no** admite `scope`; en **TheForgeService.semanticSearch** se replica el alcance multi-root lanzando **una llamada por** `roots[].id` y fusionando resultados cuando `scopeForScopedTools.repoIds` tiene más de un id.
  */
 
@@ -78,12 +78,11 @@ export function resolveAriadneCodebaseMcpTarget(
     const roots = p.roots;
     if (!roots?.length) continue;
     if (!roots.some((r) => r.id === raw)) continue;
-    /** Mismo criterio que si el usuario guardó el `id` del workspace: chat/plan ingest ven **todo** el proyecto Ariadne, no un solo root. `graphProjectId` sigue siendo el root guardado (shard Falkor / selección). */
-    const allRepoIds = Array.from(new Set(roots.map((r) => r.id.trim()).filter(Boolean)));
+    /** El id guardado es un root (repo individual). Se envía solo ese root en el scope, no todos los roots del workspace, para que la documentación de partida no mezcle contenido de otros repos. `graphProjectId` sigue siendo el root guardado (shard Falkor / selección). */
     return {
       workspaceProjectId: p.id,
       graphProjectId: raw,
-      ...(allRepoIds.length > 0 ? { scopeForScopedTools: { repoIds: allRepoIds } } : {}),
+      scopeForScopedTools: { repoIds: [raw] },
     };
   }
 
