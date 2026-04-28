@@ -17,6 +17,10 @@ import { ProjectsService } from "../projects/projects.service.js";
 import type { AskCodebaseOptions, TheForgeFileToModify } from "../theforge/theforge.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import {
+  mergeAriadneCodebaseScope,
+  resolveAriadneCodebaseMcpTarget,
+} from "../theforge/ariadne-mcp-scope.util.js";
+import {
   DEFAULT_SEMANTIC_QUERIES,
   askCodebaseOptionsForCodebaseDoc,
   askCodebaseOptionsForCodebaseDocClassicSegments,
@@ -77,7 +81,8 @@ const CODEBASE_DOC_FALLBACK_SYNTHESIS_PROMPT =
 const CODEBASE_DOC_INGEST_MDD_QUESTION =
   "Documentación de partida (MDD) del código indexado en el ámbito actual: propósito del repo, " +
   "superficie API y rutas, modelo de datos y persistencia, lógica de negocio deducible del grafo, infraestructura relevante, " +
-  "riesgos y lagunas del índice, y rutas de evidencia. Si el proyecto es multi-root, respeta el alcance del repo en scope. " +
+  "riesgos y lagunas del índice, y rutas de evidencia. Respeta **solo** el alcance de `scope.repoIds` de esta petición (multi-root: no mezcles archivos de otros roots del mismo workspace Ariadne). " +
+  "`evidence_paths` debe contener únicamente rutas verificadas en ese alcance; si una ruta no pertenece al árbol fuente acotado, no la incluyas. " +
   "No inventes artefactos que no aparezcan en el índice; si algo no consta, dilo explícitamente por sección. " +
   "Cumple el contrato MDD `evidence_first` del orchestrator/ingest.";
 
@@ -718,13 +723,32 @@ export class LegacyCoordinatorService {
 
     const legacyState =
       ((project as { legacyFlowState?: LegacyFlowState | null }).legacyFlowState ?? {}) as LegacyFlowState;
-    const indexSignalsFromGate = await this.assertLegacyIndexSddGate(projectId, theforgeId, legacyState);
+    /** `ingest_mdd` omite el gate por defecto: evita 3× `semantic_search` previas que no alimentan el JSON y confunden trazas; el ingest ya acota multi-root. Reactivar: `LEGACY_INDEX_SDD_GATE_INGEST_MDD=1`. */
+    const runIndexSddGateForIngest =
+      req?.responseMode !== "ingest_mdd" ||
+      String(process.env.LEGACY_INDEX_SDD_GATE_INGEST_MDD ?? "").trim() === "1";
+    const indexSignalsFromGate = runIndexSddGateForIngest
+      ? await this.assertLegacyIndexSddGate(projectId, theforgeId, legacyState)
+      : null;
 
     let codebaseDoc = "";
     const codebaseDocAskOpts = askCodebaseOptionsForCodebaseDoc(req?.responseMode);
 
     if (req?.responseMode === "ingest_mdd") {
-      const ingestAsk = askCodebaseOptionsForCodebaseDoc("ingest_mdd");
+      const catalog = await this.theforge.listKnownProjects();
+      const resolved = resolveAriadneCodebaseMcpTarget(theforgeId, catalog);
+      const repoIds = resolved.scopeForScopedTools?.repoIds ?? [];
+      const narrowMulti =
+        String(process.env.LEGACY_INGEST_MDD_NARROW_MULTI_ROOT ?? "1").trim() !== "0";
+      const ingestAsk: AskCodebaseOptions = { ...askCodebaseOptionsForCodebaseDoc("ingest_mdd") };
+      if (repoIds.length > 1 && narrowMulti && resolved.graphProjectId?.trim()) {
+        const primary = resolved.graphProjectId.trim();
+        ingestAsk.scope = mergeAriadneCodebaseScope(resolved.scopeForScopedTools, { repoIds: [primary] });
+        this.logger.log(
+          `[Legacy] ingest_mdd: workspace multi-root (${repoIds.length} repos) → scope.repoIds=[${primary.slice(0, 8)}…] ` +
+            `(desactivar acotación: LEGACY_INGEST_MDD_NARROW_MULTI_ROOT=0).`,
+        );
+      }
       const raw =
         (await this.theforge.askCodebase(CODEBASE_DOC_INGEST_MDD_QUESTION, theforgeId, ingestAsk))?.trim() ?? "";
       if (raw && legacyAnalyzerIndicatesEmptyIndex(raw)) {

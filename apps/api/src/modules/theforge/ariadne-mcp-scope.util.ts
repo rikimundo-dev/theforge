@@ -61,6 +61,7 @@ export function resolveAriadneCodebaseMcpTarget(
     const repoIds = Array.from(
       new Set(asWorkspace.roots.map((r) => r.id.trim()).filter(Boolean)),
     );
+    /** Todos los roots en `ask_codebase` / plan. Para `ingest_mdd`, LegacyCoordinator puede acotar a un solo root (ver `LEGACY_INGEST_MDD_NARROW_MULTI_ROOT`). */
     const scopeForScopedTools: AriadneCodebaseScope | undefined =
       repoIds.length > 0 ? { repoIds: repoIds } : undefined;
     return {
