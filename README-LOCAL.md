@@ -19,6 +19,15 @@ Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para la bas
 npm install
 ```
 
+Si **`npm install`** falla con `Cannot read properties of null (reading 'matches')` (stack en `@npmcli/arborist`), suele ser **`node_modules` mezclado**: p. ej. quedó un árbol **pnpm** (`node_modules/.pnpm`) y luego se usó **npm**. Borra todos los `node_modules` del monorepo y reinstala:
+
+```bash
+rm -rf node_modules apps/*/node_modules packages/*/node_modules
+npm install
+```
+
+Evita alternar **pnpm** y **npm** en la misma raíz sin limpiar.
+
 ### 2. Levantar solo Postgres
 
 ```bash
