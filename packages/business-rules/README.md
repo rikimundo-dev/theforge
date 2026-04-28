@@ -4,7 +4,8 @@ Reglas de negocio puras compartidas entre **API** (`apps/api`) y **web** (`apps/
 
 ## Contenido
 
-- **Estimación de costos (MXN):** constantes (`HOURS_PER_ENTITY`, `RATE_MXN_PER_HOUR`, multiplicadores de `TechnicalMetadata`, tarifas por rol de referencia), `computeCostEstimation`, `getDefaultTeamStructure`.
+- **Estimación de costos (MXN):** constantes (`HOURS_PER_ENTITY`, `RATE_MXN_PER_HOUR`, multiplicadores de `TechnicalMetadata`, tarifas por rol), `computeCostEstimation` (`totalMxn` = nómina ponderada por rol; `referenceSaleMxn` = horas × tarifa única), `getDefaultTeamStructure`.
+- **Equipo de entrega:** `team-delivery.ts` — `buildDeliveryTeamStructure`, `allocateDeliveryRoleHours`, `payrollMxnFromRoleHours`, `ROLE_LABELS_ES` (etiquetas UI).
 - **Infra:** `parseInfraFixedHours` para sumar horas fijas desde markdown de infraestructura.
 
 ## Uso

@@ -87,9 +87,10 @@ export interface LiveMetricsResult {
   totalMXN: number;
   totalMXNMarket: number;
   totalHours: number;
-  roles: { architect: number; back: number; front: number };
-  rolesHours: { architect: number; back: number; front: number };
+  roles: Record<string, number>;
+  rolesHours: Record<string, number>;
   status: "red" | "yellow" | "green";
+  readinessHints?: string[];
 }
 
 /** Calificación por sección/agente (0–100) en el evento done del stream MDD. */

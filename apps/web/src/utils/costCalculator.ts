@@ -19,8 +19,12 @@ export const RATES_MXN: Record<string, number> = { ...RATES_MXN_PER_ROLE };
 
 export interface CostResult {
   totalHours: number;
+  /** Nómina ponderada por rol (post-buffer en `computeCostEstimation`). */
   totalMxn: number;
+  /** Referencia venta horas × tarifa única (sin desglose por rol). */
+  referenceSaleMxn: number;
   teamStructure: TeamStructure;
+  rolesHours: Record<string, number>;
 }
 
 export type SemaphoreStatus = Status;
@@ -106,7 +110,14 @@ function parseMarkdownMddCounts(md: string): {
   }
 
   const entityCount = entities.size;
-  const screenCount = extraEndpointCount > 0 ? 0 : (entityCount > 0 ? Math.min(entityCount * 2, 20) : 0);
+  const inferredScreensFromApi =
+    extraEndpointCount > 0 ? Math.min(28, Math.max(4, Math.ceil(extraEndpointCount * 0.55))) : 0;
+  const screenCount =
+    extraEndpointCount > 0
+      ? inferredScreensFromApi
+      : entityCount > 0
+        ? Math.min(entityCount * 2, 20)
+        : 0;
   return { entityCount, screenCount, extraEndpointCount };
 }
 
@@ -122,7 +133,7 @@ export function calculateCostFromMdd(
   const infraFixedHours = parseInfraFixedHours(options?.infraContent ?? null);
   const status = options?.status ?? "ROJO";
 
-  const { totalHours, totalMxn, teamStructure } = computeCostEstimation({
+  const { totalHours, totalMxn, referenceSaleMxn, teamStructure, rolesHours } = computeCostEstimation({
     entityCount,
     screenCount,
     extraEndpointCount,
@@ -134,7 +145,9 @@ export function calculateCostFromMdd(
   return {
     totalHours,
     totalMxn,
+    referenceSaleMxn,
     teamStructure,
+    rolesHours,
   };
 }
 

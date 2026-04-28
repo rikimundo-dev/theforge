@@ -1,4 +1,9 @@
 import type { Status, TeamStructure } from "@theforge/shared-types";
+import {
+  allocateDeliveryRoleHours,
+  buildDeliveryTeamStructure,
+  payrollMxnFromRoleHours,
+} from "./team-delivery.js";
 
 /** Horas base por entidad de dominio (MDD §3). */
 export const HOURS_PER_ENTITY = 12;
@@ -42,9 +47,14 @@ export type KnownMetadataTag = (typeof KNOWN_METADATA_TAGS)[number];
  */
 export const RATES_MXN_PER_ROLE: Readonly<Record<string, number>> = {
   architect: 1500,
+  techLead: 1400,
+  pm: 920,
+  security: 1280,
   back: 950,
   front: 850,
-  ux: 750,
+  ux: 780,
+  qa: 680,
+  devops: 1120,
 };
 
 export interface CostEstimationInput {
@@ -58,18 +68,22 @@ export interface CostEstimationInput {
 
 export interface CostEstimationResult {
   totalHours: number;
+  /** Nómina interna ponderada (Σ horas rol × tarifa rol), post-buffer si aplica. */
   totalMxn: number;
+  /** Referencia venta simplificada: horas × {@link RATE_MXN_PER_HOUR} (misma base que “precio mercado” del Workshop). */
+  referenceSaleMxn: number;
   teamStructure: TeamStructure;
+  /** Horas asignadas por rol (suma ≈ totalHours). */
+  rolesHours: Record<string, number>;
 }
 
-export function getDefaultTeamStructure(entityCount: number, screenCount: number): TeamStructure {
-  const complexity = entityCount + screenCount;
-  return {
-    architect: 1,
-    back: complexity > 10 ? 2 : 1,
-    front: complexity > 15 ? 2 : 1,
-    ux: complexity > 8 ? 1 : 0,
-  };
+export function getDefaultTeamStructure(
+  entityCount: number,
+  screenCount: number,
+  extraEndpointCount = 0,
+  metadataTags: readonly string[] = [],
+): TeamStructure {
+  return buildDeliveryTeamStructure(entityCount, screenCount, extraEndpointCount, metadataTags);
 }
 
 /**
@@ -77,7 +91,8 @@ export function getDefaultTeamStructure(entityCount: number, screenCount: number
  * Base = Entidades×12 + Pantallas×16 + Endpoints extra×4.
  * Horas = Base × multiplicadores(TechnicalMetadata) + horas fijas(metadata) + infraFixedHours.
  * Si semáforo ≠ VERDE: Horas × buffer.
- * Total MXN = Total Horas × RATE_MXN_PER_HOUR.
+ * Nómina interna = Σ (horas_rol × tarifa_rol) con reparto {@link allocateDeliveryRoleHours}.
+ * `referenceSaleMxn` = horas × {@link RATE_MXN_PER_HOUR} (referencia mercado / tarifa única).
  */
 export function computeCostEstimation(input: CostEstimationInput): CostEstimationResult {
   const {
@@ -111,12 +126,22 @@ export function computeCostEstimation(input: CostEstimationInput): CostEstimatio
     totalHours *= BUFFER_FACTOR_WHEN_NOT_VERDE;
   }
 
-  const totalMxn = totalHours * RATE_MXN_PER_HOUR;
-  const teamStructure = getDefaultTeamStructure(entityCount, screenCount + extraEndpointCount);
+  const referenceSaleMxn = Math.round(totalHours * RATE_MXN_PER_HOUR * 100) / 100;
+  const teamStructure = getDefaultTeamStructure(
+    entityCount,
+    screenCount,
+    extraEndpointCount,
+    metadataTags,
+  );
+  const rolesHours = allocateDeliveryRoleHours(totalHours, teamStructure);
+  const payrollRaw = payrollMxnFromRoleHours(rolesHours, RATES_MXN_PER_ROLE);
+  const totalMxn = Math.round(payrollRaw * 100) / 100;
 
   return {
     totalHours: Math.round(totalHours * 100) / 100,
-    totalMxn: Math.round(totalMxn * 100) / 100,
+    totalMxn,
+    referenceSaleMxn,
     teamStructure,
+    rolesHours,
   };
 }

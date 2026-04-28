@@ -10,16 +10,19 @@ import type {
   SemaphoreStatusLive,
 } from "./estimation.types.js";
 import {
-  INTERNAL_HOUR_RATE,
   MARKET_HOUR_RATE,
   PRECISION_GREEN_MIN,
   PRECISION_RED_MAX,
-  RATIO_ARCHITECT,
-  RATIO_BACK,
-  RATIO_FRONT,
   RISK_FACTOR_LOW_PRECISION,
   RISK_PRECISION_THRESHOLD,
 } from "./estimation.types.js";
+import {
+  allocateDeliveryRoleHours,
+  buildDeliveryTeamStructure,
+  payrollMxnFromRoleHours,
+  RATES_MXN_PER_ROLE,
+} from "@theforge/business-rules";
+import { extractTechnicalMetadataTags } from "../../engine/mdd-markdown-parser.js";
 
 /** Horas base por unidad (entidades, pantallas, endpoints) para derivar total. */
 const HOURS_PER_ENTITY = 12;
@@ -603,9 +606,51 @@ function parseCountsFromMarkdown(md: string): {
   for (const m of createTableGlobal) entities.add(m[1].toLowerCase());
 
   const entityCount = entities.size;
+  const inferredScreensFromApi =
+    extraEndpointCount > 0 ? Math.min(28, Math.max(4, Math.ceil(extraEndpointCount * 0.55))) : 0;
   const screenCount =
-    extraEndpointCount > 0 ? 0 : entityCount > 0 ? Math.min(entityCount * 2, 20) : 0;
+    extraEndpointCount > 0
+      ? inferredScreensFromApi
+      : entityCount > 0
+        ? Math.min(entityCount * 2, 20)
+        : 0;
   return { entityCount, screenCount, extraEndpointCount };
+}
+
+function buildReadinessHints(
+  md: string,
+  precision: number,
+  sections: ReturnType<typeof detectReferenceSections>,
+  gaps: ReturnType<typeof computeConsistencyGaps>,
+  cx: EstimationComplexity,
+): string[] {
+  const out: string[] = [];
+  if (precision < 70) {
+    out.push(
+      "Prioriza §3 (modelo de datos) y §4 (API con payloads y códigos HTTP) antes de cascadas largas con IA.",
+    );
+  } else if (precision < 95) {
+    out.push("Refuerza trazabilidad §2↔§7 y paridad Mermaid/SQL para subir efectividad en conformance y generación asistida.");
+  }
+  if (!sections.endpointsWithPayloads) {
+    out.push("Contratos API: añade cuerpos JSON de request/response en los endpoints críticos.");
+  }
+  if (!sections.securitySubstantive) {
+    out.push("Seguridad: documenta authN/Z, datos sensibles y amenazas; mejora la verificación con IA (checkbox conformance).");
+  }
+  if (gaps.contradictionGap > 0) {
+    out.push("Elimina contradicciones entre secciones (reduce falsos positivos y retrabajo en OpenRouter).");
+  }
+  if (gaps.mermaidParityGap > 0) {
+    out.push("Alinea diagrama ER con tablas SQL para desbloquear Blueprint ↔ §3 y Contratos API.");
+  }
+  if (cx === "HIGH" && sections.db > 0 && !sections.endpointsWithPayloads) {
+    out.push("Alcance HIGH: sin payloads en API el semáforo suele quedar en amarillo aunque el MDD sea largo.");
+  }
+  if (md.length > 8000 && precision < 90) {
+    out.push("MDD extenso: revisa señales duplicadas o tablas huérfanas que confunden al modelo.");
+  }
+  return out.slice(0, 6);
 }
 
 /**
@@ -789,6 +834,7 @@ export class EstimationService {
 
     let precision: number;
     let status: SemaphoreStatusLive;
+    let readinessHints: string[];
 
     if (options?.auditorGaps) {
       const g = options.auditorGaps;
@@ -798,6 +844,18 @@ export class EstimationService {
         ? precision >= PRECISION_GREEN_MIN && g.infrastructure_ready && g.critical_gaps.length === 0
         : precision >= PRECISION_GREEN_MIN && g.critical_gaps.length === 0;
       status = hasGreenCriteria ? "green" : precision >= PRECISION_RED_MAX ? "yellow" : "red";
+      readinessHints =
+        g.critical_gaps.length > 0
+          ? g.critical_gaps
+              .slice(0, 5)
+              .map((x) => `[${(x.sections ?? []).join(" · ")}] ${x.issue}`)
+          : (g.syntax_errors?.length ?? 0) > 0
+            ? (g.syntax_errors ?? []).slice(0, 4)
+            : [
+                g.infrastructure_ready
+                  ? "Auditoría sin gaps críticos estructurados: activa conformance con IA para cruzar entregables con el MDD."
+                  : "Alinea §7 Infra con el stack de §2 (p. ej. Docker/Node) para marcar infra lista y subir confianza en cascadas.",
+              ];
     } else {
       const sections = detectReferenceSections(md);
       const gaps = adjustGapsForEstimationComplexity(computeConsistencyGaps(md), cx);
@@ -816,10 +874,7 @@ export class EstimationService {
       precision = Math.min(100, Math.round(Math.max(0, basePrecisionRaw - gapPenalty)));
       const hasGreenCriteria =
         cx === "HIGH"
-          ? sections.db > 0 &&
-            sections.endpointsWithPayloads &&
-            sections.securitySubstantive &&
-            gaps.contradictionGap === 0
+          ? sections.db > 0 && sections.endpointsWithPayloads && gaps.contradictionGap === 0
           : cx === "MEDIUM"
             ? sections.db > 0 && sections.endpointsWithPayloads && gaps.contradictionGap === 0
             : sections.db > 0 && gaps.contradictionGap === 0;
@@ -829,9 +884,11 @@ export class EstimationService {
           : precision >= PRECISION_RED_MAX
             ? "yellow"
             : "red";
+      readinessHints = buildReadinessHints(md, precision, sections, gaps, cx);
     }
 
     const { entityCount, screenCount, extraEndpointCount } = parseCountsFromMarkdown(md);
+    const metaTags = extractTechnicalMetadataTags(md);
     const baseTotalHours =
       entityCount * HOURS_PER_ENTITY +
       screenCount * HOURS_PER_SCREEN +
@@ -840,19 +897,20 @@ export class EstimationService {
     const riskFactor =
       precision < RISK_PRECISION_THRESHOLD ? RISK_FACTOR_LOW_PRECISION : 1.0;
     const totalHours = baseTotalHours;
-    const totalMXN = Math.round(totalHours * INTERNAL_HOUR_RATE * riskFactor);
-    const totalMXNMarket = Math.round(totalHours * MARKET_HOUR_RATE * riskFactor);
-
-    const roles = {
-      architect: baseTotalHours > 0 ? 1 : 0,
-      back: baseTotalHours > 0 ? 1 : 0,
-      front: baseTotalHours > 0 ? 1 : 0,
-    };
-    const rolesHours = {
-      architect: Math.round(baseTotalHours * RATIO_ARCHITECT * 100) / 100,
-      back: Math.round(baseTotalHours * RATIO_BACK * 100) / 100,
-      front: Math.round(baseTotalHours * RATIO_FRONT * 100) / 100,
-    };
+    const roles =
+      baseTotalHours > 0
+        ? (buildDeliveryTeamStructure(
+            entityCount,
+            screenCount,
+            extraEndpointCount,
+            metaTags,
+          ) as Record<string, number>)
+        : {};
+    const rolesHours =
+      baseTotalHours > 0 ? allocateDeliveryRoleHours(totalHours, roles) : {};
+    const payroll = payrollMxnFromRoleHours(rolesHours, RATES_MXN_PER_ROLE);
+    const totalMXN = Math.round(payroll * riskFactor * 100) / 100;
+    const totalMXNMarket = Math.round(totalHours * MARKET_HOUR_RATE * riskFactor * 100) / 100;
 
     return {
       precision,
@@ -862,6 +920,7 @@ export class EstimationService {
       roles,
       rolesHours,
       status,
+      readinessHints,
     };
   }
 

@@ -1,6 +1,6 @@
 # Utilidades web
 
 - **`apiClient.ts`** — `API_BASE`, token en `localStorage` (`getAccessToken` / `setAccessToken` / `clearAccessToken`), y **`apiFetch`**: añade `Authorization: Bearer` y ante 401 limpia sesión y dispara `theforge:auth-expired`.
-- **`costCalculator.ts`** — estimación MXN desde MDD.
+- **`costCalculator.ts`** — estimación MXN desde MDD vía `computeCostEstimation`: devuelve `totalMxn` (nómina por rol), `referenceSaleMxn` (horas × tarifa única), `rolesHours` y `teamStructure` alineados a API; `parseMddCounts` infiere pantallas desde endpoints cuando aplica.
 - **`downloadDocumentsZip.ts`** — ZIP de entregables.
 - **`complexityTabs.ts`** — `isTabVisibleForComplexity(tab, complexity, { projectType })`: **LOW** oculta MDD/Blueprint/API; **MEDIUM** alinea la barra (NEW: Paso 0, Spec, **BRD**, **To-Be**, API, Guía UX/UI, Tasks, ADRs — sin MDD en barra; LEGACY: Modificación, MDD Inicial, **BRD**, **To-Be**, MDD, Spec, API, Guía UX/UI, Tasks); **HIGH** muestra todo. Tabs `brd` / `to-be`: documentos por **etapa** (`Stage`), chat filtrado por `tab` como el resto. Los documentos no mostrados pueden seguir en BD; la constitución para generadores sigue usando `constitutionMarkdown` en API (DBGA/Spec si no hay MDD).

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "./ui";
+import MddViewer from "./MddViewer";
 import { useWorkshopStore, type WorkshopStage } from "../store/workshopStore";
 
 export interface BrdTobeStagePanelProps {
@@ -14,6 +15,15 @@ export interface BrdTobeStagePanelProps {
   dbgaContentChars: number;
   /** `full` = BRD + To-Be + As-Is + gate (legacy). `brd` / `tobe` = pestañas dedicadas del Workshop. `gate-only` = solo toggle bajo MDD. */
   panel?: "full" | "brd" | "tobe" | "gate-only";
+  /** Workshop: BRD controlado (preview/fuente + Grabar en barra). Si se omite, estado interno (p. ej. `full`). */
+  brdDraft?: string;
+  onBrdDraftChange?: (value: string) => void;
+  tobeDraft?: string;
+  onTobeDraftChange?: (value: string) => void;
+  asisDraft?: string;
+  onAsisDraftChange?: (value: string) => void;
+  /** `preview` = `MddViewer`; `fuente` = textarea. Solo pestañas dedicadas cuando el padre lo pasa. */
+  docViewMode?: "preview" | "source";
 }
 
 /**
@@ -31,6 +41,13 @@ export function BrdTobeStagePanel({
   codebaseDocChars,
   dbgaContentChars,
   panel = "full",
+  brdDraft,
+  onBrdDraftChange,
+  tobeDraft,
+  onTobeDraftChange,
+  asisDraft,
+  onAsisDraftChange,
+  docViewMode,
 }: BrdTobeStagePanelProps) {
   const patchWorkshopStage = useWorkshopStore((s) => s.patchWorkshopStage);
   const setProjectRequireBrdTobeGate = useWorkshopStore((s) => s.setProjectRequireBrdTobeGate);
@@ -40,16 +57,55 @@ export function BrdTobeStagePanel({
   const storeLoading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
 
-  const [brd, setBrd] = useState("");
-  const [tobe, setTobe] = useState("");
-  const [asis, setAsis] = useState("");
+  const [brdInternal, setBrdInternal] = useState("");
+  const [tobeInternal, setTobeInternal] = useState("");
+  const [asisInternal, setAsisInternal] = useState("");
   const [localBusy, setLocalBusy] = useState(false);
 
+  const brdControlled = brdDraft !== undefined;
+  const tobeControlled = tobeDraft !== undefined;
+  const asisControlled = asisDraft !== undefined;
+
+  const brd = brdControlled ? brdDraft! : brdInternal;
+  const tobe = tobeControlled ? tobeDraft! : tobeInternal;
+  const asis = asisControlled ? asisDraft! : asisInternal;
+
+  const setBrd = useCallback(
+    (v: string) => {
+      if (onBrdDraftChange) onBrdDraftChange(v);
+      else setBrdInternal(v);
+    },
+    [onBrdDraftChange],
+  );
+  const setTobe = useCallback(
+    (v: string) => {
+      if (onTobeDraftChange) onTobeDraftChange(v);
+      else setTobeInternal(v);
+    },
+    [onTobeDraftChange],
+  );
+  const setAsis = useCallback(
+    (v: string) => {
+      if (onAsisDraftChange) onAsisDraftChange(v);
+      else setAsisInternal(v);
+    },
+    [onAsisDraftChange],
+  );
+
   useEffect(() => {
-    setBrd((stage?.brdContent ?? "").trim() ? (stage?.brdContent ?? "") : "");
-    setTobe((stage?.toBeManualContent ?? "").trim() ? (stage?.toBeManualContent ?? "") : "");
-    setAsis((stage?.asIsManualContent ?? "").trim() ? (stage?.asIsManualContent ?? "") : "");
-  }, [stage?.id, stage?.brdContent, stage?.toBeManualContent, stage?.asIsManualContent]);
+    if (brdControlled) return;
+    setBrdInternal((stage?.brdContent ?? "").trim() ? (stage?.brdContent ?? "") : "");
+  }, [brdControlled, stage?.id, stage?.brdContent]);
+
+  useEffect(() => {
+    if (tobeControlled) return;
+    setTobeInternal((stage?.toBeManualContent ?? "").trim() ? (stage?.toBeManualContent ?? "") : "");
+  }, [tobeControlled, stage?.id, stage?.toBeManualContent]);
+
+  useEffect(() => {
+    if (asisControlled) return;
+    setAsisInternal((stage?.asIsManualContent ?? "").trim() ? (stage?.asIsManualContent ?? "") : "");
+  }, [asisControlled, stage?.id, stage?.asIsManualContent]);
 
   const busy = localBusy || storeLoading;
   const asIsLoading = loadingReason === "legacy-as-is";
@@ -171,6 +227,14 @@ export function BrdTobeStagePanel({
   const textareaGrowClass =
     "w-full rounded-md border border-zinc-600 bg-zinc-950/80 p-2 font-mono text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500/70 resize-none";
 
+  const previewShellClass =
+    "min-h-0 flex-1 overflow-auto rounded-md border border-zinc-600 bg-zinc-950/30 p-2 text-zinc-200";
+
+  const showBrdPreview = panel === "brd" && docViewMode === "preview";
+  const showTobePreview = panel === "tobe" && docViewMode === "preview";
+  const hideBrdInlineSave = brdControlled;
+  const hideTobeInlineSaves = tobeControlled && asisControlled;
+
   return (
     <div
       className={
@@ -205,23 +269,31 @@ export function BrdTobeStagePanel({
       {showBrdBlock ? (
       <div className={panel === "brd" ? "flex min-h-0 flex-1 flex-col gap-1" : "space-y-1"}>
         <label className="shrink-0 text-xs text-zinc-400">BRD (markdown)</label>
-        <textarea
-          value={brd}
-          onChange={(e) => setBrd(e.target.value)}
-          disabled={busy}
-          rows={panel === "brd" ? undefined : 4}
-          spellCheck={false}
-          className={
-            panel === "brd"
-              ? `${textareaGrowClass} min-h-[10rem] flex-1`
-              : `w-full rounded-md border border-zinc-600 bg-zinc-950/80 p-2 font-mono text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500/70`
-          }
-          placeholder="Problema, KPIs, alcance…"
-        />
+        {showBrdPreview ? (
+          <div className={(panel === "brd" ? "flex min-h-0 flex-1 flex-col " : "") + previewShellClass}>
+            <MddViewer content={brd} />
+          </div>
+        ) : (
+          <textarea
+            value={brd}
+            onChange={(e) => setBrd(e.target.value)}
+            disabled={busy}
+            rows={panel === "brd" ? undefined : 4}
+            spellCheck={false}
+            className={
+              panel === "brd"
+                ? `${textareaGrowClass} min-h-[10rem] flex-1`
+                : `w-full rounded-md border border-zinc-600 bg-zinc-950/80 p-2 font-mono text-xs text-zinc-200 outline-none focus:ring-1 focus:ring-amber-500/70`
+            }
+            placeholder="Problema, KPIs, alcance…"
+          />
+        )}
         <div className="flex shrink-0 flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void saveBrd()}>
-            Guardar BRD
-          </Button>
+          {!hideBrdInlineSave ? (
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void saveBrd()}>
+              Guardar BRD
+            </Button>
+          ) : null}
           <Button type="button" size="sm" disabled={busy || !brd.trim()} onClick={() => void approveBrd()}>
             Aprobar BRD
           </Button>
@@ -283,18 +355,26 @@ export function BrdTobeStagePanel({
         <div className="flex min-h-0 flex-1 flex-col gap-4">
           <div className="flex min-h-0 flex-1 flex-col gap-1">
             <label className="shrink-0 text-xs text-zinc-400">Manual To-Be</label>
-            <textarea
-              value={tobe}
-              onChange={(e) => setTobe(e.target.value)}
-              disabled={busy}
-              spellCheck={false}
-              className={`${textareaGrowClass} min-h-[10rem] flex-1`}
-              placeholder="Lógica y comportamiento deseado…"
-            />
+            {showTobePreview ? (
+              <div className={"flex min-h-0 flex-1 flex-col " + previewShellClass}>
+                <MddViewer content={tobe} />
+              </div>
+            ) : (
+              <textarea
+                value={tobe}
+                onChange={(e) => setTobe(e.target.value)}
+                disabled={busy}
+                spellCheck={false}
+                className={`${textareaGrowClass} min-h-[10rem] flex-1`}
+                placeholder="Lógica y comportamiento deseado…"
+              />
+            )}
             <div className="flex shrink-0 flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void saveTobe()}>
-                Guardar To-Be
-              </Button>
+              {!hideTobeInlineSaves ? (
+                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void saveTobe()}>
+                  Guardar To-Be
+                </Button>
+              ) : null}
               <Button type="button" size="sm" disabled={busy || !tobe.trim()} onClick={() => void approveTobe()}>
                 Aprobar To-Be
               </Button>
@@ -352,24 +432,32 @@ export function BrdTobeStagePanel({
                 </Button>
               )}
             </div>
-            <textarea
-              value={asis}
-              onChange={(e) => setAsis(e.target.value)}
-              disabled={busy}
-              spellCheck={false}
-              className={`${textareaGrowClass} min-h-[8rem] flex-1`}
-              placeholder="Opcional: proceso o código actual…"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              className="shrink-0 self-start"
-              onClick={() => void saveAsis()}
-            >
-              Guardar As-Is
-            </Button>
+            {showTobePreview ? (
+              <div className={"flex min-h-0 flex-1 flex-col " + previewShellClass}>
+                <MddViewer content={asis} />
+              </div>
+            ) : (
+              <textarea
+                value={asis}
+                onChange={(e) => setAsis(e.target.value)}
+                disabled={busy}
+                spellCheck={false}
+                className={`${textareaGrowClass} min-h-[8rem] flex-1`}
+                placeholder="Opcional: proceso o código actual…"
+              />
+            )}
+            {!hideTobeInlineSaves ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                className="shrink-0 self-start"
+                onClick={() => void saveAsis()}
+              >
+                Guardar As-Is
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : (

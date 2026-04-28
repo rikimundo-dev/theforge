@@ -2,10 +2,14 @@
   "name": "theforge",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "dev:local": "node scripts/ensure-infra.js && pnpm run dev",
+    "dev:local": "node scripts/ensure-infra.js && npm run dev",
     "dev:api": "node scripts/ensure-infra.js && turbo run dev --filter=@theforge/api",
     "dev:web": "turbo run dev --filter=@theforge/web",
     "lint": "turbo run lint",
@@ -16,7 +20,6 @@
   "devDependencies": {
     "turbo": "^2.3.0"
   },
-  "packageManager": "pnpm@9.14.2",
   "engines": {
     "node": ">=20"
   }

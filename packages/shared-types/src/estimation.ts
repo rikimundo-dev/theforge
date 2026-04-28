@@ -5,6 +5,11 @@ export const teamStructureSchema = z.object({
   back: z.number().int().min(0).optional(),
   front: z.number().int().min(0).optional(),
   ux: z.number().int().min(0).optional(),
+  techLead: z.number().int().min(0).optional(),
+  pm: z.number().int().min(0).optional(),
+  security: z.number().int().min(0).optional(),
+  qa: z.number().int().min(0).optional(),
+  devops: z.number().int().min(0).optional(),
 });
 
 export const estimationResponseSchema = z.object({

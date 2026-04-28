@@ -13,18 +13,18 @@ Monorepo Turborepo: API NestJS + Web React (Vite) + Prisma. LLM vía **OpenRoute
 ## Requisitos
 
 - Node ≥20
-- pnpm 9
+- npm (workspaces en la raíz; opcional `package-lock.json` para builds reproducibles / `npm ci` en CI)
 - PostgreSQL 15 (para API)
 - Opcional: Redis (para colas futuras)
 
 ## Desarrollo
 
 ```bash
-pnpm install
+npm install
 # Base de datos: crear DB y DATABASE_URL en .env (api o root)
-pnpm run db:generate
-pnpm run db:push
-pnpm run dev
+npm run db:generate
+npm run db:push
+npm run dev
 ```
 
 - API: http://localhost:3000
@@ -33,12 +33,14 @@ pnpm run dev
 ## Build
 
 ```bash
-pnpm run build
+npm run build
 ```
 
 ## Docker (Dokploy) — un solo contenedor
 
 Un único contenedor **theforge-db** con Postgres + API + Web (Nginx). Conexión interna: `postgresql://theforge:theforge@localhost:5432/theforge`.
+
+Las imágenes (`Dockerfile` raíz, `apps/api/Dockerfile`, `apps/web/Dockerfile`) instalan dependencias con **`npm install`** en el contexto del monorepo (copian `package.json`, `turbo.json`, `.npmrc` y los `package.json` de workspaces). Cuando tengas un **`package-lock.json` en la raíz** generado con `npm install`, puedes cambiar el `Dockerfile` a `COPY package-lock.json ./` + `npm ci` para builds más deterministas.
 
 ```bash
 docker compose up --build

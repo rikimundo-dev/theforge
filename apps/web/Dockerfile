@@ -2,25 +2,22 @@
 FROM node:20-alpine AS builder
 
 WORKDIR /app
+RUN apk add --no-cache libc6-compat
 
-RUN corepack enable && corepack prepare pnpm@9.14.2 --activate
-ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-
-COPY package.json pnpm-workspace.yaml turbo.json ./
+COPY package.json turbo.json .npmrc ./
 COPY packages/config/package.json packages/config/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/business-rules/package.json packages/business-rules/
 COPY apps/web/package.json apps/web/
 
-RUN pnpm install
+RUN npm install
 
 COPY packages/config packages/config
 COPY packages/shared-types packages/shared-types
 COPY packages/business-rules packages/business-rules
 COPY apps/web apps/web
 
-RUN pnpm run build --filter=@theforge/web
+RUN npx turbo run build --filter=@theforge/web
 
 # Production stage — Nginx
 FROM nginx:alpine AS runner

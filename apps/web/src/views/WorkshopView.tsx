@@ -120,6 +120,7 @@ export default function WorkshopView({
     () => workshopStagesList.find((s) => s.id === activeStageId),
     [workshopStagesList, activeStageId],
   );
+  const patchWorkshopStage = useWorkshopStore((s) => s.patchWorkshopStage);
   const codebaseDocCharCount = useMemo(
     () => (project?.legacyFlowState?.codebaseDoc ?? "").trim().length,
     [project?.legacyFlowState?.codebaseDoc],
@@ -308,6 +309,14 @@ export default function WorkshopView({
   const [mddInicialLocalContent, setMddInicialLocalContent] = useState("");
   const [mddInicialSaving, setMddInicialSaving] = useState(false);
   const [mddInicialCopyOk, setMddInicialCopyOk] = useState(false);
+  /** BRD / To-Be (pestañas Workshop): borradores locales y modo preview|fuente (Grabar vía barra / aviso). */
+  const brdTobeServerSnap = useRef({ stageId: "", brd: "", tobe: "", asis: "" });
+  const [brdWorkshopDraft, setBrdWorkshopDraft] = useState("");
+  const [toBeWorkshopDraft, setToBeWorkshopDraft] = useState("");
+  const [asIsWorkshopDraft, setAsIsWorkshopDraft] = useState("");
+  const [brdDocViewMode, setBrdDocViewMode] = useState<"preview" | "source">("preview");
+  const [toBeDocViewMode, setToBeDocViewMode] = useState<"preview" | "source">("preview");
+  const [brdTobePersistBusy, setBrdTobePersistBusy] = useState(false);
   /** `ask_codebase` / Ariadne al generar doc. partida (`POST …/legacy/generate-codebase-doc`). Default `raw_evidence`. `ingest_mdd` = una sola pasada `evidence_first` (MDD ingest), sin agente escalonado ni síntesis Nest. */
   const [codebaseDocResponseMode, setCodebaseDocResponseMode] = useState<CodebaseDocResponseMode>("raw_evidence");
   const copyMddInicialMarkdown = useCallback(async () => {
@@ -376,6 +385,83 @@ export default function WorkshopView({
     const codebaseDoc = project?.legacyFlowState?.codebaseDoc ?? "";
     if (codebaseDoc) setMddInicialLocalContent(codebaseDoc);
   }, [project?.legacyFlowState?.codebaseDoc]);
+
+  useEffect(() => {
+    brdTobeServerSnap.current = { stageId: "", brd: "", tobe: "", asis: "" };
+    setBrdWorkshopDraft("");
+    setToBeWorkshopDraft("");
+    setAsIsWorkshopDraft("");
+    setBrdDocViewMode("preview");
+    setToBeDocViewMode("preview");
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!activeWorkshopStage || activeWorkshopStage.id !== activeStageId) return;
+    const id = activeWorkshopStage.id;
+    const brd = activeWorkshopStage.brdContent ?? "";
+    const tobe = activeWorkshopStage.toBeManualContent ?? "";
+    const asis = activeWorkshopStage.asIsManualContent ?? "";
+
+    const cur = brdTobeServerSnap.current;
+    if (cur.stageId !== id) {
+      brdTobeServerSnap.current = { stageId: id, brd, tobe, asis };
+      setBrdWorkshopDraft(brd);
+      setToBeWorkshopDraft(tobe);
+      setAsIsWorkshopDraft(asis);
+      setBrdDocViewMode("preview");
+      setToBeDocViewMode("preview");
+      return;
+    }
+
+    if (cur.brd !== brd) {
+      setBrdWorkshopDraft((d) => (d === cur.brd ? brd : d));
+      brdTobeServerSnap.current.brd = brd;
+    }
+    const c2 = brdTobeServerSnap.current;
+    if (c2.tobe !== tobe) {
+      setToBeWorkshopDraft((d) => (d === c2.tobe ? tobe : d));
+      brdTobeServerSnap.current.tobe = tobe;
+    }
+    const c3 = brdTobeServerSnap.current;
+    if (c3.asis !== asis) {
+      setAsIsWorkshopDraft((d) => (d === c3.asis ? asis : d));
+      brdTobeServerSnap.current.asis = asis;
+    }
+  }, [
+    activeStageId,
+    activeWorkshopStage?.id,
+    activeWorkshopStage?.brdContent,
+    activeWorkshopStage?.toBeManualContent,
+    activeWorkshopStage?.asIsManualContent,
+  ]);
+
+  const brdWorkshopDirty = useMemo(
+    () => brdWorkshopDraft !== (activeWorkshopStage?.brdContent ?? ""),
+    [brdWorkshopDraft, activeWorkshopStage?.brdContent],
+  );
+  const toBeWorkshopTabDirty = useMemo(
+    () =>
+      toBeWorkshopDraft !== (activeWorkshopStage?.toBeManualContent ?? "") ||
+      asIsWorkshopDraft !== (activeWorkshopStage?.asIsManualContent ?? ""),
+    [toBeWorkshopDraft, asIsWorkshopDraft, activeWorkshopStage?.toBeManualContent, activeWorkshopStage?.asIsManualContent],
+  );
+
+  const persistBrdWorkshopDraft = useCallback(async () => {
+    if (!activeStageId || !brdWorkshopDirty) return;
+    setBrdTobePersistBusy(true);
+    await patchWorkshopStage(activeStageId, { brdContent: brdWorkshopDraft });
+    setBrdTobePersistBusy(false);
+  }, [activeStageId, brdWorkshopDirty, brdWorkshopDraft, patchWorkshopStage]);
+
+  const persistToBeTabWorkshopDrafts = useCallback(async () => {
+    if (!activeStageId || !toBeWorkshopTabDirty) return;
+    setBrdTobePersistBusy(true);
+    await patchWorkshopStage(activeStageId, {
+      toBeManualContent: toBeWorkshopDraft,
+      asIsManualContent: asIsWorkshopDraft,
+    });
+    setBrdTobePersistBusy(false);
+  }, [activeStageId, toBeWorkshopTabDirty, toBeWorkshopDraft, asIsWorkshopDraft, patchWorkshopStage]);
 
   const handleGenerateDeliverables = useCallback(async () => {
     if (!projectId || !canGenerate || cascadeRunning) return;
@@ -1180,7 +1266,7 @@ export default function WorkshopView({
                       : "Orden: MDD → Spec → Arq. → Casos → H.U. → Blueprint → Guía UX/UI → API → Flujos → Tasks → Infra (Paso 0 opcional)"}
               </p>
               <div className="flex flex-wrap items-center gap-2 shrink-0 sm:justify-end">
-                {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra"] as const).includes(
+                {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd", "to-be"] as const).includes(
                   centralPanel as any,
                 ) && (
                     (centralPanel === "spec" ||
@@ -1194,7 +1280,9 @@ export default function WorkshopView({
                       (centralPanel === "user-stories" && userStoriesContent) ||
                       (centralPanel === "logic-flows" && logicFlowsContent) ||
                       (centralPanel === "infra" && infraContent) ||
-                      (centralPanel === "mdd-inicial" && (project?.legacyFlowState?.codebaseDoc || mddInicialLocalContent))) &&
+                      (centralPanel === "mdd-inicial" && (project?.legacyFlowState?.codebaseDoc || mddInicialLocalContent)) ||
+                      (centralPanel === "brd" && !!activeStageId) ||
+                      (centralPanel === "to-be" && !!activeStageId)) &&
                     centralPanel !== "tasks" && (
                       <button
                         type="button"
@@ -1210,6 +1298,8 @@ export default function WorkshopView({
                           else if (centralPanel === "api-contracts") setApiContractsViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "logic-flows") setLogicFlowsViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "infra") setInfraViewMode((m) => (m === "preview" ? "source" : "preview"));
+                          else if (centralPanel === "brd") setBrdDocViewMode((m) => (m === "preview" ? "source" : "preview"));
+                          else if (centralPanel === "to-be") setToBeDocViewMode((m) => (m === "preview" ? "source" : "preview"));
                         }}
                         className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50"
                       >
@@ -1223,7 +1313,9 @@ export default function WorkshopView({
                                     : centralPanel === "blueprint" ? blueprintViewMode
                                       : centralPanel === "api-contracts" ? apiContractsViewMode
                                         : centralPanel === "logic-flows" ? logicFlowsViewMode
-                                          : infraViewMode) === "preview" ? (
+                                          : centralPanel === "brd" ? brdDocViewMode
+                                            : centralPanel === "to-be" ? toBeDocViewMode
+                                              : infraViewMode) === "preview" ? (
                           <>
                             <Code className="w-4 h-4" />
                             Ver fuente
@@ -1364,6 +1456,30 @@ export default function WorkshopView({
                     className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {mddInicialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Guardar
+                  </button>
+                )}
+                {centralPanel === "brd" && brdDocViewMode === "source" && activeStageId && brdWorkshopDirty && (
+                  <button
+                    type="button"
+                    onClick={() => void persistBrdWorkshopDraft()}
+                    disabled={brdTobePersistBusy}
+                    title="Guardar BRD en la etapa activa"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {brdTobePersistBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Guardar
+                  </button>
+                )}
+                {centralPanel === "to-be" && toBeDocViewMode === "source" && activeStageId && toBeWorkshopTabDirty && (
+                  <button
+                    type="button"
+                    onClick={() => void persistToBeTabWorkshopDrafts()}
+                    disabled={brdTobePersistBusy}
+                    title="Guardar Manual To-Be y As-Is en la etapa activa"
+                    className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {brdTobePersistBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                     Guardar
                   </button>
                 )}
@@ -2148,7 +2264,32 @@ export default function WorkshopView({
               )
             )}
             {centralPanel === "brd" && projectId && (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+                {brdWorkshopDirty && (
+                  <div className="shrink-0 flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                    <span className="text-sm text-amber-200/90">Cambios sin guardar en el BRD de esta etapa.</span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setBrdWorkshopDraft(activeWorkshopStage?.brdContent ?? "")}
+                        disabled={brdTobePersistBusy}
+                        className="flex items-center gap-1.5 rounded px-2 py-1 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <X className="h-4 w-4" />
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void persistBrdWorkshopDraft()}
+                        disabled={brdTobePersistBusy}
+                        className="flex items-center gap-1.5 rounded bg-amber-500/80 px-3 py-1.5 text-zinc-900 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {brdTobePersistBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Grabar
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <BrdTobeStagePanel
                   panel="brd"
                   projectId={projectId}
@@ -2158,11 +2299,42 @@ export default function WorkshopView({
                   isLegacyProject={isLegacyProject}
                   codebaseDocChars={codebaseDocCharCount}
                   dbgaContentChars={dbgaContentCharCount}
+                  brdDraft={brdWorkshopDraft}
+                  onBrdDraftChange={setBrdWorkshopDraft}
+                  docViewMode={brdDocViewMode}
                 />
               </div>
             )}
             {centralPanel === "to-be" && projectId && (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+                {toBeWorkshopTabDirty && (
+                  <div className="shrink-0 flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                    <span className="text-sm text-amber-200/90">Cambios sin guardar en To-Be / As-Is de esta etapa.</span>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setToBeWorkshopDraft(activeWorkshopStage?.toBeManualContent ?? "");
+                          setAsIsWorkshopDraft(activeWorkshopStage?.asIsManualContent ?? "");
+                        }}
+                        disabled={brdTobePersistBusy}
+                        className="flex items-center gap-1.5 rounded px-2 py-1 text-zinc-300 hover:bg-zinc-600 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <X className="h-4 w-4" />
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void persistToBeTabWorkshopDrafts()}
+                        disabled={brdTobePersistBusy}
+                        className="flex items-center gap-1.5 rounded bg-amber-500/80 px-3 py-1.5 text-zinc-900 hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {brdTobePersistBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        Grabar
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <BrdTobeStagePanel
                   panel="tobe"
                   projectId={projectId}
@@ -2172,6 +2344,11 @@ export default function WorkshopView({
                   isLegacyProject={isLegacyProject}
                   codebaseDocChars={codebaseDocCharCount}
                   dbgaContentChars={dbgaContentCharCount}
+                  tobeDraft={toBeWorkshopDraft}
+                  onTobeDraftChange={setToBeWorkshopDraft}
+                  asisDraft={asIsWorkshopDraft}
+                  onAsisDraftChange={setAsIsWorkshopDraft}
+                  docViewMode={toBeDocViewMode}
                 />
               </div>
             )}

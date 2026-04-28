@@ -5,7 +5,7 @@ Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para la bas
 ## Requisitos
 
 - **Node** ≥20  
-- **pnpm** (o `corepack enable` + `pnpm`)  
+- **npm** (incluido con Node; monorepo vía `workspaces` en la raíz)  
 - **Colima** (runtime de contenedores en Mac; si no está corriendo, `dev:local` ejecuta `colima start --cpu 2 --memory 4`)  
 - **Docker** CLI (para Postgres; Colima lo provee)
 
@@ -16,7 +16,7 @@ Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para la bas
 ### 1. Dependencias
 
 ```bash
-pnpm install
+npm install
 ```
 
 ### 2. Levantar solo Postgres
@@ -49,8 +49,8 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ### 4. Crear tablas (Prisma)
 
 ```bash
-pnpm run db:generate
-pnpm run db:push
+npm run db:generate
+npm run db:push
 ```
 
 ### 5. Arrancar API y Web
@@ -60,13 +60,13 @@ pnpm run db:push
 Levanta Postgres si no está y luego API + Web:
 
 ```bash
-pnpm run dev:local
+npm run dev:local
 ```
 
 O solo API + Web (Postgres ya levantado):
 
 ```bash
-pnpm run dev
+npm run dev
 ```
 
 **Back y front en terminales separadas**
@@ -84,7 +84,7 @@ pnpm run dev
    Desde la raíz:
 
    ```bash
-   pnpm run dev:api
+   npm run dev:api
    ```
 
 3. **Terminal 2 — Frontend (Web):**
@@ -92,7 +92,7 @@ pnpm run dev
    Desde la raíz:
 
    ```bash
-   pnpm run dev:web
+   npm run dev:web
    ```
 
 - **Web:** http://localhost:5173  
@@ -121,7 +121,7 @@ docker compose up --build
 - **Contenedor:** `theforge-db`  
 - **Datos:** volumen `theforge_db_data`
 
-Útil para probar el despliegue o si no quieres tener Node/pnpm en local.
+Útil para probar el despliegue o si no quieres tener Node/npm en local.
 
 ---
 
@@ -136,19 +136,19 @@ Si tienes PostgreSQL 15 en local:
    DATABASE_URL=postgresql://USUARIO:PASSWORD@localhost:5432/theforge
    ```
 
-3. Luego: `pnpm install` → `pnpm run db:generate` → `pnpm run db:push` → `pnpm run dev`.
+3. Luego: `npm install` → `npm run db:generate` → `npm run db:push` → `npm run dev`.
 
 ---
 
 ## Resumen rápido (Opción A)
 
 ```bash
-pnpm install
+npm install
 echo "DATABASE_URL=postgresql://theforge:theforge@localhost:5432/theforge" > .env
-pnpm run db:generate && pnpm run db:push
-pnpm run dev:local
+npm run db:generate && npm run db:push
+npm run dev:local
 ```
 
-`dev:local` levanta Postgres en Docker si no existe o está parado; luego arranca API y Web. Si prefieres levantar Postgres a mano, usa el comando `docker run ...` del paso 2 y luego `pnpm run dev`.
+`dev:local` levanta Postgres en Docker si no existe o está parado; luego arranca API y Web. Si prefieres levantar Postgres a mano, usa el comando `docker run ...` del paso 2 y luego `npm run dev`.
 
 Abre http://localhost:5173 y crea un proyecto para comprobar que todo va bien.

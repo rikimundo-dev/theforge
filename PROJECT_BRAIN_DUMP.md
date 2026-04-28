@@ -113,7 +113,7 @@ flowchart TB
 
 | Área | Paquete / runtime | Versión (aprox.) |
 |------|-------------------|-------------------|
-| Monorepo | pnpm | 9.14.2 |
+| Monorepo | npm workspaces | turbo |
 | Build | turbo | ^2.3.0 |
 | Runtime Node | engines | >=20 |
 | API framework | @nestjs/* | ^10.4.x |

@@ -9,10 +9,10 @@
     "lint": "eslint src"
   },
   "dependencies": {
-    "@theforge/shared-types": "workspace:*"
+    "@theforge/shared-types": "*"
   },
   "devDependencies": {
-    "@theforge/config": "workspace:*",
+    "@theforge/config": "*",
     "typescript": "^5.6.3"
   }
 }

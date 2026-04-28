@@ -83,16 +83,18 @@ export interface PrecisionBreakdown {
 /** Salida exacta para la UI: Semáforo + Estimación (nómina interna y precio mercado). */
 export interface LiveMetricsResult {
   precision: number;
-  /** Costo a nómina interna ($185/hr × horas × riskFactor). */
+  /** Nómina interna ponderada (Σ horas rol × tarifa rol × riskFactor). */
   totalMXN: number;
-  /** Costo a precio de mercado ($/hr mercado × horas × riskFactor). */
+  /** Referencia mercado (horas × tarifa mercado × riskFactor). */
   totalMXNMarket: number;
   totalHours: number;
   /** Personas por rol (conteo). */
-  roles: { architect: number; back: number; front: number };
-  /** Horas por rol (15% arquitectura, 45% back, 40% front). */
-  rolesHours: { architect: number; back: number; front: number };
+  roles: Record<string, number>;
+  /** Horas por rol (reparto delivery). */
+  rolesHours: Record<string, number>;
   status: SemaphoreStatusLive;
+  /** Pistas breves para preparar documentos y mejorar efectividad con IA (OpenRouter / cascadas). */
+  readinessHints: string[];
 }
 
 /** Tasa interna (Costo Empresa 2026): $21k netos × 1.4 carga social ÷ 160 h/mes ≈ $29,400/mes → $185 MXN/hr. */
@@ -103,11 +105,6 @@ export const INTERNAL_HOUR_RATE = 185;
 
 /** Tarifa hora a precio de mercado (consultoría / venta), MXN/hr. */
 export const MARKET_HOUR_RATE = 1_050;
-
-/** Reparto de horas: Arquitectura 15%, Backend 45%, Frontend/Integración 40%. */
-export const RATIO_ARCHITECT = 0.15;
-export const RATIO_BACK = 0.45;
-export const RATIO_FRONT = 0.4;
 
 /**
  * Umbrales de precisión del semáforo:

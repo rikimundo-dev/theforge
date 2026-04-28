@@ -7,7 +7,7 @@ Prisma schema y client compartido.
 - **Migración `20260327140000_ensure_pg_enums_idempotent`:** crea con `IF NOT EXISTS` los ENUM de Prisma (`Status`, `ProjectType`, `ComplexityLevel`, `StageStatus`, `EpisodicMemoryKind`) para desbloquear deploys donde faltaba el tipo antes de `ADD COLUMN …`.
 - **Client:** generado en `src/generated`; exportado por el package.
 
-`pnpm db:generate` (o `pnpm build`) genera el client. `pnpm db:push` aplica el schema a la DB. `pnpm db:migrate` ejecuta migraciones en producción.
+Desde la **raíz** del monorepo: `npm run db:generate` (o el `build` del paquete) genera el client. `npm run db:push` aplica el schema a la DB. `npm run db:migrate` ejecuta migraciones en producción.
 
 **Imagen Docker (API):** el `ENTRYPOINT` del contenedor ejecuta `prisma migrate deploy` en cada arranque antes de levantar Nest; el CLI `prisma` va en `dependencies` de este package para que el deploy no dependa de devDependencies.
 
@@ -17,14 +17,14 @@ Prisma schema y client compartido.
 
 ```bash
 cd packages/database
-DATABASE_URL="postgresql://..." pnpm exec prisma migrate resolve --applied 20250309000000_initial_schema
+DATABASE_URL="postgresql://..." npx prisma migrate resolve --applied 20250309000000_initial_schema
 ```
 
 **Si `20250311000000_add_project_type_relic` falla por "ProjectType already exists"** (p. ej. tras un `db push` previo), marcar como aplicada y volver a desplegar:
 
 ```bash
 cd packages/database
-DATABASE_URL="postgresql://user:pass@host:5432/theforge" pnpm exec prisma migrate resolve --applied 20250311000000_add_project_type_relic
+DATABASE_URL="postgresql://user:pass@host:5432/theforge" npx prisma migrate resolve --applied 20250311000000_add_project_type_relic
 ```
 
 ### P3018 — `relation "Project" does not exist` (20250311100000_add_legacy_flow_state)
@@ -50,8 +50,8 @@ Manual (misma `DATABASE_URL` que producción):
 ```bash
 cd packages/database
 export DATABASE_URL="postgresql://..."
-pnpm exec prisma migrate resolve --rolled-back 20250319140000_stage_sdd_deliverables
-pnpm exec prisma migrate deploy
+npx prisma migrate resolve --rolled-back 20250319140000_stage_sdd_deliverables
+npx prisma migrate deploy
 ```
 
 **1. Ver el registro y el estado real** (contra la misma `DATABASE_URL` que usa el contenedor API):
@@ -76,7 +76,7 @@ ORDER BY table_name, ordinal_position;
 - **A) Deshacer lo aplicado** (solo si puedes borrar datos de prueba / snapshot previo): revertir manualmente los `ALTER` de esa migración hasta un estado coherente con la migración anterior, luego:
 
   ```bash
-  pnpm exec prisma migrate resolve --rolled-back 20250319140000_stage_sdd_deliverables
+  npx prisma migrate resolve --rolled-back 20250319140000_stage_sdd_deliverables
   ```
 
   Vuelve a desplegar con una imagen que incluya el `migration.sql` actualizado (crea el enum `Status` al inicio).
@@ -84,7 +84,7 @@ ORDER BY table_name, ordinal_position;
 - **B) Completar a mano** el SQL restante de `migrations/20250319140000_stage_sdd_deliverables/migration.sql` (crear enum `Status` si falta, luego el resto según lo que ya tengas) y marcar aplicada:
 
   ```bash
-  pnpm exec prisma migrate resolve --applied 20250319140000_stage_sdd_deliverables
+  npx prisma migrate resolve --applied 20250319140000_stage_sdd_deliverables
   ```
 
 **3. Si aún no tocaste la DB** y solo falló por el enum: con el `migration.sql` corregido (enum al inicio), `resolve --rolled-back` y otro `migrate deploy` deberían aplicar la migración entera de nuevo.
@@ -109,6 +109,6 @@ Redeploy. En el siguiente arranque el entrypoint desbloqueará y `migrate deploy
 ```bash
 cd packages/database
 export DATABASE_URL="postgresql://theforge:theforge@theforge-db:5432/theforge"
-pnpm exec prisma migrate resolve --rolled-back 20260319130000_agent_checkpoint_mdd_stage
-pnpm exec prisma migrate deploy
+npx prisma migrate resolve --rolled-back 20260319130000_agent_checkpoint_mdd_stage
+npx prisma migrate deploy
 ```

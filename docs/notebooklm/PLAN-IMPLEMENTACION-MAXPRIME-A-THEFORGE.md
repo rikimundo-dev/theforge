@@ -128,7 +128,7 @@ Opcional: MaxPrime y The Forge solo levantan Postgres + Falkor. The Forge en pro
 1. Actualizar `packages/shared-types/src/mdd.ts` (constitución + `passthrough` donde aplique).
 2. Portar `markdown-repair.ts` y `mdd-pipeline-limits.ts`; exportar en `index.ts` (y re-export de `markdown-repair` si la web importa subpath, igual que MaxPrime).
 3. Sustituir `apps/api/.../engine/mdd-markdown-parser.ts` por la versión completa + tests `.constitution.spec.ts`.
-4. `pnpm build` / tests en paquetes y API.
+4. `npm run build` / tests en paquetes y API.
 
 **Criterio de hecho:** tests de constitución verdes; `mddJsonSchema` valida `constitution` opcional.
 
@@ -212,7 +212,7 @@ Opcional: MaxPrime y The Forge solo levantan Postgres + Falkor. The Forge en pro
 
 ## 5. Validación final
 
-- `pnpm -C apps/api build` y tests `node --test` en specs afectados.
+- `npm run build -w @theforge/api` (desde la raíz) y tests `node --test` en specs afectados.
 - Prueba manual Workshop: MDD con plantilla constitución §1 → semáforo AMARILLO esperado si faltan señales.
 - Legacy: verificar herramientas TheForge en grafo arquitecto.
 - Docker: build compose con nueva env Tavily declarada.
