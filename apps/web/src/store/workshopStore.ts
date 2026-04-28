@@ -2139,9 +2139,13 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           }
         }
         set({ agentProgress: [] });
-        return await get().fetchProject(pid);
+        const projQueued = await get().fetchProject(pid);
+        await get().fetchEstimation(pid).catch(() => {});
+        return projQueued;
       }
-      return await get().fetchProject(pid);
+      const projSync = await get().fetchProject(pid);
+      await get().fetchEstimation(pid).catch(() => {});
+      return projSync;
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "Error al generar entregables", agentProgress: [] });
       return null;

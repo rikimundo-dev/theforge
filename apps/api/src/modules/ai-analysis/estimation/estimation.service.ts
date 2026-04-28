@@ -492,6 +492,119 @@ function computePrecisionBreakdown(md: string, complexity: EstimationComplexity 
   };
 }
 
+function looksLikeMddEvidenceJson(o: Record<string, unknown>): boolean {
+  return (
+    ("summary" in o || "openapi_spec" in o || "evidence_paths" in o) &&
+    ("entities" in o || "api_contracts" in o || "db_entities" in o || "evidence_paths" in o || "business_logic" in o)
+  );
+}
+
+/** JSON plano o embebido tras título tipo `# MDD de partida …` + bloque (legacy ingest). */
+function extractMddEvidenceJsonObject(md: string): Record<string, unknown> | null {
+  const t = md.trim();
+  const candidates: string[] = [];
+  if (t.startsWith("{")) candidates.push(t);
+  const fence = /```(?:json)?\s*(\{[\s\S]*?)\s*```/i.exec(t);
+  if (fence?.[1]?.trim().startsWith("{")) candidates.push(fence[1].trim());
+  const nl = t.indexOf("\n{");
+  if (nl !== -1) {
+    const rest = t.slice(nl + 1).trim();
+    if (rest.startsWith("{")) candidates.push(rest);
+  }
+  for (const c of candidates) {
+    try {
+      const o = JSON.parse(c) as Record<string, unknown>;
+      if (looksLikeMddEvidenceJson(o)) return o;
+    } catch {
+      /* siguiente candidato */
+    }
+  }
+  return null;
+}
+
+/**
+ * Semáforo sobre JSON devuelto por ingest `evidence_first` (pocas claves rellenas pero muchas rutas de evidencia).
+ */
+function detectReferenceSectionsFromIngestJson(parsed: Record<string, unknown>, rawLen: number): {
+  db: number;
+  endpoints: number;
+  endpointsWithPayloads: boolean;
+  security: number;
+  securitySubstantive: boolean;
+  infra: number;
+} {
+  const ent = (parsed.db_entities ?? parsed.entities) as unknown;
+  const entityN = Array.isArray(ent) ? ent.length : 0;
+  const apiC = parsed.api_contracts;
+  const apiN = Array.isArray(apiC) ? apiC.length : 0;
+  const ev = parsed.evidence_paths;
+  const evN = Array.isArray(ev) ? ev.length : 0;
+  const spec = parsed.openapi_spec as { found?: unknown } | undefined;
+  const summary = typeof parsed.summary === "string" ? parsed.summary : "";
+  const blob = JSON.stringify(parsed);
+
+  const hasIndexedMass = evN >= 12 || entityN > 0 || apiN > 0 || rawLen > 4000;
+  const db = entityN > 0 ? 1 : hasIndexedMass ? 1 : evN >= 6 ? 0.5 : 0;
+  const endpoints = apiN > 0 || (spec && spec.found === true) ? 1 : hasIndexedMass && evN >= 8 ? 1 : 0;
+  const endpointsWithPayloads =
+    apiN > 0 ||
+    (spec && spec.found === true) ||
+    /\b(payload|requestbody|responsebody)\b/i.test(blob) ||
+    /\b(POST|GET|PUT|PATCH|DELETE)\s+[/`"']/i.test(blob + summary);
+
+  const risk = parsed.risk_report as Record<string, unknown> | undefined;
+  const infraObj = parsed.infrastructure as Record<string, unknown> | undefined;
+  const security = risk != null && Object.keys(risk).length > 0 ? 0.5 : 0;
+  const securitySubstantive =
+    security > 0 &&
+    (/anti_patterns|complexity/i.test(blob) ||
+      (typeof risk?.complexity === "number" && risk.complexity > 0));
+  const infra =
+    infraObj != null && (Object.keys(infraObj).length > 0 || (Array.isArray(infraObj.env_vars) && infraObj.env_vars.length > 0))
+      ? 0.5
+      : 0;
+
+  return { db, endpoints, endpointsWithPayloads, security, securitySubstantive, infra };
+}
+
+function tryParseJsonMddCounts(md: string): { entityCount: number; screenCount: number; extraEndpointCount: number } | null {
+  const j = extractMddEvidenceJsonObject(md);
+  if (!j) return null;
+  try {
+    const ent = j.db_entities ?? j.entities;
+    let entityCount = Array.isArray(ent) ? ent.length : 0;
+    const scr = j.screens ?? j.pantallas;
+    let screenCount = Array.isArray(scr) ? scr.length : 0;
+    let extraEndpointCount =
+      typeof j.extra_endpoints === "number" && Number.isFinite(j.extra_endpoints) ? Math.max(0, j.extra_endpoints) : 0;
+    const apiC = j.api_contracts;
+    if (Array.isArray(apiC)) extraEndpointCount += apiC.length;
+
+    const ev = j.evidence_paths;
+    const evN = Array.isArray(ev) ? ev.length : 0;
+    if (entityCount === 0 && screenCount === 0 && extraEndpointCount === 0 && evN >= 10) {
+      extraEndpointCount = Math.min(72, Math.max(10, Math.ceil(evN / 11)));
+    }
+    if (entityCount === 0 && evN >= 40) {
+      entityCount = Math.min(18, Math.max(4, Math.ceil(evN / 45)));
+    }
+
+    const inferredScreensFromApi =
+      extraEndpointCount > 0 ? Math.min(28, Math.max(4, Math.ceil(extraEndpointCount * 0.55))) : 0;
+    const finalScreenCount =
+      extraEndpointCount > 0
+        ? Math.max(screenCount, inferredScreensFromApi)
+        : screenCount > 0
+          ? screenCount
+          : entityCount > 0
+            ? Math.min(entityCount * 2, 20)
+            : 0;
+    return { entityCount, screenCount: finalScreenCount, extraEndpointCount };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Detecta secciones de referencia del MDD en markdown (agnóstico de dominio).
  * Verde requiere: DB/entidades, Endpoints con payloads, Seguridad con contenido sustancial (decisiones documentadas).
@@ -505,7 +618,13 @@ function detectReferenceSections(md: string): {
   securitySubstantive: boolean;
   infra: number;
 } {
-  const content = (md || "").trim().toLowerCase();
+  const trimmed = (md || "").trim();
+  const jsonObj = extractMddEvidenceJsonObject(trimmed);
+  if (jsonObj) {
+    return detectReferenceSectionsFromIngestJson(jsonObj, trimmed.length);
+  }
+
+  const content = trimmed.toLowerCase();
   const scores = {
     db: 0,
     endpoints: 0,
@@ -570,6 +689,11 @@ function parseCountsFromMarkdown(md: string): {
   screenCount: number;
   extraEndpointCount: number;
 } {
+  const jsonCounts = tryParseJsonMddCounts(md);
+  if (jsonCounts && (jsonCounts.entityCount > 0 || jsonCounts.screenCount > 0 || jsonCounts.extraEndpointCount > 0)) {
+    return jsonCounts;
+  }
+
   const lines = md.split(/\r?\n/);
   const entities = new Set<string>();
   let extraEndpointCount = 0;
