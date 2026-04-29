@@ -30,6 +30,9 @@ packages/database/src/generated
 .DS_Store
 Thumbs.db
 
+# Snippets / pegados locales
+pastes/
+
 # Logs
 *.log
 npm-debug.log*
