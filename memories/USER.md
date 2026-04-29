@@ -1,1 +1,0 @@
-Projects organized by Hermes profile with .cursor/mcp.json per project pointing to the correct profile. oraltrack → /Volumes/HDJorge/Desarrollos/jacj/dentistas, ariadne → /Volumes/HDJorge/Desarrollos/jacj/Ariadne, theforge → /Volumes/HDJorge/Desarrollos/jacj/theforge.
