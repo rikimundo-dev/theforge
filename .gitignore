@@ -21,6 +21,8 @@ packages/database/src/generated
 # IDE
 .idea
 .vscode
+.cursor/
+.gemini/
 *.swp
 *.swo
 
