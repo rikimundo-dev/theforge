@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button, Card, CardContent, CardHeader, CardTitle, CardDescription } from "../ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui";
 import { Shield, RefreshCw, Eye, EyeOff, Copy, Check } from "lucide-react";
 import { apiFetch, API_BASE } from "../utils/apiClient";
 
