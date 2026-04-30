@@ -634,6 +634,22 @@ const TOOLS: Tool[] = [
       required: ["projectId", "choice"],
     },
   },
+  // ── Phase 0 → Phase 1 Automation ──
+  {
+    name: "generate_phase0",
+    description:
+      "Flujo completo de cero a primer borrador: crea proyecto (NEW), ejecuta análisis DBGA + deep research, genera MDD + BRD y los sube al proyecto. Retorna projectId con contenido listo para revisar y perfeccionar.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Nombre del proyecto" },
+        idea: { type: "string", description: "Descripción de la idea u oportunidad de negocio" },
+        urls: { type: "array", items: { type: "string" }, description: "URLs de referencia (opcional)" },
+        hasUxTeam: { type: "boolean", description: "Equipo UX disponible (default: false)" },
+      },
+      required: ["name", "idea"],
+    },
+  },
   // ── TheForge Integration ──
   {
     name: "list_theforge_projects",
@@ -901,6 +917,54 @@ const handlers: Record<string, Handler> = {
         choice: args.choice,
       }),
     );
+  },
+  // Phase 0 → Phase 1: Zero to first draft
+  async generate_phase0(args) {
+    const name = args.name as string;
+    const idea = args.idea as string;
+    const urls = (args.urls as string[]) ?? [];
+    const hasUxTeam = (args.hasUxTeam as boolean) ?? false;
+
+    // Step 1: Crear proyecto NEW
+    console.error("[theforge-mcp] [generate_phase0] Paso 1: Creando proyecto...");
+    const project = await apiPost("/projects", {
+      name,
+      projectType: "NEW",
+      hasUxTeam,
+    }) as { id: string };
+    const projectId = project.id;
+
+    // Step 2: Iniciar análisis DBGA
+    console.error("[theforge-mcp] [generate_phase0] Paso 2: Iniciando DBGA...");
+    await apiPost("/ai-analysis/start", { idea, projectId });
+
+    // Step 3: Deep research + MDD generation
+    console.error("[theforge-mcp] [generate_phase0] Paso 3: Deep research + MDD...");
+    const deepResult = await apiPost(`/projects/${projectId}/phase0-deep-research`, {
+      userIdea: idea,
+      urls,
+      includeBenchmark: true,
+    }) as Record<string, unknown>;
+
+    // Step 4: Generar BRD + To-Be desde DBGA
+    console.error("[theforge-mcp] [generate_phase0] Paso 4: Generando BRD + To-Be...");
+    const brdTobeResult = await apiPost(`/projects/${projectId}/suggest-brd-tobe-from-dbga`) as Record<string, unknown>;
+
+    // Step 5: Leer el proyecto para obtener mddContent y brdContent
+    console.error("[theforge-mcp] [generate_phase0] Paso 5: Obteniendo contenido generado...");
+    const fullProject = await apiGet(`/projects/${projectId}`) as Record<string, unknown>;
+
+    const summary = {
+      projectId,
+      projectName: name,
+      deepResearch: deepResult ?? "completed",
+      brdTobe: brdTobeResult ?? "completed",
+      mddContent: fullProject.mddContent ? "generado ✓" : "no generado",
+      brdContent: fullProject.brdContent ? "generado ✓" : "no generado",
+      message: "MDD y BRD generados. Revisa y perfecciona en la UI.",
+    };
+
+    return JSON.stringify(summary);
   },
   // TheForge
   async list_theforge_projects() {
