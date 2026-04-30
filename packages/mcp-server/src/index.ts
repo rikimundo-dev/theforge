@@ -1032,7 +1032,7 @@ async function main(): Promise<void> {
   if (USE_HTTP) {
     // ── Plain HTTP Server with JSON-RPC 2.0 handling ──
     const { createServer, IncomingMessage, ServerResponse } = await import("node:http");
-    createServer(async (req, res) => {
+    const httpServer = createServer(async (req, res) => {
       // CORS
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -1068,7 +1068,9 @@ async function main(): Promise<void> {
           id: null,
         } as JSONRPCResponse));
       }
-    }).listen(PORT, () => {
+    });
+
+    httpServer.listen(PORT, () => {
       console.error(`[theforge-mcp] HTTP escuchando en puerto ${PORT}`);
     });
   } else {
