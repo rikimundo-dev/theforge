@@ -3,6 +3,8 @@
 # El nginx del contenedor web no hace proxy a la API (evita duplicar rutas con Traefik).
 # Si falla "network dokploy-network not found", quitar la red externa (Isolated Deployments)
 # default con name evita que Compose cree una red *_default extra (reduce agotamiento de address pools)
+#
+# ⚙️ Dokploy Webhook: cada push a master dispara auto-deploy (2024-04-30)
 
 networks:
   default:
