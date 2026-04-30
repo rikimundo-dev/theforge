@@ -14,6 +14,10 @@ model User {
   id        String    @id @default(uuid())
   email     String    @unique
   createdAt DateTime  @default(now())
+  /// Secret MCP M2M: criptográfico (32 bytes, 64 hex chars). Único por usuario.
+  /// Usado para autenticar peticiones del MCP server como este usuario.
+  /// Generado automáticamente en el primer login OTP. Roteable desde la UI.
+  mcpSecret String?   @unique
   projects  Project[]
   sessions  Session[]
 }
@@ -31,7 +35,7 @@ enum ComplexityLevel {
 }
 
 /// Ciclo de vida agéntico: cada proyecto avanza por etapas (MDD, cambios legacy, auditoría, etc.).
-/// Entregables SDD “constitucionales” (MDD, semáforo, estimación) viven por etapa, no en Project.
+/// Entregables SDD "constitucionales" (MDD, semáforo, estimación) viven por etapa, no en Project.
 /// `isLegacy` + `theforgeProjectId` en Stage permiten enrutar sin releer Project en cada iteración.
 model Stage {
   id               String       @id @default(uuid())

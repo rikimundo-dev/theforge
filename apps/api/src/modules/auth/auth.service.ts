@@ -167,6 +167,17 @@ export class AuthService {
       update: {},
     });
 
+    // Generar mcpSecret automático si no existe (primera vez)
+    if (!user.mcpSecret) {
+      const { randomBytes } = await import("node:crypto");
+      const mcpSecret = randomBytes(32).toString("hex");
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { mcpSecret },
+      });
+      this.logger.log(`MCP secret generado automáticamente para ${email}`);
+    }
+
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       email: user.email,
@@ -180,22 +191,56 @@ export class AuthService {
   }
 
   /**
-   * MCP M2M login: intercambia un secreto compartido por un JWT.
-   * El MCP server envía MCP_M2M_SECRET y recibe un token con role "mcp".
+   * MCP M2M login: intercambia un secreto de usuario por un JWT con el userId real.
+   * Cada usuario tiene su propio mcpSecret en la tabla User, que puede ver y rotar desde la UI.
    */
-  async mcpLogin(secret: string): Promise<{ accessToken: string }> {
-    const expected = this.config.get<string>("MCP_M2M_SECRET");
-    if (!expected) {
-      throw new UnauthorizedException("MCP M2M no configurado (MCP_M2M_SECRET)");
-    }
-    if (secret !== expected) {
+  async mcpLogin(secret: string): Promise<{ accessToken: string; user: { id: string; email: string; role: string } }> {
+    const user = await this.prisma.user.findUnique({
+      where: { mcpSecret: secret },
+    });
+    if (!user) {
       throw new UnauthorizedException("Secreto MCP inválido");
     }
     const accessToken = await this.jwt.signAsync({
-      sub: "mcp-server",
-      email: "mcp@theforge.internal",
-      role: "mcp",
+      sub: user.id,
+      email: user.email,
+      role: ADMIN_ROLE,
     });
-    return { accessToken };
+    return {
+      accessToken,
+      user: { id: user.id, email: user.email, role: ADMIN_ROLE },
+    };
+  }
+
+  async getMcpSecret(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { mcpSecret: true, email: true },
+    });
+    if (!user) throw new UnauthorizedException("Usuario no encontrado");
+    // Si no tiene secret, generarlo automáticamente
+    if (!user.mcpSecret) {
+      const { mcpSecret } = await this.regenerateMcpSecret(userId);
+      return {
+        message: "Se generó un nuevo secret para tu cuenta. Guárdalo de inmediato.",
+        mcpSecret,
+        email: user.email,
+      };
+    }
+    return { mcpSecret: user.mcpSecret, email: user.email };
+  }
+
+  async regenerateMcpSecret(userId: string) {
+    // Generar secret criptográfico de 32 bytes (hex = 64 chars)
+    const { randomBytes } = await import("node:crypto");
+    const mcpSecret = randomBytes(32).toString("hex");
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { mcpSecret },
+    });
+
+    this.logger.log(`MCP secret regenerado para usuario ${userId}`);
+    return { mcpSecret };
   }
 }
