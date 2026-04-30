@@ -26,7 +26,7 @@ import {
 
 // ── Config ─────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.THEFORGE_API_URL ?? "http://localhost:3000";
+const API_BASE = process.env.THEFORGE_API_URL ?? "http://theforge-api:3000";
 const M2M_SECRET = process.env.MCP_M2M_SECRET ?? "";
 const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
 const PORT = Number(process.env.PORT) || 3100;

@@ -1,7 +1,7 @@
 /**
  * @fileoverview **Catálogo JSDoc** de las herramientas MCP de **@theforge/mcp-server** (`index.ts`).
  * Paridad: mismos `name` que el array `TOOLS` y las claves del mapa `handlers`. Cada tool delega en la
- * **API Nest The Forge** (`THEFORGE_API_URL`, default `http://localhost:3000`) con JWT obtenido vía
+ * **API Nest The Forge** (`THEFORGE_API_URL`, default `http://theforge-api:3000` en Docker; `http://localhost:3000` en dev local) con JWT obtenido via
  * **MCP_M2M_SECRET** (`/auth/mcp-login` o flujo equivalente documentado en el servidor).
  *
  * @packageDocumentation
