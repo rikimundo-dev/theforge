@@ -17,10 +17,12 @@ import {
   LogOut,
   Plus,
   RefreshCw,
+  Settings,
   Trash2,
 } from "lucide-react";
 import WorkshopView from "./views/WorkshopView";
 import LoginView from "./views/LoginView";
+import { McpSecretCard } from "./components/McpSecretCard";
 import { apiFetch, clearAccessToken, getAccessToken, API_BASE } from "./utils/apiClient";
 import {
   Button,
@@ -93,6 +95,8 @@ export default function App() {
   const [workshopProject, setWorkshopProject] = useState<Project | null>(null);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [showTheForgeModal, setShowTheForgeModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [theforgeModalTab, setTheForgeModalTab] = useState<
   const [theforgeModalTab, setTheForgeModalTab] = useState<"projects" | "repos">("projects");
   const [theforgeProjects, setTheForgeProjects] = useState<TheForgeProject[]>([]);
   const [theforgeAvailable, setTheForgeAvailable] = useState(false);
@@ -259,6 +263,17 @@ export default function App() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Settings Dialog */}
+      <Dialog open={showSettings} onOpenChange={setShowSettings}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Ajustes</DialogTitle>
+            <DialogDescription>Configuración de tu cuenta y herramientas.</DialogDescription>
+          </DialogHeader>
+          <McpSecretCard />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showTheForgeModal} onOpenChange={setShowTheForgeModal}>
         <DialogContent size="lg" className="max-h-[min(80vh,100dvh-2rem)] w-[calc(100vw-1.5rem)] sm:w-full flex flex-col overflow-hidden">
           <DialogHeader>
@@ -381,10 +396,14 @@ export default function App() {
               Software Factory — Entrevista proactiva → MDD → Semáforo → Estimación
             </p>
           </div>
-          <Button variant="outline" size="sm" onClick={logout} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9">
-            <LogOut className="w-4 h-4" />
-            Salir
-          </Button>
+        <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
+          <Settings className="w-4 h-4" />
+          Ajustes
+        </Button>
+        <Button variant="outline" size="sm" onClick={logout} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
+          <LogOut className="w-4 h-4" />
+          Salir
+        </Button>
         </header>
 
         <Card>
