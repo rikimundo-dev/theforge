@@ -12,18 +12,6 @@
  * @author Jorge Correa <jcorrea@e-personal.net>
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-
-// HTTP transport — import dinámico para no romper si no se usa
-let HttpTransport: typeof import("@modelcontextprotocol/sdk/server/streamableHttp.js").StreamableHTTPServerTransport | undefined;
-
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  type Tool,
-} from "@modelcontextprotocol/sdk/types.js";
-
 // ── Config ─────────────────────────────────────────────────────────────
 
 const API_BASE = process.env.THEFORGE_API_URL ?? "http://theforge-api:3000";
@@ -31,6 +19,39 @@ const M2M_SECRET = process.env.MCP_M2M_SECRET ?? "";
 const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
 const PORT = Number(process.env.PORT) || 3100;
 const USE_HTTP = process.argv.includes("--http");
+
+// ── Local Types ────────────────────────────────────────────────────────
+
+interface Tool {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: string;
+    properties: Record<string, unknown>;
+    required?: string[];
+    [key: string]: unknown;
+  };
+}
+
+interface JSONRPCRequest {
+  jsonrpc: "2.0";
+  method: string;
+  params?: Record<string, unknown>;
+  id?: number | string | null;
+}
+
+interface JSONRPCError {
+  code: number;
+  message: string;
+  data?: unknown;
+}
+
+interface JSONRPCResponse {
+  jsonrpc: "2.0";
+  result?: unknown;
+  error?: JSONRPCError;
+  id?: number | string | null;
+}
 
 // ── JWT Auth Client ────────────────────────────────────────────────────
 
@@ -111,7 +132,7 @@ function apiDelete(path: string): Promise<unknown> {
  * {@link handlers}.
  *
  * @see {@link ./mcp-tools.doc.ts} tabla completa nombre → verbo HTTP.
- * @constant {import("@modelcontextprotocol/sdk/types.js").Tool[]}
+ * @constant {Tool[]}
  */
 const TOOLS: Tool[] = [
   // ── Projects ──
@@ -887,38 +908,104 @@ const handlers: Record<string, Handler> = {
   },
 };
 
-// ── Server Setup ───────────────────────────────────────────────────────
+// ── JSON-RPC Request Handler ───────────────────────────────────────────
 
-const server = new Server(
-  { name: "theforge-mcp", version: "0.1.0" },
-  { capabilities: { tools: {} } },
-);
-
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-
-/**
- * Ejecuta la tool solicitada usando {@link handlers}. Desconocidas → excepción; fallos de handler → `isError`.
- *
- * @param request - `params.name` y `params.arguments` alineados con JSON Schema de {@link TOOLS}.
- * @see {@link ./mcp-tools.doc.ts}
- */
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+async function handleToolCall(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<{ content: { type: string; text: string }[]; isError?: boolean }> {
   const handler = handlers[name];
   if (!handler) {
     throw new Error(`Unknown tool: ${name}`);
   }
+  const result = await handler(args ?? {});
+  return { content: [{ type: "text", text: result }] };
+}
+
+/**
+ * Process a single JSON-RPC 2.0 request and return a response.
+ */
+async function handleJSONRPC(request: JSONRPCRequest): Promise<JSONRPCResponse> {
+  const { method, params, id } = request;
+
   try {
-    const result = await handler(args ?? {});
-    return { content: [{ type: "text", text: result }] };
+    switch (method) {
+      case "initialize": {
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: {
+            protocolVersion: "2024-11-05",
+            capabilities: { tools: {} },
+            serverInfo: { name: "theforge-mcp", version: "0.1.0" },
+          },
+        };
+      }
+
+      case "notifications/initialized": {
+        // No-op notification
+        return {
+          jsonrpc: "2.0",
+          result: {},
+        };
+      }
+
+      case "tools/list": {
+        return {
+          jsonrpc: "2.0",
+          id,
+          result: { tools: TOOLS },
+        };
+      }
+
+      case "tools/call": {
+        const { name, arguments: args } = (params ?? {}) as { name?: string; arguments?: Record<string, unknown> };
+        if (!name) {
+          return { jsonrpc: "2.0", id, error: { code: -32602, message: "Missing tool name" } };
+        }
+        try {
+          const toolResult = await handleToolCall(name, args ?? {});
+          return { jsonrpc: "2.0", id, result: toolResult };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return {
+            jsonrpc: "2.0",
+            id,
+            result: {
+              isError: true,
+              content: [{ type: "text", text: `Error: ${message}` }],
+            },
+          };
+        }
+      }
+
+      default:
+        return {
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32601, message: `Method not found: ${method}` },
+        };
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
-      isError: true,
-      content: [{ type: "text", text: `Error: ${message}` }],
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32603, message: `Internal error: ${message}` },
     };
   }
-});
+}
+
+/**
+ * Reads the full body from an IncomingMessage.
+ */
+async function readBody(req: import("node:http").IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks).toString();
+}
+
+// ── Server Setup ───────────────────────────────────────────────────────
 
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
@@ -943,16 +1030,8 @@ async function main(): Promise<void> {
   }
 
   if (USE_HTTP) {
-    // ── HTTP StreamableTransport (Node.js) ──
-    try {
-      HttpTransport = (await import("@modelcontextprotocol/sdk/server/streamableHttp.js")).StreamableHTTPServerTransport;
-    } catch {
-      console.error("[theforge-mcp] Error cargando streamableHttp transport");
-      process.exit(1);
-    }
-    const httpTransport = new HttpTransport();
-
-    const { createServer } = await import("node:http");
+    // ── Plain HTTP Server with JSON-RPC 2.0 handling ──
+    const { createServer, IncomingMessage, ServerResponse } = await import("node:http");
     const httpServer = createServer(async (req, res) => {
       // CORS
       res.setHeader("Access-Control-Allow-Origin", "*");
@@ -965,46 +1044,64 @@ async function main(): Promise<void> {
         return;
       }
 
-      // Solo POST
       if (req.method !== "POST") {
-        res.writeHead(405);
+        res.writeHead(405, { "Content-Type": "text/plain" });
         res.end("Method Not Allowed");
         return;
       }
 
-      // Leer body
-      const chunks: Buffer[] = [];
-      for await (const chunk of req) chunks.push(chunk);
-      const body = Buffer.concat(chunks).toString();
+      // Read body
+      const body = await readBody(req);
 
-      // Delegar al transport MCP
-      let errorCaught: Error | unknown = null;
       try {
-        await httpTransport.handleRequest(req, res, body);
+        const json: JSONRPCRequest = JSON.parse(body);
+        const response = await handleJSONRPC(json);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(response));
       } catch (err) {
-        errorCaught = err;
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[theforge-mcp] Error en handleRequest: ${msg}`);
-        console.error(`[theforge-mcp] Stack: ${err instanceof Error ? err.stack : 'N/A'}`);
-        if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "text/plain" });
-          res.end(`MCP Error: ${msg}`);
-        }
-      }
-      if (res.headersSent && res.statusCode >= 400 && errorCaught) {
-        console.error(`[theforge-mcp] Error después de headers sent (HTTP ${res.statusCode})`);
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[theforge-mcp] Error parsing request: ${message}`);
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32700, message: `Parse error: ${message}` },
+          id: null,
+        } as JSONRPCResponse));
       }
     });
 
     httpServer.listen(PORT, () => {
       console.error(`[theforge-mcp] HTTP escuchando en puerto ${PORT}`);
     });
-
-    await server.connect(httpTransport);
   } else {
-    // ── Stdio Transport ──
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    // ── Stdio Transport (JSON-RPC 2.0 over stdin/stdout) ──
+    const { randomUUID } = await import("node:crypto");
+    console.error("[theforge-mcp] Iniciando en modo stdio");
+
+    const readline = await import("node:readline");
+    const rl = readline.createInterface({ input: process.stdin });
+
+    rl.on("line", async (line) => {
+      line = line.trim();
+      if (!line) return;
+
+      try {
+        const request: JSONRPCRequest = JSON.parse(line);
+        const response = await handleJSONRPC(request);
+        // Only send a response if there's an id (notifications don't get responses)
+        if (response.id !== undefined && response.id !== null) {
+          process.stdout.write(JSON.stringify(response) + "\n");
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[theforge-mcp] Stdio error: ${message}`);
+        process.stderr.write(JSON.stringify({
+          jsonrpc: "2.0",
+          error: { code: -32700, message: `Parse error: ${message}` },
+          id: null,
+        } as JSONRPCResponse) + "\n");
+      }
+    });
   }
 }
 
