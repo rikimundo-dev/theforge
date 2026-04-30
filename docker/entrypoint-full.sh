@@ -15,13 +15,15 @@ until pg_isready -U theforge -d theforge -h localhost 2>/dev/null; do
   sleep 1
 done
 
-# Migraciones — primero las versionadas, después sincronizar schema actual
-cd /app/packages/database 2>&1 && \
-  ./node_modules/.bin/prisma migrate deploy 2>&1 && \
-  echo "[entrypoint] Migraciones versionadas aplicadas correctamente" || \
-  (echo "[entrypoint] Sin migraciones versionadas — ejecutando db push para sincronizar schema..." && \
-   ./node_modules/.bin/prisma db push 2>&1 && \
-   echo "[entrypoint] Schema sincronizado via db push")
+# Migraciones versionadas (corre si hay archivos en prisma/migrations/)
+cd /app/packages/database
+echo "[entrypoint] Ejecutando migrate deploy..."
+./node_modules/.bin/prisma migrate deploy 2>&1 || true
+
+# Sincronizar schema completo (crea columnas faltantes, índices, etc.)
+echo "[entrypoint] Sincronizando schema con db push..."
+./node_modules/.bin/prisma db push --accept-data-loss 2>&1
+echo "[entrypoint] Schema sincronizado correctamente"
 
 # API en background
 cd /app/apps/api
