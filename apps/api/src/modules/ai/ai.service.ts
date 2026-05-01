@@ -175,11 +175,11 @@ export class AiService {
           }
           if (at === "brd") {
             systemPrompt +=
-              "\n\n**Para persistir el BRD** debes devolver el **markdown del BRD completo** actualizado cuando el usuario pida aplicar, integrar o actualizar (incluye lo ya existente más cambios), terminando con \`---FIN_BRD---\`. Sin ese delimitador el sistema no guarda el documento.";
+              "\n\n**Para persistir el BRD debes usar \`---FIN_BRD---\`.** Si decides hacer cambios al BRD (agregar, modificar o eliminar contenido), **no te limites a describirlo en el chat**: DEBES devolver el **markdown completo del BRD** actualizado (incluyendo todo el contenido existente más tus cambios), terminando con la línea exacta \`---FIN_BRD---\`. El chat después de esa línea será la respuesta conversacional. Si dices \"He actualizado el BRD\" en el chat PERO no incluyes \`---FIN_BRD---\`, el sistema NO persiste ningún cambio y el usuario no ve nada.";
           }
           if (at === "to-be") {
             systemPrompt +=
-              "\n\n**Para persistir el Manual To-Be** debes devolver el **markdown completo** actualizado cuando el usuario pida aplicar, integrar o actualizar, terminando con \`---FIN_TOBE---\`. Sin ese delimitador el sistema no guarda el documento.";
+              "\n\n**Para persistir el Manual To-Be debes usar \`---FIN_TOBE---\`.** Si decides hacer cambios al To-Be, DEBES devolver el **markdown completo** actualizado terminando con \`---FIN_TOBE---\`. Decirlo en el chat sin el delimitador no persiste nada.";
           }
         }
       }
@@ -338,11 +338,11 @@ export class AiService {
         }
         if (at === "brd") {
           systemPrompt +=
-            "\n\n**Para persistir el BRD** debes devolver el **markdown del BRD completo** actualizado cuando el usuario pida aplicar, integrar o actualizar (incluye lo ya existente más cambios), terminando con \`---FIN_BRD---\`. Sin ese delimitador el sistema no guarda el documento.";
+            "\n\n**Para persistir el BRD debes usar \`---FIN_BRD---\`.** Si decides hacer cambios al BRD (agregar, modificar o eliminar contenido), **no te limites a describirlo en el chat**: DEBES devolver el **markdown completo del BRD** actualizado (incluyendo todo el contenido existente más tus cambios), terminando con la línea exacta \`---FIN_BRD---\`. El chat después de esa línea será la respuesta conversacional. Si dices \"He actualizado el BRD\" en el chat PERO no incluyes \`---FIN_BRD---\`, el sistema NO persiste ningún cambio y el usuario no ve nada.";
         }
         if (at === "to-be") {
           systemPrompt +=
-            "\n\n**Para persistir el Manual To-Be** debes devolver el **markdown completo** actualizado cuando el usuario pida aplicar, integrar o actualizar, terminando con \`---FIN_TOBE---\`. Sin ese delimitador el sistema no guarda el documento.";
+            "\n\n**Para persistir el Manual To-Be debes usar \`---FIN_TOBE---\`.** Si decides hacer cambios al To-Be, DEBES devolver el **markdown completo** actualizado terminando con \`---FIN_TOBE---\`. Decirlo en el chat sin el delimitador no persiste nada.";
         }
       }
     }
