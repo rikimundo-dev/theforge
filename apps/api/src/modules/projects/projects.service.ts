@@ -1138,11 +1138,19 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n<<<TOBE>>>\n(markdown To-Be)\n<<<END_TOBE>>>\n\n" +
       "--- DBGA ---\n\n" +
       effectiveDbga.slice(0, 120_000);
-    const raw = await this.ai.generateResponse(prompt, [], { systemPrompt: DBGA_BRD_TOBE_SUGGEST_SYSTEM });
-    const parsed = parseBrdTobeTaggedSuggest((raw ?? "").trim());
+    let raw: string;
+    let parsed: { brd: string; tobe: string } | null = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      raw = await this.ai.generateResponse(prompt, [], { systemPrompt: DBGA_BRD_TOBE_SUGGEST_SYSTEM });
+      parsed = parseBrdTobeTaggedSuggest((raw ?? "").trim());
+      if (parsed) break;
+      if (attempt < 2) {
+        console.warn(`[suggestBrdTobeFromDbga] Intento ${attempt}/2: respuesta mal formada, reintentando...`);
+      }
+    }
     if (!parsed) {
       throw new BadRequestException(
-        "No se pudieron extraer BRD y To-Be del modelo. Reintenta o acorta el DBGA.",
+        "No se pudieron extraer BRD y To-Be del modelo tras 2 intentos. Reintenta o acorta el DBGA.",
       );
     }
     const brd = cleanDocumentContent(parsed.brd);
