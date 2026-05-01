@@ -348,10 +348,10 @@ export function BrdTobeStagePanel({
                   title={
                     dbgaContentChars < 300
                       ? "Genera o guarda el DBGA en el Paso 0 (≥300 caracteres)."
-                      : "Generar Manual To-Be desde el Domain Benchmark."
+                      : "Regenerar BRD + To-Be completos desde el Domain Benchmark."
                   }
                 >
-                  Generar To-Be
+                  BRD + To-Be desde DBGA
                 </Button>
                 <Button
                   type="button"

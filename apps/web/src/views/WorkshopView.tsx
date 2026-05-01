@@ -718,7 +718,7 @@ export default function WorkshopView({
 
   const mddDirty = (mddContent ?? "") !== (project?.mddContent ?? "");
   const specDirty = (specContent ?? "") !== (project?.specContent ?? "");
-  const mddEmpty = !(mddContent ?? "").trim();
+  const mddEmpty = !((mddContent ?? "").trim() || (project?.mddContent ?? "").trim());
   const precisionScore = mddEmpty ? 0 : (liveMetrics?.precision ?? project?.precisionScore ?? 0);
   const costDisplayFallback = calculateCostFromMdd(mddContent, {
     status: projectStatus,

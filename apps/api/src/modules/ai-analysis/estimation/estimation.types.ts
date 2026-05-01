@@ -108,13 +108,19 @@ export const MARKET_HOUR_RATE = 1_050;
 
 /**
  * Umbrales de precisión del semáforo:
- * - Rojo: < 50% — Solo ideas generales. El costo es una "suposición".
- * - Amarillo: 50%–94% — Arquitectura definida pero faltan contratos de API o Docker.
+ * - Rojo: < 85% — Documentación insuficiente para que la IA trabaje. El costo es una "suposición".
+ * - Amarillo: 85%–94% — Documentación aceptable (meta mínima 85%). IA puede trabajar, pero hay detalles pendientes.
  * - Verde: 95%+ — Solo si además hay DB/entidades, Endpoints con payloads y Seguridad con decisiones documentadas (agnóstico de dominio).
  */
-export const PRECISION_RED_MAX = 50;
+export const PRECISION_RED_MAX = 85;
 export const PRECISION_GREEN_MIN = 95;
 
-/** Factor de riesgo dinámico: < 70% → 1.25; ≥ 95% → 1.0. */
+/** Factor de riesgo dinámico: < 85% → 1.25; ≥ 95% → 1.0. */
 export const RISK_FACTOR_LOW_PRECISION = 1.25;
-export const RISK_PRECISION_THRESHOLD = 70;
+export const RISK_PRECISION_THRESHOLD = 85;
+
+/**
+ * Tarifa interna por hora-hombre (nómina). Se usa para calcular el costo real del equipo
+ * en `totalMXN`. El mercado (`totalMXNMarket`) usa MARKET_HOUR_RATE.
+ */
+export const INTERNAL_HOUR_RATE = 185;

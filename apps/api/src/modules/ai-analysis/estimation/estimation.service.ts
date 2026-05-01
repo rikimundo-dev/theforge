@@ -15,6 +15,7 @@ import {
   PRECISION_RED_MAX,
   RISK_FACTOR_LOW_PRECISION,
   RISK_PRECISION_THRESHOLD,
+  INTERNAL_HOUR_RATE,
 } from "./estimation.types.js";
 import {
   allocateDeliveryRoleHours,
@@ -1032,8 +1033,10 @@ export class EstimationService {
         : {};
     const rolesHours =
       baseTotalHours > 0 ? allocateDeliveryRoleHours(totalHours, roles) : {};
-    const payroll = payrollMxnFromRoleHours(rolesHours, RATES_MXN_PER_ROLE);
-    const totalMXN = Math.round(payroll * riskFactor * 100) / 100;
+    // Nómina interna: todas las roles a tarifa fija ($185/hr)
+    const internalPayroll = baseTotalHours > 0 ? totalHours * INTERNAL_HOUR_RATE : 0;
+    const totalMXN = Math.round(internalPayroll * riskFactor * 100) / 100;
+    // Mercado: referencia a tarifa de mercado
     const totalMXNMarket = Math.round(totalHours * MARKET_HOUR_RATE * riskFactor * 100) / 100;
 
     return {
