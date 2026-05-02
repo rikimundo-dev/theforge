@@ -208,6 +208,9 @@ export default function WorkshopView({
   /* Use stable selectors to avoid loops */
   const conformanceRaw = useWorkshopStore((s) => s.conformance);
   const conformance = useMemo(() => conformanceRaw, [conformanceRaw]);
+  const documentCompleteness = useWorkshopStore((s) => s.documentCompleteness);
+  const crossDocumentGaps = useWorkshopStore((s) => s.crossDocumentGaps);
+  const consistencyScore = useWorkshopStore((s) => s.consistencyScore);
   const apiBlueprintDmBlocked = conformance?.blueprintDataModel?.ok === false;
   const apiBlueprintBlockedHint =
     "El Blueprint no cubre el §3 Modelo de datos del MDD. Corrige o regenera el Blueprint; revisa el panel Conformance.";
@@ -2740,6 +2743,70 @@ export default function WorkshopView({
                   >
                     Regenerar Infra con gaps
                   </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {documentCompleteness && (
+            <div>
+              <h3 className="text-sm font-medium text-zinc-400 mb-3 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Documentos ({documentCompleteness.overall}%)
+              </h3>
+              <div className="rounded-lg border border-zinc-600 p-3 space-y-1.5 text-xs">
+                {[
+                  ["brdContent", "BRD"],
+                  ["toBeManualContent", "To-Be"],
+                  ["asIsManualContent", "As-Is"],
+                  ["specContent", "SPEC"],
+                  ["architectureContent", "Arquitectura"],
+                  ["useCasesContent", "Casos de Uso"],
+                  ["userStoriesContent", "Historias"],
+                  ["blueprintContent", "Blueprint"],
+                  ["apiContractsContent", "API"],
+                  ["logicFlowsContent", "Flujos"],
+                  ["infraContent", "Infra"],
+                  ["tasksContent", "Tasks"],
+                ].map(([key, label]) => {
+                  const score = (documentCompleteness as Record<string, number>)[key] ?? 0;
+                  return (
+                    <div key={key} className="flex items-center justify-between">
+                      <span className="text-zinc-500">{label}</span>
+                      <span className={
+                        score >= 100 ? "text-green-400" :
+                        score >= 50 ? "text-amber-400" :
+                        score > 0 ? "text-red-400" : "text-zinc-600"
+                      }>
+                        {score >= 100 ? "✓" : score >= 50 ? "◐" : score > 0 ? "○" : "—"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {crossDocumentGaps && crossDocumentGaps.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-zinc-400 mb-3 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                Brechas ({crossDocumentGaps.length})
+              </h3>
+              <div className="rounded-lg border border-amber-700/50 bg-amber-900/20 p-3 space-y-1.5 text-xs">
+                {crossDocumentGaps.slice(0, 5).map((gap, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="shrink-0 text-amber-500 mt-0.5">⚠</span>
+                    <span className="text-zinc-400">
+                      <strong className="text-zinc-300">{gap.concept}</strong> en {gap.from} → {gap.to}{" "}
+                      <span className={gap.severity === "missing" ? "text-red-400" : "text-amber-500"}>
+                        ({gap.severity === "missing" ? "no cubierto" : "parcial"})
+                      </span>
+                    </span>
+                  </div>
+                ))}
+                {crossDocumentGaps.length > 5 && (
+                  <p className="text-zinc-500">+{crossDocumentGaps.length - 5} más</p>
                 )}
               </div>
             </div>

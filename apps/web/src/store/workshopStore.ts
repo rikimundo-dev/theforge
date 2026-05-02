@@ -107,6 +107,31 @@ export interface PrecisionBreakdown {
   sectionReasons?: Partial<Record<"contexto" | "modeloDatos" | "apiContracts" | "frontend" | "seguridad" | "integracion", string>>;
 }
 
+/** Breakdown de completitud por documento (0-100). Coincide con backend PlanningDocumentFields. */
+export interface DocumentCompleteness {
+  brdContent: number;
+  toBeManualContent: number;
+  asIsManualContent: number;
+  specContent: number;
+  architectureContent: number;
+  useCasesContent: number;
+  userStoriesContent: number;
+  blueprintContent: number;
+  apiContractsContent: number;
+  logicFlowsContent: number;
+  infraContent: number;
+  tasksContent: number;
+  overall: number;
+}
+
+/** Gap de consistencia entre dos documentos. */
+export interface CrossDocumentGap {
+  from: string;
+  to: string;
+  concept: string;
+  severity: "missing" | "partial" | "contradiction";
+}
+
 /** Resultado de conformance (Blueprint/Infra vs MDD). */
 export interface ConformanceResult {
   ok: boolean;
@@ -418,6 +443,12 @@ interface WorkshopState {
   auditTrail: string[] | null;
   /** Desglose de calificación del último stream MDD */
   precisionBreakdown: PrecisionBreakdown | null;
+  /** Completitud por documento (semáforo integral). */
+  documentCompleteness: DocumentCompleteness | null;
+  /** Gaps de consistencia transversal entre documentos. */
+  crossDocumentGaps: CrossDocumentGap[];
+  /** Score de consistencia (0-100). */
+  consistencyScore: number | null;
   /** Feedback del auditor (para mostrar en UI fuera del chat) */
   auditorFeedback: string | null;
   /** Crítica del evaluador legacy (SDD vs código); solo si el backend la envía */
@@ -611,6 +642,9 @@ const initialState = {
   error: null as string | null,
   auditTrail: null as string[] | null,
   precisionBreakdown: null as PrecisionBreakdown | null,
+  documentCompleteness: null as DocumentCompleteness | null,
+  crossDocumentGaps: [] as CrossDocumentGap[],
+  consistencyScore: null as number | null,
   auditorFeedback: null as string | null,
   evaluatorCritique: null as string | null,
   legacyMcpDebugTrace: null as LegacyMcpDebugEntry[] | null,
@@ -2549,11 +2583,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         }),
       });
       if (!r.ok) return null;
-      const data = (await r.json()) as LiveMetricsResult & { precisionBreakdown?: PrecisionBreakdown };
-      const { precisionBreakdown, ...metrics } = data;
+      const data = (await r.json()) as LiveMetricsResult & { precisionBreakdown?: PrecisionBreakdown; completeness?: DocumentCompleteness; crossDocumentGaps?: CrossDocumentGap[]; consistencyScore?: number };
+      const { precisionBreakdown, completeness, crossDocumentGaps, consistencyScore, ...metrics } = data;
       set({
         liveMetrics: metrics,
         ...(precisionBreakdown != null ? { precisionBreakdown } : {}),
+        ...(completeness != null ? { documentCompleteness: completeness } : {}),
+        ...(crossDocumentGaps != null ? { crossDocumentGaps } : {}),
+        ...(consistencyScore != null ? { consistencyScore } : {}),
       });
       return metrics;
     } catch {
