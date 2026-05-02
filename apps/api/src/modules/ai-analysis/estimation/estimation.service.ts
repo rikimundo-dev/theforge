@@ -26,8 +26,6 @@ import {
 import {
   allocateDeliveryRoleHours,
   buildDeliveryTeamStructure,
-  payrollMxnFromRoleHours,
-  RATES_MXN_PER_ROLE,
 } from "@theforge/business-rules";
 import { extractTechnicalMetadataTags } from "../../engine/mdd-markdown-parser.js";
 
