@@ -15,7 +15,6 @@
 // ── Config ─────────────────────────────────────────────────────────────
 
 const API_BASE = process.env.THEFORGE_API_URL ?? "http://theforge-api:3000";
-const M2M_SECRET = process.env.MCP_M2M_SECRET ?? "";
 const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
 const PORT = Number(process.env.PORT) || 3100;
 const USE_HTTP = process.argv.includes("--http");
@@ -56,15 +55,18 @@ interface JSONRPCResponse {
 // ── JWT Auth Client ────────────────────────────────────────────────────
 
 let jwtToken: string | null = null;
+let lastClientSecret: string = "";
 
-async function login(): Promise<string> {
-  if (!M2M_SECRET) {
-    throw new Error("MCP_M2M_SECRET no está configurada — el MCP server no puede autenticarse contra la API");
+async function login(secret?: string): Promise<string> {
+  const s = secret || lastClientSecret;
+  if (!s) {
+    throw new Error("MCP_M2M_SECRET header required — usa el secret de Settings en TheForge");
   }
+  lastClientSecret = s;
   const res = await fetch(`${API_BASE}/auth/mcp-login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret: M2M_SECRET }),
+    body: JSON.stringify({ secret: s }),
     signal: AbortSignal.timeout(30_000),
   });
   if (!res.ok) {
@@ -1100,24 +1102,7 @@ async function readBody(req: import("node:http").IncomingMessage): Promise<strin
 // ── Bootstrap ──────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // Login al arrancar
-  if (M2M_SECRET) {
-    try {
-      await login();
-      console.error(`[theforge-mcp] JWT obtenido, API en ${API_BASE}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[theforge-mcp] Error de login inicial: ${msg}`);
-      console.error(
-        `[theforge-mcp] THEFORGE_API_URL=${JSON.stringify(API_BASE)} — si ves "fetch failed" en prod: ` +
-          "la API debe ser alcanzable desde este proceso (en Docker usa el hostname del servicio, p. ej. http://theforge-api:3000, no localhost salvo que compartáis red). " +
-          "Comprueba MCP_M2M_SECRET, que la API esté arriba y /auth/mcp-login expuesto.",
-      );
-      console.error(`[theforge-mcp] Continuando — se reintentará en cada llamado`);
-    }
-  } else {
-    console.error("[theforge-mcp] Sin MCP_M2M_SECRET — llamadas sin auth (solo dev)");
-  }
+  console.error(`[theforge-mcp] MCP server listo para recibir requests (auth por header MCP_M2M_SECRET)`);
 
   if (USE_HTTP) {
     // ── Plain HTTP Server with JSON-RPC 2.0 handling ──
@@ -1126,7 +1111,7 @@ async function main(): Promise<void> {
       // CORS
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Session-ID");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Session-ID, MCP_M2M_SECRET");
 
       if (req.method === "OPTIONS") {
         res.writeHead(204);
@@ -1142,6 +1127,30 @@ async function main(): Promise<void> {
 
       // Read body
       const body = await readBody(req);
+
+      // Auth: extraer MCP_M2M_SECRET del header del cliente
+      const clientSecret = (req.headers["mcp_m2m_secret"] as string) || "";
+      if (!clientSecret) {
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32000, message: "MCP_M2M_SECRET header required — usa el secret de Settings en TheForge" },
+            id: null,
+          }),
+        );
+        return;
+      }
+      try {
+        await login(clientSecret);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        res.writeHead(401, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }),
+        );
+        return;
+      }
 
       try {
         const json: JSONRPCRequest = JSON.parse(body);

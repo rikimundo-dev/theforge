@@ -167,7 +167,7 @@ services:
       retries: 3
 
   # MCP server — expone la API de TheForge como herramientas MCP sobre HTTP
-  # Hermes se conecta vía URL (StreamableHTTP) en lugar de stdio local
+  # Hermes se conecta vía URL (StreamableHTTP) enviando MCP_M2M_SECRET en header
   theforge-mcp:
     build:
       context: packages/mcp-server
@@ -185,8 +185,7 @@ services:
     environment:
       # Apunta a la API NestJS internamente (misma red Docker)
       THEFORGE_API_URL: "http://theforge-api:3000"
-      # Secreto compartido para obtener JWT del endpoint /auth/mcp-login
-      MCP_M2M_SECRET: ${MCP_M2M_SECRET:-}
+      # MCP_M2M_SECRET se recibe del cliente via header HTTP — no va en env
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${PORT:-3000}/ | head -c 1 > /dev/null 2>&1 || exit 1"]
       interval: 30s
