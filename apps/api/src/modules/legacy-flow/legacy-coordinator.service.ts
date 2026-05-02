@@ -1121,20 +1121,24 @@ export class LegacyCoordinatorService {
 
     // Múltiples consultas a TheForge para contexto amplio (evidencia del índice + ask_codebase + refactor seguro)
     const theforgeParts: string[] = [];
-    if (description && isLegacyEvidenceFirstEnabled()) {
+    const isInitialMdd = !description.trim();
+    if (isLegacyEvidenceFirstEnabled()) {
       try {
         const changeEvidence = await runLegacyStagedDiscoveryMddAgent({
           theforge: this.theforge,
           projectId,
           theforgeProjectId: theforgeId,
           agentSupervisor: this.agentSupervisor,
-          mode: "change",
-          changeDescription: description,
+          mode: isInitialMdd ? "initial" : "change",
+          changeDescription: isInitialMdd ? undefined : description,
           logger: this.logger,
         });
         if (changeEvidence.trim()) {
           theforgeParts.push(
-            "Evidencia TheForge — descubrimiento escalonado (MDD AS-IS / foco cambio):\n\n" + changeEvidence.trim(),
+            (isInitialMdd
+              ? "Evidencia TheForge — descubrimiento escalonado (MDD inicial del sistema):\n\n"
+              : "Evidencia TheForge — descubrimiento escalonado (MDD AS-IS / foco cambio):\n\n") +
+              changeEvidence.trim(),
           );
         }
       } catch (err) {
@@ -1204,21 +1208,53 @@ export class LegacyCoordinatorService {
         (codebaseDoc.length > 40000 ? "\n\n> *[Nota: El MDD inicial se truncó a 40,000 caracteres para control de contexto.]*" : "") +
         "\n\n---\n\n"
       : "";
-    const prompt =
-      (brdPre ? brdPre + "\n\n" : "") +
-      codebaseDocBlock +
-      "Genera un documento MDD de cambio (Markdown) para un proyecto legacy. Según Specification-Driven Development, el MDD es la **Constitución del cambio** y debe tener **exactamente 7 secciones** en este orden: 1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, 4. Contratos de API, 5. Lógica y Edge Cases, 6. Seguridad, 7. Infraestructura. Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra).\n\n" +
-      "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona antes de elaborar el documento. Usa TODO ese contexto; infiere todas las modificaciones necesarias en módulos, entidades, APIs y pantallas existentes que el cambio afecte; no te limites al requerimiento literal. El MDD debe reflejar el conocimiento real de la aplicación indexada (qué hay hoy y qué debe cambiar).\n\n" +
-      "Descripción del cambio:\n---\n" +
-      description +
-      "\n---\n\n" +
-      filesLine +
-      (answersText ? "Respuestas del usuario:\n---\n" + answersText + "\n---\n\n" : "") +
-      (theforgeContext
-        ? "Contexto del codebase (TheForge) — incluye evidencia del índice, validaciones, definiciones exactas, funciones por archivo y búsqueda semántica. Usar TODO para inferir impacto completo. No inventes rutas ni APIs que no aparezcan en este contexto.\n---\n" +
-          theforgeContext.slice(0, mddTheforgeContextMaxChars()) +
-          "\n---"
-        : "");
+    let prompt: string;
+    if (isInitialMdd) {
+      // Sin descripción de cambio → MDD inicial del sistema completo (no de cambio)
+      prompt =
+        (brdPre ? brdPre + "\n\n" : "") +
+        codebaseDocBlock +
+        "Genera un documento MDD inicial (Markdown) para un proyecto legacy. " +
+        "El MDD describe **el sistema existente en su totalidad**, no un cambio. " +
+        "Debe tener **exactamente 7 secciones** en este orden: " +
+        "1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, 4. Contratos de API, 5. Lógica y Edge Cases, " +
+        "6. Seguridad, 7. Infraestructura.\n\n" +
+        "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona. " +
+        "Usa TODO ese contexto para describir fielmente la aplicación existente. " +
+        "No inventes rutas, APIs, entidades ni funcionalidades que no aparezcan en el contexto. " +
+        "Si el codebase está incompleto en alguna área, documéntalo como brecha.\n\n" +
+        (theforgeContext
+          ? "Contexto del codebase (TheForge) — evidencia del índice, arquitectura, definiciones y búsqueda semántica. " +
+            "Usar TODO para describir el sistema real.\n---\n" +
+            theforgeContext.slice(0, mddTheforgeContextMaxChars()) +
+            "\n---"
+          : "");
+    } else {
+      prompt =
+        (brdPre ? brdPre + "\n\n" : "") +
+        codebaseDocBlock +
+        "Genera un documento MDD de cambio (Markdown) para un proyecto legacy. " +
+        "Según Specification-Driven Development, el MDD es la **Constitución del cambio** y debe tener " +
+        "**exactamente 7 secciones** en este orden: 1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, " +
+        "4. Contratos de API, 5. Lógica y Edge Cases, 6. Seguridad, 7. Infraestructura. " +
+        "Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra).\n\n" +
+        "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona " +
+        "antes de elaborar el documento. Usa TODO ese contexto; infiere todas las modificaciones necesarias en módulos, " +
+        "entidades, APIs y pantallas existentes que el cambio afecte; no te limites al requerimiento literal. " +
+        "El MDD debe reflejar el conocimiento real de la aplicación indexada (qué hay hoy y qué debe cambiar).\n\n" +
+        "Descripción del cambio:\n---\n" +
+        description +
+        "\n---\n\n" +
+        filesLine +
+        (answersText ? "Respuestas del usuario:\n---\n" + answersText + "\n---\n\n" : "") +
+        (theforgeContext
+          ? "Contexto del codebase (TheForge) — incluye evidencia del índice, validaciones, definiciones exactas, " +
+            "funciones por archivo y búsqueda semántica. Usar TODO para inferir impacto completo. " +
+            "No inventes rutas ni APIs que no aparezcan en este contexto.\n---\n" +
+            theforgeContext.slice(0, mddTheforgeContextMaxChars()) +
+            "\n---"
+          : "");
+    }
     const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
     const mddContent = await this.reviewer.reviewMdd(description, mddDraft?.trim() ?? "");
     const cleaned = cleanDocumentContent(mddContent);
