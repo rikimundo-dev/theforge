@@ -29,10 +29,11 @@ interface ComponentToken {
   typography?: string;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function resolveRef(value: string, tokens: DesignTokens): string {
   const match = value.match(/^\{([\w.]+)\}$/);
   if (!match) return value;
-  const parts = match[1].split(".");
+  const parts = match[1]!.split(".");
   let obj: unknown = tokens;
   for (const part of parts) {
     if (obj && typeof obj === "object" && part in obj) {
@@ -44,87 +45,96 @@ function resolveRef(value: string, tokens: DesignTokens): string {
   return typeof obj === "string" ? obj : value;
 }
 
-function setTypoField(t: Record<string, TypographyToken>, key: string, field: string, val: string): void {
-  if (!t[key]) t[key] = {};
-  (t[key] as Record<string, string>)[field] = val;
-}
-
-function setCompField(t: Record<string, ComponentToken>, key: string, field: string, val: string): void {
-  if (!t[key]) t[key] = {};
-  (t[key] as Record<string, string>)[field] = val;
-}
-
 function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | null; body: string } {
-  const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) return { frontMatter: null, body: content };
+  const m = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!m) return { frontMatter: null, body: content };
 
-  const rawYaml = match[1] ?? "";
-  const body = (match[2] ?? "").trim();
+  const rawYaml: string = m[1] ?? "";
+  const body: string = (m[2] ?? "").trim();
   const tokens: DesignTokens = {};
 
   let currentSection: string | null = null;
-  let currentSubKey: string | null = null;
 
   const lines = rawYaml.split("\n");
   for (const line of lines) {
     const t = line.trim();
     if (!t || t.startsWith("#")) continue;
 
-    // Section header
+    // Section header (colors:, typography:, rounded:, spacing:, components:)
     const sec = t.match(/^(\w+):\s*$/);
     if (sec) {
-      currentSection = sec[1];
-      currentSubKey = null;
+      currentSection = sec[1]!;
       continue;
     }
 
-    // Sub-key (typography: h1:, components: button-primary:)
-    const sub = t.match(/^(\S+):\s*$/);
-    if (currentSection === "typography" && sub) {
-      currentSubKey = sub[1];
-      if (!tokens.typography) tokens.typography = {};
-      if (!tokens.typography[currentSubKey]) tokens.typography[currentSubKey] = {};
-      continue;
-    }
-    if (currentSection === "components" && sub) {
-      currentSubKey = sub[1];
-      if (!tokens.components) tokens.components = {};
-      if (!tokens.components[currentSubKey]) tokens.components[currentSubKey] = {};
-      continue;
-    }
-
-    // Key: value
-    const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
-    if (!kv) continue;
-    const key = kv[1];
-    const val = kv[2].replace(/["']/g, "");
-
-    // Top-level fields
-    if (!currentSection) {
-      if (["name", "description", "version"].includes(key)) {
-        (tokens as Record<string, string>)[key] = val;
+    // Sub-key in typography (h1:, body-md:, etc.)
+    if (currentSection === "typography") {
+      const sub = t.match(/^(\S+):\s*$/);
+      if (sub) {
+        const sk = sub[1]!;
+        if (!tokens.typography) tokens.typography = {};
+        if (!tokens.typography[sk]) tokens.typography[sk] = {};
+        continue;
+      }
+      // Key:value in typography
+      const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
+      if (kv) {
+        const k = kv[1]!;
+        const v = kv[2]!.replace(/["']/g, "");
+        // Find the last typography key (we don't track currentSubKey)
+        const typoKeys = tokens.typography ? Object.keys(tokens.typography) : [];
+        if (typoKeys.length > 0) {
+          const lastKey = typoKeys[typoKeys.length - 1];
+          if (!tokens.typography![lastKey]) tokens.typography![lastKey] = {};
+          (tokens.typography![lastKey] as Record<string, string>)[k] = v;
+        }
       }
       continue;
     }
 
-    // Colors, rounded, spacing
-    if (["colors", "rounded", "spacing"].includes(currentSection)) {
-      const sec2 = tokens as Record<string, Record<string, string>>;
-      if (!sec2[currentSection]) sec2[currentSection] = {};
-      sec2[currentSection][key] = val;
+    // Sub-key in components
+    if (currentSection === "components") {
+      const sub = t.match(/^(\S+):\s*$/);
+      if (sub) {
+        const sk = sub[1]!;
+        if (!tokens.components) tokens.components = {};
+        if (!tokens.components[sk]) tokens.components[sk] = {};
+        continue;
+      }
+      // Key:value in components
+      const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
+      if (kv) {
+        const k = kv[1]!;
+        const v = kv[2]!.replace(/["']/g, "");
+        const compKeys = tokens.components ? Object.keys(tokens.components) : [];
+        if (compKeys.length > 0) {
+          const lastKey = compKeys[compKeys.length - 1];
+          if (!tokens.components![lastKey]) tokens.components![lastKey] = {};
+          (tokens.components![lastKey] as Record<string, string>)[k] = v;
+        }
+      }
       continue;
     }
 
-    // Typography fields
-    if (currentSection === "typography" && currentSubKey && tokens.typography) {
-      setTypoField(tokens.typography, currentSubKey, key, val);
+    // Simple key-value sections (colors, rounded, spacing)
+    if (currentSection && ["colors", "rounded", "spacing"].includes(currentSection)) {
+      const kv = t.match(/^(\S+):\s*["']?(.+?)["']?\s*$/);
+      if (kv) {
+        const k = kv[1]!;
+        const v = kv[2]!.replace(/["']/g, "");
+        const s = tokens as Record<string, Record<string, string>>;
+        if (!s[currentSection]) s[currentSection] = {};
+        s[currentSection]![k] = v;
+      }
       continue;
     }
 
-    // Components fields
-    if (currentSection === "components" && currentSubKey && tokens.components) {
-      setCompField(tokens.components, currentSubKey, key, val);
-      continue;
+    // Top-level fields (version, name, description)
+    if (!currentSection) {
+      const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
+      if (kv && kv[1] && ["name", "description", "version"].includes(kv[1])) {
+        (tokens as Record<string, string>)[kv[1]] = kv[2]!.replace(/["']/g, "");
+      }
     }
   }
 
