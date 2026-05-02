@@ -52,6 +52,8 @@ export interface LivePrecisionCalculator {
       complexity?: EstimationComplexity;
       projectId?: string;
       stageId?: string | null;
+      /** Documentos expandidos del proyecto (BRD, To-Be, etc.) para cálculo integral. */
+      documents?: PlanningDocumentFields;
     },
   ): LiveMetricsResult;
   /** Opcional: reporte de gaps en lenguaje natural. Si se pasan auditorGaps, se usan en lugar de regex. */
@@ -133,5 +135,50 @@ export const PRECISION_GREEN_MIN = 95;
 /** Factor de riesgo dinámico: < 85% → 1.25; ≥ 95% → 1.0. */
 export const RISK_FACTOR_LOW_PRECISION = 1.25;
 export const RISK_PRECISION_THRESHOLD = 85;
+
+// ──────────────────────────────────────────────
+// Tipos para Semáforo Integral Multi-Documento
+// ──────────────────────────────────────────────
+
+/** Campos de contenido de documento para el planificador integral. */
+export type PlanningDocumentFields = {
+  brdContent?: string;
+  toBeManualContent?: string;
+  asIsManualContent?: string;
+  specContent?: string;
+  architectureContent?: string;
+  useCasesContent?: string;
+  userStoriesContent?: string;
+  blueprintContent?: string;
+  apiContractsContent?: string;
+  logicFlowsContent?: string;
+  infraContent?: string;
+  tasksContent?: string;
+};
+
+/** Breakdown de completitud por documento (0-100). */
+export type DocumentCompleteness = {
+  [K in keyof PlanningDocumentFields]: number;
+} & { overall: number };
+
+/** Gap de consistencia entre dos documentos. */
+export type CrossDocumentGap = {
+  from: string;
+  to: string;
+  concept: string;
+  severity: "missing" | "partial" | "contradiction";
+};
+
+/** Longitud mínima para considerar un documento "completo" (caracteres). */
+export const DOC_COMPLETE_MIN_LENGTH = 300;
+/** Longitud mínima para "parcial". */
+export const DOC_PARTIAL_MIN_LENGTH = 80;
+
+/** Peso de completitud en la nota final (%). */
+export const COMPLETENESS_WEIGHT = 0.3;
+/** Peso de consistencia transversal en la nota final (%). */
+export const CROSS_CONSISTENCY_WEIGHT = 0.25;
+/** Peso de la calidad MDD-regex (actual) en la nota final (%). */
+export const MDD_QUALITY_WEIGHT = 0.45;
 
 
