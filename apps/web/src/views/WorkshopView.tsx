@@ -121,6 +121,7 @@ export default function WorkshopView({
     [workshopStagesList, activeStageId],
   );
   const patchWorkshopStage = useWorkshopStore((s) => s.patchWorkshopStage);
+  const generateMddFromBenchmark = useWorkshopStore((s) => s.generateMddFromBenchmark);
   const codebaseDocCharCount = useMemo(
     () => (project?.legacyFlowState?.codebaseDoc ?? "").trim().length,
     [project?.legacyFlowState?.codebaseDoc],
@@ -2089,6 +2090,26 @@ export default function WorkshopView({
                   codebaseDocChars={codebaseDocCharCount}
                   dbgaContentChars={dbgaContentCharCount}
                 />
+                <div className="flex shrink-0 flex-wrap items-center gap-2 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => void generateMddFromBenchmark(projectId)}
+                    disabled={loading && loadingReason === "mdd"}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500/80 text-zinc-900 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  >
+                    {loading && loadingReason === "mdd" ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4" />
+                    )}
+                    {mddContent?.trim() ? "Regenerar MDD" : "Generar MDD"}
+                  </button>
+                  <span className="text-xs text-zinc-500">
+                    {isLegacyProject
+                      ? "Genera MDD desde BRD + To-Be de la etapa activa"
+                      : "Genera MDD desde el DBGA / Benchmark"}
+                  </span>
+                </div>
                 {mddDirty && (
                   <div className="shrink-0 flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-3">
                     <span className="text-sm text-amber-200/90">Tienes cambios sin guardar. Graba para revisar consistencia (ER, etc.).</span>
