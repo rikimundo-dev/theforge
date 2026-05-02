@@ -49,6 +49,10 @@ import { loadLegacyKnowledgePack } from "./knowledge-loader.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
 import { UX_UI_GUIDE_PROMPT } from "../ai/prompts/ux-ui-guide-prompt.js";
 import {
+  extractDesignTokensFromTheForgeContext,
+  formatDesignTokensForUxGuide,
+} from "../ai/design-token-extractor.js";
+import {
   isLegacyCodebaseDocMcpDebugUiEnabled,
   runWithMcpUiDebug,
   type McpUiDebugEntry,
@@ -1919,6 +1923,22 @@ export class LegacyCoordinatorService {
               theforgeContext.slice(0, mddTheforgeContextMaxChars()) +
               "\n---\n\n**Regla obligatoria (legacy):** No inventes nada. Apégate al MDD y únicamente al conocimiento del codebase (TheForge) proporcionado arriba.\n\n**Instrucción:** Usa TODO el conocimiento anterior para alinear la guía con lo que ya existe. A continuación, MDD y Blueprint.\n\n" +
               uxPrompt;
+          }
+          // Extraer tokens de diseño reales del codebase (Tailwind config, CSS custom props, themes)
+          try {
+            const designTokenFindings = await extractDesignTokensFromTheForgeContext(
+              (q: string) => this.theforge.askCodebase(q, theforgeId),
+              theforgeId,
+            );
+            const tokenCtx = formatDesignTokensForUxGuide(designTokenFindings);
+            if (tokenCtx.trim()) {
+              uxPrompt = "**Tokens de diseño extraídos del codebase — usar como valores reales:**\n---\n" +
+                tokenCtx.slice(0, 6000) +
+                "\n---\n\n" + uxPrompt;
+            }
+          } catch {
+            // Si falla la extracción, continuar sin tokens — no bloquear la generación
+            this.logger.warn("[Legacy UX/UI] Design token extraction skipped (error, continuing without tokens)");
           }
           const uxUiGuideContent = await this.ai.generateResponse(uxPrompt, [], {
             systemPrompt: UX_UI_GUIDE_PROMPT,

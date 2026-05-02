@@ -41,6 +41,7 @@ import { useWorkshopStore, type Status } from "../store/workshopStore";
 import ChatContainer from "../components/ChatContainer";
 import ComplexityPendingBanner from "../components/ComplexityPendingBanner";
 import MddViewer from "../components/MddViewer";
+import { DesignMdPreview } from "../components/DesignMdPreview";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
 import LegacyMcpDebugPanel from "../components/LegacyMcpDebugPanel/LegacyMcpDebugPanel";
 import { BrdTobeStagePanel } from "../components/BrdTobeStagePanel";
@@ -178,11 +179,18 @@ export default function WorkshopView({
   const isLegacyProject = project?.projectType === "LEGACY";
   const uxGuideOneShotChatPrompt = useMemo(
     () =>
-      "Genera la Guía UX/UI completa a partir del MDD y Blueprint del proyecto. Incluye: patrón/estilo, paleta y tokens de color, tipografía, espaciado y grid, componentes de referencia, prioridades de UX, criterios de accesibilidad (WCAG, contraste 4.5:1, teclado, touch 44px) y anti-patrones a evitar." +
+      "Genera la **Guía UX/UI completa en formato DESIGN.md** (especificación abierta de Google). " +
+      "El documento DEBE empezar con YAML front matter con tokens de diseño (version, name, description, colors, typography, rounded, spacing, components) " +
+      "seguido de las secciones canónicas: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts. " +
+      "Usa {token.references} en los componentes, no dupliques valores. " +
+      "Incluye: patrón/estilo, paleta y tokens de color, tipografía, espaciado y grid, componentes de referencia, " +
+      "prioridades de UX, criterios de accesibilidad (WCAG, contraste 4.5:1, teclado, touch 44px) y anti-patrones a evitar." +
       (isLegacyProject
         ? ""
-        : " Para proyecto nuevo, al final añade la sección ## Prompt para Google Stitch (producto): un solo bloque listo para pegar en Google Stitch con pantallas y flujos del **producto** definido en el MDD y documentos (no describas la app The Forge ni el Workshop).") +
-      " Responde con el documento seguido de ---FIN_UX_UI--- y un mensaje breve.",
+        : " Para proyecto nuevo, al final del contenido (antes de ---FIN_UX_UI---) añade la sección ## Prompt para Google Stitch (producto): " +
+          "un solo bloque listo para copiar y pegar en Google Stitch con pantallas y flujos del **producto** definido en el MDD y documentos " +
+          "(no describas la app The Forge ni el Workshop).") +
+      " Responde con el DESIGN.md completo y termina con ---FIN_UX_UI--- y luego un breve comentario.",
     [isLegacyProject],
   );
   const isReverseEngineering =
@@ -310,7 +318,7 @@ export default function WorkshopView({
   const [apiContractsViewMode, setApiContractsViewMode] = useState<"preview" | "source">("preview");
   const [logicFlowsViewMode, setLogicFlowsViewMode] = useState<"preview" | "source">("preview");
   const [infraViewMode, setInfraViewMode] = useState<"preview" | "source">("preview");
-  const [uxUiGuideViewMode, setUxUiGuideViewMode] = useState<"preview" | "source">("preview");
+  const [uxUiGuideViewMode, setUxUiGuideViewMode] = useState<"design" | "preview" | "source">("design");
   const [architectureViewMode, setArchitectureViewMode] = useState<"preview" | "source">("preview");
   const [useCasesViewMode, setUseCasesViewMode] = useState<"preview" | "source">("preview");
   const [userStoriesViewMode, setUserStoriesViewMode] = useState<"preview" | "source">("preview");
@@ -1343,7 +1351,7 @@ export default function WorkshopView({
                           else if (centralPanel === "architecture") setArchitectureViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "use-cases") setUseCasesViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "user-stories") setUserStoriesViewMode((m) => (m === "preview" ? "source" : "preview"));
-                          else if (centralPanel === "ux-ui-guide") setUxUiGuideViewMode((m) => (m === "preview" ? "source" : "preview"));
+                          else if (centralPanel === "ux-ui-guide") setUxUiGuideViewMode((m) => m === "design" ? "preview" : m === "preview" ? "source" : "design");
                           else if (centralPanel === "blueprint") setBlueprintViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "api-contracts") setApiContractsViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "logic-flows") setLogicFlowsViewMode((m) => (m === "preview" ? "source" : "preview"));
@@ -1368,12 +1376,17 @@ export default function WorkshopView({
                                               : infraViewMode) === "preview" ? (
                           <>
                             <Code className="w-4 h-4" />
-                            Ver fuente
+                            {centralPanel === "ux-ui-guide" ? "Ver markdown" : "Ver fuente"}
+                          </>
+                        ) : centralPanel === "ux-ui-guide" && uxUiGuideViewMode === "design" ? (
+                          <>
+                            <Palette className="w-4 h-4" />
+                            Ver preview diseño
                           </>
                         ) : (
                           <>
                             <FileText className="w-4 h-4" />
-                            Ver previsualización
+                            {centralPanel === "ux-ui-guide" ? "Ver preview visual" : "Ver previsualización"}
                           </>
                         )}
                       </button>
@@ -1563,7 +1576,7 @@ export default function WorkshopView({
                     type="button"
                     onClick={() => sendMessage(uxGuideOneShotChatPrompt, "ux-ui-guide")}
                     disabled={loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
-                    title="Generar o regenerar la Guía UX/UI desde el MDD (se envía al chat). Proyectos nuevos: incluye prompt Google Stitch para el producto."
+                    title="Generar o regenerar la Guía UX/UI en formato DESIGN.md desde el MDD (se envía al chat). Proyectos nuevos: incluye prompt Google Stitch para el producto."
                     className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -2252,7 +2265,11 @@ export default function WorkshopView({
             )}
             {centralPanel === "ux-ui-guide" && (
               <>
-                {uxUiGuideViewMode === "preview" ? (
+                {uxUiGuideViewMode === "design" ? (
+                  <div className="flex-1 overflow-auto min-h-0">
+                    <DesignMdPreview content={uxUiGuideContent ?? ""} />
+                  </div>
+                ) : uxUiGuideViewMode === "preview" ? (
                   <MddViewer content={uxUiGuideContent ?? ""} />
                 ) : (
                   <textarea
@@ -2269,7 +2286,7 @@ export default function WorkshopView({
                     type="button"
                     onClick={() => sendMessage(uxGuideOneShotChatPrompt, "ux-ui-guide")}
                     disabled={loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
-                    title="Generar o regenerar la Guía UX/UI desde el MDD (se envía al chat). Proyectos nuevos: incluye prompt Google Stitch para el producto."
+                    title="Generar o regenerar la Guía UX/UI en formato DESIGN.md desde el MDD (se envía al chat). Proyectos nuevos: incluye prompt Google Stitch para el producto."
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded text-zinc-400 hover:text-amber-400 hover:bg-zinc-700/50 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}

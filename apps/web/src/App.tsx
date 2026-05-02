@@ -18,6 +18,7 @@ import {
   Plus,
   RefreshCw,
   Settings,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import WorkshopView from "./views/WorkshopView";
@@ -100,6 +101,7 @@ export default function App() {
   const [theforgeProjects, setTheForgeProjects] = useState<TheForgeProject[]>([]);
   const [theforgeAvailable, setTheForgeAvailable] = useState(false);
   const [theforgeLoading, setTheForgeLoading] = useState(false);
+  const [projectTypeFilter, setProjectTypeFilter] = useState<"all" | "NEW" | "LEGACY">("all");
   const newProjectInputRef = useRef<HTMLInputElement>(null);
 
   const theforgeRepositories = useMemo((): TheForgeRepository[] => {
@@ -116,6 +118,11 @@ export default function App() {
     }
     return Array.from(byId.values());
   }, [theforgeProjects]);
+
+  const filteredProjects = useMemo(
+    () => (projectTypeFilter === "all" ? projects : projects.filter((p) => (p.projectType ?? "NEW") === projectTypeFilter)),
+    [projects, projectTypeFilter],
+  );
 
   async function loadProjects() {
     setLoading(true);
@@ -456,23 +463,57 @@ export default function App() {
               <FolderOpen className="w-5 h-5 text-[var(--primary)]" />
               Proyectos
             </CardTitle>
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => setProjectTypeFilter("all")}
+                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                  projectTypeFilter === "all"
+                    ? "bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]"
+                    : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--accent)]/10"
+                }`}
+              >
+                Todos ({projects.length})
+              </button>
+              <button
+                onClick={() => setProjectTypeFilter("NEW")}
+                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                  projectTypeFilter === "NEW"
+                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
+                    : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-emerald-500/10"
+                }`}
+              >
+                <Sparkles className="w-3 h-3 inline mr-1" />
+                Nuevos ({projects.filter((p) => (p.projectType ?? "NEW") === "NEW").length})
+              </button>
+              <button
+                onClick={() => setProjectTypeFilter("LEGACY")}
+                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                  projectTypeFilter === "LEGACY"
+                    ? "bg-amber-500/20 border-amber-500 text-amber-400"
+                    : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-amber-500/10"
+                }`}
+              >
+                <GitBranch className="w-3 h-3 inline mr-1" />
+                Legacy ({projects.filter((p) => p.projectType === "LEGACY").length})
+              </button>
+            </div>
           </CardHeader>
           <CardContent>
-            {projects.length === 0 && !loading && (
+            {filteredProjects.length === 0 && !loading && (
               <EmptyState
-                title="Aún no hay proyectos"
-                description="Crea uno arriba o usa Refrescar si ya existen en el backend."
+                title={projects.length === 0 ? "Aún no hay proyectos" : "No hay proyectos de este tipo"}
+                description={projects.length === 0 ? "Crea uno arriba o usa Refrescar si ya existen en el backend." : "Cambia el filtro o crea un proyecto nuevo."}
                 icon={FolderGit2}
-                action={{
+                action={projects.length === 0 ? {
                   label: "Crear primer proyecto",
                   icon: <Plus className="w-4 h-4" />,
                   onClick: () => newProjectInputRef.current?.focus(),
-                }}
+                } : undefined}
               />
             )}
-            {projects.length > 0 && (
+            {filteredProjects.length > 0 && (
               <ul className="space-y-3">
-                {projects.map((p) => (
+                {filteredProjects.map((p) => (
                   <li key={p.id}>
                     <Card
                       variant="bordered"
@@ -484,6 +525,17 @@ export default function App() {
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <span className={`w-3 h-3 rounded-full shrink-0 ${statusDotColor[p.status]}`} title={p.status} />
                           <span className="font-medium min-w-0 flex-1">{p.name}</span>
+                          <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                            (p.projectType ?? "NEW") === "NEW"
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                              : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                          }`}>
+                            {(p.projectType ?? "NEW") === "NEW" ? (
+                              <><Sparkles className="w-2.5 h-2.5" /> Nuevo</>
+                            ) : (
+                              <><GitBranch className="w-2.5 h-2.5" /> Legacy</>
+                            )}
+                          </span>
                           <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0 sm:hidden" aria-hidden />
                         </div>
                         <div className="flex items-center justify-between gap-3 sm:justify-end sm:shrink-0 flex-wrap sm:flex-nowrap">
