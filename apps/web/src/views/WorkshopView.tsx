@@ -441,7 +441,8 @@ export default function WorkshopView({
   useEffect(() => {
     const wasGeneratingBrd =
       prevLoadingReasonRef.current === "brd-tobe-from-dbga" ||
-      prevLoadingReasonRef.current === "legacy-brd-tobe-suggest";
+      prevLoadingReasonRef.current === "legacy-brd-tobe-suggest" ||
+      prevLoadingReasonRef.current === "legacy-as-is";
     if (!loading && wasGeneratingBrd && activeWorkshopStage) {
       setBrdWorkshopDraft(activeWorkshopStage.brdContent ?? "");
       setToBeWorkshopDraft(activeWorkshopStage.toBeManualContent ?? "");
