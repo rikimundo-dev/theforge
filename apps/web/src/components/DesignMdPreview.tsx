@@ -28,7 +28,7 @@ interface DesignTokens {
 function resolveRef(value: string, tokens: DesignTokens): string {
   const match = value.match(/^\{([\w.]+)\}$/);
   if (!match) return value;
-  const parts = match[1].split(".");
+  const parts = match[1]!.split(".");
   let obj: unknown = tokens;
   for (const part of parts) {
     if (obj && typeof obj === "object" && part in obj) {
@@ -44,21 +44,21 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
   const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return { frontMatter: null, body: content };
 
-  const yamlLines = match[1];
+  const yamlString = match[1] ?? "";
   const body = match[2]?.trim() ?? "";
   const tokens: DesignTokens = {};
 
   let currentSection: string | null = null;
   let currentTypographyKey: string | null = null;
 
-  for (const line of yamlLines.split("\n")) {
+  for (const line of yamlString.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
 
     // Detect section headers (colors:, typography:, rounded:, spacing:, components:)
     const sectionMatch = trimmed.match(/^(\w+):\s*$/);
     if (sectionMatch) {
-      currentSection = sectionMatch[1];
+      currentSection = sectionMatch[1]!;
       continue;
     }
 
@@ -66,17 +66,18 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
     if (currentSection === "typography") {
       const typoKeyMatch = trimmed.match(/^(\S+):\s*$/);
       if (typoKeyMatch) {
-        currentTypographyKey = typoKeyMatch[1];
+        currentTypographyKey = typoKeyMatch[1]!;
         if (!tokens.typography) tokens.typography = {};
         tokens.typography[currentTypographyKey] = {};
         continue;
       }
       // Typography field values (fontFamily:, fontSize:, etc.)
-      if (currentTypographyKey && tokens.typography?.[currentTypographyKey]) {
+      if (currentTypographyKey && tokens.typography[currentTypographyKey]) {
         const kvMatch = trimmed.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
         if (kvMatch) {
-          const val = kvMatch[2].replace(/["']/g, "");
-          (tokens.typography[currentTypographyKey] as Record<string, string>)[kvMatch[1]] = val;
+          const key = kvMatch[1]!;
+          const val = kvMatch[2]!.replace(/["']/g, "");
+          (tokens.typography[currentTypographyKey] as Record<string, string>)[key] = val;
         }
       }
       continue;
@@ -86,11 +87,13 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
     if (currentSection && ["colors", "rounded", "spacing"].includes(currentSection)) {
       const kvMatch = trimmed.match(/^(\S+):\s*["']?(.+?)["']?\s*$/);
       if (kvMatch) {
-        const val = kvMatch[2].replace(/["']/g, "");
-        if (!(tokens as Record<string, Record<string, string>>)[currentSection]) {
-          (tokens as Record<string, Record<string, string>>)[currentSection] = {};
+        const key = kvMatch[1]!;
+        const val = kvMatch[2]!.replace(/["']/g, "");
+        const section = tokens as Record<string, Record<string, string>>;
+        if (!section[currentSection]) {
+          section[currentSection] = {};
         }
-        (tokens as Record<string, Record<string, string>>)[currentSection][kvMatch[1]] = val;
+        section[currentSection]![key] = val;
       }
       continue;
     }
@@ -99,16 +102,17 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
     if (currentSection === "components") {
       const compKeyMatch = trimmed.match(/^(\S+):\s*$/);
       if (compKeyMatch) {
-        currentTypographyKey = compKeyMatch[1];
+        currentTypographyKey = compKeyMatch[1]!;
         if (!tokens.components) tokens.components = {};
         tokens.components[currentTypographyKey] = {};
         continue;
       }
-      if (currentTypographyKey && tokens.components?.[currentTypographyKey]) {
+      if (currentTypographyKey && tokens.components[currentTypographyKey]) {
         const kvMatch = trimmed.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
         if (kvMatch) {
-          const val = kvMatch[2].replace(/["']/g, "");
-          (tokens.components[currentTypographyKey] as Record<string, string>)[kvMatch[1]] = val;
+          const key = kvMatch[1]!;
+          const val = kvMatch[2]!.replace(/["']/g, "");
+          (tokens.components[currentTypographyKey] as Record<string, string>)[key] = val;
         }
       }
       continue;
@@ -117,8 +121,8 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
     // Top-level fields (version, name, description)
     if (!currentSection) {
       const kvMatch = trimmed.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
-      if (kvMatch && ["name", "description", "version"].includes(kvMatch[1])) {
-        (tokens as Record<string, string>)[kvMatch[1]] = kvMatch[2].replace(/["']/g, "");
+      if (kvMatch && kvMatch[1] && ["name", "description", "version"].includes(kvMatch[1])) {
+        (tokens as Record<string, string>)[kvMatch[1]] = kvMatch[2]!.replace(/["']/g, "");
       }
     }
   }
@@ -292,7 +296,6 @@ export function DesignMdPreview({ content }: { content: string }) {
           <div className="flex flex-wrap gap-3">
             {Object.entries(frontMatter.rounded).map(([key, val]) => {
               const px = parseInt(val.replace("px", ""));
-              const size = isNaN(px) ? 32 : Math.min(px * 2, 80);
               return (
                 <div key={key} className="flex flex-col items-center gap-1">
                   <div
