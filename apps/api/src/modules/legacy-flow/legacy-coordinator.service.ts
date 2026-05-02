@@ -1238,8 +1238,25 @@ export class LegacyCoordinatorService {
 
     // Múltiples consultas a TheForge para contexto amplio (evidencia del índice + ask_codebase + refactor seguro)
     const theforgeParts: string[] = [];
-    const isInitialMdd = !description.trim();
-    if (isLegacyEvidenceFirstEnabled()) {
+  const isInitialMdd = !description.trim();
+  // Fase 5: Buscar etapa base (ordinal anterior) para contexto incremental
+  let baselineStage: { mddContent?: string | null } | null = null;
+  if (!isInitialMdd && gateStage && gateStage.ordinal > 1) {
+    const baselineOrdinal = gateStage.ordinal - 1;
+    const stages = project?.stages ?? [];
+    baselineStage = stages.find((s: { ordinal: number }) => s.ordinal === baselineOrdinal) ?? null;
+    if (!baselineStage?.mddContent?.trim()) {
+      // Si no está en el objeto project cargado, buscar en DB
+      try {
+        const dbStage = await this.prisma.stage.findFirst({
+          where: { projectId: gateStage.projectId, ordinal: baselineOrdinal },
+          select: { mddContent: true },
+        });
+        if (dbStage?.mddContent?.trim()) baselineStage = dbStage;
+      } catch { /* non-critical */ }
+    }
+  }
+  if (isLegacyEvidenceFirstEnabled()) {
       try {
         const changeEvidence = await runLegacyStagedDiscoveryMddAgent({
           theforge: this.theforge,
@@ -1347,9 +1364,19 @@ export class LegacyCoordinatorService {
             "\n---"
           : "");
     } else {
+      const baselineBlock = baselineStage?.mddContent?.trim()
+        ? "## Línea base — MDD de la etapa anterior (sistema sin el cambio actual)\n\n" +
+          baselineStage.mddContent.trim().slice(0, 30000) +
+          "\n\n---\n\n" +
+          "**Instrucción:** El MDD de cambio debe describir SOLO las modificaciones, adiciones o eliminaciones " +
+          "respecto a esta línea base. No redescribas secciones enteras que no cambian. " +
+          "Si una sección (§1–7) no se modifica, indícalo con «Sin cambios respecto a la línea base». " +
+          "Enfócate en qué cambia, dónde cambia y por qué cambia.\n\n---\n\n"
+        : "";
       prompt =
         (brdPre ? brdPre + "\n\n" : "") +
         codebaseDocBlock +
+        baselineBlock +
         "Genera un documento MDD de cambio (Markdown) para un proyecto legacy. " +
         "Según Specification-Driven Development, el MDD es la **Constitución del cambio** y debe tener " +
         "**exactamente 7 secciones** en este orden: 1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, " +
