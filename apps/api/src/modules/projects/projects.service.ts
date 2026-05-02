@@ -455,6 +455,33 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       include: { estimation: true },
     });
     if (!out) throw new NotFoundException("Etapa no encontrada tras crear");
+
+    // Cambio 3: Sincronizar con FalkorDB al crear etapa — nodo + relación con línea base
+    if (isLegacy) {
+      // Sincronizar nodo LegacyStage
+      this.graphMemory.syncLegacyStage({
+        stageId: out.id,
+        projectId,
+        ordinal: out.ordinal,
+        name: out.name ?? "",
+        theforgeProjectId: project.theforgeProjectId ?? undefined,
+      }).catch(() => {});
+      // Relacionar con Stage 1 (línea base) si no es Stage 1
+      if (out.ordinal > 1) {
+        const baselineStage = project.stages.find((s) => s.ordinal === 1);
+        if (baselineStage) {
+          this.graphMemory.syncLegacyStage({
+            stageId: out.id,
+            projectId,
+            ordinal: out.ordinal,
+            name: out.name ?? "",
+            parentStageId: baselineStage.id,
+            theforgeProjectId: project.theforgeProjectId ?? undefined,
+          }).catch(() => {});
+        }
+      }
+    }
+
     return { stage: out };
   }
 

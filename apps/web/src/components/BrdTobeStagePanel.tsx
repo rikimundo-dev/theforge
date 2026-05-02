@@ -223,7 +223,7 @@ export function BrdTobeStagePanel({
   }
 
   const title =
-    panel === "brd" ? "BRD (etapa)" : panel === "tobe" ? "Manual To-Be / As-Is (etapa)" : "BRD / To-Be / As-Is (etapa)";
+    panel === "brd" ? "BRD de cambio (etapa)" : panel === "tobe" ? "Manual To-Be de cambio / As-Is (etapa)" : "BRD de cambio / To-Be de cambio / As-Is (etapa)";
   const showGate = panel === "full";
   const showBrdBlock = panel === "full" || panel === "brd";
   const showTobeBlock = panel === "full" || panel === "tobe";

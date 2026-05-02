@@ -2103,11 +2103,22 @@ export default function WorkshopView({
                   codebaseDocChars={codebaseDocCharCount}
                   dbgaContentChars={dbgaContentCharCount}
                 />
+                {/* Gate BRD/To-Be: si requireBrdTobeGate está activo y BRD o To-Be no aprobados, bloquear */}
+                {(() => {
+                  const brdGateBlocked = project?.requireBrdTobeGate === true &&
+                    (!activeWorkshopStage?.brdApprovedAt || !activeWorkshopStage?.toBeApprovedAt);
+                  return null;
+                })()}
                 <div className="flex shrink-0 flex-wrap items-center gap-2 mb-3">
+                  {(() => {
+                    const brdGateBlocked = project?.requireBrdTobeGate === true &&
+                      (!activeWorkshopStage?.brdApprovedAt || !activeWorkshopStage?.toBeApprovedAt);
+                    return null;
+                  })()}
                   <button
                     type="button"
                     onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
-                    disabled={loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")}
+                    disabled={(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) || (project?.requireBrdTobeGate === true && (!activeWorkshopStage?.brdApprovedAt || !activeWorkshopStage?.toBeApprovedAt))}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500/80 text-zinc-900 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     {(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) ? (
@@ -2117,11 +2128,15 @@ export default function WorkshopView({
                     )}
                     {mddContent?.trim() ? "Regenerar MDD" : "Generar MDD"}
                   </button>
-                  <span className="text-xs text-zinc-500">
-                    {isLegacyProject
-                      ? "Genera MDD desde BRD + To-Be de la etapa activa"
-                      : "Genera MDD desde el DBGA / Benchmark"}
-                  </span>
+                  {(project?.requireBrdTobeGate === true && (!activeWorkshopStage?.brdApprovedAt || !activeWorkshopStage?.toBeApprovedAt)) ? (
+                    <span className="text-xs text-amber-400">Requiere BRD y To-Be aprobados (panel BRD/To-Be)</span>
+                  ) : (
+                    <span className="text-xs text-zinc-500">
+                      {isLegacyProject
+                        ? "Genera MDD desde BRD + To-Be de la etapa activa"
+                        : "Genera MDD desde el DBGA / Benchmark"}
+                    </span>
+                  )}
                 </div>
                 {mddDirty && (
                   <div className="shrink-0 flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-3">

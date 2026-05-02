@@ -680,10 +680,40 @@ export class LegacyCoordinatorService {
     if (!stage?.id) {
       throw new BadRequestException("No hay etapa para persistir BRD / To-Be.");
     }
+    // Cambio 2: Buscar etapa base (anterior en ordinal) para contexto incremental
+    let baselineStageBrdBlock = "";
+    if (stage.ordinal > 1) {
+      try {
+        const baselineOrdinal = stage.ordinal - 1;
+        const baseline = await this.prisma.stage.findFirst({
+          where: { projectId: stage.projectId, ordinal: baselineOrdinal },
+          select: { brdContent: true, toBeManualContent: true },
+        });
+        if (baseline?.brdContent?.trim() || baseline?.toBeManualContent?.trim()) {
+          baselineStageBrdBlock =
+            "## Línea base — BRD y To-Be de la etapa anterior (sistema sin el cambio actual)\n\n" +
+            (baseline.brdContent?.trim() ? "### BRD actual (línea base)\n\n" + baseline.brdContent.trim().slice(0, 15000) + "\n\n" : "") +
+            (baseline.toBeManualContent?.trim() ? "### To-Be actual (línea base)\n\n" + baseline.toBeManualContent.trim().slice(0, 15000) + "\n\n" : "") +
+            "---\n\n**Instrucción:** El BRD y To-Be DEBEN centrarse SOLO en el cambio (adiciones, modificaciones o eliminaciones) respecto a esta línea base. " +
+            "No redescribas el sistema completo. Si algo no cambia respecto a la línea base, indícalo brevemente. " +
+            "El BRD y To-Be de esta etapa son documentos de cambio, no documentos completos del sistema.\n\n---\n\n";
+        }
+      } catch { /* non-critical */ }
+    }
+    const isInitialLegacyStage = !baselineStageBrdBlock;
     const prompt =
-      "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), redacta **dos** borradores en español, en markdown:\n" +
-      "1) **BRD de cambio:** problema, alcance, supuestos, riesgos; cita rutas o módulos del documento fuente cuando puedas.\n" +
-      "2) **Manual To-Be:** comportamiento y reglas de negocio **deseadas** tras el cambio; alinea con el BRD; no inventes APIs o archivos que no aparezcan en el fuente (indica «no consta» si falta evidencia).\n\n" +
+      isInitialLegacyStage
+        ? "Eres analista de negocio. A partir del **MDD inicial** (documentación del codebase existente a continuación), " +
+          "deriva **dos** borradores en español, en markdown, que reflejen fielmente el sistema documentado:\n" +
+          "1) **BRD (sistema actual):** problema de negocio que resuelve el sistema existente, alcance actual, usuarios, supuestos y riesgos identificados. Cita módulos o rutas del MDD inicial.\n" +
+          "2) **Manual To-Be (sistema actual):** comportamiento y reglas de negocio del sistema **tal como existe hoy**, según el MDD inicial. Describe la lógica actual, no una visión futura.\n\n" +
+          "IMPORTANTE: Este NO es un documento de cambio. Debes **reflejar el sistema existente** descrito en el MDD inicial.\n\n"
+        : "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), redacta **dos** borradores en español, en markdown, como documentos de cambio:\n" +
+          "1) **BRD de cambio:** problema que resuelve este cambio, alcance del cambio, supuestos, riesgos; cita rutas o módulos del documento fuente que este cambio toca.\n" +
+          "2) **Manual To-Be de cambio:** comportamiento y reglas de negocio **deseadas** tras aplicar el cambio; alinea con el BRD de cambio; no inventes APIs o archivos que no aparezcan en el fuente (indica «no consta» si falta evidencia).\n\n" +
+          "IMPORTANTE: Este es un **documento de cambio**, no una descripción del sistema completo. Céntrate en qué cambia, qué se agrega y qué se modifica.\n\n"
+      +
+      (baselineStageBrdBlock ? baselineStageBrdBlock : "") +
       "Responde **solo** con este formato exacto (delimitadores literales):\n" +
       "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n<<<TOBE>>>\n(markdown To-Be)\n<<<END_TOBE>>>\n\n" +
       "--- DOCUMENTO ---\n\n" +
