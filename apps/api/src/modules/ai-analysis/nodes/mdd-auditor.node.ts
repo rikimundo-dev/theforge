@@ -146,7 +146,7 @@ export function createMddAuditorNode(
 
       let parsed: z.infer<typeof auditorOutputSchema>;
       try {
-        parsed = parseJsonOrThrow(text, auditorOutputSchema);
+        parsed = parseJsonOrThrow(text, auditorOutputSchema) as unknown as z.infer<typeof auditorOutputSchema>;
       } catch (parseErr) {
         LOG("fallback determinístico: parse error — %s", parseErr instanceof Error ? parseErr.message.slice(0, 300) : String(parseErr).slice(0, 300));
         const validation = validateMddStructure(draft);
