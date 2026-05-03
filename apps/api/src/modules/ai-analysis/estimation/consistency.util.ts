@@ -12,7 +12,7 @@ export function extractConcepts(text: string): Set<string> {
   const h2 = lower.matchAll(/^##\s+(.+)$/gm);
   for (const m of h2) {
     const t = m[1].trim();
-    if (t.length > 3 && t.length <= 100) s.add(t);
+    if (t.length > 3 && t.length <= 100 && !/^(objetivos?|alcance|criterios?\s+de\s+éxito|para\s+quién|fuera\s+del\s+alcance|dentro\s+del\s+(mvp|alcance)|dependencias\s+conocidas|supuestos|riesgos|métricas\s+de\s+éxito|público\s+objetivo|descripción|justificación|contexto|introducción|definiciones|siglas|referencias|anexos|glosario|conclusiones|próximos\s+pasos|roadmap|plan\s+de\s+trabajo|entregables|cronograma|diagramas|vista\s+general|arquitectura\s+general)$/i.test(t)) s.add(t);
   }
 
   // Bold phrases (3-60 chars)
