@@ -668,8 +668,8 @@ function detectReferenceSections(md: string): {
   );
   scores.endpointsWithPayloads =
     scores.endpoints > 0 &&
-    (/\bpayload\b|\brequest\s*body\b|\bresponse\s*body\b|json\s*:\s*\{/i.test(content) ||
-      /(?:post|put|patch).*\{[\s\S]*\}/i.test(content));
+    (/\bpayload\b|\brequest\s*body\b|\bresponse\s*body\b|json\s*:\s*\{|```json\s*\{/i.test(content) ||
+      /(?:post|put|patch)[\s\S]*?\{[\s\S]*\}/i.test(content));
 
   const securityBlock =
     content.match(
