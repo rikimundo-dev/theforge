@@ -2204,6 +2204,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 },
               ],
             });
+            // Refrescar el proyecto para que los documentos generados aparezcan sin recargar
+            if (prog.index > 0) {
+              get().fetchProject(pid).catch(() => {});
+            }
           }
         }
         set({ agentProgress: [] });
