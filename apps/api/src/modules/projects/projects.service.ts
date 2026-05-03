@@ -30,7 +30,7 @@ import {
 } from "@theforge/shared-types";
 import { UX_UI_GUIDE_PROMPT } from "../ai/prompts/ux-ui-guide-prompt.js";
 import { uxGuideLlmOptions } from "../ai/ux-guide-llm-context.js";
-import { parseBrdTobeTaggedSuggest } from "../ai-analysis/utils/brd-tobe-gate.util.js";
+
 import { flattenStageDeliverables, pickPrimaryStage } from "./stage-helpers.js";
 
 /** System prompt para sintetizar BRD/To-Be desde DBGA (greenfield); más ligero que el coordinador legacy + KNOWLEDGE. */
