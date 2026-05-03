@@ -23,7 +23,7 @@ import { getMddAuditorTools, getMddArchitectTools } from "../tools/tool-registry
 import type { TheForgeService } from "../../theforge/theforge.service.js";
 import { MDDStateAnnotation, type MDDStateType } from "../state/index.js";
 
-const MAX_MDD_ITERATIONS = 3;
+const MAX_MDD_ITERATIONS = 1;
 
 /** Opciones al compilar el grafo MDD (p. ej. TheForge MCP para herramientas del Arquitecto en legacy). */
 export type MddGraphCompileOptions = {

@@ -59,7 +59,7 @@ function resolveLangGraphRecursionLimit(): number {
     const n = Number(raw);
     if (Number.isFinite(n) && n >= 10 && n <= 500) return Math.floor(n);
   }
-  return 15;
+  return 20;
 }
 
 const LANGGRAPH_RECURSION_LIMIT = resolveLangGraphRecursionLimit();
