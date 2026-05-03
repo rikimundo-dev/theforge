@@ -9,7 +9,10 @@ Generar el **documento de Infraestructura y Despliegue** (DevOps / Docker Spec) 
 **Contenido obligatorio del documento:**
 
 1. **Dockerfile multietapa:** Descripción (o ejemplo) de un Dockerfile optimizado (build stage + runtime stage, usuario no root, imagen base mínima cuando sea posible).
-2. **docker-compose.yml:** Servicios necesarios según el MDD (Postgres, Redis si aplica, API, Frontend, etc.) con nombres, puertos y dependencias.
+2. **docker-compose.yml:** Servicios necesarios según el MDD (Postgres, Redis si aplica, API, Frontend, etc.) con:
+   - **Puertos:** Solo exponer puertos estrictamente necesarios para acceso externo (API gateway, Frontend). Los servicios internos (Postgres, Redis, colas, workers) NO deben tener `ports:` en el compose — se comunican por nombre de contenedor (DNS interno de Docker).
+   - **Nombres de contenedor:** Usar `container_name:` para cada servicio y referenciar siempre por nombre (ej. `postgres://postgres:5432` en vez de `localhost:5432`).
+   - **Dependencias:** `depends_on` entre servicios cuando corresponda.
 3. **Variables de entorno:** Archivo `.env.example` con todas las variables necesarias para que el sistema arranque (DATABASE_URL, API keys, feature flags, etc.), sin valores sensibles.
 4. **Volúmenes y persistencia:** Configuración de volúmenes para datos persistentes (BD, archivos subidos, etc.) para que no se pierdan al reiniciar contenedores.
 
