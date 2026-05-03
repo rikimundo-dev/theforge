@@ -43,7 +43,10 @@ const auditorOutputSchema = z.object({
     z.string().transform((s) => [s]),
     z.record(z.any()).transform((obj) => [JSON.stringify(obj)]),
   ]).optional().default([]),
-  infrastructure_ready: z.boolean().optional(),
+  infrastructure_ready: z.union([
+    z.boolean(),
+    z.any().transform((v) => Boolean(v)),
+  ]).optional(),
 });
 
 const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:Auditor] ${msg}`, ...args);
@@ -141,7 +144,36 @@ export function createMddAuditorNode(
         };
       }
 
-      const parsed = parseJsonOrThrow(text, auditorOutputSchema);
+      let parsed: z.infer<typeof auditorOutputSchema>;
+      try {
+        parsed = parseJsonOrThrow(text, auditorOutputSchema);
+      } catch (parseErr) {
+        LOG("fallback determinístico: parse error — %s", parseErr instanceof Error ? parseErr.message.slice(0, 300) : String(parseErr).slice(0, 300));
+        const validation = validateMddStructure(draft);
+        let fallbackScore = 80;
+        if (!validation.section3HasPayloads) fallbackScore -= 20;
+        if (!validation.hasTechnicalMetadata) fallbackScore -= 5;
+        if (validation.missingSections.length > 0) {
+          fallbackScore = Math.min(fallbackScore, 94);
+          fallbackScore -= validation.missingSections.length * 5;
+        }
+        fallbackScore = Math.max(0, Math.min(100, fallbackScore));
+        const fallbackDecision = fallbackScore >= AUDIT_PASS_THRESHOLD && validation.missingSections.length === 0 ? "done" as const : "clarifier" as const;
+        const fallbackIteration = (state.mddIteration ?? 0) + (fallbackDecision === "clarifier" ? 1 : 0);
+        const fallbackFeedback = validation.issues.length > 0
+          ? validation.issues.join(" ")
+          : "Faltan: modelo de datos/entidades, contratos con payloads, decisiones de seguridad, estrategia de infraestructura.";
+        LOG("fallback score=%s decision=%s", fallbackScore, fallbackDecision);
+        return {
+          auditorScore: fallbackScore,
+          auditorFeedback: fallbackFeedback,
+          auditorDecision: fallbackDecision,
+          mddIteration: fallbackIteration,
+          delegateTarget: undefined,
+          sectionsToRun: undefined,
+          acceptedProposalDirective: undefined,
+        };
+      }
       let score = Math.min(100, Math.max(0, parsed.auditorScore));
       const validation = validateMddStructure(draft);
 
