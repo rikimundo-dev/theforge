@@ -65,7 +65,6 @@ import {
   brdTobeGateFailureMessage,
   composeBrdToBeAsIsPreamble,
   isBrdTobeGateSatisfied,
-  parseBrdTobeTaggedSuggest,
 } from "../ai-analysis/utils/brd-tobe-gate.util.js";
 
 const KNOWLEDGE = loadLegacyKnowledgePack();
@@ -738,9 +737,10 @@ export class LegacyCoordinatorService {
         systemPrompt: COORDINATOR_SYSTEM,
         maxTokensOverride: 32000,
       });
-      const parsed = parseBrdTobeTaggedSuggest((raw ?? "").trim());
-      if (parsed?.brd) {
-        brd = cleanDocumentContent(parsed.brd);
+      const brdMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*BRD\s*>>>\s*([\s\S]*?)\s*<<<_?END_BRD_?>>>/i);
+      const extracted = brdMatch?.[1]?.trim() ?? null;
+      if (extracted) {
+        brd = cleanDocumentContent(extracted);
         break;
       }
       if (attempt < 2) {
@@ -772,9 +772,10 @@ export class LegacyCoordinatorService {
         systemPrompt: COORDINATOR_SYSTEM,
         maxTokensOverride: 32000,
       });
-      const parsed = parseBrdTobeTaggedSuggest((raw ?? "").trim());
-      if (parsed?.tobe) {
-        tobe = cleanDocumentContent(parsed.tobe);
+      const tobeMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*TOBE\s*>>>\s*([\s\S]*?)\s*<<<_?END_TOBE_?>>>/i);
+      const extracted = tobeMatch?.[1]?.trim() ?? null;
+      if (extracted) {
+        tobe = cleanDocumentContent(extracted);
         break;
       }
       if (attempt < 2) {
