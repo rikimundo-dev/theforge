@@ -2163,6 +2163,21 @@ export default function WorkshopView({
                     )}
                     {mddContent?.trim() ? "Regenerar MDD" : "Generar MDD"}
                   </button>
+                  {effectiveMddTrimmed.length > 200 && (
+                    <button
+                      type="button"
+                      onClick={handleGenerateDeliverables}
+                      disabled={cascadeRunning || mddReviewing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-green-600/80 text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {cascadeRunning ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Layers className="w-4 h-4" />
+                      )}
+                      {cascadeRunning ? "Generando documentos…" : "Generar todos los documentos"}
+                    </button>
+                  )}
                   {(project?.requireBrdTobeGate === true && (!activeWorkshopStage?.brdApprovedAt || !activeWorkshopStage?.toBeApprovedAt)) ? (
                     <span className="text-xs text-amber-400">Requiere BRD y To-Be aprobados (panel BRD/To-Be)</span>
                   ) : (

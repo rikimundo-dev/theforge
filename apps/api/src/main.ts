@@ -72,6 +72,10 @@ async function bootstrap() {
   app.use(json({ limit: "50mb" }));
   app.use(urlencoded({ extended: true, limit: "50mb" }));
 
+  // Timeout largo para pipelines de generación MDD (hasta 10 min)
+  const httpServer = app.getHttpServer();
+  httpServer.timeout = parseInt(process.env.HTTP_SERVER_TIMEOUT_MS ?? "600000", 10);
+
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
 }

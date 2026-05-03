@@ -2446,72 +2446,105 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     const dbgaContent = (get().dbgaContent ?? get().project?.dbgaContent ?? "").trim();
     set({ loading: true, loadingReason: "mdd", error: null, agentProgress: [] });
-    try {
-      const benchStage = get().activeStageId;
-      const r = await apiFetch(`${API_BASE}/ai-analysis/mdd/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dbgaContent: dbgaContent || undefined,
-          projectId: projectId.trim(),
-          ...(benchStage ? { stageId: benchStage } : {}),
-        }),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar MDD");
-      }
-      const reader = r.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalMarkdown: string | null = null;
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              const event = JSON.parse(trimmed) as { type: string; agent?: string; message?: string; markdown?: string };
-              if (event.type === "progress" && event.agent != null && event.message != null) {
-                set((s) => ({ agentProgress: [...s.agentProgress, { agent: event.agent!, message: event.message! }] }));
-              } else if (event.type === "draft" && event.markdown != null && event.markdown.trim().length > 80) {
-                set({ mddContent: event.markdown });
-              } else if (event.type === "done" && event.markdown != null) {
-                finalMarkdown = event.markdown;
-              } else if (event.type === "blocked" && event.message) {
-                throw new Error(String(event.message));
-              } else if (event.type === "error" && event.message) {
-                throw new Error(event.message);
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 2000;
+    let lastError: string | null = null;
+    let accumulatedMdd: string | null = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const benchStage = get().activeStageId;
+        const r = await apiFetch(`${API_BASE}/ai-analysis/mdd/stream`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dbgaContent: dbgaContent || undefined,
+            projectId: projectId.trim(),
+            ...(benchStage ? { stageId: benchStage } : {}),
+          }),
+        });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.message ?? "Error al generar MDD");
+        }
+        const reader = r.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let finalMarkdown: string | null = null;
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) continue;
+              try {
+                const event = JSON.parse(trimmed) as { type: string; agent?: string; message?: string; markdown?: string };
+                if (event.type === "progress" && event.agent != null && event.message != null) {
+                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: event.agent!, message: event.message! }] }));
+                } else if (event.type === "draft" && event.markdown != null && event.markdown.trim().length > 80) {
+                  accumulatedMdd = event.markdown;
+                  set({ mddContent: event.markdown });
+                } else if (event.type === "done" && event.markdown != null) {
+                  finalMarkdown = event.markdown;
+                } else if (event.type === "blocked" && event.message) {
+                  throw new Error(String(event.message));
+                } else if (event.type === "error" && event.message) {
+                  throw new Error(event.message);
+                }
+              } catch (parseErr) {
+                if (parseErr instanceof SyntaxError) continue;
+                throw parseErr;
               }
-            } catch (parseErr) {
-              if (parseErr instanceof SyntaxError) continue;
-              throw parseErr;
             }
           }
         }
-      }
 
-      if (finalMarkdown != null && finalMarkdown.trim().length > 80) {
-        set({ mddContent: finalMarkdown, error: null, mddJustGeneratedFromBenchmark: true });
-        const { persistMddContent, fetchProject, fetchEstimation } = get();
-        await persistMddContent(finalMarkdown);
-        const data = await fetchProject(projectId);
-        await fetchEstimation(projectId);
-        return data ?? get().project;
+        if (finalMarkdown != null && finalMarkdown.trim().length > 80) {
+          set({ mddContent: finalMarkdown, error: null, mddJustGeneratedFromBenchmark: true });
+          const { persistMddContent, fetchProject, fetchEstimation } = get();
+          await persistMddContent(finalMarkdown);
+          const data = await fetchProject(projectId);
+          await fetchEstimation(projectId);
+          set({ loading: false, loadingReason: null, agentProgress: [] });
+          return data ?? get().project;
+        }
+        // Si llegamos aquí sin finalMarkdown pero con accumulatedMdd, usar accumulated
+        if (accumulatedMdd && accumulatedMdd.trim().length > 80) {
+          set({ mddContent: accumulatedMdd, error: null, mddJustGeneratedFromBenchmark: true });
+          const { persistMddContent, fetchProject, fetchEstimation } = get();
+          await persistMddContent(accumulatedMdd);
+          const data = await fetchProject(projectId);
+          await fetchEstimation(projectId);
+          set({ loading: false, loadingReason: null, agentProgress: [] });
+          return data ?? get().project;
+        }
+        set({ loading: false, loadingReason: null, agentProgress: [] });
+        return get().project;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : "Error al generar MDD";
+        // Si tenemos contenido acumulado, guardarlo antes de reintentar
+        if (accumulatedMdd && accumulatedMdd.trim().length > 80) {
+          set({ mddContent: accumulatedMdd });
+          const { persistMddContent } = get();
+          await persistMddContent(accumulatedMdd).catch(() => {});
+        }
+        if (attempt < MAX_RETRIES) {
+          console.log(`[MDD Retry] attempt ${attempt}/${MAX_RETRIES} failed: ${lastError}. Retrying in ${RETRY_DELAY_MS}ms...`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+          set({ agentProgress: [] });
+        }
       }
-      return get().project;
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar MDD" });
-      return null;
-    } finally {
-      set({ loading: false, loadingReason: null, agentProgress: [] });
     }
+
+    set({ error: lastError ?? "Error al generar MDD tras reintentos" });
+    set({ loading: false, loadingReason: null, agentProgress: [] });
+    return null;
   },
 
   clearMddJustGeneratedFromBenchmark: () => set({ mddJustGeneratedFromBenchmark: false }),
