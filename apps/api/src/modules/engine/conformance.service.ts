@@ -81,16 +81,21 @@ function extractStackKeywords(text: string): Set<string> {
   return keywords;
 }
 
-/** Extrae nombres de entidades/tablas (CREATE TABLE, **Entity**, etc.) de un bloque. */
+/** Extrae nombres de entidades/tablas (CREATE TABLE, **Entity**, tabla markdown, listas) de un bloque. */
 function extractEntities(text: string): Set<string> {
   const entities = new Set<string>();
-  const createTable = text.matchAll(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?([a-z_][a-z0-9_]*)["`]?/gi);
+  const createTable = text.matchAll(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?([a-z_][a-z0-9_]*)/gi);
   for (const m of createTable) {
     if (m[1]) entities.add(m[1].toLowerCase());
   }
   const bold = text.matchAll(/\*\*([A-Za-z][A-Za-z0-9_]*)\*\*/g);
   for (const m of bold) {
     if (m[1] && m[1].length > 2) entities.add(m[1].toLowerCase());
+  }
+  // Extraer de filas de tabla markdown: | entidad | ... |
+  const tableRows = text.matchAll(/^\|\s*([a-z_][a-z0-9_]*)\s*\|/gim);
+  for (const m of tableRows) {
+    if (m[1]) entities.add(m[1].toLowerCase());
   }
   return entities;
 }
