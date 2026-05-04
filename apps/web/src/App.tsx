@@ -26,7 +26,7 @@ import WorkshopView from "./views/WorkshopView";
 import LoginView from "./views/LoginView";
 import { McpSecretCard } from "./components/McpSecretCard";
 import { UsersList } from "./components/UsersList";
-import { apiFetch, API_BASE, getStoredUser } from "./utils/apiClient";
+import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser } from "./utils/apiClient";
 import {
   Button,
   Input,
