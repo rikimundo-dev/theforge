@@ -11,7 +11,7 @@ import { JwtService } from "@nestjs/jwt";
 import { randomInt, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service.js";
-import { ADMIN_ROLE, DEFAULT_ALLOWED_OTP_EMAIL } from "./auth.constants.js";
+import { DEFAULT_ALLOWED_OTP_EMAIL } from "./auth.constants.js";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_MS = 60 * 1000;

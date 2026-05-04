@@ -2,7 +2,6 @@ import {
   BadRequestException,
   Body,
   Controller,
-  Delete,
   Get,
   HttpCode,
   Param,
@@ -15,7 +14,7 @@ import { Public } from "../../common/decorators/public.decorator.js";
 import { AuthService } from "./auth.service.js";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { getRequestUserId, getRequestUserRole } from "../../common/request-user.store.js";
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { ForbiddenException } from "@nestjs/common";
 
 const requestOtpSchema = z.object({
   email: z.string().email().optional(),
