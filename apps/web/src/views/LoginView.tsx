@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Flame, Loader2 } from "lucide-react";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
-import { API_BASE, setAccessToken } from "@/utils/apiClient";
+import { API_BASE, setAccessToken, getAccessToken, clearAccessToken } from "@/utils/apiClient";
 
 interface LoginViewProps {
   onLoggedIn: () => void;
@@ -9,9 +9,48 @@ interface LoginViewProps {
 
 export default function LoginView({ onLoggedIn }: LoginViewProps) {
   const [code, setCode] = useState("");
-  const [step, setStep] = useState<"send" | "code">("send");
+  const [step, setStep] = useState<"send" | "code" | "sso">("send");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+
+  useEffect(() => {
+    const ssoUrl = import.meta.env.VITE_SSO_URL as string;
+    if (ssoUrl?.trim()) {
+      setSsoEnabled(true);
+    }
+
+    // Manejar redirect SSO con token
+    const params = new URLSearchParams(window.location.search);
+    const ssoToken = params.get("sso_token");
+    if (ssoToken) {
+      handleSsoLogin(ssoToken);
+    }
+  }, []);
+
+  async function handleSsoLogin(token: string) {
+    setLoading(true);
+    setError(null);
+    try {
+      const r = await fetch(`${API_BASE}/auth/sso/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await r.json();
+      if (!r.ok || !data.accessToken) {
+        throw new Error(data.message ?? "Error SSO");
+      }
+      setAccessToken(data.accessToken);
+      // Limpiar query params
+      window.history.replaceState({}, "", window.location.pathname);
+      onLoggedIn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error SSO");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function requestOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -92,6 +131,30 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
                 ) : null}
                 Enviar código
               </Button>
+              {ssoEnabled && (
+                <>
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-[var(--border)]" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-[var(--card)] px-2 text-[var(--foreground-muted)]">o</span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      const ssoUrl = import.meta.env.VITE_SSO_URL as string;
+                      if (ssoUrl) window.location.href = ssoUrl;
+                    }}
+                    disabled={loading}
+                  >
+                    Iniciar sesión con SSO
+                  </Button>
+                </>
+              )}
             </form>
           ) : (
             <form onSubmit={verifyOtp} className="space-y-4">

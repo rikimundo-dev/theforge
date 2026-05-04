@@ -1,12 +1,14 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
+  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { randomInt } from "node:crypto";
+import { randomInt, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { ADMIN_ROLE, DEFAULT_ALLOWED_OTP_EMAIL } from "./auth.constants.js";
@@ -149,7 +151,7 @@ export class AuthService {
 
   async verifyOtp(rawCode: string): Promise<{
     accessToken: string;
-    user: { email: string; role: string };
+    user: { id: string; email: string; role: string };
   }> {
     const email = this.allowedEmail();
     const code = rawCode.trim();
@@ -167,9 +169,8 @@ export class AuthService {
       update: {},
     });
 
-    // Generar mcpSecret automático si no existe (primera vez)
+    // Generar mcpSecret automático si no existe (primera vez) — NO ROMPER
     if (!user.mcpSecret) {
-      const { randomBytes } = await import("node:crypto");
       const mcpSecret = randomBytes(32).toString("hex");
       await this.prisma.user.update({
         where: { id: user.id },
@@ -178,15 +179,18 @@ export class AuthService {
       this.logger.log(`MCP secret generado automáticamente para ${email}`);
     }
 
+    // Usar el role real del usuario desde la DB
+    const userRole = user.role ?? "developer";
+
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       email: user.email,
-      role: ADMIN_ROLE,
+      role: userRole,
     });
 
     return {
       accessToken,
-      user: { email: user.email, role: ADMIN_ROLE },
+      user: { id: user.id, email: user.email, role: userRole },
     };
   }
 
@@ -201,14 +205,15 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("Secreto MCP inválido");
     }
+    const userRole = user.role ?? "developer";
     const accessToken = await this.jwt.signAsync({
       sub: user.id,
       email: user.email,
-      role: ADMIN_ROLE,
+      role: userRole,
     });
     return {
       accessToken,
-      user: { id: user.id, email: user.email, role: ADMIN_ROLE },
+      user: { id: user.id, email: user.email, role: userRole },
     };
   }
 
@@ -231,8 +236,6 @@ export class AuthService {
   }
 
   async regenerateMcpSecret(userId: string) {
-    // Generar secret criptográfico de 32 bytes (hex = 64 chars)
-    const { randomBytes } = await import("node:crypto");
     const mcpSecret = randomBytes(32).toString("hex");
 
     await this.prisma.user.update({
@@ -242,5 +245,126 @@ export class AuthService {
 
     this.logger.log(`MCP secret regenerado para usuario ${userId}`);
     return { mcpSecret };
+  }
+
+  // ─── SSO ───
+
+  /**
+   * Login via SSO externo.
+   * Valida el token contra SSO_URL/verify, crea/actualiza usuario local y emite JWT.
+   */
+  async ssoLogin(ssoToken: string): Promise<{
+    accessToken: string;
+    user: { id: string; email: string; role: string; name: string | null };
+    ssoUrl?: string;
+  }> {
+    const ssoUrl = stripEnvQuotes(this.config.get<string>("SSO_URL"));
+    if (!ssoUrl) {
+      throw new BadRequestException("SSO no configurado (SSO_URL)");
+    }
+
+    const verifyUrl = `${ssoUrl.replace(/\/$/, "")}/verify`;
+    const ssoRes = await fetch(verifyUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: ssoToken }),
+    });
+
+    if (!ssoRes.ok) {
+      throw new UnauthorizedException("Token SSO inválido");
+    }
+
+    const ssoData = (await ssoRes.json()) as {
+      email?: string;
+      role?: string;
+      name?: string;
+    };
+
+    if (!ssoData?.email) {
+      throw new BadRequestException("SSO no devolvió email");
+    }
+
+    const email = ssoData.email.trim().toLowerCase();
+    const role = ssoData.role === "admin" ? "admin" : "developer";
+    const name = ssoData.name?.trim() || null;
+
+    // Crear o actualizar usuario local
+    const user = await this.prisma.user.upsert({
+      where: { email },
+      create: { email, name, role },
+      update: { name, role },
+    });
+
+    // Asegurar mcpSecret (NO ROMPER)
+    if (!user.mcpSecret) {
+      const mcpSecret = randomBytes(32).toString("hex");
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: { mcpSecret },
+      });
+    }
+
+    const accessToken = await this.jwt.signAsync({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    });
+
+    return {
+      accessToken,
+      user: { id: user.id, email: user.email, role: user.role, name: user.name },
+      ssoUrl,
+    };
+  }
+
+  // ─── Users CRUD ───
+
+  /** Obtener perfil del usuario autenticado. */
+  async getMe(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, role: true, name: true, mcpSecret: true, createdAt: true },
+    });
+    if (!user) throw new NotFoundException("Usuario no encontrado");
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      hasMcpSecret: !!user.mcpSecret,
+      createdAt: user.createdAt,
+    };
+  }
+
+  /** Listar todos los usuarios (admin-only). */
+  async listUsers() {
+    const users = await this.prisma.user.findMany({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, email: true, role: true, name: true, mcpSecret: true, createdAt: true },
+    });
+    return users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      role: u.role,
+      name: u.name,
+      hasMcpSecret: !!u.mcpSecret,
+      createdAt: u.createdAt,
+    }));
+  }
+
+  /** Cambiar rol de un usuario (admin-only). */
+  async updateUserRole(userId: string, role: string) {
+    if (role !== "admin" && role !== "developer") {
+      throw new BadRequestException("Rol inválido. Use 'admin' o 'developer'.");
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("Usuario no encontrado");
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+    });
+
+    return { id: userId, email: user.email, role };
   }
 }

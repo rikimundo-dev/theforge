@@ -13,6 +13,8 @@ datasource db {
 model User {
   id        String    @id @default(uuid())
   email     String    @unique
+  role      String    @default("developer")
+  name      String?
   createdAt DateTime  @default(now())
   /// Secret MCP M2M: criptográfico (32 bytes, 64 hex chars). Único por usuario.
   /// Usado para autenticar peticiones del MCP server como este usuario.
