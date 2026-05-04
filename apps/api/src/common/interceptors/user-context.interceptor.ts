@@ -17,17 +17,18 @@ export class UserContextInterceptor implements NestInterceptor {
     if (context.getType() !== "http") {
       return next.handle();
     }
-    const req = context.switchToHttp().getRequest<{ user?: { userId?: string } }>();
+    const req = context.switchToHttp().getRequest<{ user?: { userId?: string; role?: string } }>();
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
     const userId = req.user?.userId;
+    const role = req.user?.role ?? "developer";
     if (isPublic || !userId) {
       return next.handle();
     }
     return new Observable((subscriber) => {
-      requestUserStore.run({ userId }, () => {
+      requestUserStore.run({ userId, role }, () => {
         next.handle().subscribe({
           next: (v) => subscriber.next(v),
           error: (e) => subscriber.error(e),

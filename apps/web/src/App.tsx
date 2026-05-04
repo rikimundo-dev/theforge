@@ -18,13 +18,16 @@ import {
   Plus,
   RefreshCw,
   Settings,
+  Shield,
   Sparkles,
   Trash2,
+  Users,
 } from "lucide-react";
 import WorkshopView from "./views/WorkshopView";
 import LoginView from "./views/LoginView";
 import { McpSecretCard } from "./components/McpSecretCard";
-import { apiFetch, clearAccessToken, getAccessToken, API_BASE } from "./utils/apiClient";
+import { UsersList } from "./components/UsersList";
+import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser, type TheForgeUser } from "./utils/apiClient";
 import {
   Button,
   Input,
@@ -97,6 +100,7 @@ export default function App() {
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [showTheForgeModal, setShowTheForgeModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showUsers, setShowUsers] = useState(false);
   const [theforgeModalTab, setTheForgeModalTab] = useState<"projects" | "repos">("projects");
   const [theforgeProjects, setTheForgeProjects] = useState<TheForgeProject[]>([]);
   const [theforgeAvailable, setTheForgeAvailable] = useState(false);
@@ -280,6 +284,17 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
+      {/* Users Dialog (admin only) */}
+      <Dialog open={showUsers} onOpenChange={setShowUsers}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col overflow-hidden">
+          <DialogHeader>
+            <DialogTitle>Usuarios</DialogTitle>
+            <DialogDescription>Gestión de usuarios y roles.</DialogDescription>
+          </DialogHeader>
+          <UsersList />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={showTheForgeModal} onOpenChange={setShowTheForgeModal}>
         <DialogContent size="lg" className="max-h-[min(80vh,100dvh-2rem)] w-[calc(100vw-1.5rem)] sm:w-full flex flex-col overflow-hidden">
           <DialogHeader>
@@ -402,6 +417,12 @@ export default function App() {
               Software Factory — Entrevista proactiva → MDD → Semáforo → Estimación
             </p>
           </div>
+        {getStoredUser()?.role === "admin" && (
+        <Button variant="outline" size="sm" onClick={() => setShowUsers(true)} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
+          <Shield className="w-4 h-4" />
+          Usuarios
+        </Button>
+        )}
         <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
           <Settings className="w-4 h-4" />
           Ajustes
@@ -545,6 +566,7 @@ export default function App() {
                           <span className="text-sm text-[var(--foreground-muted)]">
                             {new Date(p.createdAt).toLocaleDateString("es-MX")}
                           </span>
+                          {getStoredUser()?.role === "admin" && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -555,6 +577,7 @@ export default function App() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
+                          )}
                           <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0 hidden sm:block" aria-hidden />
                         </div>
                       </CardContent>
