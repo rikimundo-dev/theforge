@@ -331,6 +331,7 @@ export default function WorkshopView({
   const [userStoriesViewMode, setUserStoriesViewMode] = useState<"preview" | "source">("preview");
   const [mddInicialViewMode, setMddInicialViewMode] = useState<"preview" | "source">("preview");
   const [aemViewMode, setAemViewMode] = useState<"preview" | "source">("preview");
+  const [hermesConfigured, setHermesConfigured] = useState<boolean | null>(null);
   const [mddInicialLocalContent, setMddInicialLocalContent] = useState("");
   const [mddInicialSaving, setMddInicialSaving] = useState(false);
   const [mddInicialCopyOk, setMddInicialCopyOk] = useState(false);
@@ -742,6 +743,17 @@ export default function WorkshopView({
     return () => clearTimeout(t);
   }, [aemContent, projectId, project?.aemContent, project, persistAemContent]);
 
+  // Consultar si Hermes Agent está configurado en el backend
+  useEffect(() => {
+    if (!projectId) return;
+    import("../utils/apiClient").then(({ apiFetch, API_BASE }) => {
+      apiFetch(`${API_BASE}/projects/hermes-status`)
+        .then((r) => r.json() as Promise<{ configured: boolean }>)
+        .then((data) => setHermesConfigured(data.configured === true))
+        .catch(() => setHermesConfigured(false));
+    });
+  }, [projectId]);
+
   const handleBlueprintBlur = useCallback(() => {
     if (blueprintContent != null) persistBlueprintContent(blueprintContent);
   }, [blueprintContent, persistBlueprintContent]);
@@ -971,9 +983,19 @@ export default function WorkshopView({
                 if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
               }).catch((err: Error) => setError(err.message));
             }}
-            disabled={loading}
-            className="flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 rounded text-zinc-300 hover:text-emerald-400 hover:bg-emerald-900/30 text-sm touch-manipulation min-h-[44px] sm:min-h-0 border border-zinc-600 hover:border-emerald-700 transition-colors"
-            title="Lanzar proyecto a Hermes Agent para desarrollo"
+            disabled={loading || hermesConfigured === false}
+            title={
+              hermesConfigured === null
+                ? "Verificando configuración…"
+                : hermesConfigured
+                  ? "Lanzar proyecto a Hermes Agent para desarrollo"
+                  : "Hermes no configurado — falta HERMES_WEBHOOK_URL y HERMES_API_KEY"
+            }
+            className={`flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 rounded text-sm touch-manipulation min-h-[44px] sm:min-h-0 border transition-colors ${
+              hermesConfigured === false
+                ? "text-zinc-600 border-zinc-700 cursor-not-allowed"
+                : "text-zinc-300 hover:text-emerald-400 hover:bg-emerald-900/30 border-zinc-600 hover:border-emerald-700"
+            }`}
           >
             {loading && loadingReason === "launch-hermes" ? (
               <Loader2 className="w-4 h-4 animate-spin shrink-0" />

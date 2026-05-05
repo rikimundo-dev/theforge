@@ -270,6 +270,13 @@ export class ProjectsController {
     return this.projects.launchHermes(id);
   }
 
+  /** Indica si Hermes Agent está configurado (env vars presentes). */
+  @Get("hermes-status")
+  hermesStatus() {
+    const configured = !!(process.env.HERMES_WEBHOOK_URL?.trim() && process.env.HERMES_API_KEY?.trim());
+    return { configured };
+  }
+
   @Delete(":id")
   remove(@Param("id") id: string) {
     const role = getRequestUserRole();

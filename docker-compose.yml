@@ -128,6 +128,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-https://${WEB_DOMAIN:-theforge.local},https://theforge.kreoint.mx,http://localhost:5173,http://127.0.0.1:5173}
       # Secreto compartido para validar login MCP (POST /auth/mcp-login)
       MCP_M2M_SECRET: ${MCP_M2M_SECRET:-}
+      # Webhook proxy de Hermes Agent (para notificar proyectos listos para desarrollo)
+      HERMES_WEBHOOK_URL: ${HERMES_WEBHOOK_URL:-}
+      HERMES_API_KEY: ${HERMES_API_KEY:-}
     depends_on:
       theforge-db:
         condition: service_healthy
