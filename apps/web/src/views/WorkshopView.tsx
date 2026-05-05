@@ -979,7 +979,7 @@ export default function WorkshopView({
             type="button"
             onClick={() => {
               if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
-              launchHermes(projectId).then((res) => {
+              launchHermes(projectId).then((res: { success: boolean; status: number } | undefined) => {
                 if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
               }).catch((err: Error) => setError(err.message));
             }}

@@ -424,6 +424,7 @@ interface WorkshopState {
     | "brd-tobe-from-dbga"
     | "legacy-deliverables"
     | "deliverables-cascade"
+    | "launch-hermes"
     | null;
   /** Mensaje de usuario en curso (streaming); se muestra hasta recibir "done" */
   streamingUserMessage: string | null;
@@ -596,6 +597,8 @@ interface WorkshopState {
   legacyGenerateDeliverables: (projectId: string) => Promise<boolean>;
   fetchEstimation: (projectId: string) => Promise<LiveMetricsResult | null>;
   fetchAdrs: (projectId: string) => Promise<void>;
+  /** Notifica a Hermes Agent que el proyecto está listo para desarrollo. */
+  launchHermes: (projectId: string) => Promise<{ success: boolean; status: number } | undefined>;
   reset: () => void;
 }
 
