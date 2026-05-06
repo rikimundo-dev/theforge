@@ -2197,7 +2197,7 @@ export default function WorkshopView({
                   <button
                     type="button"
                     onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
-                    disabled={(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) || (project?.requireBrdTobeGate === true && (!activeWorkshopStage?.brdApprovedAt || !activeWorkshopStage?.toBeApprovedAt))}
+                    disabled={(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) || (project?.requireBrdTobeGate === true && (!brd.trim() || !tobe.trim()))}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500/80 text-zinc-900 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                   >
                     {(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) ? (
@@ -2211,7 +2211,7 @@ export default function WorkshopView({
                     <button
                       type="button"
                       onClick={handleGenerateDeliverables}
-                      disabled={!canGenerate || cascadeRunning || mddReviewing}
+                      disabled={!canGenerate || cascadeRunning || mddReviewing || (project?.requireBrdTobeGate === true && (!brd.trim() || !tobe.trim()))}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-green-600/80 text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {cascadeRunning ? (
