@@ -209,7 +209,7 @@ export default function WorkshopView({
       const hasCodebaseDoc = (activeLegacyState?.codebaseDoc ?? "").trim().length > 0;
       return hasMdd || hasCodebaseDoc;
     }
-    if (complexity === "LOW" || complexity === "MEDIUM") {
+    if (complexity === "LOW" || complexity === "MEDIUM" || complexity === "HIGH") {
       const hasBootstrap =
         (dbgaContent ?? "").trim().length > 0 || effectiveMddTrimmed.length > 0;
       return (semaphoreGreen && hasSpec) || hasBootstrap;
