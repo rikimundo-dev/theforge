@@ -166,7 +166,8 @@ export class AiService {
         if (tag && !options?.welcomeBrief) {
           systemPrompt += `\n\nSi decides generar o actualizar el documento de ${label} (completo o solo una sección), escribe el contenido y TERMINA con la línea exacta \`---FIN_${tag}---\`. Lo que vaya después se mostrará como mensaje en el chat. Así el sistema aplicará los cambios al documento del proyecto.`;
           if (at === "mdd") {
-            systemPrompt +=\n              "\n\n**Cuando el usuario indique que falta algo en el documento** (ej. \"X no está mencionado\", \"el cotizador también se involucra\", \"falta Y\"), **debes** devolver el MDD o la sección correspondiente actualizada con ese contenido incorporado, terminando con `---FIN_MDD---`. **Siempre incluye un mensaje breve en el chat después de `---FIN_MDD---`** resumiendo el cambio (ej. \"Actualizada la sección 7 con Dokploy en lugar de AWS.\"). Ese mensaje de chat es lo único que verá el usuario.";
+            systemPrompt +=
+              "\n\n**Cuando el usuario indique que falta algo en el documento** (ej. \"X no está mencionado\", \"el cotizador también se involucra\", \"falta Y\"), **debes** devolver el MDD o la sección correspondiente actualizada con ese contenido incorporado, terminando con `---FIN_MDD---`. **Siempre incluye un mensaje breve en el chat después de `---FIN_MDD---`** resumiendo el cambio (ej. \"Actualizada la sección 7 con Dokploy en lugar de AWS.\"). Ese mensaje de chat es lo único que verá el usuario.";
           }
           if (at === "spec") {
             systemPrompt +=
@@ -328,7 +329,8 @@ export class AiService {
       if (tag && !options?.welcomeBrief) {
         systemPrompt += `\n\nSi decides generar o actualizar el documento de ${label} (completo o solo una sección), escribe el contenido y TERMINA con la línea exacta \`---FIN_${tag}---\`. Lo que vaya después se mostrará como mensaje en el chat. Así el sistema aplicará los cambios al documento del proyecto.`;
         if (at === "mdd") {
-            systemPrompt +=\n              "\n\n**Cuando el usuario indique que falta algo en el documento** (ej. \"X no está mencionado\", \"el cotizador también se involucra\", \"falta Y\"), **debes** devolver el MDD o la sección correspondiente actualizada con ese contenido incorporado, terminando con `---FIN_MDD---`. **Siempre incluye un mensaje breve en el chat después de `---FIN_MDD---`** resumiendo el cambio (ej. \"Actualizada la sección 7 con Dokploy en lugar de AWS.\"). Ese mensaje de chat es lo único que verá el usuario.";
+            systemPrompt +=
+              "\n\n**Cuando el usuario indique que falta algo en el documento** (ej. \"X no está mencionado\", \"el cotizador también se involucra\", \"falta Y\"), **debes** devolver el MDD o la sección correspondiente actualizada con ese contenido incorporado, terminando con `---FIN_MDD---`. **Siempre incluye un mensaje breve en el chat después de `---FIN_MDD---`** resumiendo el cambio (ej. \"Actualizada la sección 7 con Dokploy en lugar de AWS.\"). Ese mensaje de chat es lo único que verá el usuario.";
           }
         if (at === "spec") {
           systemPrompt +=
