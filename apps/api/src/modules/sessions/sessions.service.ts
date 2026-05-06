@@ -418,10 +418,27 @@ export class SessionsService {
       throw err;
     }
 
+    const DOC_DELIMITER_RE = /-{2,}\s*FIN_(?:MDD|UX_UI|DBGA|SPEC|BRD|TOBE|BLUEPRINT|API|FLOWS|TASKS|INFRA)\s*-{2,}/i;
     let buffer = "";
+    let documentChunksDone = false;
     for await (const chunk of stream) {
       buffer += chunk;
-      yield { type: "chunk", content: chunk };
+      if (documentChunksDone) {
+        // Already past the delimiter — yield normally
+        yield { type: "chunk", content: chunk };
+      } else if (DOC_DELIMITER_RE.test(buffer)) {
+        // Delimiter found — stop buffering document content, yield chat part
+        documentChunksDone = true;
+        const match = buffer.match(DOC_DELIMITER_RE);
+        if (match) {
+          const idx = buffer.indexOf(match[0]);
+          const afterDelim = buffer.slice(idx + match[0].length);
+          if (afterDelim.trim()) {
+            yield { type: "chunk", content: afterDelim };
+          }
+        }
+      }
+      // Before the delimiter: silent buffer (document content, not chat)
     }
 
     const safeResponse = buffer.trim();
