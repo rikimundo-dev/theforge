@@ -101,9 +101,9 @@ export class AuthService {
     return display;
   }
 
-  /** Host público de la web (Safari) para @domain #code y magic link. Lee WEB_APP_HOST del env. */
+  /** Host público de la web (Safari) para @domain #code y magic link. Lee WEB_DOMAIN del env. */
   private resolveWebAppHostname(): string | null {
-    const raw = stripEnvQuotes(this.config.get<string>("WEB_APP_HOST"))?.trim();
+    const raw = stripEnvQuotes(this.config.get<string>("WEB_DOMAIN"))?.trim();
     if (!raw) return null;
     let host = raw.toLowerCase();
     host = host.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].replace(/^\./, '');
