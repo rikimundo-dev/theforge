@@ -107,6 +107,7 @@ export default function App() {
   const [theforgeAvailable, setTheForgeAvailable] = useState(false);
   const [theforgeLoading, setTheForgeLoading] = useState(false);
   const [projectTypeFilter, setProjectTypeFilter] = useState<"all" | "NEW" | "LEGACY">("all");
+  const [transitioning, setTransitioning] = useState(false);
   const newProjectInputRef = useRef<HTMLInputElement>(null);
 
   const theforgeRepositories = useMemo((): TheForgeRepository[] => {
@@ -255,7 +256,24 @@ export default function App() {
     if (needsSetup) {
       return <SetupView onComplete={() => setNeedsSetup(false)} />;
     }
-    return <LoginView onLoggedIn={() => setAuthed(true)} />;
+    return <LoginView onLoggedIn={() => {
+      setTransitioning(true);
+      // Breve pausa para que React monte el árbol completo antes de mostrar el contenido
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setAuthed(true);
+          setTransitioning(false);
+        });
+      });
+    }} />;
+  }
+
+  if (transitioning) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] flex items-center justify-center p-6">
+        <Loader2 className="w-8 h-8 animate-spin text-[var(--primary)]" />
+      </div>
+    );
   }
 
   function logout() {
