@@ -335,7 +335,7 @@ export function DashboardSidebar({
                 <span className={cn("truncate", rail && "sm:hidden")}>Panel de proyectos</span>
               </button>
 
-              <details open className={cn("group/ws flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", rail && "hidden")}>
+              <details open className="group/ws flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 <summary
                   className={cn(
                     "flex shrink-0 cursor-pointer list-none items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden",

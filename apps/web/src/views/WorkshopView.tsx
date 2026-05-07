@@ -1264,7 +1264,7 @@ export default function WorkshopView({
         {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
         <section
           className={cn(
-            "min-w-0 min-h-0 border-r border-[var(--border)] overflow-hidden lg:min-h-0",
+            "min-w-0 min-h-0 border-r border-[var(--border)] overflow-y-auto lg:min-h-0 lg:overflow-hidden",
             "flex flex-col",
             mobileWorkshopColumn === "workspace" ? "flex flex-1 min-h-0" : "hidden lg:flex lg:flex-col",
           )}
