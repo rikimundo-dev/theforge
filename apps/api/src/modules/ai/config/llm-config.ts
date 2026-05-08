@@ -5,6 +5,7 @@
 export const OPENROUTER_DEFAULT_BASE = "https://openrouter.ai/api/v1";
 export const OPENROUTER_DEFAULT_CHAT_MODEL = "nousresearch/hermes-3-llama-3.1-405b";
 export const OPENROUTER_DEFAULT_EMBEDDING_MODEL = "openai/text-embedding-3-small";
+export const OPENROUTER_DEFAULT_VISION_MODEL = "openai/gpt-4o";
 
 export type NormalizedLlmProviderId = "openrouter";
 
@@ -48,6 +49,17 @@ export function resolvePrimaryChatRuntime(): OpenRouterRuntime {
   const embeddingModel =
     process.env.OPENROUTER_EMBEDDING_MODEL?.trim() || OPENROUTER_DEFAULT_EMBEDDING_MODEL;
   return { providerId: "openrouter", apiKey, baseURL, chatModel, embeddingModel };
+}
+
+/**
+ * Modelo para tareas de visión (imágenes). Lee `VISION_MODEL`; fallback a OPENROUTER_CHAT_MODEL o GPT‑4o.
+ */
+export function resolveVisionModel(): string {
+  return (
+    process.env.VISION_MODEL?.trim() ??
+    process.env.OPENROUTER_CHAT_MODEL?.trim() ??
+    OPENROUTER_DEFAULT_VISION_MODEL
+  );
 }
 
 /**
