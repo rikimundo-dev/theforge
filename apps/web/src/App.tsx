@@ -551,7 +551,7 @@ export default function App() {
       </Dialog>
 
       {workshopProject ? (
-        <div className="flex min-h-[100dvh] flex-col overflow-y-auto bg-[var(--background)] text-[var(--foreground)] sm:h-[100dvh] sm:max-h-[100dvh] sm:min-h-0 sm:flex-row sm:overflow-hidden">
+        <div className="flex w-full min-h-[100dvh] flex-col overflow-y-auto bg-[var(--background)] text-[var(--foreground)] sm:h-[100dvh] sm:max-h-[100dvh] sm:min-h-0 sm:flex-row sm:overflow-hidden">
           <DashboardSidebar
             projectSearchQuery={projectSearchQuery}
             onProjectSearchChange={setProjectSearchQuery}
@@ -565,7 +565,7 @@ export default function App() {
             workshopProject={{ id: workshopProject.id, name: workshopProject.name }}
             onExitWorkshop={handleExitWorkshop}
           />
-          <div className="flex min-w-0 flex-col overflow-visible sm:min-h-0 sm:flex-1 sm:overflow-hidden">
+          <div className="flex min-w-0 w-full max-w-full flex-col overflow-visible sm:min-h-0 sm:flex-1 sm:overflow-hidden">
             <WorkshopView
               projectId={workshopProject.id}
               projectName={workshopProject.name}
