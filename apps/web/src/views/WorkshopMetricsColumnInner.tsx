@@ -1,0 +1,676 @@
+/**
+ * @fileoverview Semáforo, conformidad, estimación y CTA de cascada (columna derecha del workshop).
+ */
+import { useCallback, useMemo } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  DollarSign,
+  FileText,
+  Lock,
+  Loader2,
+  Package,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useWorkshopStore, type Status } from "../store/workshopStore";
+import { calculateCostFromMdd } from "../utils/costCalculator";
+
+/** Flat cards: border + bg only — avoids muddy stacked shadows next to the metrics flyout in light mode */
+const WORKSHOP_METRICS_CARD =
+  "rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_78%,var(--background))]";
+
+const WORKSHOP_METRICS_BADGE_OK =
+  "inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_oklch,var(--success)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[color-mix(in_oklch,var(--success)_90%,var(--foreground))]";
+
+const WORKSHOP_METRICS_BADGE_WARN =
+  "inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_oklch,var(--primary)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]";
+
+const WORKSHOP_METRICS_BADGE_ERR =
+  "inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_oklch,var(--destructive)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[color-mix(in_oklch,var(--destructive)_90%,var(--foreground))]";
+
+export interface WorkshopMetricsColumnInnerProps {
+  projectId: string;
+  conformanceUseLlm: boolean;
+  onConformanceUseLlmChange: (next: boolean) => void;
+  onOpenAuditModal: () => void;
+  /**
+   * `flyout`: responsive two-column grid (status + conformance vs estimation + actions)
+   * so the hover panel stays shorter and scrolls less. `embedded`: single column (mobile rail).
+   */
+  layout?: "embedded" | "flyout";
+}
+
+export function WorkshopMetricsColumnInner({
+  projectId,
+  conformanceUseLlm,
+  onConformanceUseLlmChange,
+  onOpenAuditModal,
+  layout = "embedded",
+}: WorkshopMetricsColumnInnerProps) {
+  const project = useWorkshopStore((s) => s.project);
+  const liveMetrics = useWorkshopStore((s) => s.liveMetrics);
+  const mddContent = useWorkshopStore((s) => s.mddContent);
+  const infraContentField = useWorkshopStore((s) => s.infraContent);
+  const specContentField = useWorkshopStore((s) => s.specContent);
+  const dbgaContentField = useWorkshopStore((s) => s.dbgaContent);
+  const specContent = specContentField ?? project?.specContent ?? null;
+  const dbgaContent = dbgaContentField ?? project?.dbgaContent ?? null;
+  const effectiveMddTrimmed = useMemo(
+    () => (mddContent ?? "").trim() || (project?.mddContent ?? "").trim(),
+    [mddContent, project?.mddContent],
+  );
+  const projectStatus: Status = project?.status ?? "ROJO";
+  const semaphoreGreen = liveMetrics ? liveMetrics.status === "green" : projectStatus === "VERDE";
+  const hasSpec = (specContent ?? "").trim().length > 0;
+  const complexity = project?.complexity ?? "HIGH";
+  const isLegacyProject = project?.projectType === "LEGACY";
+  const activeStageId = useWorkshopStore((s) => s.activeStageId);
+  const workshopStages = useWorkshopStore((s) => s.workshopStages);
+  const workshopStagesList = workshopStages.length > 0 ? workshopStages : (project?.stages ?? []);
+  const activeWorkshopStage = useMemo(
+    () => workshopStagesList.find((s) => s.id === activeStageId),
+    [workshopStagesList, activeStageId],
+  );
+  const activeLegacyState = useMemo(() => {
+    if (project?.projectType === "LEGACY" && activeWorkshopStage?.legacyChangeState) {
+      return activeWorkshopStage.legacyChangeState;
+    }
+    return project?.legacyFlowState ?? null;
+  }, [project?.projectType, activeWorkshopStage?.legacyChangeState, project?.legacyFlowState]);
+
+  const canGenerate = useMemo(() => {
+    if (isLegacyProject) {
+      const hasMdd = effectiveMddTrimmed.length > 0;
+      const hasCodebaseDoc = (activeLegacyState?.codebaseDoc ?? "").trim().length > 0;
+      return hasMdd || hasCodebaseDoc;
+    }
+    if (complexity === "LOW" || complexity === "MEDIUM") {
+      const hasBootstrap =
+        (dbgaContent ?? "").trim().length > 0 || effectiveMddTrimmed.length > 0;
+      return (semaphoreGreen && hasSpec) || hasBootstrap;
+    }
+    return semaphoreGreen && hasSpec;
+  }, [
+    isLegacyProject,
+    complexity,
+    semaphoreGreen,
+    hasSpec,
+    dbgaContent,
+    effectiveMddTrimmed,
+    activeLegacyState?.codebaseDoc,
+  ]);
+
+  const conformanceRaw = useWorkshopStore((s) => s.conformance);
+  const conformance = useMemo(() => conformanceRaw, [conformanceRaw]);
+  const documentCompleteness = useWorkshopStore((s) => s.documentCompleteness);
+  const crossDocumentGaps = useWorkshopStore((s) => s.crossDocumentGaps);
+  const apiBlueprintDmBlocked = conformance?.blueprintDataModel?.ok === false;
+  const apiBlueprintBlockedHint =
+    "El Blueprint no cubre el §3 Modelo de datos del MDD. Corrige o regenera el Blueprint; revisa el panel Conformance.";
+
+  const auditorFeedback = useWorkshopStore((s) => s.auditorFeedback);
+  const auditFeedbackStatusLabel = useMemo(() => {
+    const st = liveMetrics?.status;
+    return st === "green" ? "Verde" : st === "yellow" ? "Amarillo" : "Rojo";
+  }, [liveMetrics?.status]);
+
+  const loading = useWorkshopStore((s) => s.loading);
+  const loadingReason = useWorkshopStore((s) => s.loadingReason);
+  const cascadeRunning = loading && (loadingReason === "deliverables-cascade" || loadingReason === "legacy-deliverables");
+  const setError = useWorkshopStore((s) => s.setError);
+  const fetchProject = useWorkshopStore((s) => s.fetchProject);
+  const mddReviewing = useWorkshopStore((s) => s.mddReviewing);
+
+  const cascadeCtaHint = useMemo(() => {
+    if (cascadeRunning) return "Generación de entregables en curso…";
+    if (mddReviewing) return "Revisión o grabado del MDD en curso; espera a que termine.";
+    if (canGenerate) return null;
+    if (
+      isLegacyProject &&
+      effectiveMddTrimmed.length === 0 &&
+      !(activeLegacyState?.codebaseDoc ?? "").trim()
+    ) {
+      return "Añade MDD o la documentación de partida (Modificación / MDD Inicial) para habilitar la cascada.";
+    }
+    if (!semaphoreGreen) {
+      return "El semáforo debe estar en verde: revisa el MDD y la conformidad en los bloques de arriba.";
+    }
+    if (!hasSpec) {
+      return "Genera y guarda el Spec en su pestaña; es requisito cuando aplica esta regla.";
+    }
+    return "Aún no se cumplen las condiciones para generar entregables en cascada.";
+  }, [
+    cascadeRunning,
+    mddReviewing,
+    canGenerate,
+    isLegacyProject,
+    effectiveMddTrimmed,
+    activeLegacyState?.codebaseDoc,
+    semaphoreGreen,
+    hasSpec,
+  ]);
+
+  const generateBlueprint = useWorkshopStore((s) => s.generateBlueprint);
+  const generateApiContracts = useWorkshopStore((s) => s.generateApiContracts);
+  const generateLogicFlows = useWorkshopStore((s) => s.generateLogicFlows);
+  const generateInfra = useWorkshopStore((s) => s.generateInfra);
+  const legacyGenerateDeliverables = useWorkshopStore((s) => s.legacyGenerateDeliverables);
+  const generateDeliverablesCascade = useWorkshopStore((s) => s.generateDeliverablesCascade);
+
+  const mddEmpty = !((mddContent ?? "").trim() || (project?.mddContent ?? "").trim());
+  const precisionScore = mddEmpty ? 0 : (liveMetrics?.precision ?? project?.precisionScore ?? 0);
+  const infraContent = infraContentField ?? project?.infraContent ?? null;
+  const costDisplayFallback = calculateCostFromMdd(mddContent, {
+    status: projectStatus,
+    infraContent: project?.infraContent ?? infraContent,
+  });
+  const costDisplay = mddEmpty
+    ? {
+        totalMxn: costDisplayFallback.totalMxn,
+        totalMxnMarket: costDisplayFallback.totalMxn,
+        totalMxnIA: 0,
+        totalHours: costDisplayFallback.totalHours,
+        teamStructure: costDisplayFallback.teamStructure,
+        rolesHours: { architect: 0, back: 0, front: 0 } as Record<string, number>,
+      }
+    : liveMetrics
+      ? {
+          totalMxn: liveMetrics.totalMXN,
+          totalMxnMarket: liveMetrics.totalMXNMarket,
+          totalMxnIA: liveMetrics.totalMXNIA ?? 0,
+          totalHours: liveMetrics.totalHours,
+          teamStructure: liveMetrics.roles as Record<string, number>,
+          rolesHours: liveMetrics.rolesHours as Record<string, number>,
+        }
+      : {
+          ...costDisplayFallback,
+          totalMxnMarket: costDisplayFallback.totalMxn,
+          totalMxnIA: 0,
+          rolesHours: {} as Record<string, number>,
+        };
+
+  const effectiveStatus = mddEmpty ? "red" : (liveMetrics?.status ?? (precisionScore <= 40 ? "red" : precisionScore <= 90 ? "yellow" : "green"));
+  const semaphoreConfig =
+    effectiveStatus === "red"
+      ? {
+          icon: Lock,
+          color: "text-[color-mix(in_oklch,var(--destructive)_92%,var(--foreground))]",
+          borderAccent: "border-l-4 border-l-[color-mix(in_oklch,var(--destructive)_62%,var(--border))]",
+          tint: "bg-[color-mix(in_oklch,var(--destructive)_7%,var(--card))]",
+          label: "Bloqueado",
+        }
+      : effectiveStatus === "yellow"
+        ? {
+            icon: AlertTriangle,
+            color: "text-[color-mix(in_oklch,var(--warning)_92%,var(--foreground))]",
+            borderAccent: "border-l-4 border-l-[color-mix(in_oklch,var(--warning)_55%,var(--border))]",
+            tint: "bg-[color-mix(in_oklch,var(--warning)_8%,var(--card))]",
+            label: "Advertencia",
+          }
+        : {
+            icon: CheckCircle2,
+            color: "text-[color-mix(in_oklch,var(--success)_92%,var(--foreground))]",
+            borderAccent: "border-l-4 border-l-[color-mix(in_oklch,var(--success)_50%,var(--border))]",
+            tint: "bg-[color-mix(in_oklch,var(--success)_8%,var(--card))]",
+            label: "Listo",
+          };
+
+  const SemaphoreIcon = semaphoreConfig.icon;
+
+  const handleGenerateDeliverables = useCallback(async () => {
+    if (!projectId || !canGenerate || cascadeRunning) return;
+    setError(null);
+    if (isLegacyProject) {
+      await legacyGenerateDeliverables(projectId);
+      if (projectId) fetchProject(projectId);
+    } else {
+      await generateDeliverablesCascade(projectId);
+    }
+  }, [projectId, canGenerate, cascadeRunning, setError, isLegacyProject, legacyGenerateDeliverables, fetchProject, generateDeliverablesCascade]);
+
+  return (
+    <div
+      className={cn(
+        layout === "flyout"
+          ? "grid w-full min-w-0 grid-cols-2 items-start gap-4 sm:gap-5"
+          : "contents",
+      )}
+    >
+      <div
+        className={cn(
+          layout === "flyout" ? "flex min-w-0 flex-col gap-3" : "contents",
+        )}
+      >
+          <div className="shrink-0 space-y-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight text-[var(--foreground)]">
+              <Package className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+              Semáforo
+            </h3>
+            <p
+              className="line-clamp-2 text-[11px] text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]"
+              title="Consistencia del MDD frente a entregables y reglas del taller. Condiciona la generación en cascada."
+            >
+              Consistencia del MDD frente a entregables y reglas del taller. Condiciona la generación en cascada.
+            </p>
+            <div
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              className={cn(
+                WORKSHOP_METRICS_CARD,
+                semaphoreConfig.borderAccent,
+                semaphoreConfig.tint,
+                "flex items-center gap-2.5 p-2.5",
+              )}
+            >
+              <SemaphoreIcon
+                className={`h-8 w-8 shrink-0 ${semaphoreConfig.color}`}
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <p className={cn("text-sm font-semibold leading-tight", semaphoreConfig.color)}>
+                  {semaphoreConfig.label}
+                </p>
+                <p className="text-[11px] text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                  Precisión {precisionScore}%
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenAuditModal()}
+              className="inline-flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md px-2 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--muted)_48%,transparent)] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--muted)_50%,var(--card))] lg:w-auto lg:justify-start"
+            >
+              <FileText className="h-3 w-3 shrink-0" aria-hidden />
+              Ver logs y desglose
+            </button>
+          </div>
+
+          {conformance && (
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-col gap-2">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight text-[var(--foreground)]">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+                  <span className="min-w-0 truncate">Conformance vs MDD</span>
+                </h3>
+                <label
+                  htmlFor="workshop-conformance-use-llm"
+                  className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_55%,var(--background))] px-2 py-1.5 text-[11px] font-medium text-[var(--foreground)] hover:bg-[color-mix(in_oklch,var(--muted)_35%,var(--card))] focus-within:ring-2 focus-within:ring-[var(--ring)] focus-within:ring-offset-1 focus-within:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]"
+                >
+                  <input
+                    id="workshop-conformance-use-llm"
+                    type="checkbox"
+                    checked={conformanceUseLlm}
+                    onChange={(e) => {
+                      onConformanceUseLlmChange(e.target.checked);
+                    }}
+                    className="h-3.5 w-3.5 shrink-0 rounded border-[var(--border)] bg-[var(--background)] text-[var(--primary)] accent-[var(--primary)] focus:outline-none"
+                  />
+                  <span className="min-w-0 leading-tight">
+                    Incluir verificación con IA
+                    <span className="mt-0.5 block font-normal text-[color-mix(in_oklch,var(--muted-foreground)_98%,var(--foreground))]">
+                      Regenerar desde cada pestaña de documento.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <div className={cn(WORKSHOP_METRICS_CARD, "divide-y divide-[color-mix(in_oklch,var(--border)_90%,transparent)] p-0")}>
+                <div
+                  className="flex flex-col gap-1 px-2 py-1.5"
+                  title={conformance.blueprint.ok ? undefined : conformance.blueprint.gaps.join("; ")}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Blueprint</span>
+                    {conformance.blueprint.ok ? (
+                      <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                    ) : (
+                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
+                    )}
+                  </div>
+                  {!conformance.blueprint.ok && (
+                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                      {conformance.blueprint.gaps.join("; ")}
+                    </p>
+                  )}
+                  {!conformance.blueprint.ok && conformance.blueprint.gaps.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => generateBlueprint(projectId!, { preview: true, gapsFeedback: conformance!.blueprint.gaps.join("\n") })}
+                      disabled={loading || mddReviewing}
+                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      Regenerar Blueprint con gaps
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="flex flex-col gap-1 px-2 py-1.5"
+                  title={
+                    conformance.blueprintDataModel?.ok !== false
+                      ? "Alineado con Blueprint; puedes generar Contratos de API."
+                      : (conformance.blueprintDataModel?.gaps ?? []).join("; ")
+                  }
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Modelo §3</span>
+                    {conformance.blueprintDataModel?.ok !== false ? (
+                      <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                    ) : (
+                      <span className={WORKSHOP_METRICS_BADGE_ERR}>Bloquea API</span>
+                    )}
+                  </div>
+                  {!conformance.blueprintDataModel?.ok && (
+                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]">
+                      {(conformance.blueprintDataModel?.gaps ?? []).join("; ")}
+                    </p>
+                  )}
+                  {!conformance.blueprintDataModel?.ok &&
+                    (conformance.blueprintDataModel?.gaps?.length ?? 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          generateBlueprint(projectId!, {
+                            preview: true,
+                            gapsFeedback: conformance!.blueprintDataModel!.gaps.join("\n"),
+                          })
+                        }
+                        disabled={loading || mddReviewing}
+                        className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                      >
+                        Regenerar Blueprint (gaps §3)
+                      </button>
+                    )}
+                </div>
+                <div className="flex flex-col gap-1 px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">API</span>
+                    {conformance.api.ok ? (
+                      <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                    ) : (
+                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Revisar</span>
+                    )}
+                  </div>
+                  {!conformance.api.ok && (
+                    <p className="break-words text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                      Faltan en el doc. de API: {conformance.api.missingInApi.join(", ")}
+                    </p>
+                  )}
+                  {!conformance.api.ok && (conformance.api.missingInApi.length > 0 || conformance.api.extraInApi.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        generateApiContracts(projectId!, {
+                          preview: true,
+                          gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n"),
+                        })
+                      }
+                      disabled={loading || mddReviewing || apiBlueprintDmBlocked}
+                      title={apiBlueprintDmBlocked ? apiBlueprintBlockedHint : undefined}
+                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      Regenerar API con gaps
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Flujos</span>
+                    {conformance.logicFlows.ok ? (
+                      <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                    ) : (
+                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
+                    )}
+                  </div>
+                  {!conformance.logicFlows.ok && (
+                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                      {conformance.logicFlows.gaps.join("; ")}
+                    </p>
+                  )}
+                  {!conformance.logicFlows.ok && conformance.logicFlows.gaps.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => generateLogicFlows(projectId!, { gapsFeedback: conformance!.logicFlows.gaps.join("\n") })}
+                      disabled={loading || mddReviewing}
+                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      Regenerar Flujos con gaps
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 px-2 py-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Infra</span>
+                    {conformance.infra.ok ? (
+                      <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                    ) : (
+                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
+                    )}
+                  </div>
+                  {!conformance.infra.ok && (
+                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                      {conformance.infra.gaps.join("; ")}
+                    </p>
+                  )}
+                  {!conformance.infra.ok && conformance.infra.gaps.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => generateInfra(projectId!, { preview: true, gapsFeedback: conformance!.infra.gaps.join("\n") })}
+                      disabled={loading || mddReviewing}
+                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      Regenerar Infra con gaps
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(documentCompleteness || (crossDocumentGaps && crossDocumentGaps.length > 0)) && (
+            <details className="min-w-0 shrink-0 rounded-lg border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_40%,transparent)] px-2 py-1.5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-[11px] font-semibold text-[var(--foreground)] marker:content-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] rounded [&::-webkit-details-marker]:hidden">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <FileText className="h-3 w-3 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+                  <span className="truncate">Más métricas</span>
+                </span>
+                <span className="shrink-0 text-right text-[10px] font-normal leading-tight text-[var(--muted-foreground)]">
+                  {[
+                    documentCompleteness ? `${documentCompleteness.overall}% docs` : null,
+                    crossDocumentGaps && crossDocumentGaps.length > 0 ? `${crossDocumentGaps.length} brechas` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </summary>
+              <div className="mt-2 space-y-3 border-t border-[var(--border)]/70 pt-2">
+                {documentCompleteness && (
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                      Completitud por documento
+                    </p>
+                    <div className={cn(WORKSHOP_METRICS_CARD, "max-h-36 space-y-1 overflow-y-auto p-2 text-[11px]")}>
+                      {[
+                        ["brdContent", "BRD"],
+                        ["toBeManualContent", "To-Be"],
+                        ["asIsManualContent", "As-Is"],
+                        ["specContent", "SPEC"],
+                        ["architectureContent", "Arq."],
+                        ["useCasesContent", "Casos"],
+                        ["userStoriesContent", "H.U."],
+                        ["blueprintContent", "BP"],
+                        ["apiContractsContent", "API"],
+                        ["logicFlowsContent", "Flujos"],
+                        ["infraContent", "Infra"],
+                        ["tasksContent", "Tasks"],
+                      ].map(([key, label]) => {
+                        const score = (documentCompleteness as unknown as Record<string, number>)[key as string] ?? 0;
+                        return (
+                          <div key={key} className="flex items-center justify-between gap-2">
+                            <span className="text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]">{label}</span>
+                            <span
+                              className={
+                                score >= 100
+                                  ? "text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]"
+                                  : score >= 50
+                                    ? "text-[var(--primary)]"
+                                    : score > 0
+                                      ? "text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
+                                      : "text-[color-mix(in_oklch,var(--foreground-subtle)_82%,var(--background))]"
+                              }
+                            >
+                              {score >= 100 ? "✓" : score >= 50 ? "◐" : score > 0 ? "○" : "—"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {crossDocumentGaps && crossDocumentGaps.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--warning)]">
+                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                      Brechas ({crossDocumentGaps.length})
+                    </p>
+                    <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-[color-mix(in_oklch,var(--warning)_35%,var(--border))] bg-[color-mix(in_oklch,var(--warning)_10%,var(--card))] p-2 text-[11px] leading-snug">
+                      {crossDocumentGaps.slice(0, 5).map((gap, i) => (
+                        <div key={i} className="flex items-start gap-1.5">
+                          <span className="shrink-0 text-[var(--primary)]" aria-hidden>
+                            ⚠
+                          </span>
+                          <span className="min-w-0 text-[color-mix(in_oklch,var(--muted-foreground)_98%,var(--foreground))]">
+                            <strong className="text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]">{gap.concept}</strong>{" "}
+                            <span className="text-[10px] opacity-90">
+                              {gap.from}→{gap.to}
+                            </span>{" "}
+                            <span
+                              className={
+                                gap.severity === "missing"
+                                  ? "text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
+                                  : "text-[var(--primary)]"
+                              }
+                            >
+                              ({gap.severity === "missing" ? "falta" : "parcial"})
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                      {crossDocumentGaps.length > 5 && (
+                        <p className="text-[10px] text-[var(--foreground-subtle)]">+{crossDocumentGaps.length - 5} más</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+      </div>
+      <div
+        className={cn(
+          layout === "flyout" ? "flex min-w-0 flex-col gap-3" : "contents",
+        )}
+      >
+          <div className="shrink-0 space-y-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight text-[var(--foreground)]">
+              <DollarSign className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+              Estimación (MXN)
+            </h3>
+            <p
+              className="line-clamp-2 text-[11px] text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]"
+              title="Totales orientativos en MXN: nómina interna, coste de IA y valor de mercado. El cálculo sigue activo aunque el semáforo esté en rojo."
+            >
+              Totales orientativos en MXN: nómina interna, coste de IA y valor de mercado. El cálculo sigue activo aunque el semáforo esté en rojo.
+            </p>
+            <div className={cn(WORKSHOP_METRICS_CARD, "space-y-2 p-2.5")}>
+              <p className="text-[11px] font-medium text-[var(--foreground)]">
+                {costDisplay.totalHours.toFixed(1)} h totales
+              </p>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-baseline justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
+                  <span className="text-[11px] font-medium text-[var(--foreground)]">Nómina</span>
+                  <span className="tabular-nums text-base font-bold text-[var(--primary)]">
+                    ${costDisplay.totalMxn.toLocaleString("es-MX")}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
+                  <span className="text-[11px] font-medium text-[var(--foreground)]">Costo IA</span>
+                  <span className="tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--chart-2)_78%,var(--foreground))]">
+                    ${costDisplay.totalMxnIA.toLocaleString("es-MX")}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-medium text-[var(--foreground)]">Mercado</span>
+                  <span className="tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]">
+                    ${(costDisplay.totalMxnMarket ?? costDisplay.totalMxn).toLocaleString("es-MX")}
+                  </span>
+                </div>
+              </div>
+              {costDisplay.teamStructure &&
+                Object.keys(costDisplay.teamStructure).length > 0 && (
+                  <div className="max-h-20 space-y-0.5 overflow-y-auto border-t border-[var(--border)]/70 pt-2 text-[10px] leading-tight text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                    {Object.entries(costDisplay.teamStructure).map(
+                      ([role, count]) =>
+                        count ? (
+                          <div key={role} className="flex justify-between gap-2">
+                            <span className="min-w-0 truncate capitalize text-[var(--muted-foreground)]">{role}</span>
+                            <span className="shrink-0 tabular-nums">
+                              {count}
+                              {costDisplay.rolesHours?.[role] != null ? ` · ${Number(costDisplay.rolesHours[role]).toFixed(1)}h` : ""}
+                            </span>
+                          </div>
+                        ) : null,
+                    )}
+                  </div>
+                )}
+            </div>
+          </div>
+
+          <div className="shrink-0 space-y-1.5">
+            <button
+              type="button"
+              onClick={handleGenerateDeliverables}
+              disabled={!canGenerate || cascadeRunning || mddReviewing}
+              aria-describedby={cascadeCtaHint ? "workshop-cascade-cta-hint" : undefined}
+              className={cn(
+                "flex w-full min-h-10 items-center justify-center gap-2 rounded-lg px-3 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
+                canGenerate && !cascadeRunning && !mddReviewing
+                  ? "bg-[var(--success)] text-[var(--success-foreground)] hover:bg-[color-mix(in_oklch,var(--success)_88%,black)]"
+                  : "cursor-not-allowed border border-dashed border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_28%,var(--card))] text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]",
+              )}
+            >
+              {cascadeRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                  Generando entregables…
+                </>
+              ) : canGenerate ? (
+                "Generar entregables"
+              ) : !semaphoreGreen ? (
+                "Semáforo en verde requerido"
+              ) : (
+                "Revisa el Spec para continuar"
+              )}
+            </button>
+            {cascadeCtaHint ? (
+              <p
+                id="workshop-cascade-cta-hint"
+                className="text-center text-[11px] leading-snug text-[color-mix(in_oklch,var(--foreground)_94%,var(--muted-foreground))]"
+              >
+                {cascadeCtaHint}
+              </p>
+            ) : null}
+          </div>
+
+          {/* Feedback del auditor debajo del semáforo (selectores Zustand → re-render al actualizar liveMetrics / auditorFeedback) */}
+          {auditorFeedback ? (
+            <div className="max-h-28 shrink-0 overflow-y-auto rounded-lg border border-[var(--border)] bg-[var(--background)] p-2 text-[11px] leading-snug text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))] shadow-sm">
+              <strong className="mb-0.5 block text-[var(--foreground)]">
+                Auditoría ({liveMetrics?.precision ?? 0}% — {auditFeedbackStatusLabel})
+              </strong>
+              {auditorFeedback}
+            </div>
+          ) : null}
+      </div>
+    </div>
+  );
+}

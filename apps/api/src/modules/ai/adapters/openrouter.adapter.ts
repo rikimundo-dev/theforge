@@ -9,6 +9,7 @@ import {
   resolveEmbeddingsBackend,
   resolveOpenRouterEmbeddingApiKey,
   resolvePrimaryChatRuntime,
+  resolveVisionModel,
   type OpenRouterRuntime,
 } from "../config/llm-config.js";
 
@@ -67,11 +68,13 @@ export class OpenRouterAdapter implements LLMProvider {
   /** Cliente embeddings: misma base URL; clave puede ser OPENROUTER_EMBEDDING_API_KEY. */
   private readonly embeddingClient: OpenAI;
   private readonly model: string;
+  private readonly visionModel: string;
   private readonly embeddingModel: string;
 
   constructor() {
     const runtime = resolvePrimaryChatRuntime() as OpenRouterRuntime;
     this.model = runtime.chatModel;
+    this.visionModel = resolveVisionModel();
     this.embeddingModel = runtime.embeddingModel;
     const headers = openRouterDefaultHeaders();
     this.chatClient = new OpenAI({
@@ -92,6 +95,8 @@ export class OpenRouterAdapter implements LLMProvider {
     history: ChatMessage[],
     options?: GenerateResponseOptions,
   ): Promise<string> {
+    const hasImages = options?.userMessageImages != null && options.userMessageImages.length > 0;
+    const activeModel = hasImages ? this.visionModel : this.model;
     try {
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
       if (options?.systemPrompt) {
@@ -105,12 +110,13 @@ export class OpenRouterAdapter implements LLMProvider {
       const ts = () => new Date().toISOString();
       console.log(`[OpenRouterAdapter] ${ts()} → Request enviado:`, {
         messagesCount: messages.length,
-        model: this.model,
+        model: activeModel,
+        hasImages,
       });
       const completion = await this.chatClient.chat.completions.create({
-        model: this.model,
+        model: activeModel,
         messages,
-        max_tokens: options?.maxTokensOverride ?? 32768,
+        max_tokens: options?.maxTokensOverride ?? 65535,
       });
 
       const content = completion.choices[0]?.message?.content ?? "";
@@ -133,6 +139,8 @@ export class OpenRouterAdapter implements LLMProvider {
     history: ChatMessage[],
     options?: GenerateResponseOptions,
   ): Promise<AsyncIterable<string>> {
+    const hasImages = options?.userMessageImages != null && options.userMessageImages.length > 0;
+    const activeModel = hasImages ? this.visionModel : this.model;
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
     if (options?.systemPrompt) {
       messages.push({ role: "system", content: options.systemPrompt });
@@ -143,9 +151,9 @@ export class OpenRouterAdapter implements LLMProvider {
     );
 
     const stream = await this.chatClient.chat.completions.create({
-      model: this.model,
+      model: activeModel,
       messages,
-      max_tokens: 8192,
+      max_tokens: 65535,
       stream: true,
     });
 

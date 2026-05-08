@@ -129,6 +129,8 @@ services:
       # Webhook proxy de Hermes Agent (para notificar proyectos listos para desarrollo)
       HERMES_WEBHOOK_URL: ${HERMES_WEBHOOK_URL:-}
       HERMES_API_KEY: ${HERMES_API_KEY:-}
+      STT_MODEL: ${STT_MODEL:-}
+      VISION_MODEL: ${VISION_MODEL:-}
     depends_on:
       theforge-db:
         condition: service_healthy

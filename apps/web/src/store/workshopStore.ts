@@ -479,6 +479,9 @@ interface WorkshopState {
   /** Etapa cuyo MDD edita el Workshop (vista en vivo). */
   activeStageId: string | null;
   setActiveStageId: (stageId: string | null) => void;
+  /** Panel central de documentos (pestaña activa); sincroniza barra global y `WorkshopView`. */
+  workshopActiveDocPanel: string;
+  setWorkshopActiveDocPanel: (panel: string) => void;
   /** `POST /projects/:id/stages` → `{ stage }`; opcional `copyMddFromStageId`. */
   createWorkshopStage: (opts: { name?: string; key?: string; copyMddFromStageId?: string; copyLegacyChangeFromStageId?: string }) => Promise<Project | null>;
   /** `PATCH /projects/:id/stages/:stageId` — BRD/To-Be/As-Is, aprobaciones, etc. */
@@ -667,12 +670,14 @@ const initialState = {
   adrs: null as any[] | null,
   workshopStages: [] as WorkshopStage[],
   activeStageId: null as string | null,
+  workshopActiveDocPanel: "mdd",
 };
 
 export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   ...initialState,
 
   setProjectId: (id) => set({ projectId: id }),
+  setWorkshopActiveDocPanel: (panel) => set({ workshopActiveDocPanel: panel }),
   setProject: (p) => {
     if (!p) {
       set({ project: null, activeStageId: null, workshopStages: [], lastLegacyDeliverablesDebug: null });
@@ -1535,13 +1540,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 const uxFromApi = (data.uxUiGuideContent ?? proj?.uxUiGuideContent) as string | null | undefined;
                 const packed = projectWithUxAfterStream(proj, uxFromApi, get().activeStageId);
                 const nextStages = packed?.project?.stages ?? proj?.stages;
+                const freshUx = cleanDoc(uxFromApi ?? get().uxUiGuideContent ?? null);
                 set({
                   session: sess ?? get().session,
                   project: packed?.project ?? get().project,
                   activeStageId: packed?.activeStageId ?? get().activeStageId,
                   mddContent: packed?.mddContent ?? get().mddContent,
                   workshopStages: nextStages && nextStages.length > 0 ? nextStages : get().workshopStages,
-                  uxUiGuideContent: cleanDoc(uxFromApi ?? get().uxUiGuideContent ?? null),
+                  uxUiGuideContent: freshUx,
                   dbgaContent: cleanDoc(proj?.dbgaContent ?? null),
                   specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
                   blueprintContent: cleanDoc(proj?.blueprintContent ?? null),
@@ -1556,6 +1562,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   error: null,
                   evaluatorCritique: pickEvaluatorCritique(data),
                 });
+                // Auto-persist UX/UI guide when the orchestrator returns content on its tab
+                if (tab === "ux-ui-guide" && freshUx) {
+                  get().persistUxUiGuideContent(freshUx).catch(() => {});
+                }
               } else if (event === "error" && data.error) {
                 set({
                   error: String(data.error),
@@ -1589,13 +1599,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 const uxFromApi = (data.uxUiGuideContent ?? proj?.uxUiGuideContent) as string | null | undefined;
                 const packed = projectWithUxAfterStream(proj, uxFromApi, get().activeStageId);
                 const nextStagesB = packed?.project?.stages ?? proj?.stages;
+                const freshUx = cleanDoc(uxFromApi ?? get().uxUiGuideContent ?? null);
                 set({
                   session: sess ?? get().session,
                   project: packed?.project ?? get().project,
                   activeStageId: packed?.activeStageId ?? get().activeStageId,
                   mddContent: packed?.mddContent ?? get().mddContent,
                   workshopStages: nextStagesB && nextStagesB.length > 0 ? nextStagesB : get().workshopStages,
-                  uxUiGuideContent: cleanDoc(uxFromApi ?? get().uxUiGuideContent ?? null),
+                  uxUiGuideContent: freshUx,
                   dbgaContent: cleanDoc(proj?.dbgaContent ?? null),
                   specContent: cleanDoc(proj?.specContent ?? null),
                   blueprintContent: cleanDoc(proj?.blueprintContent ?? null),
@@ -1614,6 +1625,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   error: null,
                   evaluatorCritique: pickEvaluatorCritique(data),
                 });
+                // Auto-persist UX/UI guide when the orchestrator returns content on its tab
+                if (tab === "ux-ui-guide" && freshUx) {
+                  get().persistUxUiGuideContent(freshUx).catch(() => {});
+                }
               } else if (event === "error" && data.error) {
                 set({
                   error: String(data.error),

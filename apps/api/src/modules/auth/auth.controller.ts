@@ -109,8 +109,12 @@ export class AuthController {
   @Get("has-users")
   @Public()
   @HttpCode(200)
-  hasUsers() {
-    return this.auth.hasUsers();
+  async hasUsers(): Promise<{ hasUsers: boolean }> {
+    try {
+      return await this.auth.hasUsers();
+    } catch {
+      return { hasUsers: true };
+    }
   }
 
   /** POST /auth/register-first-admin — crea el primer admin (público, solo si no hay usuarios). */

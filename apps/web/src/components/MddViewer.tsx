@@ -82,8 +82,9 @@ function looksLikeMermaidBlock(source: string, className?: string): boolean {
   return hasMermaidLang || MERMAID_DIAGRAM_START.test(trimmed);
 }
 
+/** Theme tokens so preview text stays readable in light mode (avoids zinc-300 on pale backgrounds). */
 const MARKDOWN_CLASS =
-  "text-sm text-zinc-300 [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_pre]:bg-zinc-800 [&_pre]:p-3 [&_pre]:rounded [&_code]:bg-zinc-800 [&_code]:px-1 [&_code]:rounded [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-zinc-600 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_td]:border [&_td]:border-zinc-600 [&_td]:px-3 [&_td]:py-2";
+  "text-sm text-[var(--foreground)] [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:text-[var(--foreground)] [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-[var(--foreground)] [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-[var(--foreground)] [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-2 [&_strong]:font-semibold [&_strong]:text-[var(--foreground)] [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:border [&_pre]:border-[var(--border)] [&_pre]:bg-[color-mix(in_oklch,var(--muted)_78%,var(--card))] [&_pre]:p-3 [&_pre]:text-[var(--foreground)] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-[var(--foreground)] [&_p_code]:rounded [&_p_code]:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] [&_p_code]:px-1 [&_p_code]:py-0.5 [&_p_code]:text-[var(--foreground)] [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-[var(--border)] [&_th]:bg-[color-mix(in_oklch,var(--muted)_42%,var(--card))] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:text-[var(--foreground)] [&_td]:border [&_td]:border-[var(--border)] [&_td]:px-3 [&_td]:py-2 [&_td]:text-[var(--foreground)]";
 
 let mermaidInit = false;
 function initMermaid() {
@@ -118,9 +119,9 @@ class MermaidBlockErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <pre className="my-6 rounded bg-zinc-800 p-3 text-zinc-400 text-sm overflow-x-auto">
+        <pre className="my-6 overflow-x-auto rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_78%,var(--card))] p-3 text-sm text-[var(--foreground)]">
           <code>{this.props.content}</code>
-          <p className="mt-2 text-zinc-500 text-xs" aria-live="polite">
+          <p className="mt-2 text-xs text-[var(--muted-foreground)]" aria-live="polite">
             No se pudo mostrar el diagrama (código fuente arriba).
           </p>
         </pre>
@@ -180,9 +181,9 @@ function MermaidBlock({ content, blockKey }: { content: string; blockKey: string
 
   if (error) {
     return (
-      <pre className="rounded bg-zinc-800 p-3 text-zinc-400 text-sm overflow-x-auto">
+      <pre className="overflow-x-auto rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_78%,var(--card))] p-3 text-sm text-[var(--foreground)]">
         <code>{content}</code>
-        <p className="mt-2 text-zinc-500 text-xs" aria-live="polite">
+        <p className="mt-2 text-xs text-[var(--muted-foreground)]" aria-live="polite">
           No se pudo mostrar el diagrama (código fuente arriba).
         </p>
       </pre>
@@ -233,7 +234,7 @@ const MdSection = memo(function MdSection({ content }: { content: string }) {
             const looksLikeMetadataOnly = /^\[\w+\](\s+\[\w+\])*$/.test(source.trim());
             if (looksLikeMetadataOnly) {
               return (
-                <span className="text-zinc-500 text-xs" aria-label="Metadata técnica">
+                <span className="text-xs text-[var(--muted-foreground)]" aria-label="Metadata técnica">
                   {source}
                 </span>
               );
@@ -293,10 +294,10 @@ class MddViewerErrorBoundary extends Component<
     if (this.state.hasError) {
       return (
         <div className={`space-y-4 min-w-0 ${this.props.className ?? ""}`}>
-          <p className="text-sm text-amber-500">
+          <p className="text-sm text-[var(--warning)]">
             Error al mostrar el documento. Contenido en modo texto:
           </p>
-          <pre className="rounded bg-zinc-800 p-4 text-zinc-400 text-sm overflow-auto max-h-[80vh] whitespace-pre-wrap">
+          <pre className="max-h-[80vh] overflow-auto whitespace-pre-wrap rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_78%,var(--card))] p-4 text-sm text-[var(--foreground)]">
             {this.props.content}
           </pre>
         </div>

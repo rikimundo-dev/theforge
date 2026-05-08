@@ -22,6 +22,7 @@ import { AiOrchestratorModule } from "./modules/ai-orchestrator/ai-orchestrator.
 import { AiAnalysisModule } from "./modules/ai-analysis/ai-analysis.module.js";
 import { TheForgeModule } from "./modules/theforge/theforge.module.js";
 import { LegacyFlowModule } from "./modules/legacy-flow/legacy-flow.module.js";
+import { AudioModule } from "./modules/audio/audio.module.js";
 
 @Module({
   controllers: [HealthController],
@@ -37,6 +38,7 @@ import { LegacyFlowModule } from "./modules/legacy-flow/legacy-flow.module.js";
     AiAnalysisModule,
     TheForgeModule,
     LegacyFlowModule,
+    AudioModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

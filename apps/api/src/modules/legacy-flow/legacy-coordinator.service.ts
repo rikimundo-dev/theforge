@@ -652,7 +652,7 @@ export class LegacyCoordinatorService {
       "## 1. Resumen ejecutivo del sistema actual\n## 2. Dominios y capacidades observadas\n## 3. Flujos críticos (AS-IS) con referencia a rutas o archivos citados del texto fuente cuando sea posible\n## 4. Datos y contratos existentes mencionados\n## 5. Riesgos técnicos o deuda detectados\n\n" +
       "Reglas: no inventes módulos que no aparezcan en el documento; si falta evidencia, indica «no consta». Usa listas breves donde ayude.\n\n--- DOCUMENTO FUENTE ---\n\n" +
       codebaseDoc.slice(0, 120_000);
-    const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM, maxTokensOverride: 32000 });
+    const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
     const asIs = cleanDocumentContent((mddDraft ?? "").trim()) || "(As-Is generado vacío.)";
     await this.prisma.stage.update({ where: { id: stage.id }, data: { asIsManualContent: asIs } });
     await this.syncCurrentLegacyStageToGraph(projectId, stage.id).catch(() => {});
@@ -735,7 +735,7 @@ export class LegacyCoordinatorService {
     for (let attempt = 1; attempt <= 2; attempt++) {
       const raw = await this.ai.generateResponse(brdPrompt, [], {
         systemPrompt: COORDINATOR_SYSTEM,
-        maxTokensOverride: 32000,
+
       });
       const brdMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*BRD\s*>>>\s*([\s\S]*?)\s*<<<_?END_BRD_?>>>/i);
       const extracted = brdMatch?.[1]?.trim() ?? null;
@@ -770,7 +770,7 @@ export class LegacyCoordinatorService {
     for (let attempt = 1; attempt <= 2; attempt++) {
       const raw = await this.ai.generateResponse(tobePrompt, [], {
         systemPrompt: COORDINATOR_SYSTEM,
-        maxTokensOverride: 32000,
+
       });
       const tobeMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*TOBE\s*>>>\s*([\s\S]*?)\s*<<<_?END_TOBE_?>>>/i);
       const extracted = tobeMatch?.[1]?.trim() ?? null;
@@ -1482,7 +1482,7 @@ export class LegacyCoordinatorService {
             "\n---"
           : "");
     }
-    const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM, maxTokensOverride: 32000 });
+    const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
     const mddContent = await this.reviewer.reviewMdd(description, mddDraft?.trim() ?? "");
     const cleaned = cleanDocumentContent(mddContent);
     // Dual-write durante migración: stage.legacyChangeState + project.legacyFlowState

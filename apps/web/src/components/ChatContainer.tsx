@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useMemo } from "react";
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from "react";
 import {
   BRD_TOBE_FROM_DBGA_STEPS,
   LEGACY_BRD_TOBE_SUGGEST_STEPS,
@@ -8,7 +8,7 @@ import {
 } from "../constants/legacy-workshop-loading-steps";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus } from "lucide-react";
+import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown } from "lucide-react";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
 import type { ChatImagePart } from "@theforge/shared-types";
@@ -54,6 +54,35 @@ const ACTIVE_TAB_LABELS: Record<ActiveTab, string> = {
   adrs: "Decisiones Arquitectónicas (ADRs)",
 };
 
+/**
+ * Short chat composer placeholders. Full stage names stay in the chat header (`contextLabel`).
+ */
+const CHAT_COMPOSER_PLACEHOLDER: Record<ActiveTab, string> = {
+  benchmark: "Idea, alcance o enlaces…",
+  legacy: "Qué cambiar o ampliar…",
+  "mdd-inicial": "Indicaciones para la partida…",
+  spec: "Mensaje sobre el Spec…",
+  brd: "Mensaje sobre el BRD…",
+  "to-be": "Cambios al To-Be…",
+  mdd: "Mensaje o /sección…",
+  "ux-ui-guide": "Marca, UI o prioridades…",
+  blueprint: "Mensaje sobre el Blueprint…",
+  tasks: "Mensaje sobre Tasks…",
+  "api-contracts": "Ajustes a contratos API…",
+  "logic-flows": "Flujos o reglas…",
+  architecture: "Mensaje sobre arquitectura…",
+  "use-cases": "Escenarios o actores…",
+  "user-stories": "Historias o criterios…",
+  infra: "Despliegue o infra…",
+  adrs: "Decisiones técnicas…",
+};
+
+function getChatComposerPlaceholder(isBenchmarkFirstAction: boolean, activeTab: ActiveTab): string {
+  if (isBenchmarkFirstAction) return "Dominio, idea y enlaces (opcional)…";
+  if (activeTab === "mdd") return "Mensaje o /sección…";
+  return CHAT_COMPOSER_PLACEHOLDER[activeTab];
+}
+
 /** Comandos / para regenerar secciones del MDD (solo tab MDD). §1 = solo agente sintetizador de contexto desde §2–§7. */
 const MDD_SECTION_COMMANDS: { slug: string; label: string; section: number }[] = [
   { slug: "contexto", label: "1. Contexto", section: 1 },
@@ -77,6 +106,22 @@ function getRegenerateSectionFromSlashCommand(msg: string): number | null {
 }
 
 const ACCEPT_IMG = /^image\/(png|jpeg|jpg|gif|webp)$/i;
+
+/** Single bordered “AI bar”: attach + textarea + send share one surface (Claude/ChatGPT-style unified chrome). */
+/** Máx. altura del textarea antes de scroll interno (solo pegas enormes); el shell crece hacia arriba con el contenido. */
+const AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 420;
+
+const AI_COMPOSER_SHELL =
+  "flex w-full min-w-0 items-end gap-2 rounded-[1.25rem] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_92%,var(--muted))] px-2.5 py-2 shadow-sm transition-[border-color,background-color] focus-within:border-[color-mix(in_oklch,var(--primary)_30%,var(--border))] focus-within:bg-[color-mix(in_oklch,var(--card)_96%,var(--muted))] dark:bg-[color-mix(in_oklch,var(--card)_62%,var(--muted))] dark:focus-within:bg-[color-mix(in_oklch,var(--card)_72%,var(--muted))]";
+
+const AI_COMPOSER_TEXTAREA =
+  "min-h-[2.25rem] flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-sm leading-6 text-[var(--foreground)] shadow-none outline-none ring-0 appearance-none break-words min-w-0 overflow-y-hidden overflow-x-hidden placeholder:text-[var(--muted-foreground)] focus:border-0 focus:shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+
+const AI_COMPOSER_ATTACH_BTN =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--primary)] disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-0";
+
+const AI_COMPOSER_SEND_BTN =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-none transition-[opacity,transform] hover:opacity-90 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-0";
 
 async function readFilesAsChatParts(files: Iterable<File>): Promise<ChatImagePart[]> {
   const list = Array.from(files).slice(0, 6);
@@ -240,10 +285,18 @@ export default function ChatContainer({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const prevStageForBannerRef = useRef<string | null>(null);
   const [stageSwitchBannerOpen, setStageSwitchBannerOpen] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const multiStageChat = workshopStages.length > 1;
+
+  /** STT (speech‑to‑text) via mic */
+  const [sttModel, setSttModel] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const stageNameForBadge = useMemo(() => {
     return (stageId: string | undefined) => {
@@ -290,16 +343,28 @@ export default function ChatContainer({
     return () => clearInterval(id);
   }, [isLegacyLongRun, legacyRotatingSteps]);
 
-  /** Auto-resize textarea hasta máx. 3 líneas visibles (~5rem), luego scroll */
-  useEffect(() => {
-    const el = chatInputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 80)}px`; // 80px ≈ 3 líneas + padding
+  /** Auto-resize: crece con el texto (el shell en el pie sube = sensación de “crecer hacia arriba”). Scroll solo si supera el techo. */
+  useLayoutEffect(() => {
+    function syncHeight() {
+      const t = chatInputRef.current;
+      if (!t) return;
+      t.style.height = "auto";
+      const viewportCap =
+        typeof window !== "undefined"
+          ? Math.floor(window.innerHeight * 0.45)
+          : AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX;
+      const maxH = Math.min(AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX, Math.max(160, viewportCap));
+      const next = Math.min(t.scrollHeight, maxH);
+      t.style.height = `${next}px`;
+      t.style.overflowY = t.scrollHeight > maxH ? "auto" : "hidden";
+    }
+    syncHeight();
+    window.addEventListener("resize", syncHeight);
+    return () => window.removeEventListener("resize", syncHeight);
   }, [inputValue]);
 
   const isBenchmarkFirstAction =
-    activeTab === "benchmark" && benchmarkMode && !benchmarkMode.hasBenchmark;
+    activeTab === "benchmark" && !!benchmarkMode && !benchmarkMode.hasBenchmark;
 
   /** En Paso 0: "sin contenido" = sin mensajes del usuario; si solo hay burbujas del asistente, mostramos el texto instructivo. */
   const benchmarkEmpty =
@@ -309,10 +374,12 @@ export default function ChatContainer({
     benchmarkEmpty && messages.length > 0 ? [] : messages;
 
   useEffect(() => {
-    const t = setTimeout(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
+    if (isNearBottom || loading || messagesToShow.length === 0) {
       chatEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-    }, 100);
-    return () => clearTimeout(t);
+    }
   }, [
     messagesToShow.length,
     agentProgress.length,
@@ -323,11 +390,103 @@ export default function ChatContainer({
     legacyProgressIndex,
   ]);
 
+  /** Scroll to bottom on mount (after messages render). */
+  useEffect(() => {
+    const t = setTimeout(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+    }, 200);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     const urls = pendingFiles.map((f) => URL.createObjectURL(f));
     setPendingPreviews(urls);
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [pendingFiles]);
+
+  /** Fetch STT config on mount */
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(
+          `${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`,
+        );
+        if (r.ok) {
+          const data: { sttModel: string | null } = await r.json();
+          setSttModel(data.sttModel);
+        }
+      } catch { /* no STT */ }
+    })();
+  }, []);
+
+  const handleMicClick = async () => {
+    if (recording) {
+      // Stop recording
+      mediaRecorderRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks: Blob[] = [];
+      audioChunksRef.current = chunks;
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+      recorder.onstop = async () => {
+        // Release mic
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: mimeType });
+        if (blob.size < 100) return; // silence / too short
+
+        // Send to backend
+        try {
+          const formData = new FormData();
+          formData.append("audio", blob, "recording.webm");
+          const r = await fetch(
+            `${import.meta.env.VITE_API_URL ?? "/api"}/audio/transcribe`,
+            { method: "POST", body: formData },
+          );
+          if (r.ok) {
+            const data: { text: string } = await r.json();
+            if (data.text?.trim()) {
+              setInputValue((prev) => {
+                const sep = prev.trim() ? " " : "";
+                return prev + sep + data.text.trim();
+              });
+              // Focus textarea after setting value
+              requestAnimationFrame(() => chatInputRef.current?.focus());
+            }
+          }
+        } catch { /* transcribe failed – silently */ }
+      };
+      recorder.onerror = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+      };
+      recorder.start();
+      setRecording(true);
+    } catch {
+      // Permission denied or no mic
+    }
+  };
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    setShowScrollBtn(false);
+  };
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const far = el.scrollHeight - el.scrollTop - el.clientHeight > 200;
+    setShowScrollBtn(far);
+  }, []);
 
   const handleSend = async () => {
     if ((!inputValue.trim() && !pendingFiles.length) || loading) return;
@@ -386,15 +545,15 @@ export default function ChatContainer({
     <div className="flex flex-col h-full min-h-0">
       {showCenteredEmpty ? (
         <div className="flex-1 flex flex-col items-center justify-center min-h-0 p-6">
-          <Target className="w-14 h-14 text-amber-500/80 shrink-0 mb-4" />
-          <p className="text-center text-lg text-zinc-200 mb-6 max-w-xl">
+          <Target className="w-14 h-14 shrink-0 mb-4 text-[color-mix(in_oklch,var(--primary)_75%,var(--muted-foreground))]" />
+          <p className="text-center text-lg text-[var(--foreground)] mb-6 max-w-xl">
             ¿Qué quieres construir y cuál es tu referencia (ej. industria o producto similar)?
           </p>
           <div className="w-full max-w-2xl flex flex-col gap-3">
             {showLongPasteMddWarn && (
-              <p className="text-xs text-amber-500/90 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+              <p className="text-xs text-[color-mix(in_oklch,var(--primary)_85%,var(--foreground))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] rounded-lg px-3 py-2">
                 Mensaje muy largo ({inputValue.length} caracteres). Conviene trocear por sección (p. ej.{" "}
-                <code className="text-amber-200">/contratos-api</code>) o varios mensajes; el envío no se bloquea.
+                <code className="text-[color-mix(in_oklch,var(--primary)_72%,var(--foreground))]">/contratos-api</code>) o varios mensajes; el envío no se bloquea.
               </p>
             )}
             <input
@@ -417,12 +576,12 @@ export default function ChatContainer({
                     <img
                       src={url}
                       alt=""
-                      className="h-16 w-16 object-cover rounded-lg border border-zinc-600"
+                      className="h-16 w-16 object-cover rounded-lg border border-[var(--border)]"
                     />
                     <button
                       type="button"
                       onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
-                      className="absolute -top-1 -right-1 rounded-full bg-zinc-800 border border-zinc-500 p-0.5 text-zinc-300 hover:text-white"
+                      className="absolute -top-1 -right-1 rounded-full bg-[var(--card)] border border-[var(--border)] p-0.5 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] hover:text-[var(--foreground)]"
                       aria-label="Quitar imagen"
                     >
                       <X className="w-3 h-3" />
@@ -431,16 +590,29 @@ export default function ChatContainer({
                 ))}
               </div>
             ) : null}
-            <div className="flex gap-2 items-end w-full min-w-0">
+            <div className={AI_COMPOSER_SHELL} role="group" aria-label="Mensaje al asistente">
               {!isBenchmarkFirstAction ? (
                 <button
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
                   disabled={loading || pendingFiles.length >= 6}
-                  className="shrink-0 p-2.5 rounded-lg border border-zinc-600 bg-zinc-800/80 text-zinc-300 hover:text-amber-400 hover:border-amber-500/40 disabled:opacity-40"
+                  className={AI_COMPOSER_ATTACH_BTN}
                   title="Adjuntar imagen (máx. 6, PNG/JPEG/WebP/GIF)"
+                  aria-label="Adjuntar imagen"
                 >
-                  <ImagePlus className="w-5 h-5" />
+                  <ImagePlus className="h-[1.125rem] w-[1.125rem] shrink-0" aria-hidden />
+                </button>
+              ) : null}
+              {sttModel ? (
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  disabled={loading}
+                  className={`${AI_COMPOSER_ATTACH_BTN} ${recording ? "text-[var(--destructive)] animate-pulse" : ""}`}
+                  title={recording ? "Detener grabación" : "Grabar voz"}
+                  aria-label={recording ? "Detener grabación" : "Grabar voz"}
+                >
+                  <Mic className={`h-[1.125rem] w-[1.125rem] shrink-0 ${recording ? "text-[var(--destructive)]" : ""}`} aria-hidden />
                 </button>
               ) : null}
               <textarea
@@ -450,96 +622,105 @@ export default function ChatContainer({
                 onKeyDown={(e) => {
                   if (e.key !== "Enter" || e.shiftKey) return;
                   e.preventDefault();
-                  if (isBenchmarkFirstAction) handleGenerateBenchmark();
+                  if (isBenchmarkFirstAction) void handleGenerateBenchmark();
                   else void handleSend();
                 }}
-                placeholder={
+                placeholder={getChatComposerPlaceholder(isBenchmarkFirstAction, activeTab)}
+                title={
                   isBenchmarkFirstAction
-                    ? "Describe tu idea; si incluyes URLs (ej. https://auth0.com/docs) se usarán como referencias para el benchmark..."
-                    : "Describe tu idea o pega un enlace de referencia..."
+                    ? "Puedes incluir URLs públicas; se usarán como referencia para el benchmark."
+                    : undefined
                 }
                 rows={1}
-                className="flex-1 min-w-0 min-h-[2.5rem] max-h-[5rem] overflow-y-auto resize-none bg-zinc-800/50 border border-zinc-600 rounded-lg px-4 py-3 text-sm font-mono text-zinc-200 placeholder-zinc-500 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none break-words"
+                className={`${AI_COMPOSER_TEXTAREA} font-sans`}
                 spellCheck={false}
                 disabled={loading}
               />
+              <button
+                type="button"
+                className={AI_COMPOSER_SEND_BTN}
+                onClick={() => (isBenchmarkFirstAction ? void handleGenerateBenchmark() : void handleSend())}
+                disabled={
+                  loading ||
+                  (isBenchmarkFirstAction ? !inputValue.trim() : !inputValue.trim() && !pendingFiles.length)
+                }
+                title={isBenchmarkFirstAction ? "Generar Benchmark & Gap Analysis" : "Enviar"}
+                aria-label={isBenchmarkFirstAction ? "Generar Benchmark & Gap Analysis" : "Enviar mensaje"}
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden /> : <Send className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />}
+              </button>
             </div>
-            {isBenchmarkFirstAction ? (
-              <button
-                onClick={handleGenerateBenchmark}
-                disabled={loading || !inputValue.trim()}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                title="Generar Benchmark & Gap Analysis"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Generar Benchmark & Gap Analysis
-              </button>
-            ) : (
-              <button
-                onClick={() => void handleSend()}
-                disabled={loading || (!inputValue.trim() && !pendingFiles.length)}
-                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                title="Enviar"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                Enviar
-              </button>
-            )}
           </div>
         </div>
       ) : (
         <>
-          <div className="shrink-0 px-4 py-2 border-b border-zinc-700 flex items-center justify-between gap-2 text-zinc-400 text-sm">
-            <span className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              {embedded ? "Chat (Paso 0)" : "Conversación"}
-              {contextLabel && !embedded && (
-                <span className="text-zinc-500 text-xs">· {contextLabel}</span>
-              )}
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {onRevaluate && projectId ? (
+          <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_45%,var(--background))] px-3 py-2.5 sm:px-4">
+            <div className="flex items-start justify-between gap-4 min-w-0">
+              <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                <div
+                  className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--primary)] ring-1 ring-[color-mix(in_oklch,var(--border)_70%,transparent)]"
+                  aria-hidden
+                >
+                  <MessageSquare className="h-4 w-4" strokeWidth={2} />
+                </div>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <h2 className="text-sm font-semibold leading-tight tracking-tight text-[var(--foreground)]">
+                    {embedded ? "Chat (Paso 0)" : "Conversación"}
+                  </h2>
+                  {contextLabel && !embedded ? (
+                    <p
+                      className="mt-1 line-clamp-2 text-left text-xs leading-snug text-[var(--foreground-subtle)] sm:line-clamp-1"
+                      title={contextLabel}
+                    >
+                      {contextLabel}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                {onRevaluate && projectId ? (
+                  <button
+                    type="button"
+                    onClick={() => void onRevaluate()}
+                    disabled={loading || revaluateBusy}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_12%,var(--card))] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_45%,var(--background))] disabled:pointer-events-none disabled:opacity-40"
+                    title="Re-Valorar: re-infiere complejidad desde tus documentos y abre la entrevista HITL (Paso 0 o legacy con MDD)."
+                    aria-label="Re-Valorar complejidad y abrir entrevista HITL"
+                  >
+                    {revaluateBusy ? (
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                    )}
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => void onRevaluate()}
-                  disabled={loading || revaluateBusy}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-300 hover:text-amber-400 hover:bg-amber-500/10 disabled:opacity-50 disabled:pointer-events-none"
-                  title="Producto nuevo (Paso 0) o legacy (MDD): re-infiere complejidad desde tus documentos y abre la entrevista HITL"
+                  onClick={() => setShowClearConfirm(true)}
+                  disabled={loading || messages.length === 0}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] hover:text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_45%,var(--background))] disabled:pointer-events-none disabled:opacity-40"
+                  title="Borrar historial de la conversación (el MDD no se modifica)."
+                  aria-label="Borrar historial de la conversación"
                 >
-                  {revaluateBusy ? (
-                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  ) : (
-                    <RefreshCw className="w-4 h-4 shrink-0" />
-                  )}
-                  Re-Valorar
+                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
                 </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setShowClearConfirm(true)}
-                disabled={loading || messages.length === 0}
-                className="flex items-center gap-1.5 px-2 py-1 rounded text-zinc-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:pointer-events-none"
-                title="Borrar historial (el MDD se mantiene)"
-              >
-                <Trash2 className="w-4 h-4" />
-                Borrar historial
-              </button>
+              </div>
             </div>
-          </div>
+          </header>
           {multiStageChat && stageSwitchBannerOpen && (
             <div
-              className="shrink-0 mx-3 mt-2 mb-1 px-3 py-2 rounded-lg border border-amber-500/35 bg-amber-500/10 text-amber-100/95 text-xs leading-snug flex gap-2 items-start"
+              className="shrink-0 mx-3 mt-2 mb-1 px-3 py-2 rounded-lg border border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] text-[color-mix(in_oklch,var(--primary)_55%,var(--foreground))] text-xs leading-snug flex gap-2 items-start"
               role="status"
             >
               <span className="flex-1">
-                <strong className="text-amber-200">Historial global:</strong> el chat no se filtra por etapa.
+                <strong className="text-[color-mix(in_oklch,var(--primary)_72%,var(--foreground))]">Historial global:</strong> el chat no se filtra por etapa.
                 Los mensajes anteriores pueden referirse a otra línea de trabajo. El foco del MDD y el semáforo
                 sí corresponden a la etapa seleccionada arriba.
               </span>
               <button
                 type="button"
                 onClick={() => setStageSwitchBannerOpen(false)}
-                className="shrink-0 px-2 py-0.5 rounded bg-zinc-700/80 hover:bg-zinc-600 text-zinc-200 text-[11px]"
+                className="shrink-0 px-2 py-0.5 rounded bg-[color-mix(in_oklch,var(--muted)_82%,var(--card))] hover:bg-[var(--muted)] text-[var(--foreground)] text-[11px]"
               >
                 Cerrar
               </button>
@@ -563,7 +744,7 @@ export default function ChatContainer({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+          <div ref={chatScrollRef} onScroll={handleChatScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
             {messagesToShow.length ? (
               messagesToShow.map((msg, i) => (
                 <div
@@ -572,19 +753,19 @@ export default function ChatContainer({
                 >
                   <div
                     className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${msg.role === "user"
-                      ? "bg-amber-500/20 text-amber-100"
-                      : "bg-zinc-800 text-zinc-200 border border-zinc-600"
+                      ? "bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[color-mix(in_oklch,var(--primary)_58%,var(--foreground))]"
+                      : "bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)]"
                       }`}
                   >
                     {msg.stageId ? (
                       <span
-                        className="block text-[10px] font-medium uppercase tracking-wide text-amber-400/85 mb-1"
+                        className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-[color-mix(in_oklch,var(--primary)_80%,var(--foreground))]"
                       >
                         Etapa: {stageNameForBadge(msg.stageId)}
                       </span>
                     ) : null}
                     {msg.role === "assistant" ? (
-                      <div className="prose prose-invert prose-sm max-w-none prose-table:text-zinc-300 prose-th:border-zinc-600 prose-td:border-zinc-600">
+                      <div className="prose prose-invert prose-sm max-w-none prose-table:text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] prose-th:border-[var(--border)] prose-td:border-[var(--border)]">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
@@ -596,7 +777,7 @@ export default function ChatContainer({
                                 key={j}
                                 src={`data:${im.mimeType};base64,${im.base64}`}
                                 alt=""
-                                className="max-h-36 max-w-[min(100%,280px)] rounded-md border border-amber-500/35 object-contain bg-zinc-900/50"
+                                className="max-h-36 max-w-[min(100%,280px)] rounded-md border border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] object-contain bg-[color-mix(in_oklch,var(--background)_50%,var(--card))]"
                               />
                             ))}
                           </div>
@@ -608,28 +789,31 @@ export default function ChatContainer({
                 </div>
               ))
             ) : loading && !showAgentProgress && !isLegacyLongRun ? (
-              <p className="text-zinc-500 text-sm text-center py-8">
+              <p className="text-[var(--foreground-subtle)] text-sm text-center py-8">
                 Cargando mensaje de bienvenida…
               </p>
             ) : !loading && !showAgentProgress && !isLegacyLongRun ? (
-              <div className="text-center py-8 space-y-3">
-                <p className="text-zinc-500 text-sm">
+              <div className="mx-auto flex max-w-md flex-col items-center gap-3 px-2 py-10 text-center sm:py-12">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--muted)] text-[var(--primary)] ring-1 ring-[color-mix(in_oklch,var(--border)_65%,transparent)]">
+                  <MessageSquare className="h-5 w-5" strokeWidth={2} aria-hidden />
+                </div>
+                <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
                   {activeTab === "benchmark"
-                    ? "Describe tu idea en el cuadro de abajo y envíala; los agentes generarán el Benchmark & Gap Analysis."
+                    ? "Escribe tu idea en la barra inferior y envía. Los agentes generarán el Benchmark & Gap Analysis."
                     : activeTab === "mdd"
-                      ? "Escribe aquí: pide generar el MDD con agentes, que revise el documento, o haz preguntas. El gerente decidirá quién responde."
-                      : `Escribe un mensaje para continuar. La IA adaptará su respuesta al documento activo (${contextLabel}).`}
+                      ? "Usa la barra inferior: pide generar el MDD, revisiones o preguntas. El orquestador asigna el agente adecuado."
+                      : "Escribe en la barra inferior. El contexto es el de la pestaña activa (véase arriba)."}
                 </p>
               </div>
             ) : null}
 
             {isLegacyLongRun ? (
               <div
-                className="rounded-lg border border-amber-500/35 bg-amber-950/25 px-3 py-2.5 space-y-1.5"
+                className="rounded-lg border border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--background))] px-3 py-2.5 space-y-1.5"
                 role="status"
                 aria-live="polite"
               >
-                <p className="text-[10px] font-medium uppercase tracking-wide text-amber-400/85">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-[color-mix(in_oklch,var(--primary)_82%,var(--foreground))]">
                   {loadingReason === "legacy-codebase-doc"
                     ? "MDD inicial (partida)"
                     : loadingReason === "legacy-mdd"
@@ -642,8 +826,8 @@ export default function ChatContainer({
                             ? "BRD / To-Be desde DBGA"
                             : "Entregables legacy"}
                 </p>
-                <div className="flex items-start gap-2 text-sm text-amber-100/90">
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400 shrink-0 mt-0.5" aria-hidden />
+                <div className="flex items-start gap-2 text-sm text-[color-mix(in_oklch,var(--primary)_55%,var(--foreground))]">
+                  <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)] shrink-0 mt-0.5" aria-hidden />
                   <span className="leading-snug">
                     {legacyRotatingSteps[legacyProgressIndex % legacyRotatingSteps.length]}
                   </span>
@@ -652,46 +836,46 @@ export default function ChatContainer({
             ) : null}
 
             {evaluatorCritique ? (
-              <div className="rounded-lg border border-violet-800/50 bg-violet-950/30 px-3 py-2 text-xs text-zinc-200 leading-relaxed">
+              <div className="rounded-lg border border-violet-800/50 bg-violet-950/30 px-3 py-2 text-xs text-[var(--foreground)] leading-relaxed">
                 <div className="flex items-start justify-between gap-2 mb-1">
                   <span className="font-medium text-violet-200">Crítica del evaluador</span>
                   <button
                     type="button"
                     onClick={() => clearEvaluatorCritique()}
-                    className="shrink-0 text-zinc-500 hover:text-zinc-300 p-0.5 rounded"
+                    className="shrink-0 text-[var(--foreground-subtle)] hover:text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] p-0.5 rounded"
                     aria-label="Cerrar crítica"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <p className="whitespace-pre-wrap text-zinc-300">{evaluatorCritique}</p>
+                <p className="whitespace-pre-wrap text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]">{evaluatorCritique}</p>
               </div>
             ) : null}
 
             {showAgentProgress && (
-              <div className="space-y-1.5 pb-2 border-b border-zinc-700/50">
-                <p className="text-xs text-zinc-500 font-medium">
+              <div className="space-y-1.5 pb-2 border-b border-[var(--border)]/50">
+                <p className="text-xs text-[var(--foreground-subtle)] font-medium">
                   {agentProgress.length > 0 ? "Agentes trabajando:" : "Flujo MDD en curso…"}
                 </p>
                 {agentProgress.length > 0 ? (
                   <>
                     {agentProgress.map((p, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-zinc-300">
+                      <div key={i} className="flex items-center gap-2 text-sm text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]">
                         <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span className="font-medium text-zinc-400">{p.agent}</span>
-                        <span className="text-zinc-500">— {p.message}</span>
+                        <span className="font-medium text-[var(--muted-foreground)]">{p.agent}</span>
+                        <span className="text-[var(--foreground-subtle)]">— {p.message}</span>
                       </div>
                     ))}
                     {loading && (
-                      <div className="flex items-center gap-2 text-sm text-zinc-300">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
-                        <span className="font-medium text-amber-400/90">Siguiente paso…</span>
+                      <div className="flex items-center gap-2 text-sm text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
+                        <span className="font-medium text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">Siguiente paso…</span>
                       </div>
                     )}
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 text-sm text-zinc-400">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+                  <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
                     <span>Manager o agentes procesando…</span>
                   </div>
                 )}
@@ -710,19 +894,31 @@ export default function ChatContainer({
 
             {loading && !isLegacyLongRun && (
               <div className="flex justify-start">
-                <div className="rounded-lg px-3 py-2 bg-zinc-800 border border-zinc-600">
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                <div className="rounded-lg px-3 py-2 bg-[var(--card)] border border-[var(--border)]">
+                  <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
                 </div>
               </div>
             )}
             <div ref={chatEndRef} />
           </div>
+          {showScrollBtn ? (
+            <div className="flex justify-center -mt-10 mb-2 pointer-events-none relative z-10">
+              <button
+                type="button"
+                onClick={scrollToBottom}
+                className="pointer-events-auto inline-flex h-9 w-9 items-center justify-center rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] shadow-md hover:text-[var(--foreground)] hover:shadow-lg transition-shadow"
+                aria-label="Ir al final"
+              >
+                <ChevronDown className="h-5 w-5" />
+              </button>
+            </div>
+          ) : null}
           {error && (
-            <p className="px-4 pb-2 text-sm text-red-400">{error}</p>
+            <p className="px-4 pb-2 text-sm text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]">{error}</p>
           )}
           {showSlashCommands && (
-            <div className="px-4 pt-2 border-t border-zinc-700/50 bg-zinc-800/30">
-              <p className="text-xs text-zinc-500 mb-2">Regenerar sección del MDD (solo esta sección se reescribirá):</p>
+            <div className="px-4 pt-2 border-t border-[var(--border)]/50 bg-[var(--card)]/30">
+              <p className="text-xs text-[var(--foreground-subtle)] mb-2">Regenerar sección del MDD (solo esta sección se reescribirá):</p>
               <div className="flex flex-wrap gap-1.5">
                 {filteredSlashCommands.map((cmd) => (
                   <button
@@ -732,7 +928,7 @@ export default function ChatContainer({
                       setInputValue("");
                       sendMessage(`/${cmd.slug}`, { regenerateSection: cmd.section });
                     }}
-                    className="px-2.5 py-1.5 rounded-md text-sm bg-zinc-700 hover:bg-amber-500/20 text-zinc-200 hover:text-amber-200 border border-zinc-600 hover:border-amber-500/40"
+                    className="px-2.5 py-1.5 rounded-md text-sm bg-[var(--muted)] hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--foreground)] hover:text-[color-mix(in_oklch,var(--primary)_72%,var(--foreground))] border border-[var(--border)] hover:border-[color-mix(in_oklch,var(--primary)_40%,var(--border))]"
                   >
                     {cmd.label}
                   </button>
@@ -740,9 +936,9 @@ export default function ChatContainer({
               </div>
             </div>
           )}
-          <div className="p-4 border-t border-zinc-700 flex flex-col gap-2 shrink-0">
+          <div className="p-4 border-t border-[var(--border)] flex flex-col gap-2 shrink-0">
             {showLongPasteMddWarn && (
-              <p className="text-xs text-amber-500/90 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+              <p className="text-xs text-[color-mix(in_oklch,var(--primary)_85%,var(--foreground))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] rounded-lg px-3 py-2">
                 Mensaje muy largo ({inputValue.length} caracteres). Conviene trocear por sección o varios mensajes.
               </p>
             )}
@@ -766,12 +962,12 @@ export default function ChatContainer({
                     <img
                       src={url}
                       alt=""
-                      className="h-16 w-16 object-cover rounded-lg border border-zinc-600"
+                      className="h-16 w-16 object-cover rounded-lg border border-[var(--border)]"
                     />
                     <button
                       type="button"
                       onClick={() => setPendingFiles((p) => p.filter((_, j) => j !== i))}
-                      className="absolute -top-1 -right-1 rounded-full bg-zinc-800 border border-zinc-500 p-0.5 text-zinc-300 hover:text-white"
+                      className="absolute -top-1 -right-1 rounded-full bg-[var(--card)] border border-[var(--border)] p-0.5 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] hover:text-[var(--foreground)]"
                       aria-label="Quitar imagen"
                     >
                       <X className="w-3 h-3" />
@@ -780,16 +976,29 @@ export default function ChatContainer({
                 ))}
               </div>
             ) : null}
-            <div className="flex gap-2 items-end w-full min-w-0">
+            <div className={AI_COMPOSER_SHELL} role="group" aria-label="Mensaje al asistente">
               {!isBenchmarkFirstAction ? (
                 <button
                   type="button"
                   onClick={() => imageInputRef.current?.click()}
                   disabled={loading || pendingFiles.length >= 6}
-                  className="shrink-0 p-2.5 rounded-lg border border-zinc-600 bg-zinc-800/80 text-zinc-300 hover:text-amber-400 hover:border-amber-500/40 disabled:opacity-40"
+                  className={AI_COMPOSER_ATTACH_BTN}
                   title="Adjuntar imagen (máx. 6, PNG/JPEG/WebP/GIF)"
+                  aria-label="Adjuntar imagen"
                 >
-                  <ImagePlus className="w-5 h-5" />
+                  <ImagePlus className="h-[1.125rem] w-[1.125rem] shrink-0" aria-hidden />
+                </button>
+              ) : null}
+              {sttModel ? (
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  disabled={loading}
+                  className={`${AI_COMPOSER_ATTACH_BTN} ${recording ? "text-[var(--destructive)] animate-pulse" : ""}`}
+                  title={recording ? "Detener grabación" : "Grabar voz"}
+                  aria-label={recording ? "Detener grabación" : "Grabar voz"}
+                >
+                  <Mic className={`h-[1.125rem] w-[1.125rem] shrink-0 ${recording ? "text-[var(--destructive)]" : ""}`} aria-hidden />
                 </button>
               ) : null}
               <textarea
@@ -799,42 +1008,33 @@ export default function ChatContainer({
                 onKeyDown={(e) => {
                   if (e.key !== "Enter" || e.shiftKey) return;
                   e.preventDefault();
-                  if (isBenchmarkFirstAction) handleGenerateBenchmark();
+                  if (isBenchmarkFirstAction) void handleGenerateBenchmark();
                   else void handleSend();
                 }}
-                placeholder={
+                placeholder={getChatComposerPlaceholder(isBenchmarkFirstAction, activeTab)}
+                title={
                   isBenchmarkFirstAction
-                    ? "Ej: Quiero un sistema de login con SSO tipo Auth0, 2FA y auditoría de sesiones..."
-                    : activeTab === "mdd"
-                      ? "Escribe aquí o / para ver comandos de regenerar sección..."
-                      : `Tu respuesta (contexto: ${contextLabel})...`
+                    ? "Puedes incluir URLs públicas; se usarán como referencia para el benchmark."
+                    : undefined
                 }
                 rows={1}
-                className="flex-1 min-h-[2.5rem] max-h-[5rem] overflow-y-auto resize-none bg-[var(--input)] border border-[var(--input-border)] rounded-lg px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent outline-none break-words min-w-0"
+                className={AI_COMPOSER_TEXTAREA}
                 spellCheck={false}
                 disabled={loading}
               />
-              {isBenchmarkFirstAction ? (
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleGenerateBenchmark}
-                  disabled={loading || !inputValue.trim()}
-                  loading={loading}
-                  title="Generar Benchmark & Gap Analysis"
-                >
-                  <Send className="w-4 h-4 shrink-0" />
-                </Button>
-              ) : (
-                <Button
-                  size="icon"
-                  onClick={() => void handleSend()}
-                  disabled={loading || (!inputValue.trim() && !pendingFiles.length)}
-                  title="Enviar"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
-              )}
+              <button
+                type="button"
+                className={AI_COMPOSER_SEND_BTN}
+                onClick={() => (isBenchmarkFirstAction ? void handleGenerateBenchmark() : void handleSend())}
+                disabled={
+                  loading ||
+                  (isBenchmarkFirstAction ? !inputValue.trim() : !inputValue.trim() && !pendingFiles.length)
+                }
+                title={isBenchmarkFirstAction ? "Generar Benchmark & Gap Analysis" : "Enviar"}
+                aria-label={isBenchmarkFirstAction ? "Generar Benchmark & Gap Analysis" : "Enviar mensaje"}
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden /> : <Send className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />}
+              </button>
             </div>
           </div>
         </>

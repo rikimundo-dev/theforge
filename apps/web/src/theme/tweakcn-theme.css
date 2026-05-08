@@ -1,0 +1,161 @@
+/**
+ * Theme "Claude +" from tweakcn registry (cmdght103000n04lh3e2ae93r).
+ * Light: :root — Dark: .dark on html (Tailwind class strategy).
+ *
+ * Note: registry ships `--sidebar-border` ≈ white for both modes; in `.dark` we
+ * override sidebar tokens so the rail matches Claude web (warm charcoal, soft edges).
+ * Light: `--sidebar` is toned down vs `--background` so the rail is not stark white.
+ */
+:root {
+  --radius: 1rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --tracking-normal: 0em;
+  --font-sans: "Outfit", system-ui, -apple-system, sans-serif;
+  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: var(--font-serif);
+  --background: oklch(0.9818 0.0054 95.0986);
+  --foreground: oklch(0.3438 0.0269 95.7226);
+  --card: oklch(0.9665 0.0067 97.3521);
+  --card-foreground: oklch(0.1908 0.002 106.5859);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2671 0.0196 98.939);
+  --primary: oklch(0.6171 0.1375 39.0427);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9245 0.0138 92.9892);
+  --secondary-foreground: oklch(0.4334 0.0177 98.6048);
+  --muted: oklch(0.9341 0.0153 90.239);
+  --muted-foreground: oklch(0.5341 0.0078 97.4503);
+  --accent: oklch(0.9245 0.0138 92.9892);
+  --accent-foreground: oklch(0.2671 0.0196 98.939);
+  --destructive: oklch(0.1908 0.002 106.5859);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.8847 0.0069 97.3627);
+  --input: oklch(0.7621 0.0156 98.3528);
+  --ring: oklch(0.6171 0.1375 39.0427);
+  --chart-1: oklch(0.5583 0.1276 42.9956);
+  --chart-2: oklch(0.6898 0.1581 290.4107);
+  --chart-3: oklch(0.8816 0.0276 93.128);
+  --chart-4: oklch(0.8822 0.0403 298.1792);
+  --chart-5: oklch(0.5608 0.1348 42.0584);
+  /* Rail ~one step darker than `--card` / `--muted` vs bright `--background` (~0.982 L) */
+  --sidebar: oklch(0.928 0.013 94.2);
+  --sidebar-foreground: oklch(0.338 0.022 96);
+  --sidebar-primary: oklch(0.6171 0.1375 39.0427);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.908 0.016 93.5);
+  --sidebar-accent-foreground: oklch(0.302 0.018 98);
+  --sidebar-border: oklch(0.878 0.009 97);
+  --sidebar-ring: oklch(0.6171 0.1375 39.0427);
+  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-gold: 0 0 24px color-mix(in oklch, var(--primary) 22%, transparent);
+  --foreground-muted: var(--muted-foreground);
+  --foreground-subtle: color-mix(in oklch, var(--muted-foreground) 72%, var(--background));
+  --background-secondary: var(--sidebar);
+  --background-tertiary: var(--muted);
+  --card-border: var(--border);
+  --input-border: var(--border);
+  --primary-hover: color-mix(in oklch, var(--primary) 88%, black);
+  --accent-muted: color-mix(in oklch, var(--primary) 45%, var(--muted));
+  --ring-offset: var(--background);
+  --success: oklch(0.55 0.14 145);
+  --success-foreground: oklch(0.99 0 0);
+  --warning: oklch(0.75 0.14 85);
+  --warning-foreground: oklch(0.25 0.02 85);
+  --info: oklch(0.55 0.12 250);
+  --info-foreground: oklch(0.99 0 0);
+  --border-hover: color-mix(in oklch, var(--border) 85%, var(--foreground));
+  --input-focus: var(--ring);
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+}
+
+.dark {
+  --background: oklch(0.2679 0.0036 106.6427);
+  --foreground: oklch(0.9576 0.0027 106.4494);
+  --card: oklch(0.2928 0.0018 106.5092);
+  --card-foreground: oklch(0.9818 0.0054 95.0986);
+  --popover: oklch(0.3085 0.0035 106.6039);
+  --popover-foreground: oklch(0.9211 0.004 106.4781);
+  --primary: oklch(0.6724 0.1308 38.7559);
+  --primary-foreground: oklch(0.1908 0.002 106.5859);
+  --secondary: oklch(0.9818 0.0054 95.0986);
+  --secondary-foreground: oklch(0.3085 0.0035 106.6039);
+  --muted: oklch(0.2213 0.0038 106.707);
+  --muted-foreground: oklch(0.7713 0.0169 99.0657);
+  --accent: oklch(0.213 0.0078 95.4245);
+  --accent-foreground: oklch(0.9663 0.008 98.8792);
+  --destructive: oklch(0.6368 0.2078 25.3313);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.3618 0.0101 106.8928);
+  --input: oklch(0.4336 0.0113 100.2195);
+  --ring: oklch(0.6724 0.1308 38.7559);
+  --chart-1: oklch(0.5583 0.1276 42.9956);
+  --chart-2: oklch(0.6898 0.1581 290.4107);
+  --chart-3: oklch(0.213 0.0078 95.4245);
+  --chart-4: oklch(0.3074 0.0516 289.323);
+  --chart-5: oklch(0.5608 0.1348 42.0584);
+  /* Sidebar: warm charcoal like Claude web — not the registry’s near-white border on dark */
+  --sidebar: oklch(0.216 0.0045 95.5);
+  --sidebar-foreground: oklch(0.9 0.011 93);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: oklch(0.268 0.005 96);
+  --sidebar-accent-foreground: oklch(0.88 0.012 93);
+  --sidebar-border: oklch(0.33 0.0065 96);
+  --sidebar-ring: var(--ring);
+  --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
+  --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);
+  --shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 4px 6px -1px hsl(0 0% 0% / 0.1);
+  --shadow-gold: 0 0 28px color-mix(in oklch, var(--primary) 28%, transparent);
+  --foreground-muted: var(--muted-foreground);
+  --foreground-subtle: color-mix(in oklch, var(--muted-foreground) 65%, var(--background));
+  --background-secondary: var(--sidebar);
+  --background-tertiary: var(--muted);
+  --card-border: var(--border);
+  --input-border: var(--border);
+  --primary-hover: color-mix(in oklch, var(--primary) 90%, white);
+  --accent-muted: color-mix(in oklch, var(--primary) 40%, var(--muted));
+  --ring-offset: var(--background);
+  --success: oklch(0.65 0.16 145);
+  --success-foreground: oklch(0.15 0.02 145);
+  --warning: oklch(0.78 0.12 85);
+  --warning-foreground: oklch(0.2 0.03 85);
+  --info: oklch(0.65 0.12 250);
+  --info-foreground: oklch(0.99 0 0);
+  --border-hover: color-mix(in oklch, var(--border) 80%, var(--foreground));
+  --input-focus: var(--ring);
+}
+
+/**
+ * Workshop (project view): uses the same tokens as the shell; avoid raw zinc/amber
+ * in TSX so light/dark and tweakcn “Claude+” stay aligned.
+ */
+html.dark .workshop-root {
+  color-scheme: dark;
+}
+
+html:not(.dark) .workshop-root {
+  color-scheme: light;
+}
+
+@layer base {
+  body {
+    letter-spacing: var(--tracking-normal);
+  }
+}

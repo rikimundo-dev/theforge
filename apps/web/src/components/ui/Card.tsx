@@ -27,7 +27,7 @@ const Card = forwardRef<
     };
 
     const hoverStyles = hoverable
-      ? "hover:border-[var(--accent)] hover:shadow-[var(--shadow-gold)] cursor-pointer"
+      ? "hover:border-[var(--primary)]/50 hover:shadow-[var(--shadow-gold)] cursor-pointer"
       : "";
 
     return (

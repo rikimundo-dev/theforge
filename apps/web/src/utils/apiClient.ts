@@ -5,6 +5,8 @@ export interface TheForgeUser {
   id: string;
   email: string;
   role: "admin" | "developer";
+  /** Display name from profile / JWT; may be empty until backend provides it */
+  name?: string | null;
 }
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
@@ -27,10 +29,16 @@ export function setAccessToken(token: string): void {
   // Extraer user info del JWT
   const payload = decodeJwt(token);
   if (payload) {
+    const rawName = payload.name;
+    const name =
+      typeof rawName === "string" && rawName.trim() !== ""
+        ? rawName.trim()
+        : null;
     const user: TheForgeUser = {
       id: (payload.sub as string) || "",
       email: (payload.email as string) || "",
       role: (payload.role as "admin" | "developer") || "developer",
+      name,
     };
     localStorage.setItem(USER_KEY, JSON.stringify(user));
   }

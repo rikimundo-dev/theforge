@@ -5,20 +5,16 @@
  * @copyright 2026 Jorge Correa
  * @license Apache-2.0
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useWorkshopStore } from "./store/workshopStore";
 import {
-  ChevronRight,
-  Flame,
+  AlertTriangle,
   FolderGit2,
   FolderOpen,
-  FolderPlus,
   GitBranch,
   Loader2,
-  LogOut,
   Plus,
   RefreshCw,
-  Settings,
-  Shield,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -26,11 +22,13 @@ import WorkshopView from "./views/WorkshopView";
 import LoginView from "./views/LoginView";
 import SetupView from "./views/SetupView";
 import UsersView from "./views/UsersView";
+import { CreateProjectWizardDialog } from "./components/CreateProjectWizardDialog";
+import { ProjectFolderTile } from "./components/ProjectFolderTile";
+import { DashboardSidebar } from "./components/DashboardSidebar";
 import { McpSecretCard } from "./components/McpSecretCard";
 import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser } from "./utils/apiClient";
 import {
   Button,
-  Input,
   Card,
   CardHeader,
   CardContent,
@@ -85,19 +83,24 @@ interface TheForgeRepository {
   branch?: string;
 }
 
-const statusDotColor: Record<Status, string> = {
-  ROJO: "bg-[var(--destructive)]",
-  AMARILLO: "bg-[var(--warning)]",
-  VERDE: "bg-[var(--success)]",
-};
+const SIDEBAR_COLLAPSED_KEY = "theforge-sidebar-collapsed";
+
+function readSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export default function App() {
   const [authed, setAuthed] = useState(() => !!getAccessToken());
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
-  const [newName, setNewName] = useState("");
   const [workshopProject, setWorkshopProject] = useState<Project | null>(null);
-  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [bulkDeleteTargets, setBulkDeleteTargets] = useState<Project[] | null>(null);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [showCreateWizard, setShowCreateWizard] = useState(false);
   const [showTheForgeModal, setShowTheForgeModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [usersViewOpen, setUsersViewOpen] = useState(false);
@@ -107,8 +110,21 @@ export default function App() {
   const [theforgeAvailable, setTheForgeAvailable] = useState(false);
   const [theforgeLoading, setTheForgeLoading] = useState(false);
   const [projectTypeFilter, setProjectTypeFilter] = useState<"all" | "NEW" | "LEGACY">("all");
+  const [projectSearchQuery, setProjectSearchQuery] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
+
+  const handleToggleSidebarCollapsed = useCallback(() => {
+    setSidebarCollapsed((c) => {
+      const next = !c;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
   const [transitioning, setTransitioning] = useState(false);
-  const newProjectInputRef = useRef<HTMLInputElement>(null);
 
   const theforgeRepositories = useMemo((): TheForgeRepository[] => {
     const byId = new Map<string, TheForgeRepository>();
@@ -125,40 +141,61 @@ export default function App() {
     return Array.from(byId.values());
   }, [theforgeProjects]);
 
-  const filteredProjects = useMemo(
-    () => (projectTypeFilter === "all" ? projects : projects.filter((p) => (p.projectType ?? "NEW") === projectTypeFilter)),
-    [projects, projectTypeFilter],
+  const projectList = useMemo(
+    () => (Array.isArray(projects) ? projects : []),
+    [projects],
   );
 
-  async function loadProjects() {
+  const filteredProjects = useMemo(
+    () =>
+      projectTypeFilter === "all"
+        ? projectList
+        : projectList.filter((p) => (p.projectType ?? "NEW") === projectTypeFilter),
+    [projectList, projectTypeFilter],
+  );
+
+  const displayedProjects = useMemo(() => {
+    const q = projectSearchQuery.trim().toLowerCase();
+    if (!q) return filteredProjects;
+    return filteredProjects.filter((p) => p.name.toLowerCase().includes(q));
+  }, [filteredProjects, projectSearchQuery]);
+
+  const loadProjects = useCallback(async () => {
     setLoading(true);
     try {
       const r = await apiFetch(`${API_BASE}/projects`);
-      const data = await r.json();
-      setProjects(data);
+      const data: unknown = await r.json();
+      if (!r.ok || !Array.isArray(data)) {
+        setProjects([]);
+        return;
+      }
+      setProjects(data as Project[]);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function createProject() {
-    if (!newName.trim()) return;
-    setLoading(true);
-    try {
-      const r = await apiFetch(`${API_BASE}/projects`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), hasUxTeam: false, projectType: "NEW" }),
-      });
-      if (!r.ok) throw new Error("Error al crear proyecto");
-      const created = (await r.json()) as Project;
-      setNewName("");
-      await loadProjects();
-      setWorkshopProject(created);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const createProject = useCallback(
+    async (name: string) => {
+      const trimmed = name.trim();
+      if (!trimmed) throw new Error("Nombre vacío");
+      setLoading(true);
+      try {
+        const r = await apiFetch(`${API_BASE}/projects`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: trimmed, hasUxTeam: false, projectType: "NEW" }),
+        });
+        if (!r.ok) throw new Error("Error al crear proyecto");
+        const created = (await r.json()) as Project;
+        await loadProjects();
+        setWorkshopProject(created);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loadProjects],
+  );
 
   async function loadTheForgeProjects() {
     setTheForgeLoading(true);
@@ -201,29 +238,49 @@ export default function App() {
     }
   }
 
-  function openDeleteConfirm(p: Project, e: React.MouseEvent) {
-    e.stopPropagation();
-    setProjectToDelete(p);
-  }
+  const handleToggleProjectSelect = useCallback((projectId: string) => {
+    setSelectedProjectIds((prev) =>
+      prev.includes(projectId) ? prev.filter((id) => id !== projectId) : [...prev, projectId],
+    );
+  }, []);
 
-  async function confirmDelete() {
-    if (!projectToDelete) return;
+  const handleClearProjectSelection = useCallback(() => {
+    setSelectedProjectIds([]);
+  }, []);
+
+  const openBulkDeleteConfirm = useCallback(() => {
+    const targets = displayedProjects.filter((p) => selectedProjectIds.includes(p.id));
+    if (targets.length === 0) return;
+    setBulkDeleteTargets(targets);
+  }, [displayedProjects, selectedProjectIds]);
+
+  const confirmBulkDelete = useCallback(async () => {
+    if (!bulkDeleteTargets?.length) return;
     setLoading(true);
     try {
-      const r = await apiFetch(`${API_BASE}/projects/${projectToDelete.id}`, {
-        method: "DELETE",
-      });
-      if (!r.ok) throw new Error("Error al borrar");
-      setProjectToDelete(null);
+      for (const p of bulkDeleteTargets) {
+        const r = await apiFetch(`${API_BASE}/projects/${p.id}`, {
+          method: "DELETE",
+        });
+        if (!r.ok) throw new Error("Error al borrar");
+      }
+      setBulkDeleteTargets(null);
+      setSelectedProjectIds([]);
       await loadProjects();
     } finally {
       setLoading(false);
     }
-  }
+  }, [bulkDeleteTargets, loadProjects]);
 
   useEffect(() => {
-    if (!workshopProject) loadProjects();
-  }, [workshopProject]);
+    const allowed = new Set(displayedProjects.map((p) => p.id));
+    setSelectedProjectIds((prev) => prev.filter((id) => allowed.has(id)));
+  }, [displayedProjects]);
+
+  useEffect(() => {
+    if (!authed || workshopProject) return;
+    void loadProjects();
+  }, [authed, workshopProject, loadProjects]);
 
   // Check if first-run setup is needed (no users exist)
   useEffect(() => {
@@ -282,38 +339,61 @@ export default function App() {
     setAuthed(false);
     setWorkshopProject(null);
     setUsersViewOpen(false);
+    setProjects([]);
+    setProjectSearchQuery("");
   }
 
-  if (workshopProject) {
-    return (
-      <WorkshopView
-        projectId={workshopProject.id}
-        projectName={workshopProject.name}
-        onBack={() => setWorkshopProject(null)}
-      />
-    );
-  }
+  const isAdmin = getStoredUser()?.role === "admin";
+
+  const handleExitWorkshop = useCallback(() => {
+    useWorkshopStore.getState().setWorkshopActiveDocPanel("mdd");
+    setWorkshopProject(null);
+  }, []);
 
   if (usersViewOpen && getStoredUser()?.role === "admin") {
     return <UsersView onBack={() => setUsersViewOpen(false)} />;
   }
 
   return (
-    <div className="min-h-[100dvh] bg-[var(--background)] text-[var(--foreground)] px-4 py-6 sm:p-6 lg:p-8 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+    <>
+      <CreateProjectWizardDialog
+        open={showCreateWizard}
+        onOpenChange={setShowCreateWizard}
+        loading={loading}
+        onCreateNew={createProject}
+        onContinueLegacy={openTheForgeModal}
+      />
+
+      <AlertDialog open={!!bulkDeleteTargets?.length} onOpenChange={(open) => !open && !loading && setBulkDeleteTargets(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Borrar proyecto</AlertDialogTitle>
+            <AlertDialogTitle>
+              {bulkDeleteTargets && bulkDeleteTargets.length > 1 ? "Borrar proyectos" : "Borrar proyecto"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Borrar &quot;{projectToDelete?.name}&quot;? Se eliminarán sesiones y estimaciones. Esta acción no se puede deshacer.
+              Se eliminarán sesiones y estimaciones. Esta acción no se puede deshacer.
             </AlertDialogDescription>
+            {bulkDeleteTargets && bulkDeleteTargets.length > 0 ? (
+              <ul className="max-h-40 list-inside list-disc overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--muted)]/30 py-2 pl-4 pr-2 text-sm text-[var(--foreground)]">
+                {bulkDeleteTargets.slice(0, 12).map((p) => (
+                  <li key={p.id} className="truncate">
+                    {p.name}
+                  </li>
+                ))}
+                {bulkDeleteTargets.length > 12 ? (
+                  <li className="list-none text-[var(--foreground-muted)]">
+                    …y {bulkDeleteTargets.length - 12} más
+                  </li>
+                ) : null}
+              </ul>
+            ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setProjectToDelete(null)}>
+            <AlertDialogCancel onClick={() => setBulkDeleteTargets(null)} disabled={loading}>
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} disabled={loading}>
-              {loading ? "Borrando…" : "Borrar"}
+            <AlertDialogAction onClick={() => void confirmBulkDelete()} disabled={loading}>
+              {loading ? "Borrando…" : bulkDeleteTargets && bulkDeleteTargets.length > 1 ? `Borrar (${bulkDeleteTargets.length})` : "Borrar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -339,9 +419,33 @@ export default function App() {
             </DialogDescription>
           </DialogHeader>
           {!theforgeAvailable && !theforgeLoading && (
-            <p className="text-sm text-[var(--foreground-muted)]">
-              TheForge no está configurado o no está disponible. Configura THEFORGE_MCP_URL y MCP_AUTH_TOKEN en el backend.
-            </p>
+            <div
+              role="alert"
+              className="rounded-[var(--radius-md)] border border-[color-mix(in_oklch,var(--destructive)_42%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_14%,var(--card))] p-4 shadow-sm"
+            >
+              <div className="flex gap-3">
+                <AlertTriangle
+                  className="mt-0.5 h-5 w-5 shrink-0 text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
+                  aria-hidden
+                />
+                <div className="min-w-0 space-y-3 text-sm">
+                  <p className="font-semibold leading-snug text-[var(--foreground)]">
+                    TheForge no está configurado o no está disponible.
+                  </p>
+                  <p className="leading-relaxed text-[var(--foreground-muted)]">
+                    Configura estas variables en el backend:
+                  </p>
+                  <ul className="flex flex-col gap-2 font-mono text-xs text-[var(--foreground)]">
+                    <li className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_55%,var(--card))] px-3 py-2">
+                      THEFORGE_MCP_URL
+                    </li>
+                    <li className="rounded-[var(--radius-sm)] border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_55%,var(--card))] px-3 py-2">
+                      MCP_AUTH_TOKEN
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
           )}
           {theforgeLoading && (
             <div className="flex items-center gap-2 text-[var(--foreground-muted)] py-6">
@@ -382,7 +486,7 @@ export default function App() {
                             disabled={loading}
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <FolderGit2 className="w-4 h-4 shrink-0 text-[var(--accent)]" />
+                              <FolderGit2 className="w-4 h-4 shrink-0 text-[var(--primary)]" />
                               <span className="font-medium truncate">{rp.name}</span>
                               {rp.roots?.length != null && rp.roots.length > 0 && (
                                 <Badge variant="secondary" className="shrink-0 text-xs">
@@ -420,7 +524,7 @@ export default function App() {
                             disabled={loading}
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <GitBranch className="w-4 h-4 shrink-0 text-[var(--accent)]" />
+                              <GitBranch className="w-4 h-4 shrink-0 text-[var(--primary)]" />
                               <span className="font-medium truncate">{repo.name}</span>
                               {repo.branch != null && repo.branch !== "" && (
                                 <Badge variant="outline" className="shrink-0 text-xs">
@@ -441,189 +545,224 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
-      <div className="max-w-4xl mx-auto space-y-6">
-        <header className="border-b border-[var(--border)] pb-4 sm:pb-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-start sm:justify-between gap-3 sm:gap-4">
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--primary)] flex items-center gap-2">
-              <Flame className="w-8 h-8" />
-              TheForge
-            </h1>
-            <p className="text-[var(--foreground-muted)] mt-1 text-sm sm:text-base">
-              Software Factory — Entrevista proactiva → MDD → Semáforo → Estimación
+      {workshopProject ? (
+        <div className="flex w-full min-h-[100dvh] flex-col overflow-y-auto bg-[var(--background)] text-[var(--foreground)] sm:h-[100dvh] sm:max-h-[100dvh] sm:min-h-0 sm:flex-row sm:overflow-hidden">
+          <DashboardSidebar
+            projectSearchQuery={projectSearchQuery}
+            onProjectSearchChange={setProjectSearchQuery}
+            user={getStoredUser()}
+            onLogout={logout}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenUsers={() => setUsersViewOpen(true)}
+            canManageUsers={isAdmin}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={handleToggleSidebarCollapsed}
+            workshopProject={{ id: workshopProject.id, name: workshopProject.name }}
+            onExitWorkshop={handleExitWorkshop}
+          />
+          <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-visible sm:overflow-hidden">
+            <WorkshopView
+              projectId={workshopProject.id}
+              projectName={workshopProject.name}
+              onBack={handleExitWorkshop}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 w-full flex-col overflow-y-auto bg-[var(--background)] text-[var(--foreground)] sm:flex-row sm:overflow-hidden">
+          <DashboardSidebar
+            projectSearchQuery={projectSearchQuery}
+            onProjectSearchChange={setProjectSearchQuery}
+            user={getStoredUser()}
+            onLogout={logout}
+            onOpenSettings={() => setShowSettings(true)}
+            onOpenUsers={() => setUsersViewOpen(true)}
+            canManageUsers={isAdmin}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={handleToggleSidebarCollapsed}
+          />
+
+          <main className="min-h-0 flex-1 overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <div className="mx-auto w-full max-w-[min(100%,88rem)] space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
+        <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between sm:pb-5">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--foreground-subtle)]">
+              Panel
+            </p>
+            <p className="mt-1 text-sm text-[var(--foreground-muted)] sm:text-base">
+              Entrevista proactiva → MDD → Semáforo → Estimación
             </p>
           </div>
-        {getStoredUser()?.role === "admin" && (
-        <Button variant="outline" size="sm" onClick={() => setUsersViewOpen(true)} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
-          <Shield className="w-4 h-4" />
-          Usuarios
-        </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={() => setShowSettings(true)} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
-          <Settings className="w-4 h-4" />
-          Ajustes
-        </Button>
-        <Button variant="outline" size="sm" onClick={logout} className="shrink-0 self-start sm:self-auto touch-manipulation min-h-[44px] sm:min-h-9 gap-2">
-          <LogOut className="w-4 h-4" />
-          Salir
-        </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <Button
+              type="button"
+              className="w-full touch-manipulation min-h-11 sm:w-auto sm:min-h-10"
+              onClick={() => setShowCreateWizard(true)}
+              disabled={loading}
+            >
+              <Plus className="h-4 w-4 shrink-0" aria-hidden />
+              Crear nuevo proyecto
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full touch-manipulation min-h-11 sm:w-auto sm:min-h-10"
+              onClick={() => void loadProjects()}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
+              Refrescar
+            </Button>
+          </div>
         </header>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FolderPlus className="w-5 h-5 text-[var(--primary)]" />
-              Nuevo proyecto
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-              <div className="w-full sm:w-auto sm:min-w-[12rem] sm:max-w-md">
-                <label className="block text-sm text-[var(--foreground-muted)] mb-1 sr-only">
-                  Nombre del proyecto
-                </label>
-                <Input
-                  ref={newProjectInputRef}
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && createProject()}
-                  placeholder="Nombre del proyecto"
-                  className="w-full min-h-[44px] sm:min-h-10"
-                />
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap w-full sm:w-auto">
-                <Button className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10" onClick={createProject} disabled={loading || !newName.trim()}>
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  <span className="hidden sm:inline">Crear (proyecto nuevo)</span>
-                  <span className="sm:hidden">Crear nuevo</span>
-                </Button>
-                <Button variant="secondary" className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10 text-left sm:text-center whitespace-normal h-auto py-2.5 sm:py-2" onClick={() => openTheForgeModal("projects")} disabled={loading}>
-                  <span className="sm:hidden">TheForge · proyecto</span>
-                  <span className="hidden sm:inline">Proyecto existente (TheForge)</span>
-                </Button>
-                <Button variant="secondary" className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10 text-left sm:text-center whitespace-normal h-auto py-2.5 sm:py-2" onClick={() => openTheForgeModal("repos")} disabled={loading}>
-                  <span className="sm:hidden">TheForge · repo</span>
-                  <span className="hidden sm:inline">Repositorio existente (TheForge)</span>
-                </Button>
-                <Button variant="outline" className="w-full sm:w-auto touch-manipulation min-h-[44px] sm:min-h-10" onClick={loadProjects} disabled={loading}>
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                  Refrescar
-                </Button>
-              </div>
+        <Card id="dashboard-projects">
+          <CardHeader className="space-y-4 sm:flex sm:flex-row sm:items-start sm:justify-between sm:space-y-0 sm:gap-4">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <FolderOpen className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden />
+                Proyectos
+              </CardTitle>
+              <p className="mt-1.5 text-sm text-[var(--foreground-muted)]">
+                Carpetas estilo Drive: pulsa una carpeta para abrir el taller. Si eres administrador, marca las casillas y usa la barra inferior para borrar en lote.
+              </p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FolderOpen className="w-5 h-5 text-[var(--primary)]" />
-              Proyectos
-            </CardTitle>
-            <div className="flex gap-2 mt-2">
+            <div
+              className="flex flex-wrap gap-2"
+              role="tablist"
+              aria-label="Filtrar proyectos por tipo"
+            >
               <button
+                type="button"
+                role="tab"
+                aria-selected={projectTypeFilter === "all"}
                 onClick={() => setProjectTypeFilter("all")}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                className={`touch-manipulation rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
                   projectTypeFilter === "all"
-                    ? "bg-[var(--accent)]/20 border-[var(--accent)] text-[var(--accent)]"
-                    : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--accent)]/10"
+                    ? "border-[var(--primary)] bg-[var(--primary)]/18 text-[var(--primary)]"
+                    : "border-[var(--border)] bg-transparent text-[var(--foreground-muted)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
-                Todos ({projects.length})
+                Todos ({projectList.length})
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={projectTypeFilter === "NEW"}
                 onClick={() => setProjectTypeFilter("NEW")}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                className={`touch-manipulation rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
                   projectTypeFilter === "NEW"
-                    ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
-                    : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-emerald-500/10"
+                    ? "border-emerald-500 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                    : "border-[var(--border)] bg-transparent text-[var(--foreground-muted)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
-                <Sparkles className="w-3 h-3 inline mr-1" />
-                Nuevos ({projects.filter((p) => (p.projectType ?? "NEW") === "NEW").length})
+                <Sparkles className="mr-1 inline h-3 w-3 align-text-bottom" aria-hidden />
+                Nuevos ({projectList.filter((q) => (q.projectType ?? "NEW") === "NEW").length})
               </button>
               <button
+                type="button"
+                role="tab"
+                aria-selected={projectTypeFilter === "LEGACY"}
                 onClick={() => setProjectTypeFilter("LEGACY")}
-                className={`px-3 py-1 text-xs rounded-full border transition-colors ${
+                className={`touch-manipulation rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
                   projectTypeFilter === "LEGACY"
-                    ? "bg-amber-500/20 border-amber-500 text-amber-400"
-                    : "border-[var(--border)] text-[var(--foreground-muted)] hover:bg-amber-500/10"
+                    ? "border-amber-500 bg-amber-500/20 text-amber-800 dark:text-amber-300"
+                    : "border-[var(--border)] bg-transparent text-[var(--foreground-muted)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
-                <GitBranch className="w-3 h-3 inline mr-1" />
-                Legacy ({projects.filter((p) => p.projectType === "LEGACY").length})
+                <GitBranch className="mr-1 inline h-3 w-3 align-text-bottom" aria-hidden />
+                Legacy ({projectList.filter((q) => q.projectType === "LEGACY").length})
               </button>
             </div>
           </CardHeader>
           <CardContent>
-            {filteredProjects.length === 0 && !loading && (
+            {displayedProjects.length === 0 && !loading && (
               <EmptyState
-                title={projects.length === 0 ? "Aún no hay proyectos" : "No hay proyectos de este tipo"}
-                description={projects.length === 0 ? "Crea uno arriba o usa Refrescar si ya existen en el backend." : "Cambia el filtro o crea un proyecto nuevo."}
+                title={
+                  projectList.length === 0
+                    ? "Aún no hay proyectos"
+                    : projectSearchQuery.trim()
+                      ? "Sin coincidencias"
+                      : "No hay proyectos de este tipo"
+                }
+                description={
+                  projectList.length === 0
+                    ? "Usa «Crear nuevo proyecto» para el asistente, o Refrescar si el backend ya tiene datos."
+                    : projectSearchQuery.trim()
+                      ? "Prueba otras palabras o borra el buscador del panel lateral."
+                      : "Cambia el filtro o crea un proyecto nuevo desde el encabezado."
+                }
                 icon={FolderGit2}
-                action={projects.length === 0 ? {
+                action={projectList.length === 0 ? {
                   label: "Crear primer proyecto",
                   icon: <Plus className="w-4 h-4" />,
-                  onClick: () => newProjectInputRef.current?.focus(),
+                  onClick: () => setShowCreateWizard(true),
                 } : undefined}
               />
             )}
-            {filteredProjects.length > 0 && (
-              <ul className="space-y-3">
-                {filteredProjects.map((p) => (
-                  <li key={p.id}>
-                    <Card
-                      variant="bordered"
-                      hoverable
-                      className="cursor-pointer"
-                      onClick={() => setWorkshopProject(p)}
-                    >
-                      <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4 py-3 px-4">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <span className={`w-3 h-3 rounded-full shrink-0 ${statusDotColor[p.status]}`} title={p.status} />
-                          <span className="font-medium min-w-0 flex-1">{p.name}</span>
-                          <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full shrink-0 ${
-                            (p.projectType ?? "NEW") === "NEW"
-                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                              : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-                          }`}>
-                            {(p.projectType ?? "NEW") === "NEW" ? (
-                              <><Sparkles className="w-2.5 h-2.5" /> Nuevo</>
-                            ) : (
-                              <><GitBranch className="w-2.5 h-2.5" /> Legacy</>
-                            )}
-                          </span>
-                          <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0 sm:hidden" aria-hidden />
-                        </div>
-                        <div className="flex items-center justify-between gap-3 sm:justify-end sm:shrink-0 flex-wrap sm:flex-nowrap">
-                          <span className="text-sm text-[var(--foreground-muted)]">
-                            Precisión {p.precisionScore}%
-                          </span>
-                          <span className="text-sm text-[var(--foreground-muted)]">
-                            {new Date(p.createdAt).toLocaleDateString("es-MX")}
-                          </span>
-                          {getStoredUser()?.role === "admin" && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(e) => openDeleteConfirm(p, e)}
-                            disabled={loading}
-                            className="shrink-0 touch-manipulation min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-9 text-[var(--foreground-muted)] hover:text-[var(--destructive)] hover:bg-[var(--destructive)]/10"
-                            title="Borrar proyecto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                          )}
-                          <ChevronRight className="w-5 h-5 text-[var(--foreground-muted)] shrink-0 hidden sm:block" aria-hidden />
-                        </div>
-                      </CardContent>
-                    </Card>
+            {displayedProjects.length > 0 && (
+              <ul
+                className="grid list-none gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+                aria-label="Carpetas de proyectos"
+              >
+                {displayedProjects.map((p) => (
+                  <li key={p.id} className="min-h-0">
+                    <ProjectFolderTile
+                      id={p.id}
+                      name={p.name}
+                      status={p.status}
+                      precisionScore={p.precisionScore}
+                      projectType={p.projectType}
+                      selected={selectedProjectIds.includes(p.id)}
+                      selectable={isAdmin}
+                      onOpen={() => setWorkshopProject(p)}
+                      onToggleSelect={() => handleToggleProjectSelect(p.id)}
+                    />
                   </li>
                 ))}
               </ul>
             )}
           </CardContent>
         </Card>
-      </div>
-    </div>
+
+        {isAdmin && selectedProjectIds.length > 0 ? (
+          <div
+            className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2"
+            role="presentation"
+          >
+            <div
+              role="toolbar"
+              aria-label="Acciones para carpetas seleccionadas"
+              className="pointer-events-auto flex max-w-lg flex-col gap-3 rounded-2xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_92%,black)] px-4 py-3 shadow-2xl backdrop-blur-md sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+            >
+              <p className="text-center text-sm font-medium text-[var(--foreground)] sm:text-left">
+                <span className="tabular-nums text-[var(--primary)]">{selectedProjectIds.length}</span>
+                {" "}
+                {selectedProjectIds.length === 1 ? "carpeta seleccionada" : "carpetas seleccionadas"}
+              </p>
+              <div className="flex flex-1 flex-wrap items-center justify-center gap-2 sm:justify-end">
+                <Button type="button" variant="outline" size="sm" onClick={handleClearProjectSelection} disabled={loading}>
+                  Quitar selección
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={openBulkDeleteConfirm}
+                  disabled={loading}
+                  className="touch-manipulation"
+                >
+                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Borrar
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        </div>
+      </main>
+        </div>
+      )}
+    </>
   );
 }

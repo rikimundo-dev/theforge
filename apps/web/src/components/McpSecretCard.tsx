@@ -93,7 +93,7 @@ export function McpSecretCard() {
         <div className="space-y-4">
           {/* Mensajes */}
           {message && (
-            <div className="rounded-lg border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-3 text-sm text-[var(--accent)]">
+            <div className="rounded-lg border border-[var(--primary)]/25 bg-[var(--primary)]/10 px-4 py-3 text-sm text-[var(--foreground)]">
               {message}
             </div>
           )}
