@@ -45,7 +45,14 @@ import { BrdTobeStagePanel } from "../components/BrdTobeStagePanel";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
 import type { LucideIcon } from "lucide-react";
-import { Button } from "../components/ui";
+import {
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui";
+import { WorkshopFlowOrderModal } from "../components/WorkshopFlowOrderModal";
 import {
   LEGACY_CODEBASE_DOC_STEPS,
   LEGACY_DELIVERABLES_STEPS,
@@ -63,20 +70,68 @@ const WORKSHOP_HEADER_CTL_HOVER =
 const WORKSHOP_HEADER_SECONDARY =
   "inline-flex h-11 min-h-[44px] sm:h-9 sm:min-h-0 items-center justify-center gap-1.5 rounded-lg px-2 sm:px-2.5 text-sm font-normal text-[var(--muted-foreground)] transition-[background-color,color] hover:bg-[color-mix(in_oklch,var(--muted)_55%,transparent)] hover:text-[var(--foreground)] touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-0";
 
-const WORKSHOP_DOC_TOOLBAR_LINK =
-  "min-h-[44px] sm:min-h-9 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--muted)_52%,var(--card))] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]";
-
 const WORKSHOP_MDD_ACTION_PRIMARY =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:cursor-not-allowed disabled:opacity-50";
 
 type WorkshopComplexityTier = "LOW" | "MEDIUM" | "HIGH";
 
+type WorkshopDocToolbarViewModes = {
+  mddViewMode: "preview" | "source";
+  mddInicialViewMode: "preview" | "source";
+  specViewMode: "preview" | "source";
+  architectureViewMode: "preview" | "source";
+  useCasesViewMode: "preview" | "source";
+  userStoriesViewMode: "preview" | "source";
+  uxUiGuideViewMode: "design" | "preview" | "source";
+  aemViewMode: "preview" | "source";
+  blueprintViewMode: "preview" | "source";
+  apiContractsViewMode: "preview" | "source";
+  logicFlowsViewMode: "preview" | "source";
+  brdDocViewMode: "preview" | "source";
+  toBeDocViewMode: "preview" | "source";
+  infraViewMode: "preview" | "source";
+};
+
+function getWorkshopDocToolbarActiveViewMode(
+  centralPanel: string,
+  modes: WorkshopDocToolbarViewModes,
+): string {
+  if (centralPanel === "mdd") return modes.mddViewMode;
+  if (centralPanel === "mdd-inicial") return modes.mddInicialViewMode;
+  if (centralPanel === "spec") return modes.specViewMode;
+  if (centralPanel === "architecture") return modes.architectureViewMode;
+  if (centralPanel === "use-cases") return modes.useCasesViewMode;
+  if (centralPanel === "user-stories") return modes.userStoriesViewMode;
+  if (centralPanel === "ux-ui-guide") return modes.uxUiGuideViewMode;
+  if (centralPanel === "aem") return modes.aemViewMode;
+  if (centralPanel === "blueprint") return modes.blueprintViewMode;
+  if (centralPanel === "api-contracts") return modes.apiContractsViewMode;
+  if (centralPanel === "logic-flows") return modes.logicFlowsViewMode;
+  if (centralPanel === "brd") return modes.brdDocViewMode;
+  if (centralPanel === "to-be") return modes.toBeDocViewMode;
+  return modes.infraViewMode;
+}
+
+/** Icon + tooltip for preview/source (and UX guide design) toggle on the doc toolbar. */
+function workshopDocSourceTogglePresentation(
+  centralPanel: string,
+  activeViewMode: string,
+): { Icon: LucideIcon; tooltip: string } {
+  if (centralPanel === "ux-ui-guide") {
+    if (activeViewMode === "preview") return { Icon: Code, tooltip: "Ver markdown" };
+    if (activeViewMode === "design") return { Icon: Palette, tooltip: "Ver preview diseño" };
+    return { Icon: FileText, tooltip: "Ver preview visual" };
+  }
+  if (activeViewMode === "preview") return { Icon: Code, tooltip: "Ver fuente" };
+  return { Icon: FileText, tooltip: "Ver previsualización" };
+}
+
 /**
- * Explains document tab order. HIGH flows get a short summary + expandable full path (readability + mobile).
+ * Explains document tab order. HIGH complexity: summary only — full flow opens from the toolbar modal.
  */
 function WorkshopDocToolbarHint({
   tier,
-  isLegacyProject,
+  isLegacyProject: _isLegacyProject,
 }: {
   tier: WorkshopComplexityTier;
   isLegacyProject: boolean;
@@ -85,10 +140,10 @@ function WorkshopDocToolbarHint({
     tier === "LOW"
       ? "Complejidad baja: Spec → H.U. → Tasks (MDD / Blueprint / API ocultos). Paso 0 opcional."
       : tier === "MEDIUM"
-        ? isLegacyProject
+        ? _isLegacyProject
           ? "Complejidad media (legacy): MDD Inicial opcional (Ariadne); MDD de cambio + Spec → API → Guía UX/UI → Tasks."
           : "Complejidad media (producto nuevo): sin MDD en barra — insumo Paso 0 / Spec. Entregables: Spec → API → Guía UX/UI → Tasks."
-        : isLegacyProject
+        : _isLegacyProject
           ? "Legacy: MDD Inicial opcional (Ariadne → doc. de partida); luego Modificación + MDD de cambio y entregables. Cada etapa del taller = una modificación con doc actualizada vía Ariadne."
           : "Orden: Paso 0 → BRD → To-Be → MDD → Spec → Arq. → Casos → H.U. → Blueprint → Guía UX/UI → API → Flujos → Tasks → Infra";
 
@@ -96,10 +151,10 @@ function WorkshopDocToolbarHint({
     tier === "LOW"
       ? fullText
       : tier === "MEDIUM"
-        ? isLegacyProject
-          ? "Complejidad media (legacy): doc. partida opcional con Ariadne; luego MDD de cambio y entregables (Spec → API → UX/UI → Tasks)."
+        ? _isLegacyProject
+          ? "Complejidad media (legacy): doc. de partida opcional con Ariadne; luego MDD de cambio y entregables (Spec → API → UX/UI → Tasks)."
           : "Complejidad media (producto nuevo): insumo Paso 0 / Spec; entregables Spec → API → Guía UX/UI → Tasks (sin MDD en barra hasta avanzar el flujo)."
-        : isLegacyProject
+        : _isLegacyProject
           ? "Complejidad alta (legacy): Ariadne para doc. de partida, Modificación por etapa y documentación actualizada con el taller."
           : "Complejidad alta (producto nuevo): recorre Paso 0, BRD, To-Be, MDD y entregables hasta Infra en el orden sugerido.";
 
@@ -112,20 +167,8 @@ function WorkshopDocToolbarHint({
   }
 
   return (
-    <div className="min-w-0 flex-1 space-y-2">
-      <p className="text-xs font-medium leading-snug text-[var(--foreground)] sm:max-w-[min(100%,52rem)]">{summaryLine}</p>
-      <details className="group rounded-lg border border-[color-mix(in_oklch,var(--border)_85%,transparent)] bg-[color-mix(in_oklch,var(--card)_38%,var(--background))] px-2.5 py-2 open:shadow-sm">
-        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-[color-mix(in_oklch,var(--primary)_78%,var(--foreground))] outline-none marker:content-none [&::-webkit-details-marker]:hidden focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] rounded-md">
-          <ChevronDown
-            className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180"
-            aria-hidden
-          />
-          Ver orden completo del flujo
-        </summary>
-        <p className="mt-2 max-h-[min(40vh,14rem)] overflow-y-auto border-t border-[var(--border)]/70 pt-2 text-xs leading-relaxed text-[var(--foreground-subtle)]">
-          {fullText}
-        </p>
-      </details>
+    <div className="min-w-0 flex-1 sm:max-w-[min(100%,52rem)]">
+      <p className="text-xs font-medium leading-snug text-[var(--foreground)]">{summaryLine}</p>
     </div>
   );
 }
@@ -606,6 +649,7 @@ export default function WorkshopView({
   const [revaluateBusy, setRevaluateBusy] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [flowOrderModalOpen, setFlowOrderModalOpen] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
   const [newStageName, setNewStageName] = useState("");
   /** `""` = MDD en blanco; si no vacío, copia desde esa etapa */
@@ -1054,7 +1098,7 @@ export default function WorkshopView({
   return (
     <div
       data-workshop-root
-      className="workshop-root min-h-[100dvh] sm:min-h-0 flex flex-col bg-[var(--background)] text-[var(--foreground)] antialiased"
+      className="workshop-root flex w-full min-h-0 flex-1 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased"
     >
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-2.5 sm:px-5 sm:py-3 shrink-0 backdrop-blur-sm">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
@@ -1286,6 +1330,11 @@ export default function WorkshopView({
       )}
 
       <WorkshopHelpModal open={showHelpModal} onClose={() => setShowHelpModal(false)} />
+      <WorkshopFlowOrderModal
+        open={flowOrderModalOpen}
+        onOpenChange={setFlowOrderModalOpen}
+        isLegacyProject={isLegacyProject}
+      />
 
       {error && (
         <div className="shrink-0 px-4 py-2 bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] border-b border-[color-mix(in_oklch,var(--destructive)_35%,var(--border))] flex items-center justify-between gap-2">
@@ -1301,15 +1350,17 @@ export default function WorkshopView({
         </div>
       )}
 
-      <ComplexityPendingBanner />
+      <div className="shrink-0">
+        <ComplexityPendingBanner />
+      </div>
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:grid lg:overflow-visible lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)]">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)] lg:grid-rows-1 lg:items-stretch lg:overflow-visible">
         {/* Columna A: Chat (siempre a la izquierda, como en MDD) */}
         <section
           className={cn(
-            "border-r border-[var(--border)] min-h-0 overflow-hidden lg:min-h-0",
+            "min-h-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
             "flex flex-col",
-            mobileWorkshopColumn === "chat" ? "flex flex-1 min-h-0" : "hidden lg:flex lg:flex-col",
+            mobileWorkshopColumn === "chat" ? "flex min-h-0 flex-1" : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
           )}
         >
           <ChatContainer
@@ -1335,18 +1386,21 @@ export default function WorkshopView({
         {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
         <section
           className={cn(
-            "min-w-0 min-h-0 border-r border-[var(--border)] overflow-hidden lg:min-h-0",
+            "min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
             "flex flex-col",
-            mobileWorkshopColumn === "workspace" ? "flex flex-1 min-h-0" : "hidden lg:flex lg:flex-col",
+            mobileWorkshopColumn === "workspace"
+              ? "flex min-h-0 flex-1"
+              : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
           )}
         >
           <div className="shrink-0 border-b border-[var(--border)] px-3 py-2.5 sm:px-4 sm:py-3 flex flex-col gap-2.5 text-sm text-[var(--muted-foreground)]">
+            <TooltipProvider delayDuration={280}>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <WorkshopDocToolbarHint
                 tier={effectiveComplexityForTabs as WorkshopComplexityTier}
                 isLegacyProject={isLegacyProject}
               />
-              <div className="flex flex-wrap items-center gap-2 shrink-0 sm:justify-end sm:pt-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end sm:gap-2 sm:pt-0.5">
                 {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd", "to-be"] as const).includes(
                   centralPanel as any,
                 ) && (
@@ -1365,9 +1419,36 @@ export default function WorkshopView({
                       (centralPanel === "mdd-inicial" && (activeLegacyState?.codebaseDoc || mddInicialLocalContent)) ||
                       (centralPanel === "brd" && !!activeStageId) ||
                       (centralPanel === "to-be" && !!activeStageId)) &&
-                    centralPanel !== "tasks" && (
-                      <button
+                    centralPanel !== "tasks" && (() => {
+                      const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
+                        mddViewMode,
+                        mddInicialViewMode,
+                        specViewMode,
+                        architectureViewMode,
+                        useCasesViewMode,
+                        userStoriesViewMode,
+                        uxUiGuideViewMode,
+                        aemViewMode,
+                        blueprintViewMode,
+                        apiContractsViewMode,
+                        logicFlowsViewMode,
+                        brdDocViewMode,
+                        toBeDocViewMode,
+                        infraViewMode,
+                      });
+                      const { Icon: DocToggleIcon, tooltip: docToggleTooltip } = workshopDocSourceTogglePresentation(
+                        centralPanel,
+                        activeDocViewMode,
+                      );
+                      return (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
                         type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-11 w-11 shrink-0 rounded-xl text-[var(--muted-foreground)] hover:bg-[color-mix(in_oklch,var(--muted)_52%,var(--card))] hover:text-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] sm:h-9 sm:w-9"
+                        aria-label={docToggleTooltip}
                         onClick={() => {
                           if (centralPanel === "mdd") setMddViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "mdd-inicial") setMddInicialViewMode((m) => (m === "preview" ? "source" : "preview"));
@@ -1384,40 +1465,36 @@ export default function WorkshopView({
                           else if (centralPanel === "brd") setBrdDocViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "to-be") setToBeDocViewMode((m) => (m === "preview" ? "source" : "preview"));
                         }}
-                        className={WORKSHOP_DOC_TOOLBAR_LINK}
+                          >
+                            <DocToggleIcon className="h-4 w-4 shrink-0" aria-hidden />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="end" className="max-w-[14rem]">
+                          {docToggleTooltip}
+                        </TooltipContent>
+                      </Tooltip>
+                      );
+                    })()
+                )}
+                {effectiveComplexityForTabs === "HIGH" && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-11 w-11 shrink-0 rounded-xl border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_65%,var(--muted))] text-[var(--foreground)] shadow-sm hover:bg-[color-mix(in_oklch,var(--muted)_45%,var(--card))] hover:text-[var(--primary)] sm:h-9 sm:w-9"
+                        aria-label="Ver orden completo de flujo"
+                        onClick={() => setFlowOrderModalOpen(true)}
                       >
-                        {(centralPanel === "mdd" ? mddViewMode
-                          : centralPanel === "mdd-inicial" ? mddInicialViewMode
-                          : centralPanel === "spec" ? specViewMode
-                            : centralPanel === "architecture" ? architectureViewMode
-                              : centralPanel === "use-cases" ? useCasesViewMode
-                                : centralPanel === "user-stories" ? userStoriesViewMode
-                                  : centralPanel === "ux-ui-guide" ? uxUiGuideViewMode
-                                    : centralPanel === "aem" ? aemViewMode
-                                    : centralPanel === "blueprint" ? blueprintViewMode
-                                      : centralPanel === "api-contracts" ? apiContractsViewMode
-                                        : centralPanel === "logic-flows" ? logicFlowsViewMode
-                                          : centralPanel === "brd" ? brdDocViewMode
-                                            : centralPanel === "to-be" ? toBeDocViewMode
-                                              : infraViewMode) === "preview" ? (
-                          <>
-                            <Code className="w-4 h-4" />
-                            {centralPanel === "ux-ui-guide" ? "Ver markdown" : "Ver fuente"}
-                          </>
-                        ) : centralPanel === "ux-ui-guide" && uxUiGuideViewMode === "design" ? (
-                          <>
-                            <Palette className="w-4 h-4" />
-                            Ver preview diseño
-                          </>
-                        ) : (
-                          <>
-                            <FileText className="w-4 h-4" />
-                            {centralPanel === "ux-ui-guide" ? "Ver preview visual" : "Ver previsualización"}
-                          </>
-                        )}
-                      </button>
-                    )
-                  )}
+                        <ListOrdered className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Ver orden completo de flujo
+                    </TooltipContent>
+                  </Tooltip>
+                )}
                 {centralPanel === "architecture" && (
                   <button
                     type="button"
@@ -1611,6 +1688,7 @@ export default function WorkshopView({
                 )}
               </div>
             </div>
+            </TooltipProvider>
           </div>
           <div
             className={
@@ -2799,12 +2877,16 @@ export default function WorkshopView({
                       "group/pull-tab relative z-[2] flex w-[2rem] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 px-1 py-2",
                       "rounded-l-xl rounded-r-none border border-[var(--border)] border-r-0 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
                       "text-[8px] font-semibold uppercase tracking-[0.14em] text-[color-mix(in_oklch,var(--foreground)_82%,var(--muted-foreground))]",
-                      "shadow-[0_4px_18px_-6px_rgba(0,0,0,0.42)] ring-1 ring-[color-mix(in_oklch,var(--foreground)_5%,transparent)]",
+                      // Light: crisp outline via border only — ring+shadow stacks read as a dirty halo on cream UI.
+                      "shadow-none ring-0 dark:shadow-[0_4px_18px_-6px_rgba(0,0,0,0.42)] dark:ring-1 dark:ring-[color-mix(in_oklch,var(--foreground)_8%,transparent)]",
                       "transition-[color,background-color,box-shadow] duration-200 ease-out",
                       "hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_42%,var(--card))]",
                       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
                       lgMetricsFlyoutOpen &&
-                        "text-[var(--primary)] bg-[color-mix(in_oklch,var(--muted)_38%,var(--primary))] ring-[color-mix(in_oklch,var(--primary)_18%,transparent)]",
+                        cn(
+                          "text-[var(--primary)] bg-[color-mix(in_oklch,var(--muted)_38%,var(--primary))]",
+                          "ring-0 dark:ring-1 dark:ring-[color-mix(in_oklch,var(--primary)_18%,transparent)]",
+                        ),
                     )}
                     aria-expanded={lgMetricsFlyoutOpen}
                     aria-controls="workshop-metrics-flyout-panel"
@@ -2827,7 +2909,7 @@ export default function WorkshopView({
                   className={cn(
                     "flex min-h-0 min-w-[17.5rem] w-[min(40rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-xl",
                     "border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
-                    "shadow-[0_12px_40px_-8px_rgba(0,0,0,0.45)] ring-1 ring-[color-mix(in_oklch,var(--foreground)_6%,transparent)]",
+                    "shadow-[var(--shadow-lg)] ring-0 dark:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.45)] dark:ring-1 dark:ring-[color-mix(in_oklch,var(--foreground)_8%,transparent)]",
                     !lgMetricsFlyoutOpen && "pointer-events-none",
                   )}
                 >

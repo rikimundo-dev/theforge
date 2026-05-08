@@ -31,3 +31,9 @@ export {
   AlertDialogCancel,
 } from "./AlertDialog";
 export { EmptyState } from "./EmptyState";
+export {
+  TooltipProvider,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "./Tooltip";

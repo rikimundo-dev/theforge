@@ -15,8 +15,9 @@ import { cn } from "@/lib/utils";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import { calculateCostFromMdd } from "../utils/costCalculator";
 
+/** Flat cards: border + bg only — avoids muddy stacked shadows next to the metrics flyout in light mode */
 const WORKSHOP_METRICS_CARD =
-  "rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_78%,var(--background))] shadow-sm";
+  "rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_78%,var(--background))]";
 
 const WORKSHOP_METRICS_BADGE_OK =
   "inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_oklch,var(--success)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[color-mix(in_oklch,var(--success)_90%,var(--foreground))]";

@@ -4,6 +4,7 @@
  *
  * Note: registry ships `--sidebar-border` ≈ white for both modes; in `.dark` we
  * override sidebar tokens so the rail matches Claude web (warm charcoal, soft edges).
+ * Light: `--sidebar` is toned down vs `--background` so the rail is not stark white.
  */
 :root {
   --radius: 1rem;
@@ -40,14 +41,15 @@
   --chart-3: oklch(0.8816 0.0276 93.128);
   --chart-4: oklch(0.8822 0.0403 298.1792);
   --chart-5: oklch(0.5608 0.1348 42.0584);
-  --sidebar: oklch(0.9663 0.008 98.8792);
-  --sidebar-foreground: oklch(0.359 0.0051 106.6524);
+  /* Rail ~one step darker than `--card` / `--muted` vs bright `--background` (~0.982 L) */
+  --sidebar: oklch(0.928 0.013 94.2);
+  --sidebar-foreground: oklch(0.338 0.022 96);
   --sidebar-primary: oklch(0.6171 0.1375 39.0427);
-  --sidebar-primary-foreground: oklch(0.9881 0 0);
-  --sidebar-accent: oklch(0.9245 0.0138 92.9892);
-  --sidebar-accent-foreground: oklch(0.325 0 0);
-  --sidebar-border: oklch(0.9401 0 0);
-  --sidebar-ring: oklch(0.7731 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.908 0.016 93.5);
+  --sidebar-accent-foreground: oklch(0.302 0.018 98);
+  --sidebar-border: oklch(0.878 0.009 97);
+  --sidebar-ring: oklch(0.6171 0.1375 39.0427);
   --shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
   --shadow: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 1px 2px -1px hsl(0 0% 0% / 0.1);
   --shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.1), 0 2px 4px -1px hsl(0 0% 0% / 0.1);

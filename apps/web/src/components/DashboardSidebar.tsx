@@ -4,7 +4,7 @@
  * With an open workshop project, shows deliverables under the project name and syncs
  * the active document tab via `useWorkshopStore`.
  */
-import { useCallback, useMemo, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useMemo, type MouseEvent, type ReactElement, type ReactNode } from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -22,6 +22,12 @@ import {
   Sun,
 } from "lucide-react";
 import { Input } from "./ui/Input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui";
 import type { TheForgeUser } from "@/utils/apiClient";
 import { useTheme, type ThemePreference } from "@/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
@@ -67,31 +73,64 @@ function closeDetailsFromEvent(e: MouseEvent<HTMLElement>) {
   if (root) (root as HTMLDetailsElement).open = false;
 }
 
+/**
+ * Tooltip for collapsed rail: native `title` is easy to miss and can behave poorly with nested overflow.
+ */
+function CollapsedRailHint({
+  rail,
+  label,
+  children,
+}: {
+  rail: boolean;
+  label: string;
+  children: ReactElement;
+}) {
+  if (!rail) return children;
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="right" align="center" sideOffset={10}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function ThemeModeToggle({ compact }: { compact: boolean }) {
   const { preference, setPreference } = useTheme();
 
-  const item = (value: ThemePreference, label: string, icon: ReactNode) => (
-    <button
-      type="button"
-      key={value}
-      onClick={() => setPreference(value)}
-      title={label}
-      aria-label={label}
-      aria-pressed={preference === value}
-      className={cn(
-        "flex items-center justify-center rounded-[var(--radius-md)] font-medium transition-colors",
-        compact ? "w-full py-2.5" : "flex-1 flex-col gap-0.5 py-2 text-[11px]",
-        preference === value
-          ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
-          : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
-      )}
-    >
-      <span className={cn("flex items-center justify-center", !compact && "flex-col gap-0.5")}>
-        <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>
-        {!compact ? <span className="leading-none">{label}</span> : null}
-      </span>
-    </button>
-  );
+  const item = (value: ThemePreference, label: string, icon: ReactNode) => {
+    const button = (
+      <button
+        type="button"
+        onClick={() => setPreference(value)}
+        title={label}
+        aria-label={label}
+        aria-pressed={preference === value}
+        className={cn(
+          "flex items-center justify-center rounded-[var(--radius-md)] font-medium transition-colors",
+          compact ? "w-full py-2.5" : "flex-1 flex-col gap-0.5 py-2 text-[11px]",
+          preference === value
+            ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+            : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+        )}
+      >
+        <span className={cn("flex items-center justify-center", !compact && "flex-col gap-0.5")}>
+          <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>
+          {!compact ? <span className="leading-none">{label}</span> : null}
+        </span>
+      </button>
+    );
+    if (!compact) return button;
+    return (
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right" align="center" sideOffset={10}>
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    );
+  };
 
   return (
     <div
@@ -226,18 +265,24 @@ export function DashboardSidebar({
   const inWorkshop = !!workshopProject && typeof onExitWorkshop === "function";
 
   return (
+    <TooltipProvider delayDuration={280}>
     <aside
       className={cn(
         "flex w-full shrink-0 flex-col border-[var(--sidebar-border)] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] sm:border-b-0 sm:border-r sm:min-h-0 sm:self-stretch sm:sticky sm:top-0 sm:transition-[width] sm:duration-200 sm:ease-out",
-        inWorkshop && "sm:overflow-hidden",
+        // Workshop: cap height on narrow stacked layout; fill row height on sm+ so steps can scroll.
+        // overflow-y-auto on the steps list shows a scrollbar only when content overflows.
+        inWorkshop &&
+          "min-h-0 overflow-hidden max-sm:max-h-[min(38rem,calc(100svh-5.5rem))] max-sm:min-h-0 sm:h-full sm:max-h-[min(100dvh,100svh)] sm:min-h-0",
         rail ? "sm:w-[4.5rem] sm:min-w-[4.5rem]" : "sm:w-[272px]",
       )}
       aria-label="Navegación principal"
     >
       <div
         className={cn(
-          "flex flex-col sm:min-h-0 sm:flex-1",
-          inWorkshop ? "gap-4 sm:flex sm:flex-col sm:overflow-hidden" : "gap-6 sm:overflow-y-auto",
+          "flex flex-col min-h-0",
+          inWorkshop
+            ? "min-h-0 flex-1 gap-4 overflow-hidden"
+            : "gap-6 sm:min-h-0 sm:flex-1 sm:overflow-y-auto",
           rail ? "p-4 sm:px-2 sm:py-4" : "p-4",
         )}
       >
@@ -263,19 +308,21 @@ export function DashboardSidebar({
               <p className="truncate text-xs text-[var(--muted-foreground)]">Software Factory</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            title={rail ? "Expandir barra lateral" : "Contraer barra lateral"}
-            aria-expanded={!rail}
-            className={cn(
-              "hidden shrink-0 rounded-[var(--radius-md)] p-2 text-[var(--sidebar-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] sm:flex",
-              rail && "sm:w-10 sm:shrink-0 sm:items-center sm:justify-center sm:p-2",
-            )}
-          >
-            <ChevronLeft className={cn("h-5 w-5", rail && "hidden")} aria-hidden />
-            <ChevronRight className={cn("hidden h-5 w-5", rail && "block")} aria-hidden />
-          </button>
+          <CollapsedRailHint rail={rail} label="Expandir barra lateral">
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              title={rail ? "Expandir barra lateral" : "Contraer barra lateral"}
+              aria-expanded={!rail}
+              className={cn(
+                "hidden shrink-0 rounded-[var(--radius-md)] p-2 text-[var(--sidebar-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] sm:flex",
+                rail && "sm:w-10 sm:shrink-0 sm:items-center sm:justify-center sm:p-2",
+              )}
+            >
+              <ChevronLeft className={cn("h-5 w-5", rail && "hidden")} aria-hidden />
+              <ChevronRight className={cn("hidden h-5 w-5", rail && "block")} aria-hidden />
+            </button>
+          </CollapsedRailHint>
         </div>
 
         {!inWorkshop ? (
@@ -296,19 +343,24 @@ export function DashboardSidebar({
         ) : null}
 
         <div className={cn("relative hidden", rail && "sm:block", inWorkshop && "sm:hidden")}>
-          <button
-            type="button"
-            title="Expandir barra para buscar"
-            aria-label="Expandir barra lateral para buscar proyectos"
-            onClick={onToggleCollapsed}
-            className="flex w-full items-center justify-center rounded-[var(--radius-lg)] border border-[color-mix(in_oklch,var(--sidebar-border)_65%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_5%,var(--sidebar))] py-2.5 text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
-          >
-            <Search className="h-5 w-5" />
-          </button>
+          <CollapsedRailHint rail={rail} label="Buscar proyectos — expandir barra lateral">
+            <button
+              type="button"
+              title="Expandir barra para buscar"
+              aria-label="Expandir barra lateral para buscar proyectos"
+              onClick={onToggleCollapsed}
+              className="flex w-full items-center justify-center rounded-[var(--radius-lg)] border border-[color-mix(in_oklch,var(--sidebar-border)_65%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_5%,var(--sidebar))] py-2.5 text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)]"
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </CollapsedRailHint>
         </div>
 
         <nav
-          className={cn("flex min-w-0 flex-col gap-1", inWorkshop && "min-h-0 flex-1")}
+          className={cn(
+            "flex min-w-0 flex-col gap-1",
+            inWorkshop && "min-h-0 flex-1 overflow-hidden",
+          )}
           aria-label="Secciones"
         >
           <p
@@ -321,41 +373,60 @@ export function DashboardSidebar({
           </p>
 
           {inWorkshop ? (
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 sm:min-h-0">
-              <button
-                type="button"
-                onClick={onExitWorkshop}
-                title="Volver al panel de proyectos"
-                className={cn(
-                  "flex w-full shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
-                  rail && "sm:justify-center sm:px-0",
-                )}
-              >
-                <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-                <span className={cn("truncate", rail && "sm:hidden")}>Panel de proyectos</span>
-              </button>
-
-              <details open className="group/ws flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-                <summary
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+              <CollapsedRailHint rail={rail} label="Volver al panel de proyectos">
+                <button
+                  type="button"
+                  onClick={onExitWorkshop}
+                  title="Volver al panel de proyectos"
                   className={cn(
-                    "flex shrink-0 cursor-pointer list-none items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden",
+                    "flex w-full shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+                    rail && "sm:justify-center sm:px-0",
+                  )}
+                >
+                  <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className={cn("truncate", rail && "sm:hidden")}>Panel de proyectos</span>
+                </button>
+              </CollapsedRailHint>
+
+              {/* Plain div (not <details>): flex + min-h-0 height math is reliable for the scrollable steps list. */}
+              <div
+                className="group/ws flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                role="group"
+                aria-label={`Proyecto ${workshopProject.name}`}
+              >
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2",
                     "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]",
                     rail && "sm:justify-center sm:px-0",
                   )}
-                  title={workshopProject.name}
+                  title={rail ? undefined : workshopProject.name}
                 >
-                  <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
-                  <span className={cn("min-w-0 flex-1 truncate text-left text-sm font-medium", rail && "sm:hidden")}>
-                    {workshopProject.name}
-                  </span>
-                  <ChevronDown
-                    className={cn(
-                      "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform group-open/ws:rotate-180",
-                      rail && "sm:hidden",
-                    )}
-                    aria-hidden
-                  />
-                </summary>
+                  {rail ? (
+                    <Tooltip delayDuration={200}>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)]">
+                          <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center" sideOffset={10}>
+                        Proyecto: {workshopProject.name}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <>
+                      <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
+                        {workshopProject.name}
+                      </span>
+                      <ChevronDown
+                        className="h-4 w-4 shrink-0 rotate-180 text-[var(--muted-foreground)] transition-transform"
+                        aria-hidden
+                      />
+                    </>
+                  )}
+                </div>
                 <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-1">
                   <p
                     className={cn(
@@ -366,7 +437,7 @@ export function DashboardSidebar({
                     Pasos del flujo
                   </p>
                   <div
-                    className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-0.5 pb-1 [-webkit-overflow-scrolling:touch] [scrollbar-gutter:stable]"
+                    className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-0.5 pb-1 [-webkit-overflow-scrolling:touch]"
                     role="list"
                     aria-label="Pasos del workshop"
                   >
@@ -400,63 +471,70 @@ export function DashboardSidebar({
                                     aria-hidden
                                   />
                                 ) : null}
-                                <button
-                                  type="button"
-                                  role="listitem"
-                                  title={`${item.title}${done ? " — con contenido" : ""}`}
-                                  aria-current={isCurrent ? "page" : undefined}
-                                  onClick={() => setWorkshopActiveDocPanel(item.id)}
-                                  className={cn(
-                                    "flex min-w-0 items-center font-medium transition-colors",
-                                    rail
-                                      ? cn(
-                                          "mx-auto box-border h-9 w-9 shrink-0 items-center justify-center rounded-lg p-0",
-                                          "mb-0.5 last:mb-0",
-                                          isCurrent
-                                            ? "bg-[color-mix(in_oklch,var(--sidebar-accent)_100%,transparent)] text-[var(--primary)]"
-                                            : "text-[var(--muted-foreground)] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_88%,transparent)] hover:text-[var(--sidebar-accent-foreground)]",
-                                        )
-                                      : cn(
-                                          "mb-px w-full gap-2.5 rounded-md px-2 py-1.5 text-left text-sm last:mb-0",
-                                          isCurrent
-                                            ? "bg-[color-mix(in_oklch,var(--sidebar-accent)_100%,transparent)] text-[var(--sidebar-accent-foreground)]"
-                                            : "text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--sidebar-foreground))] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)]",
-                                        ),
-                                  )}
+                                <CollapsedRailHint
+                                  rail={rail}
+                                  label={
+                                    done ? `${item.label} · Con contenido · ${item.title}` : `${item.label} · ${item.title}`
+                                  }
                                 >
-                                  {rail ? (
-                                    <span className="relative flex h-5 w-5 items-center justify-center" aria-hidden>
-                                      <Icon
-                                        className={cn(
-                                          "h-4 w-4",
-                                          isCurrent ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]",
-                                        )}
-                                      />
-                                      {done ? (
-                                        <CheckCircle2 className="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 text-[color-mix(in_oklch,var(--success)_90%,var(--sidebar-foreground))] [filter:drop-shadow(0_0_1px_var(--sidebar))]" />
-                                      ) : null}
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <Icon
-                                        className={cn(
-                                          "h-4 w-4 shrink-0 opacity-90",
-                                          isCurrent
-                                            ? "text-[var(--primary)]"
-                                            : "text-[color-mix(in_oklch,var(--muted-foreground)_92%,var(--sidebar-foreground))]",
-                                        )}
-                                        aria-hidden
-                                      />
-                                      <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
-                                      {done ? (
-                                        <CheckCircle2
-                                          className="h-3.5 w-3.5 shrink-0 text-[color-mix(in_oklch,var(--success)_78%,var(--sidebar-foreground))] opacity-90"
+                                  <button
+                                    type="button"
+                                    role="listitem"
+                                    title={`${item.title}${done ? " — con contenido" : ""}`}
+                                    aria-current={isCurrent ? "page" : undefined}
+                                    onClick={() => setWorkshopActiveDocPanel(item.id)}
+                                    className={cn(
+                                      "flex min-w-0 items-center font-medium transition-colors",
+                                      rail
+                                        ? cn(
+                                            "mx-auto box-border h-9 w-9 shrink-0 items-center justify-center rounded-lg p-0",
+                                            "mb-0.5 last:mb-0",
+                                            isCurrent
+                                              ? "bg-[color-mix(in_oklch,var(--sidebar-accent)_100%,transparent)] text-[var(--primary)]"
+                                              : "text-[var(--muted-foreground)] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_88%,transparent)] hover:text-[var(--sidebar-accent-foreground)]",
+                                          )
+                                        : cn(
+                                            "mb-px w-full gap-2.5 rounded-md px-2 py-1.5 text-left text-sm last:mb-0",
+                                            isCurrent
+                                              ? "bg-[color-mix(in_oklch,var(--sidebar-accent)_100%,transparent)] text-[var(--sidebar-accent-foreground)]"
+                                              : "text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--sidebar-foreground))] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)]",
+                                          ),
+                                    )}
+                                  >
+                                    {rail ? (
+                                      <span className="relative flex h-5 w-5 items-center justify-center" aria-hidden>
+                                        <Icon
+                                          className={cn(
+                                            "h-4 w-4",
+                                            isCurrent ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]",
+                                          )}
+                                        />
+                                        {done ? (
+                                          <CheckCircle2 className="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 text-[color-mix(in_oklch,var(--success)_90%,var(--sidebar-foreground))] [filter:drop-shadow(0_0_1px_var(--sidebar))]" />
+                                        ) : null}
+                                      </span>
+                                    ) : (
+                                      <>
+                                        <Icon
+                                          className={cn(
+                                            "h-4 w-4 shrink-0 opacity-90",
+                                            isCurrent
+                                              ? "text-[var(--primary)]"
+                                              : "text-[color-mix(in_oklch,var(--muted-foreground)_92%,var(--sidebar-foreground))]",
+                                          )}
                                           aria-hidden
                                         />
-                                      ) : null}
-                                    </>
-                                  )}
-                                </button>
+                                        <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
+                                        {done ? (
+                                          <CheckCircle2
+                                            className="h-3.5 w-3.5 shrink-0 text-[color-mix(in_oklch,var(--success)_78%,var(--sidebar-foreground))] opacity-90"
+                                            aria-hidden
+                                          />
+                                        ) : null}
+                                      </>
+                                    )}
+                                  </button>
+                                </CollapsedRailHint>
                               </li>
                             );
                           })}
@@ -465,28 +543,30 @@ export function DashboardSidebar({
                     )}
                   </div>
                 </div>
-              </details>
+              </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handleScrollToProjects}
-              title="Proyectos"
-              className={cn(
-                "flex w-full items-center gap-3 rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] px-3 py-2.5 text-left text-sm font-medium text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))]",
-                rail && "sm:justify-center sm:px-0",
-              )}
-            >
-              <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
-              <span className={cn(rail && "sm:hidden")}>Proyectos</span>
-            </button>
+            <CollapsedRailHint rail={rail} label="Proyectos">
+              <button
+                type="button"
+                onClick={handleScrollToProjects}
+                title="Proyectos"
+                className={cn(
+                  "flex w-full items-center gap-3 rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] px-3 py-2.5 text-left text-sm font-medium text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))]",
+                  rail && "sm:justify-center sm:px-0",
+                )}
+              >
+                <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
+                <span className={cn(rail && "sm:hidden")}>Proyectos</span>
+              </button>
+            </CollapsedRailHint>
           )}
         </nav>
       </div>
 
       <div
         className={cn(
-          "mt-auto border-t border-[color-mix(in_oklch,var(--sidebar-border)_75%,var(--sidebar))] p-3",
+          "mt-auto shrink-0 border-t border-[color-mix(in_oklch,var(--sidebar-border)_75%,var(--sidebar))] p-3",
           rail && "sm:px-2",
         )}
       >
@@ -503,12 +583,35 @@ export function DashboardSidebar({
               rail && "sm:flex-col sm:justify-center sm:gap-1 sm:px-0",
             )}
           >
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--sidebar-foreground)_9%,var(--sidebar))] text-xs font-semibold text-[var(--primary)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_12%,transparent)]"
-              aria-hidden
-            >
-              {getUserInitials(user)}
-            </div>
+            {rail ? (
+              <Tooltip delayDuration={200}>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex shrink-0 rounded-full outline-none ring-offset-2 ring-offset-[var(--sidebar)] focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+                    <span
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--sidebar-foreground)_9%,var(--sidebar))] text-xs font-semibold text-[var(--primary)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_12%,transparent)]"
+                      aria-hidden
+                    >
+                      {getUserInitials(user)}
+                    </span>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" align="end" sideOffset={10} className="max-w-[14rem]">
+                  <span className="block font-medium text-[var(--popover-foreground)]">{getDisplayName(user)}</span>
+                  {user?.email ? (
+                    <span className="mt-0.5 block text-[11px] leading-snug text-[var(--muted-foreground)]">
+                      {user.email}
+                    </span>
+                  ) : null}
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--sidebar-foreground)_9%,var(--sidebar))] text-xs font-semibold text-[var(--primary)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_12%,transparent)]"
+                aria-hidden
+              >
+                {getUserInitials(user)}
+              </div>
+            )}
             <div className={cn("min-w-0 flex-1 text-left", rail && "sm:hidden")}>
               <p className="truncate text-sm font-medium text-[var(--sidebar-foreground)]">
                 {getDisplayName(user)}
@@ -563,5 +666,6 @@ export function DashboardSidebar({
         </details>
       </div>
     </aside>
+    </TooltipProvider>
   );
 }

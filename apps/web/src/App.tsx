@@ -565,7 +565,7 @@ export default function App() {
             workshopProject={{ id: workshopProject.id, name: workshopProject.name }}
             onExitWorkshop={handleExitWorkshop}
           />
-          <div className="flex min-w-0 w-full max-w-full flex-col overflow-visible sm:min-h-0 sm:flex-1 sm:overflow-hidden">
+          <div className="flex min-h-0 min-w-0 w-full max-w-full flex-1 flex-col overflow-visible sm:overflow-hidden">
             <WorkshopView
               projectId={workshopProject.id}
               projectName={workshopProject.name}
