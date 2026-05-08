@@ -258,42 +258,90 @@ export default function WorkshopView({
   const uxGuideOneShotChatPrompt = useMemo(
     () =>
       "Genera la **Guía UX/UI completa en formato DESIGN.md** (especificación abierta de Google). " +
-      "El documento DEBE empezar con YAML front matter con tokens de diseño ESTRUCTURADOS (version, name, description, colors, typography, rounded, spacing, components) " +
-      "seguido de las secciones canónicas en markdown: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts. " +
-      "Es CRÍTICO que el YAML front matter tenga el formato exacto de ejemplo:\n" +
+      "El documento DEBE empezar con YAML front matter con TODOS los tokens de diseño del schema estándar a continuación. " +
+      "NO omitas ninguna sección del schema — todas son obligatorias. " +
+      "Seguido de las secciones canónicas en markdown: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts. " +
+      "Es CRÍTICO que el YAML front matter siga EXACTAMENTE este schema completo (completa los valores para el proyecto específico):\n" +
       "---\n" +
-      "name: CRM Pipeline\n" +
-      "description: CRM minimalista para consultores\n" +
+      'name: \"CRM Pipeline\"\n' +
+      'version: \"1.0.0\"\n' +
+      'description: \"CRM minimalista para consultores independientes en LATAM\"\n' +
       "colors:\n" +
       '  primary: \"#1A5F7A\"\n' +
       '  secondary: \"#2E8B57\"\n' +
       '  tertiary: \"#F4A261\"\n' +
       '  neutral: \"#F5F7FA\"\n' +
       '  foreground: \"#1A1A2E\"\n' +
+      '  background: \"#FFFFFF\"\n' +
+      '  muted: \"#E8ECF0\"\n' +
+      '  border: \"#D0D5DD\"\n' +
+      '  danger: \"#DC2626\"\n' +
+      '  success: \"#16A34A\"\n' +
+      '  warning: \"#F59E0B\"\n' +
+      '  info: \"#3B82F6\"\n' +
       "typography:\n" +
+      "  font-sans:\n" +
+      '    fontFamily: \"Inter, system-ui, sans-serif\"\n' +
       "  h1:\n" +
       '    fontSize: \"32px\"\n' +
       "    fontWeight: 700\n" +
       '    lineHeight: \"40px\"\n' +
       '    letterSpacing: \"-0.02em\"\n' +
+      "  h2:\n" +
+      '    fontSize: \"24px\"\n' +
+      "    fontWeight: 600\n" +
+      '    lineHeight: \"32px\"\n' +
+      '    letterSpacing: \"-0.01em\"\n' +
+      "  h3:\n" +
+      '    fontSize: \"20px\"\n' +
+      "    fontWeight: 600\n" +
+      '    lineHeight: \"28px\"\n' +
+      "  h4:\n" +
+      '    fontSize: \"18px\"\n' +
+      "    fontWeight: 600\n" +
+      '    lineHeight: \"24px\"\n' +
       "  body-md:\n" +
       '    fontSize: \"16px\"\n' +
       "    fontWeight: 400\n" +
       '    lineHeight: \"26px\"\n' +
+      "  body-sm:\n" +
+      '    fontSize: \"14px\"\n' +
+      "    fontWeight: 400\n" +
+      '    lineHeight: \"22px\"\n' +
       "  label-sm:\n" +
       '    fontSize: \"14px\"\n' +
       "    fontWeight: 500\n" +
       '    lineHeight: \"20px\"\n' +
+      "  caption:\n" +
+      '    fontSize: \"12px\"\n' +
+      "    fontWeight: 400\n" +
+      '    lineHeight: \"16px\"\n' +
+      "  overline:\n" +
+      '    fontSize: \"10px\"\n' +
+      "    fontWeight: 600\n" +
+      '    lineHeight: \"14px\"\n' +
+      '    letterSpacing: \"0.08em\"\n' +
       "rounded:\n" +
+      '  none: \"0px\"\n' +
       '  sm: \"6px\"\n' +
       '  md: \"12px\"\n' +
       '  lg: \"20px\"\n' +
+      '  xl: \"28px\"\n' +
+      '  full: \"9999px\"\n' +
       "spacing:\n" +
+      '  xxs: \"2px\"\n' +
       '  xs: \"4px\"\n' +
       '  sm: \"8px\"\n' +
       '  md: \"16px\"\n' +
       '  lg: \"24px\"\n' +
       '  xl: \"32px\"\n' +
+      '  2xl: \"48px\"\n' +
+      '  3xl: \"64px\"\n' +
+      "elevation:\n" +
+      '  card: \"0 1px 3px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.06)\"\n' +
+      '  dropdown: \"0 4px 6px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.06)\"\n' +
+      '  modal: \"0 10px 25px rgba(0,0,0,0.15), 0 6px 10px rgba(0,0,0,0.10)\"\n' +
+      '  sticky: \"0 2px 4px rgba(0,0,0,0.05)\"\n' +
       "components:\n" +
       "  button-primary:\n" +
       '    backgroundColor: \"{colors.tertiary}\"\n' +
@@ -312,6 +360,12 @@ export default function WorkshopView({
       '    textColor: \"{colors.primary}\"\n' +
       '    rounded: \"{rounded.sm}\"\n' +
       '    padding: \"8px 16px\"\n' +
+      "  button-danger:\n" +
+      '    backgroundColor: \"{colors.danger}\"\n' +
+      '    textColor: \"#FFFFFF\"\n' +
+      '    rounded: \"{rounded.sm}\"\n' +
+      '    padding: \"12px 20px\"\n' +
+      '    typography: label-sm\n' +
       "  card:\n" +
       '    backgroundColor: \"{colors.neutral}\"\n' +
       '    textColor: \"{colors.foreground}\"\n' +
@@ -320,17 +374,29 @@ export default function WorkshopView({
       "  badge:\n" +
       '    backgroundColor: \"{colors.tertiary}\"\n' +
       '    textColor: \"#FFFFFF\"\n' +
-      '    rounded: \"{rounded.lg}\"\n' +
+      '    rounded: \"{rounded.full}\"\n' +
       '    padding: \"4px 10px\"\n' +
       "  input:\n" +
       '    backgroundColor: \"#FFFFFF\"\n' +
       '    textColor: \"{colors.foreground}\"\n' +
       '    rounded: \"{rounded.sm}\"\n' +
       '    padding: \"10px 14px\"\n' +
+      "  modal:\n" +
+      '    backgroundColor: \"#FFFFFF\"\n' +
+      '    rounded: \"{rounded.lg}\"\n' +
+      '    padding: \"24px\"\n' +
+      "  toast:\n" +
+      '    backgroundColor: \"{colors.foreground}\"\n' +
+      '    textColor: \"#FFFFFF\"\n' +
+      '    rounded: \"{rounded.md}\"\n' +
+      '    padding: \"12px 16px\"\n' +
+      "  skeleton:\n" +
+      '    backgroundColor: \"{colors.muted}\"\n' +
+      '    rounded: \"{rounded.sm}\"\n' +
       "---\n" +
       "Luego del front matter, incluye las secciones canónicas en markdown con descripciones y usos de cada token. " +
       "Usa {token.references} en las descripciones, no dupliques valores. " +
-      "Incluye: patrón/estilo, paleta y tokens de color, tipografía, espaciado y grid, componentes de referencia, " +
+      "Incluye: patrón/estilo, paleta y tokens de color, tipografía, espaciado y grid, todos los componentes del schema, " +
       "prioridades de UX, criterios de accesibilidad (WCAG, contraste 4.5:1, teclado, touch 44px) y anti-patrones a evitar." +
       (isLegacyProject
         ? ""
