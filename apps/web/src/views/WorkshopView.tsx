@@ -700,8 +700,8 @@ export default function WorkshopView({
   /** Fuerza sincronización cuando una operación de BRD acaba de completarse (loading pasó de true a false). */
   useEffect(() => {
     const wasGeneratingBrd =
-      prevLoadingReasonRef.current === "brd-tobe-from-dbga" ||
-      prevLoadingReasonRef.current === "legacy-brd-tobe-suggest";
+      prevLoadingReasonRef.current === "brd-from-dbga" ||
+      prevLoadingReasonRef.current === "legacy-brd-suggest";
     if (!loading && wasGeneratingBrd && activeWorkshopStage) {
       setBrdWorkshopDraft(activeWorkshopStage.brdContent ?? "");
       brdTobeServerSnap.current = {
