@@ -70,7 +70,6 @@ export function computeCrossDocumentConsistency(
   // Documentos fuente (especificación)
   const sources: Array<{ name: string; content: string }> = [];
   if (docs.brdContent?.trim()) sources.push({ name: "BRD", content: docs.brdContent });
-  if (docs.toBeManualContent?.trim()) sources.push({ name: "To-Be", content: docs.toBeManualContent });
   if (docs.specContent?.trim()) sources.push({ name: "SPEC", content: docs.specContent });
   if (docs.useCasesContent?.trim()) sources.push({ name: "CasosDeUso", content: docs.useCasesContent });
 

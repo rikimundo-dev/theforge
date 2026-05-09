@@ -143,8 +143,6 @@ export const RISK_PRECISION_THRESHOLD = 85;
 /** Campos de contenido de documento para el planificador integral. */
 export type PlanningDocumentFields = {
   brdContent?: string;
-  toBeManualContent?: string;
-  asIsManualContent?: string;
   specContent?: string;
   architectureContent?: string;
   useCasesContent?: string;

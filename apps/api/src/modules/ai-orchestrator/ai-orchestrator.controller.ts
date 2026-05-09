@@ -39,7 +39,6 @@ export class AiOrchestratorController {
       uxUiGuideContent,
       dbgaContent,
       brdContent,
-      toBeManualContent,
       activeTab,
       stageId,
     } = body;
@@ -57,7 +56,6 @@ export class AiOrchestratorController {
       uxUiGuideContent?.trim() || undefined,
       dbgaContent?.trim() || undefined,
       brdContent?.trim() || undefined,
-      toBeManualContent?.trim() || undefined,
       stageId?.trim() || undefined,
       images,
     );
@@ -75,7 +73,6 @@ export class AiOrchestratorController {
       dbgaContent?: string | null;
       specContent?: string | null;
       brdContent?: string | null;
-      toBeManualContent?: string | null;
       activeTab?: string;
       stageId?: string;
       images?: unknown;
@@ -91,7 +88,6 @@ export class AiOrchestratorController {
       dbgaContent,
       specContent,
       brdContent,
-      toBeManualContent,
       activeTab,
       stageId,
     } = body;
@@ -118,7 +114,6 @@ export class AiOrchestratorController {
         dbgaContent?.trim() || undefined,
         specContent?.trim() || undefined,
         brdContent?.trim() || undefined,
-        toBeManualContent?.trim() || undefined,
         stageId?.trim() || undefined,
         images,
       );

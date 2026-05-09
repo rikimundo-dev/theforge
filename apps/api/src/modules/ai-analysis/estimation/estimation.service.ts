@@ -906,15 +906,11 @@ export class EstimationService {
         where: { id: sid },
         select: {
           brdContent: true,
-          toBeManualContent: true,
-          asIsManualContent: true,
         },
       });
       if (stage) {
         documents = {
           brdContent: stage.brdContent ?? undefined,
-          toBeManualContent: stage.toBeManualContent ?? undefined,
-          asIsManualContent: stage.asIsManualContent ?? undefined,
         };
       }
     }

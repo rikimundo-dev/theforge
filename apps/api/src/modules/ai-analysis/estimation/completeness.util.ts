@@ -1,19 +1,15 @@
 import { PlanningDocumentFields, DocumentCompleteness, DOC_COMPLETE_MIN_LENGTH, DOC_PARTIAL_MIN_LENGTH } from "./estimation.types";
-
-/** Pesos relativos entre documentos (suman 1.0). */
 const DOC_WEIGHTS: Record<keyof PlanningDocumentFields, number> = {
-  brdContent: 0.18,
-  toBeManualContent: 0.12,
-  asIsManualContent: 0.04,
-  specContent: 0.10,
-  architectureContent: 0.12,
-  useCasesContent: 0.08,
+  brdContent: 0.22,
+  specContent: 0.14,
+  architectureContent: 0.14,
+  blueprintContent: 0.12,
+  useCasesContent: 0.10,
   userStoriesContent: 0.05,
-  blueprintContent: 0.10,
   apiContractsContent: 0.08,
   logicFlowsContent: 0.05,
   infraContent: 0.05,
-  tasksContent: 0.03,
+  tasksContent: 0.05,
 };
 
 /**
