@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ComplexityLevel, Prisma, StageStatus, Status } from "@theforge/database";
 import type { Estimation, Project, Stage } from "@theforge/database";
 import { getRequestUserId } from "../../common/request-user.store.js";
@@ -46,7 +46,6 @@ function toApiProject<P extends { stages: StageWithEst[] } & Record<string, unkn
 
 @Injectable()
 export class ProjectsService implements IOrchestratorProjectsPort {
-  private readonly logger = new Logger(ProjectsService.name);
 
   /** Scope de proyecto autenticado (AsyncLocalStorage). */
   private projectWhereForUser(projectId: string) {
@@ -198,7 +197,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         hasUxTeam: parsed.hasUxTeam ?? false,
         complexity: parsed.complexity as ComplexityLevel,
         projectType: parsed.projectType,
-        requireBrdTobeGate: !isLegacy,
+        // requireBrdTobeGate eliminado
         theforgeProjectId: parsed.theforgeProjectId ?? undefined,
         stages: {
           create: {
@@ -529,10 +528,6 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.key !== undefined) data.key = dto.key.trim();
     if (dto.brdContent !== undefined) data.brdContent = dto.brdContent.trim() || null;
-    if (dto.toBeManualContent !== undefined) data.toBeManualContent = dto.toBeManualContent.trim() || null;
-    if (dto.asIsManualContent !== undefined) data.asIsManualContent = dto.asIsManualContent.trim() || null;
-    if (dto.approveBrd === true) data.brdApprovedAt = new Date();
-    if (dto.approveToBe === true) data.toBeApprovedAt = new Date();
     if (dto.ordinal !== undefined) {
       const clash = await this.prisma.stage.findFirst({
         where: {
@@ -555,15 +550,6 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       include: { estimation: true },
     });
     if (!out) throw new NotFoundException("Etapa no encontrada");
-    if (dto.approveBrd === true && (out.brdContent ?? "").trim().length > 0) {
-      try {
-        await this.graphMemory.ingestBrdObjectivesFromMarkdown(projectId, stageId, out.brdContent ?? "");
-      } catch (err) {
-        this.logger.warn(
-          `[Projects] ingestBrdObjectivesFromMarkdown: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
     return { stage: out };
   }
 
@@ -1133,13 +1119,13 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   /**
-   * Borradores BRD + Manual To-Be desde `Project.dbgaContent` (greenfield). LEGACY debe usar
-   * `POST …/legacy/suggest-brd-tobe-from-codebase-doc`.
+   * Genera BRD desde `Project.dbgaContent` (greenfield). LEGACY debe usar
+   * `POST …/legacy/suggest-brd-from-codebase-doc`. (To-Be eliminado del sistema.)
    */
-  async suggestBrdTobeFromDbga(
+  async suggestBrdFromDbga(
     projectId: string,
     opts?: { stageId?: string | null },
-  ): Promise<{ brdContent: string; toBeManualContent: string; stageId: string }> {
+  ): Promise<{ brdContent: string; stageId: string }> {
     const project = await this.prisma.project.findFirst({
       where: this.projectWhereForUser(projectId),
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
@@ -1147,7 +1133,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     if (!project) throw new NotFoundException("Project not found");
     if (project.projectType === "LEGACY") {
       throw new BadRequestException(
-        "En proyectos legacy usa POST …/legacy/suggest-brd-tobe-from-codebase-doc (documentación Ariadne).",
+        "En proyectos legacy usa POST …/legacy/suggest-brd-from-codebase-doc (documentación Ariadne).",
       );
     }
     const dbga = String(project.dbgaContent ?? "").trim();
@@ -1163,18 +1149,11 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       (sid ? project.stages.find((s) => s.id === sid) : undefined) ||
       pickPrimaryStage(project.stages as StageWithEst[]);
     if (!stage?.id) {
-      throw new BadRequestException("No hay etapa para persistir BRD / To-Be.");
+      throw new BadRequestException("No hay etapa para persistir BRD.");
     }
     const dbgaSlice = effectiveDbga.slice(0, 120_000);
 
-    /** Extrae contenido de un solo tag (BRD o TOBE) del texto generado. */
-    const extractTagged = (text: string, tag: "BRD" | "TOBE"): string | null => {
-      const cleaned = text.replace(/```\w*\s*\n?/g, "").trim();
-      const match = cleaned.match(new RegExp(`<<<\\s*${tag}\\s*>>>\\s*([\\s\\S]*?)\\s*<<<_?END_${tag}_?>>>`, "i"));
-      return match?.[1]?.trim() ?? null;
-    };
-
-    // Paso 1: Generar BRD
+    // Generar BRD
     const brdPrompt =
       "Eres analista de negocio. A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente, " +
       "genera **solo el BRD** en español, en markdown:\n" +
@@ -1188,13 +1167,15 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       const raw = await this.ai.generateResponse(brdPrompt, [], {
         systemPrompt: DBGA_BRD_TOBE_SUGGEST_SYSTEM,
       });
-      const extracted = extractTagged((raw ?? "").trim(), "BRD");
+      const cleaned = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim();
+      const match = cleaned.match(/<<<\s*BRD\s*>>>\s*([\s\S]*?)\s*<<<_?END_BRD_?>>>/i);
+      const extracted = match?.[1]?.trim() ?? null;
       if (extracted) {
         brd = cleanDocumentContent(extracted);
         break;
       }
       if (attempt < 2) {
-        console.warn(`[suggestBrdTobeFromDbga] Intento BRD ${attempt}/2: respuesta mal formada, reintentando...`);
+        console.warn(`[suggestBrdFromDbga] Intento BRD ${attempt}/2: respuesta mal formada, reintentando...`);
       }
     }
     if (!brd) {
@@ -1203,48 +1184,11 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       );
     }
 
-    // Paso 2: Generar To-Be con el BRD como contexto
-    const tobePrompt =
-      "Eres analista de negocio. A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente " +
-      "y del **BRD** ya generado, genera **solo el Manual To-Be** en español, en markdown:\n" +
-      "**Manual To-Be:** comportamiento y reglas de negocio **deseadas** del producto; coherente con el BRD; " +
-      "no inventes módulos o APIs que no se deduzcan del DBGA (indica «no consta» si falta detalle).\n\n" +
-      "**BRD generado (como referencia):**\n\n" +
-      brd.slice(0, 15_000) +
-      "\n\n---\n\n" +
-      "Responde **solo** con este formato exacto (delimitadores literales):\n" +
-      "<<<TOBE>>>\n(markdown To-Be)\n<<<END_TOBE>>>\n\n" +
-      "--- DBGA ---\n\n" +
-      dbgaSlice;
-    let tobe = "";
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const raw = await this.ai.generateResponse(tobePrompt, [], {
-        systemPrompt: DBGA_BRD_TOBE_SUGGEST_SYSTEM,
-      });
-      const extracted = extractTagged((raw ?? "").trim(), "TOBE");
-      if (extracted) {
-        tobe = cleanDocumentContent(extracted);
-        break;
-      }
-      if (attempt < 2) {
-        console.warn(`[suggestBrdTobeFromDbga] Intento To-Be ${attempt}/2: respuesta mal formada, reintentando...`);
-      }
-    }
-    if (!tobe) {
-      throw new BadRequestException(
-        "No se pudo generar el To-Be. Reintenta o acorta el DBGA.",
-      );
-    }
     await this.prisma.stage.update({
       where: { id: stage.id },
-      data: {
-        brdContent: brd,
-        toBeManualContent: tobe,
-        brdApprovedAt: null,
-        toBeApprovedAt: null,
-      },
+      data: { brdContent: brd },
     });
-    return { brdContent: brd, toBeManualContent: tobe, stageId: stage.id };
+    return { brdContent: brd, stageId: stage.id };
   }
 
   /** Notifica a Hermes Agent que el proyecto está listo para desarrollo via webhook proxy. */

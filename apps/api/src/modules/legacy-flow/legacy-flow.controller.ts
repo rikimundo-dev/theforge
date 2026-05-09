@@ -98,25 +98,14 @@ export class LegacyFlowController {
   }
 
   /**
-   * Genera mapa As-Is (markdown) desde `codebaseDoc` y lo guarda en `Stage.asIsManualContent` (etapa legacy o primaria).
+   * Genera borrador BRD desde `codebaseDoc` (legacy); To-Be y As-Is eliminados del sistema.
    */
-  @Post("generate-as-is-manual")
-  async generateAsIsManual(
-    @Param("projectId") projectId: string,
-    @Body() body: { stageId?: string } = {},
-  ) {
-    return this.coordinator.generateAsIsManual(projectId, body.stageId);
-  }
-
-  /**
-   * Rellena borradores BRD y Manual To-Be en la etapa legacy (o primaria) a partir de `codebaseDoc`; no aprueba HITL.
-   */
-  @Post("suggest-brd-tobe-from-codebase-doc")
-  async suggestBrdTobeFromCodebaseDoc(
+  @Post("suggest-brd-from-codebase-doc")
+  async suggestBrdFromCodebaseDoc(
     @Param("projectId") projectId: string,
     @Body() body: { stageId?: string },
   ) {
-    return this.coordinator.suggestBrdTobeFromCodebaseDoc(projectId, body.stageId);
+    return this.coordinator.suggestBrdFromCodebaseDoc(projectId, body.stageId);
   }
 
   /**

@@ -225,10 +225,7 @@ export interface WorkshopStage {
   workflowStatus: string;
   mddContent?: string | null;
   brdContent?: string | null;
-  toBeManualContent?: string | null;
-  asIsManualContent?: string | null;
   brdApprovedAt?: string | null;
-  toBeApprovedAt?: string | null;
   status: Status;
   precisionScore: number;
   estimation: Estimation | null;
@@ -1491,11 +1488,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           const dbga = get().dbgaContent ?? get().project?.dbgaContent ?? null;
           if (dbga != null) body.dbgaContent = dbga;
         }
-        if (tab === "brd" || tab === "to-be") {
+        if (tab === "brd") {
           const aid = get().activeStageId;
           const st = get().project?.stages?.find((x) => x.id === aid);
           if (tab === "brd") body.brdContent = st?.brdContent ?? "";
-          if (tab === "to-be") body.toBeManualContent = st?.toBeManualContent ?? "";
         }
         if (tab === "spec") {
           const sc = get().specContent ?? get().project?.specContent;

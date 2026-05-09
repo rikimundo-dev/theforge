@@ -3,9 +3,7 @@
  * Keeps visibility rules in sync with `WorkshopView` / `isTabVisibleForComplexity`.
  */
 import type { LucideIcon } from "lucide-react";
-import {
-  BookOpen,
-  Brain,
+import { Brain,
   ClipboardList,
   Edit3,
   FileCode,
@@ -89,6 +87,7 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
     });
   }
 
+  // WORKSHOP DOC NAV— keep only BRD tab
   if (visible("brd")) {
     items.push({
       id: "brd",
@@ -96,15 +95,6 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
       title: "BRD por etapa; requisitos de negocio",
       Icon: ClipboardList,
       content: ctx.activeWorkshopStage?.brdContent,
-    });
-  }
-  if (visible("to-be")) {
-    items.push({
-      id: "to-be",
-      label: "To-Be",
-      title: "Manual To-Be y As-Is por etapa; entrevista en el chat",
-      Icon: BookOpen,
-      content: ctx.activeWorkshopStage?.toBeManualContent,
     });
   }
   if (visible("mdd")) {

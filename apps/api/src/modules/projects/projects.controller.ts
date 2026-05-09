@@ -162,14 +162,14 @@ export class ProjectsController {
     return this.projects.generateBenchmark(id, userIdea, urls);
   }
 
-  /** Greenfield: borradores BRD + To-Be desde `dbgaContent` (no usa codebaseDoc / Ariadne). Body opcional: `{ stageId }`. */
-  @Post(":id/suggest-brd-tobe-from-dbga")
-  suggestBrdTobeFromDbga(
+  /** Greenfield: borrador BRD desde `dbgaContent` (To-Be eliminado del sistema). */
+  @Post(":id/suggest-brd-from-dbga")
+  suggestBrdFromDbga(
     @Param("id") id: string,
     @Body() body: { stageId?: string },
   ) {
     const stageId = typeof body?.stageId === "string" ? body.stageId : undefined;
-    return this.projects.suggestBrdTobeFromDbga(id, { stageId });
+    return this.projects.suggestBrdFromDbga(id, { stageId });
   }
 
   @Post(":id/phase0-deep-research")

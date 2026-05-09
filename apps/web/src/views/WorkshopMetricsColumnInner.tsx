@@ -491,8 +491,6 @@ export function WorkshopMetricsColumnInner({
                     <div className={cn(WORKSHOP_METRICS_CARD, "max-h-36 space-y-1 overflow-y-auto p-2 text-[11px]")}>
                       {[
                         ["brdContent", "BRD"],
-                        ["toBeManualContent", "To-Be"],
-                        ["asIsManualContent", "As-Is"],
                         ["specContent", "SPEC"],
                         ["architectureContent", "Arq."],
                         ["useCasesContent", "Casos"],

@@ -53,15 +53,7 @@ model Stage {
   /// Constitución SDD (markdown): Master Design Document de 7 secciones para esta etapa.
   mddContent       String?      @db.Text
   /// BRD (markdown): problema, KPIs, alcance de negocio — fase previa al MDD técnico.
-  brdContent            String?   @db.Text
-  /// Manual To-Be (markdown): lógica y comportamiento deseado.
-  toBeManualContent     String?   @db.Text
-  /// Mapa / manual As-Is (markdown); útil en legacy o documentación del proceso actual.
-  asIsManualContent     String?   @db.Text
-  /// Marca de aprobación cliente (HITL) del BRD.
-  brdApprovedAt         DateTime?
-  /// Marca de aprobación cliente (HITL) del To-Be.
-  toBeApprovedAt        DateTime?
+  brdContent     String?   @db.Text
   /// Semáforo SDD (ROJO / AMARILLO / VERDE) derivado del MDD.
   status           Status       @default(ROJO)
   precisionScore   Int          @default(0)
@@ -122,8 +114,6 @@ model Project {
   /// Propuesta HITL pendiente: { level, planSummary, reason } hasta que el usuario confirme en el chat.
   complexityPending Json?
   projectType      ProjectType  @default(NEW)
-  /// Si true, el API bloquea MDD técnico (§3+) hasta BRD y Manual To-Be aprobados en la etapa activa. LEGACY suele ir en false hasta una fase de mejora; NEW en true por defecto.
-  requireBrdTobeGate Boolean     @default(true)
   theforgeProjectId   String?
   hasUxTeam        Boolean      @default(false)
   stages           Stage[]

@@ -12,10 +12,6 @@ export const HIGH_GREENFIELD_FLOW_STEPS = [
     description: "Requisitos de negocio: problema, KPIs, alcance y reglas con stakeholders.",
   },
   {
-    label: "To-Be",
-    description: "Manual To-Be: estado deseado del producto y comportamiento esperado.",
-  },
-  {
     label: "MDD",
     description: "Master Design Doc: modelo de datos, dominio y contratos técnicos centrales.",
   },

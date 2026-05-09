@@ -62,9 +62,7 @@ import type {
   LegacyDeliverablesStrategyResolution,
 } from "./legacy-deliverables-strategy/legacy-deliverables-strategy.types.js";
 import {
-  brdTobeGateFailureMessage,
-  composeBrdToBeAsIsPreamble,
-  isBrdTobeGateSatisfied,
+  composeBrdPreamble,
 } from "../ai-analysis/utils/brd-tobe-gate.util.js";
 
 const KNOWLEDGE = loadLegacyKnowledgePack();
@@ -572,20 +570,7 @@ export class LegacyCoordinatorService {
     ]);
   }
 
-  private async enforceLegacyBrdTobeGate(projectId: string): Promise<void> {
-    const row = await this.prisma.project.findUnique({
-      where: { id: projectId },
-      select: { requireBrdTobeGate: true },
-    });
-    if (!row?.requireBrdTobeGate) return;
-    const st = await this.resolveLegacyGateStage(projectId);
-    if (!st) {
-      throw new BadRequestException("No hay etapa para validar BRD/To-Be. Crea etapa en el proyecto.");
-    }
-    if (!isBrdTobeGateSatisfied(st)) {
-      throw new BadRequestException(brdTobeGateFailureMessage());
-    }
-  }
+  // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos del sistema
 
   /**
    * Sincroniza la etapa legacy actual al grafo FalkorDB (nodo :LegacyStage).
@@ -629,42 +614,14 @@ export class LegacyCoordinatorService {
     }
   }
 
-  /**
-   * Sintetiza un manual As-Is en markdown desde `legacyFlowState.codebaseDoc` y lo persiste en `Stage.asIsManualContent`.
-   */
-  async generateAsIsManual(projectId: string, stageIdHint?: string): Promise<{ asIsManualContent: string; stageId: string }> {
-    const { project } = await this.getLegacyProject(projectId);
-    const stage = stageIdHint?.trim()
-      ? await this.prisma.stage.findUnique({ where: { id: stageIdHint.trim() } })
-      : await this.resolveLegacyGateStage(projectId);
-    const state = this.getLegacyChangeState(stage, project);
-    const codebaseDoc = String(state.codebaseDoc ?? "").trim();
-    if (codebaseDoc.length < 400) {
-      throw new BadRequestException(
-        "Se requiere documentación de partida del codebase (mín. ~400 caracteres). Ejecuta primero generate-codebase-doc.",
-      );
-    }
-    if (!stage?.id) {
-      throw new BadRequestException("No hay etapa para persistir el mapa As-Is.");
-    }
-    const prompt =
-      "Eres analista de negocio y arquitecto de software. A partir del siguiente documento del codebase (índice / evidencia), produce un **Manual As-Is** en español en Markdown con:\n" +
-      "## 1. Resumen ejecutivo del sistema actual\n## 2. Dominios y capacidades observadas\n## 3. Flujos críticos (AS-IS) con referencia a rutas o archivos citados del texto fuente cuando sea posible\n## 4. Datos y contratos existentes mencionados\n## 5. Riesgos técnicos o deuda detectados\n\n" +
-      "Reglas: no inventes módulos que no aparezcan en el documento; si falta evidencia, indica «no consta». Usa listas breves donde ayude.\n\n--- DOCUMENTO FUENTE ---\n\n" +
-      codebaseDoc.slice(0, 120_000);
-    const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
-    const asIs = cleanDocumentContent((mddDraft ?? "").trim()) || "(As-Is generado vacío.)";
-    await this.prisma.stage.update({ where: { id: stage.id }, data: { asIsManualContent: asIs } });
-    await this.syncCurrentLegacyStageToGraph(projectId, stage.id).catch(() => {});
-    return { asIsManualContent: asIs, stageId: stage.id };
-  }
+  // generateAsIsManual eliminado — As-Is removido del sistema; usar legacyFlowState.codebaseDoc directamente
 
   /**
-   * Borradores BRD + Manual To-Be a partir de `legacyFlowState.codebaseDoc` (Ariadne); persiste en la etapa gate sin aprobar.
+   * Borrador BRD a partir de `legacyFlowState.codebaseDoc` (Ariadne); persiste en la etapa sin aprobar.
+   * (To-Be y As-Is eliminados — el MDD captura el diseño.)
    */
-  async suggestBrdTobeFromCodebaseDoc(projectId: string, stageIdHint?: string): Promise<{
+  async suggestBrdFromCodebaseDoc(projectId: string, stageIdHint?: string): Promise<{
     brdContent: string;
-    toBeManualContent: string;
     stageId: string;
   }> {
     const { project } = await this.getLegacyProject(projectId);
@@ -686,56 +643,51 @@ export class LegacyCoordinatorService {
       stage = await this.resolveLegacyGateStage(projectId);
     }
     if (!stage?.id) {
-      throw new BadRequestException("No hay etapa para persistir BRD / To-Be.");
+      throw new BadRequestException("No hay etapa para persistir BRD.");
     }
-    // Cambio 2: Buscar etapa base (anterior en ordinal) para contexto incremental
-    let baselineStageBrdBlock = "";
+
+    let baselineBrdBlock = "";
     if (stage.ordinal > 1) {
       try {
         const baselineOrdinal = stage.ordinal - 1;
         const baseline = await this.prisma.stage.findFirst({
           where: { projectId: stage.projectId, ordinal: baselineOrdinal },
-          select: { brdContent: true, toBeManualContent: true },
+          select: { brdContent: true },
         });
-        if (baseline?.brdContent?.trim() || baseline?.toBeManualContent?.trim()) {
-          baselineStageBrdBlock =
-            "## Línea base — BRD y To-Be de la etapa anterior (sistema sin el cambio actual)\n\n" +
-            (baseline.brdContent?.trim() ? "### BRD actual (línea base)\n\n" + baseline.brdContent.trim().slice(0, 15000) + "\n\n" : "") +
-            (baseline.toBeManualContent?.trim() ? "### To-Be actual (línea base)\n\n" + baseline.toBeManualContent.trim().slice(0, 15000) + "\n\n" : "") +
-            "---\n\n**Instrucción:** El BRD y To-Be DEBEN centrarse SOLO en el cambio (adiciones, modificaciones o eliminaciones) respecto a esta línea base. " +
-            "No redescribas el sistema completo. Si algo no cambia respecto a la línea base, indícalo brevemente. " +
-            "El BRD y To-Be de esta etapa son documentos de cambio, no documentos completos del sistema.\n\n---\n\n";
+        if (baseline?.brdContent?.trim()) {
+          baselineBrdBlock =
+            "## Línea base — BRD de la etapa anterior (sistema sin el cambio actual)\n\n" +
+            baseline.brdContent.trim().slice(0, 15000) +
+            "\n\n---\n\n**Instrucción:** El BRD debe centrarse SOLO en el cambio respecto a esta línea base. " +
+            "No redescribas el sistema completo.\n\n---\n\n";
         }
       } catch { /* non-critical */ }
     }
-    const isInitialLegacyStage = !baselineStageBrdBlock;
+    const isInitialLegacyStage = !baselineBrdBlock;
     const basePrompt = isInitialLegacyStage
       ? "Eres analista de negocio. A partir del **MDD inicial** (documentación del codebase existente a continuación), " +
-        "deriva un borrador en español, en markdown, que refleje fielmente el sistema documentado.\\n\\n" +
-        "IMPORTANTE: Este NO es un documento de cambio. Debes **reflejar el sistema existente** descrito en el MDD inicial.\\n\\n"
-      : "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), redacta un borrador en español, en markdown, como documento de cambio.\\n\\n" +
-        "IMPORTANTE: Este es un **documento de cambio**, no una descripción del sistema completo. Céntrate en qué cambia, qué se agrega y qué se modifica.\\n\\n";
+        "deriva un borrador en español, en markdown, que refleje fielmente el sistema documentado.\n\n" +
+        "IMPORTANTE: Este NO es un documento de cambio. Debes **reflejar el sistema existente** descrito en el MDD inicial.\n\n"
+      : "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), redacta un borrador en español, en markdown, como documento de cambio.\n\n" +
+        "IMPORTANTE: Este es un **documento de cambio**, no una descripción del sistema completo. Céntrate en qué cambia, qué se agrega y qué se modifica.\n\n";
 
     const codebaseChunk = codebaseDoc.slice(0, 120_000);
-    const baselineBlock = baselineStageBrdBlock ? baselineStageBrdBlock : "";
 
-    // Generar BRD
     const brdPrompt =
       basePrompt +
       (isInitialLegacyStage
-        ? "Genera el **BRD (sistema actual):** problema de negocio que resuelve el sistema existente, alcance actual, usuarios, supuestos y riesgos identificados. Cita módulos o rutas del MDD inicial.\\n\\n"
-        : "Genera el **BRD de cambio:** problema que resuelve este cambio, alcance del cambio, supuestos, riesgos; cita rutas o módulos del documento fuente que este cambio toca.\\n\\n") +
-      baselineBlock +
-      "Responde **solo** con este formato exacto (delimitadores literales):\\n" +
-      "<<<BRD>>>\\n(markdown BRD)\\n<<<END_BRD>>>\\n\\n" +
-      "--- DOCUMENTO ---\\n\\n" +
+        ? "Genera el **BRD (sistema actual):** problema de negocio que resuelve el sistema existente, alcance actual, usuarios, supuestos y riesgos identificados. Cita módulos o rutas del MDD inicial.\n\n"
+        : "Genera el **BRD de cambio:** problema que resuelve este cambio, alcance del cambio, supuestos, riesgos; cita rutas o módulos del documento fuente que este cambio toca.\n\n") +
+      baselineBrdBlock +
+      "Responde **solo** con este formato exacto (delimitadores literales):\n" +
+      "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n\n" +
+      "--- DOCUMENTO ---\n\n" +
       codebaseChunk;
 
     let brd = "";
     for (let attempt = 1; attempt <= 2; attempt++) {
       const raw = await this.ai.generateResponse(brdPrompt, [], {
         systemPrompt: COORDINATOR_SYSTEM,
-
       });
       const brdMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*BRD\s*>>>\s*([\s\S]*?)\s*<<<_?END_BRD_?>>>/i);
       const extracted = brdMatch?.[1]?.trim() ?? null;
@@ -744,7 +696,7 @@ export class LegacyCoordinatorService {
         break;
       }
       if (attempt < 2) {
-        console.warn(`[suggestBrdTobeFromCodebaseDoc] Intento BRD ${attempt}/2: respuesta mal formada, reintentando...`);
+        console.warn(`[suggestBrdFromCodebaseDoc] Intento BRD ${attempt}/2: respuesta mal formada, reintentando...`);
       }
     }
     if (!brd) {
@@ -753,52 +705,14 @@ export class LegacyCoordinatorService {
       );
     }
 
-    // Generar To-Be
-    const tobePrompt =
-      basePrompt +
-      (isInitialLegacyStage
-        ? "Genera el **Manual To-Be (sistema actual):** comportamiento y reglas de negocio del sistema **tal como existe hoy**, según el MDD inicial. Describe la lógica actual, no una visión futura.\\n\\n"
-        : "Genera el **Manual To-Be de cambio:** comportamiento y reglas de negocio **deseadas** tras aplicar el cambio; alinea con el BRD de cambio; no inventes APIs o archivos que no aparezcan en el fuente (indica «no consta» si falta evidencia).\\n\\n") +
-      baselineBlock +
-      "**BRD generado (como referencia):**\\n\\n" + brd.slice(0, 15000) + "\\n\\n---\\n\\n" +
-      "Responde **solo** con este formato exacto (delimitadores literales):\\n" +
-      "<<<TOBE>>>\\n(markdown To-Be)\\n<<<END_TOBE>>>\\n\\n" +
-      "--- DOCUMENTO ---\\n\\n" +
-      codebaseChunk;
-
-    let tobe = "";
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const raw = await this.ai.generateResponse(tobePrompt, [], {
-        systemPrompt: COORDINATOR_SYSTEM,
-
-      });
-      const tobeMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*TOBE\s*>>>\s*([\s\S]*?)\s*<<<_?END_TOBE_?>>>/i);
-      const extracted = tobeMatch?.[1]?.trim() ?? null;
-      if (extracted) {
-        tobe = cleanDocumentContent(extracted);
-        break;
-      }
-      if (attempt < 2) {
-        console.warn(`[suggestBrdTobeFromCodebaseDoc] Intento To-Be ${attempt}/2: respuesta mal formada, reintentando...`);
-      }
-    }
-    if (!tobe) {
-      throw new BadRequestException(
-        "No se pudo generar el To-Be. Reintenta o acorta el documento de partida.",
-      );
-    }
-
     await this.prisma.stage.update({
       where: { id: stage.id },
       data: {
         brdContent: brd,
-        toBeManualContent: tobe,
-        brdApprovedAt: null,
-        toBeApprovedAt: null,
       },
     });
     await this.syncCurrentLegacyStageToGraph(projectId, stage.id).catch(() => {});
-    return { brdContent: brd, toBeManualContent: tobe, stageId: stage.id };
+    return { brdContent: brd, stageId: stage.id };
   }
 
   private hasLegacyIndexSddResolution(state: LegacyFlowState): boolean {
@@ -1316,8 +1230,8 @@ export class LegacyCoordinatorService {
         ? [`${descTermsGate} modules services handlers components routes`, ...DEFAULT_SEMANTIC_QUERIES]
         : [...DEFAULT_SEMANTIC_QUERIES];
     await this.assertLegacyIndexSddGate(projectId, theforgeId, state, { semanticQueries: gateSemanticQueries });
-    await this.enforceLegacyBrdTobeGate(projectId);
-    const brdPre = gateStage ? composeBrdToBeAsIsPreamble(gateStage) : "";
+    // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos
+    const brdPre = gateStage?.brdContent ? composeBrdPreamble(gateStage.brdContent) : "";
 
     // Múltiples consultas a TheForge para contexto amplio (evidencia del índice + ask_codebase + refactor seguro)
     const theforgeParts: string[] = [];
@@ -1672,8 +1586,8 @@ export class LegacyCoordinatorService {
       );
     }
 
-    await this.enforceLegacyBrdTobeGate(projectId);
-
+    // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos
+    await this.prisma
     const codebaseDoc = String((project as { legacyFlowState?: LegacyFlowState }).legacyFlowState?.codebaseDoc ?? "").trim();
     const mddContent = String(project.mddContent ?? "").trim();
     report.codebaseDocChars = codebaseDoc.length;

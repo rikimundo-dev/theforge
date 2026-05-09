@@ -10,10 +10,7 @@ import { createMddGraph, createMddGraphWithManager } from "./graph/mdd-graph.js"
 import { defaultDBGAState, type DBGAState } from "./state/index.js";
 import { defaultMDDState, type MDDState, type MDDStateType } from "./state/index.js";
 import {
-  brdTobeGateFailureMessage,
-  composeBrdToBeAsIsPreamble,
-  isBrdTobeGateSatisfied,
-  isTechnicalMddGraphNode,
+  composeBrdPreamble,
 } from "./utils/brd-tobe-gate.util.js";
 import { CheckpointerService } from "./checkpoint/checkpointer.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
@@ -439,8 +436,7 @@ export class AiAnalysisService {
     stageId?: string | null,
   ): AsyncGenerator<StreamProgressEvent> {
     let estimationStage: string | undefined;
-    let gateStage: Awaited<ReturnType<PrismaService["stage"]["findUnique"]>> | null = null;
-    let enforceBrdTobeGate = false;
+    let brdContent: string | null = null;
     if (projectId?.trim()) {
       const p = await this.prisma.project.findUnique({
         where: { id: projectId.trim() },
@@ -455,9 +451,9 @@ export class AiAnalysisService {
           p.complexity as EstimationComplexity,
         );
         if (estimationStage?.trim()) {
-          gateStage = await this.prisma.stage.findUnique({ where: { id: estimationStage.trim() } });
+          const stage = await this.prisma.stage.findUnique({ where: { id: estimationStage.trim() } });
+          brdContent = stage?.brdContent ?? null;
         }
-        enforceBrdTobeGate = !!(p as { requireBrdTobeGate?: boolean }).requireBrdTobeGate;
       }
     }
     const graph = createMddGraph(this.graphMemory, { theforge: this.theforge });
@@ -465,10 +461,8 @@ export class AiAnalysisService {
     let dbgaEffective =
       dbgaContent.trim() ||
       "(Sin Benchmark. El usuario no tiene un documento de Benchmark; genera un MDD base con contexto, alcance y requisitos que el usuario podrá refinar.)";
-    if (gateStage) {
-      const pre = composeBrdToBeAsIsPreamble(gateStage);
-      if (pre) dbgaEffective = pre + dbgaEffective;
-    }
+    const brdPreamble = composeBrdPreamble(brdContent);
+    if (brdPreamble) dbgaEffective = brdPreamble + dbgaEffective;
     const initialState: MDDState = {
       ...defaultMDDState,
       dbgaContent: dbgaEffective,
@@ -501,16 +495,6 @@ export class AiAnalysisService {
         if (mode === "updates" && data && typeof data === "object" && !Array.isArray(data)) {
           const nodeName = Object.keys(data as Record<string, unknown>)[0];
           if (nodeName) {
-            if (enforceBrdTobeGate && gateStage && isTechnicalMddGraphNode(nodeName)) {
-              const fresh = estimationStage?.trim()
-                ? await this.prisma.stage.findUnique({ where: { id: estimationStage.trim() } })
-                : null;
-              const st = fresh ?? gateStage;
-              if (!isBrdTobeGateSatisfied(st)) {
-                yield { type: "blocked", code: "BRD_TOBE_GATE", message: brdTobeGateFailureMessage() };
-                return;
-              }
-            }
             const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : getAgentLabel(nodeName);
             yield { type: "progress", agent: label, message: entry?.message ?? nodeName };
@@ -581,10 +565,9 @@ export class AiAnalysisService {
       projRow.complexity as EstimationComplexity,
     );
 
-    const gateStage = mddStageKey?.trim()
-      ? await this.prisma.stage.findUnique({ where: { id: mddStageKey.trim() } })
+    const brdContent = mddStageKey?.trim()
+      ? (await this.prisma.stage.findUnique({ where: { id: mddStageKey.trim() }, select: { brdContent: true } }))?.brdContent ?? null
       : null;
-    const enforceBrdTobeGate = !!(projRow as { requireBrdTobeGate?: boolean }).requireBrdTobeGate;
 
     const row = await this.prisma.agentStateCheckpoint.upsert({
       where: {
@@ -631,10 +614,8 @@ export class AiAnalysisService {
       }
     }
     let dbgaEffective = dbgaContent.trim() || "(Sin Benchmark. El usuario no tiene un documento de Benchmark; genera un MDD base.)";
-    if (gateStage) {
-      const pre = composeBrdToBeAsIsPreamble(gateStage);
-      if (pre) dbgaEffective = pre + dbgaEffective;
-    }
+    const brdPreamble = composeBrdPreamble(brdContent);
+    if (brdPreamble) dbgaEffective = brdPreamble + dbgaEffective;
     const initialState: MDDState = {
       ...defaultMDDState,
       dbgaContent: dbgaEffective,
@@ -735,16 +716,6 @@ export class AiAnalysisService {
             return;
           }
           if (nodeName) {
-            if (enforceBrdTobeGate && gateStage && isTechnicalMddGraphNode(nodeName)) {
-              const fresh = mddStageKey?.trim()
-                ? await this.prisma.stage.findUnique({ where: { id: mddStageKey.trim() } })
-                : null;
-              const st = fresh ?? gateStage;
-              if (!isBrdTobeGateSatisfied(st)) {
-                yield { type: "blocked", code: "BRD_TOBE_GATE", message: brdTobeGateFailureMessage() };
-                return;
-              }
-            }
             const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : nodeName === "manager" ? "Manager (entrevista)" : getAgentLabel(nodeName);
             this.logger.log(`[MDD stream/manager] progress node=${nodeName} label=${label}`);
@@ -898,14 +869,7 @@ export class AiAnalysisService {
     const estimationStage = stageIdForEstimation(cp.mddStageId);
     const preferredStageForCtx = cp.mddStageId.trim() ? cp.mddStageId : undefined;
 
-    const projForGate = await this.prisma.project.findUnique({
-      where: { id: projectId.trim() },
-      select: { requireBrdTobeGate: true },
-    });
-    const gateStageResume = preferredStageForCtx?.trim()
-      ? await this.prisma.stage.findUnique({ where: { id: preferredStageForCtx.trim() } })
-      : null;
-    const enforceBrdTobeGateResume = projForGate?.requireBrdTobeGate === true;
+    // requireBrdTobeGate eliminado — To-Be/As-Is removidos
 
     yield { type: "progress", agent: "Manager", message: "Reanudando flujo con tu respuesta..." };
 
@@ -1029,16 +993,6 @@ export class AiAnalysisService {
             return;
           }
           if (nodeName) {
-            if (enforceBrdTobeGateResume && gateStageResume && isTechnicalMddGraphNode(nodeName)) {
-              const fresh = preferredStageForCtx?.trim()
-                ? await this.prisma.stage.findUnique({ where: { id: preferredStageForCtx.trim() } })
-                : null;
-              const st = fresh ?? gateStageResume;
-              if (!isBrdTobeGateSatisfied(st)) {
-                yield { type: "blocked", code: "BRD_TOBE_GATE", message: brdTobeGateFailureMessage() };
-                return;
-              }
-            }
             const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : nodeName === "manager" ? "Manager (entrevista)" : getAgentLabel(nodeName);
 
@@ -1232,25 +1186,12 @@ export class AiAnalysisService {
       return;
     }
 
-    const projRowRegen = await this.prisma.project.findUnique({
-      where: { id: pid },
-      select: {
-        complexity: true,
-        requireBrdTobeGate: true,
-        stages: { orderBy: { ordinal: "asc" }, select: { id: true, ordinal: true, workflowStatus: true } },
-      },
-    });
-    const regenCx = (projRowRegen?.complexity ?? "HIGH") as EstimationComplexity;
-    const regenEstimationStage =
-      stageId?.trim() || pickPrimaryStage(projRowRegen?.stages ?? [])?.id || undefined;
-    const gateStageRegen = regenEstimationStage
-      ? await this.prisma.stage.findUnique({ where: { id: regenEstimationStage } })
+    // regenEstimationStage desde pid + stageId (To-Be/As-Is eliminados)
+    const regenCx = "HIGH" as EstimationComplexity;
+    const regenEstimationStage = stageId?.trim() || undefined;
+    const regenBrdContent = regenEstimationStage
+      ? (await this.prisma.stage.findUnique({ where: { id: regenEstimationStage }, select: { brdContent: true } }))?.brdContent ?? null
       : null;
-    const enforceBrdTobeGateRegen = projRowRegen?.requireBrdTobeGate === true;
-    if (section >= 2 && enforceBrdTobeGateRegen && gateStageRegen && !isBrdTobeGateSatisfied(gateStageRegen)) {
-      yield { type: "blocked", code: "BRD_TOBE_GATE", message: brdTobeGateFailureMessage() };
-      return;
-    }
 
     this.estimationService.cacheProjectComplexity(pid, regenEstimationStage ?? null, regenCx);
     const regenEstOpts = { projectId: pid, stageId: regenEstimationStage ?? null, complexity: regenCx };
@@ -1302,10 +1243,8 @@ export class AiAnalysisService {
       const structured = markdownToMddStructured(mddContent);
       const agentCtxRegen = await this.buildMddAgentContext(pid, regenEstimationStage ?? null);
       let dbgaRegen = "(Regenerando sección desde documento actual.)";
-      if (gateStageRegen) {
-        const pre = composeBrdToBeAsIsPreamble(gateStageRegen);
-        if (pre) dbgaRegen = pre + dbgaRegen;
-      }
+      const pre = composeBrdPreamble(regenBrdContent);
+      if (pre) dbgaRegen = pre + dbgaRegen;
       const state: MDDState = {
         ...defaultMDDState,
         dbgaContent: dbgaRegen,

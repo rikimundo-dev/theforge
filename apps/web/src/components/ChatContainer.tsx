@@ -21,7 +21,6 @@ export type ActiveTab =
   | "mdd-inicial"
   | "spec"
   | "brd"
-  | "to-be"
   | "mdd"
   | "ux-ui-guide"
   | "blueprint"
@@ -40,7 +39,6 @@ const ACTIVE_TAB_LABELS: Record<ActiveTab, string> = {
   "mdd-inicial": "MDD Inicial (documentación de partida)",
   spec: "Spec",
   brd: "BRD (etapa)",
-  "to-be": "Manual To-Be (etapa)",
   mdd: "MDD",
   "ux-ui-guide": "Guía UX/UI",
   blueprint: "Blueprint",
@@ -63,7 +61,6 @@ const CHAT_COMPOSER_PLACEHOLDER: Record<ActiveTab, string> = {
   "mdd-inicial": "Indicaciones para la partida…",
   spec: "Mensaje sobre el Spec…",
   brd: "Mensaje sobre el BRD…",
-  "to-be": "Cambios al To-Be…",
   mdd: "Mensaje o /sección…",
   "ux-ui-guide": "Marca, UI o prioridades…",
   blueprint: "Mensaje sobre el Blueprint…",
@@ -310,7 +307,7 @@ export default function ChatContainer({
     const tab = activeTab ?? "mdd";
     if (!projectId?.trim() || !session?.id) return;
     if (tab === "mdd") return;
-    const welcomeTabs: ActiveTab[] = ["brd", "to-be", "ux-ui-guide", "benchmark"];
+    const welcomeTabs: ActiveTab[] = ["brd", "ux-ui-guide", "benchmark"];
     if (!welcomeTabs.includes(tab)) return;
     const count = (session.chatLog ?? []).filter((m: { tab?: string }) => (m.tab ?? "mdd") === tab).length;
     if (count > 0) return;

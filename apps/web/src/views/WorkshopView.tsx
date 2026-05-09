@@ -41,7 +41,7 @@ import { DesignMdPreview } from "../components/DesignMdPreview";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
 import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
 import LegacyMcpDebugPanel from "../components/LegacyMcpDebugPanel/LegacyMcpDebugPanel";
-import { BrdTobeStagePanel } from "../components/BrdTobeStagePanel";
+import { BrdStagePanel } from "../components/BrdStagePanel";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
 import type { LucideIcon } from "lucide-react";
@@ -681,30 +681,22 @@ export default function WorkshopView({
   }, [activeLegacyState?.codebaseDoc]);
 
   useEffect(() => {
-    brdTobeServerSnap.current = { stageId: "", brd: "", tobe: "", asis: "" };
+    brdTobeServerSnap.current = { stageId: "", brd: "" };
     setBrdWorkshopDraft("");
-    setToBeWorkshopDraft("");
-    setAsIsWorkshopDraft("");
     setBrdDocViewMode("preview");
-    setToBeDocViewMode("preview");
   }, [projectId]);
 
-  /** Sincroniza drafts desde el stage cuando el contenido del servidor cambia, preservando ediciones del usuario. */
+  /** Sincroniza BRD draft desde el stage cuando el contenido del servidor cambia, preservando ediciones del usuario. */
   useEffect(() => {
     if (!activeWorkshopStage || activeWorkshopStage.id !== activeStageId) return;
     const id = activeWorkshopStage.id;
     const brd = activeWorkshopStage.brdContent ?? "";
-    const tobe = activeWorkshopStage.toBeManualContent ?? "";
-    const asis = activeWorkshopStage.asIsManualContent ?? "";
 
     const cur = brdTobeServerSnap.current;
     if (cur.stageId !== id) {
-      brdTobeServerSnap.current = { stageId: id, brd, tobe, asis };
+      brdTobeServerSnap.current = { stageId: id, brd };
       setBrdWorkshopDraft(brd);
-      setToBeWorkshopDraft(tobe);
-      setAsIsWorkshopDraft(asis);
       setBrdDocViewMode("preview");
-      setToBeDocViewMode("preview");
       return;
     }
 
@@ -712,72 +704,37 @@ export default function WorkshopView({
       setBrdWorkshopDraft((d) => (d === cur.brd ? brd : d));
       brdTobeServerSnap.current.brd = brd;
     }
-    const c2 = brdTobeServerSnap.current;
-    if (c2.tobe !== tobe) {
-      setToBeWorkshopDraft((d) => (d === c2.tobe ? tobe : d));
-      brdTobeServerSnap.current.tobe = tobe;
-    }
-    const c3 = brdTobeServerSnap.current;
-    if (c3.asis !== asis) {
-      setAsIsWorkshopDraft((d) => (d === c3.asis ? asis : d));
-      brdTobeServerSnap.current.asis = asis;
-    }
   }, [
     activeStageId,
     activeWorkshopStage?.id,
     activeWorkshopStage?.brdContent,
-    activeWorkshopStage?.toBeManualContent,
-    activeWorkshopStage?.asIsManualContent,
   ]);
 
-  /** Fuerza sincronización cuando una operación de BRD/To-Be acaba de completarse (loading pasó de true a false).
-   *  Cubre casos donde el efecto anterior no detectó el cambio (ej. Zustand batching, referencia de stage sin mutar). */
+  /** Fuerza sincronización cuando una operación de BRD acaba de completarse (loading pasó de true a false). */
   useEffect(() => {
     const wasGeneratingBrd =
       prevLoadingReasonRef.current === "brd-tobe-from-dbga" ||
-      prevLoadingReasonRef.current === "legacy-brd-tobe-suggest" ||
-      prevLoadingReasonRef.current === "legacy-as-is";
+      prevLoadingReasonRef.current === "legacy-brd-tobe-suggest";
     if (!loading && wasGeneratingBrd && activeWorkshopStage) {
       setBrdWorkshopDraft(activeWorkshopStage.brdContent ?? "");
-      setToBeWorkshopDraft(activeWorkshopStage.toBeManualContent ?? "");
-      setAsIsWorkshopDraft(activeWorkshopStage.asIsManualContent ?? "");
       brdTobeServerSnap.current = {
         stageId: activeWorkshopStage.id,
         brd: activeWorkshopStage.brdContent ?? "",
-        tobe: activeWorkshopStage.toBeManualContent ?? "",
-        asis: activeWorkshopStage.asIsManualContent ?? "",
       };
     }
     prevLoadingReasonRef.current = loadingReason;
-  }, [loading, loadingReason, activeWorkshopStage?.id, activeWorkshopStage?.brdContent, activeWorkshopStage?.toBeManualContent, activeWorkshopStage?.asIsManualContent]);
+  }, [loading, loadingReason, activeWorkshopStage?.id, activeWorkshopStage?.brdContent]);
 
   const brdWorkshopDirty = useMemo(
     () => brdWorkshopDraft !== (activeWorkshopStage?.brdContent ?? ""),
     [brdWorkshopDraft, activeWorkshopStage?.brdContent],
   );
-  const toBeWorkshopTabDirty = useMemo(
-    () =>
-      toBeWorkshopDraft !== (activeWorkshopStage?.toBeManualContent ?? "") ||
-      asIsWorkshopDraft !== (activeWorkshopStage?.asIsManualContent ?? ""),
-    [toBeWorkshopDraft, asIsWorkshopDraft, activeWorkshopStage?.toBeManualContent, activeWorkshopStage?.asIsManualContent],
-  );
-
   const persistBrdWorkshopDraft = useCallback(async () => {
     if (!activeStageId || !brdWorkshopDirty) return;
     setBrdTobePersistBusy(true);
     await patchWorkshopStage(activeStageId, { brdContent: brdWorkshopDraft });
     setBrdTobePersistBusy(false);
   }, [activeStageId, brdWorkshopDirty, brdWorkshopDraft, patchWorkshopStage]);
-
-  const persistToBeTabWorkshopDrafts = useCallback(async () => {
-    if (!activeStageId || !toBeWorkshopTabDirty) return;
-    setBrdTobePersistBusy(true);
-    await patchWorkshopStage(activeStageId, {
-      toBeManualContent: toBeWorkshopDraft,
-      asIsManualContent: asIsWorkshopDraft,
-    });
-    setBrdTobePersistBusy(false);
-  }, [activeStageId, toBeWorkshopTabDirty, toBeWorkshopDraft, asIsWorkshopDraft, patchWorkshopStage]);
 
   const handleGenerateDeliverables = useCallback(async () => {
     if (!projectId || !canGenerate || cascadeRunning) return;
@@ -1463,7 +1420,7 @@ export default function WorkshopView({
                           else if (centralPanel === "logic-flows") setLogicFlowsViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "infra") setInfraViewMode((m) => (m === "preview" ? "source" : "preview"));
                           else if (centralPanel === "brd") setBrdDocViewMode((m) => (m === "preview" ? "source" : "preview"));
-                          else if (centralPanel === "to-be") setToBeDocViewMode((m) => (m === "preview" ? "source" : "preview"));
+                          // to-be tab removed
                         }}
                           >
                             <DocToggleIcon className="h-4 w-4 shrink-0" aria-hidden />
@@ -2210,16 +2167,6 @@ export default function WorkshopView({
                     </button>
                   </div>
                 )}
-                <BrdTobeStagePanel
-                  panel="gate-only"
-                  projectId={projectId}
-                  requireBrdTobeGate={project?.requireBrdTobeGate === true}
-                  activeStageId={activeStageId}
-                  stage={activeWorkshopStage}
-                  isLegacyProject={isLegacyProject}
-                  codebaseDocChars={codebaseDocCharCount}
-                  dbgaContentChars={dbgaContentCharCount}
-                />
                 <div
                   className="mb-3 flex flex-col gap-3 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_38%,var(--background))] p-3 sm:p-4"
                   role="region"
@@ -2229,7 +2176,7 @@ export default function WorkshopView({
                     <button
                       type="button"
                       onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
-                      disabled={(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) || (project?.requireBrdTobeGate === true && (!(activeWorkshopStage?.brdContent ?? "").trim() || !(activeWorkshopStage?.toBeManualContent ?? "").trim()))}
+                      disabled={loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")}
                       className={cn(
                         WORKSHOP_MDD_ACTION_PRIMARY,
                         "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
@@ -2246,7 +2193,7 @@ export default function WorkshopView({
                       <button
                         type="button"
                         onClick={handleGenerateDeliverables}
-                        disabled={!canGenerate || cascadeRunning || mddReviewing || project?.requireBrdTobeGate === true}
+                        disabled={!canGenerate || cascadeRunning || mddReviewing}
                         className={cn(
                           WORKSHOP_MDD_ACTION_PRIMARY,
                           "bg-[var(--success)] text-[var(--success-foreground)] hover:bg-[color-mix(in_oklch,var(--success)_88%,black)]",
@@ -2261,18 +2208,7 @@ export default function WorkshopView({
                       </button>
                     )}
                   </div>
-                  {(project?.requireBrdTobeGate === true && (!(activeWorkshopStage?.brdContent ?? "").trim() || !(activeWorkshopStage?.toBeManualContent ?? "").trim())) ? (
-                    <div
-                      className="flex min-w-0 items-start gap-2 rounded-lg border border-[color-mix(in_oklch,var(--destructive)_38%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_12%,var(--card))] px-3 py-2.5 text-sm leading-snug text-[color-mix(in_oklch,var(--destructive)_92%,var(--foreground))]"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]" aria-hidden />
-                      <span>
-                        <span className="font-semibold">BRD / To-Be incompletos.</span> Completa el contenido en sus pestañas antes de generar el MDD o los entregables.
-                      </span>
-                    </div>
-                  ) : (
+                  {(
                     <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
                       {isLegacyProject
                         ? "Genera el MDD desde BRD y To-Be de la etapa activa (y doc. de partida si aplica)."
@@ -2574,68 +2510,16 @@ export default function WorkshopView({
                     </div>
                   </div>
                 )}
-                <BrdTobeStagePanel
-                  panel="brd"
+                <BrdStagePanel
                   projectId={projectId}
-                  requireBrdTobeGate={project?.requireBrdTobeGate === true}
                   activeStageId={activeStageId}
-                  stage={activeWorkshopStage}
-                  isLegacyProject={isLegacyProject}
-                  codebaseDocChars={codebaseDocCharCount}
-                  dbgaContentChars={dbgaContentCharCount}
-                  brdDraft={brdWorkshopDraft}
-                  onBrdDraftChange={setBrdWorkshopDraft}
+                  brdContent={brdWorkshopDraft}
+                  onBrdContentChange={setBrdWorkshopDraft}
                   docViewMode={brdDocViewMode}
                 />
               </div>
             )}
-            {centralPanel === "to-be" && projectId && (
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-                {toBeWorkshopTabDirty && (
-                  <div className="shrink-0 flex items-center justify-between gap-2 rounded-lg border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] px-3 py-2">
-                    <span className="text-sm text-[color-mix(in_oklch,var(--primary)_62%,var(--foreground))]">Cambios sin guardar en To-Be / As-Is de esta etapa.</span>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setToBeWorkshopDraft(activeWorkshopStage?.toBeManualContent ?? "");
-                          setAsIsWorkshopDraft(activeWorkshopStage?.asIsManualContent ?? "");
-                        }}
-                        disabled={brdTobePersistBusy}
-                        className="flex items-center gap-1.5 rounded px-2 py-1 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] hover:bg-[var(--muted)] hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <X className="h-4 w-4" />
-                        Cancelar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void persistToBeTabWorkshopDrafts()}
-                        disabled={brdTobePersistBusy}
-                        className="flex items-center gap-1.5 rounded-md bg-[var(--primary)] px-3 py-1.5 text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {brdTobePersistBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                        Grabar
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <BrdTobeStagePanel
-                  panel="tobe"
-                  projectId={projectId}
-                  requireBrdTobeGate={project?.requireBrdTobeGate === true}
-                  activeStageId={activeStageId}
-                  stage={activeWorkshopStage}
-                  isLegacyProject={isLegacyProject}
-                  codebaseDocChars={codebaseDocCharCount}
-                  dbgaContentChars={dbgaContentCharCount}
-                  tobeDraft={toBeWorkshopDraft}
-                  onTobeDraftChange={setToBeWorkshopDraft}
-                  asisDraft={asIsWorkshopDraft}
-                  onAsisDraftChange={setAsIsWorkshopDraft}
-                  docViewMode={toBeDocViewMode}
-                />
-              </div>
-            )}
+            {/* to-be tab removed — secciones To-Be y As-Is eliminadas del sistema */}
             {centralPanel === "blueprint" && (
               blueprintContent ? (
                 blueprintViewMode === "preview" ? (
