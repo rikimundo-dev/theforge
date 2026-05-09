@@ -264,14 +264,14 @@ export default function ChatContainer({
     (loadingReason === "legacy-codebase-doc" ||
       loadingReason === "legacy-mdd" ||
       loadingReason === "legacy-as-is" ||
-      loadingReason === "legacy-brd-tobe-suggest" ||
+      loadingReason === "legacy-brd-suggest" ||
       loadingReason === "legacy-deliverables" ||
-      loadingReason === "brd-tobe-from-dbga");
+      loadingReason === "brd-from-dbga");
   const legacyRotatingSteps = useMemo(() => {
     if (loadingReason === "legacy-codebase-doc") return LEGACY_CODEBASE_DOC_STEPS;
     if (loadingReason === "legacy-mdd") return LEGACY_MDD_STEPS;
-    if (loadingReason === "legacy-brd-tobe-suggest") return LEGACY_BRD_TOBE_SUGGEST_STEPS;
-    if (loadingReason === "brd-tobe-from-dbga") return BRD_TOBE_FROM_DBGA_STEPS;
+    if (loadingReason === "legacy-brd-suggest") return LEGACY_BRD_TOBE_SUGGEST_STEPS;
+    if (loadingReason === "brd-from-dbga") return BRD_TOBE_FROM_DBGA_STEPS;
     if (loadingReason === "legacy-deliverables") return LEGACY_DELIVERABLES_STEPS;
     return LEGACY_CODEBASE_DOC_STEPS;
   }, [loadingReason]);
@@ -817,9 +817,9 @@ export default function ChatContainer({
                       ? "MDD de cambio"
                       : loadingReason === "legacy-as-is"
                         ? "Manual As-Is"
-                        : loadingReason === "legacy-brd-tobe-suggest"
+                        : loadingReason === "legacy-brd-suggest"
                           ? "BRD / To-Be (borradores)"
-                          : loadingReason === "brd-tobe-from-dbga"
+                          : loadingReason === "brd-from-dbga"
                             ? "BRD / To-Be desde DBGA"
                             : "Entregables legacy"}
                 </p>

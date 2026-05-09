@@ -417,8 +417,8 @@ interface WorkshopState {
     | "legacy-codebase-doc"
     | "legacy-mdd"
     | "legacy-as-is"
-    | "legacy-brd-tobe-suggest"
-    | "brd-tobe-from-dbga"
+    | "legacy-brd-suggest"
+    | "brd-from-dbga"
     | "legacy-deliverables"
     | "deliverables-cascade"
     | "launch-hermes"
@@ -584,16 +584,16 @@ interface WorkshopState {
   legacyGenerateMdd: (projectId: string, stageId?: string) => Promise<{ mddContent: string } | null>;
   /** POST …/legacy/generate-as-is-manual → persiste `asIsManualContent` en la etapa legacy/primaria. */
   legacyGenerateAsIsManual: (projectId: string) => Promise<{ asIsManualContent: string; stageId: string } | null>;
-  /** POST …/legacy/suggest-brd-tobe-from-codebase-doc — borradores desde doc. Ariadne (sin aprobar). */
-  legacySuggestBrdTobeFromCodebaseDoc: (
+  /** POST …/legacy/suggest-brd-from-codebase-doc — borrador BRD desde doc. Ariadne. */
+  legacySuggestBrdFromCodebaseDoc: (
     projectId: string,
     stageId?: string,
-  ) => Promise<{ brdContent: string; toBeManualContent: string; stageId: string } | null>;
-  /** POST …/projects/:id/suggest-brd-tobe-from-dbga — greenfield desde `dbgaContent`. */
-  suggestBrdTobeFromDbga: (
+  ) => Promise<{ brdContent: string; stageId: string } | null>;
+  /** POST …/projects/:id/suggest-brd-from-dbga — greenfield desde `dbgaContent`. */
+  suggestBrdFromDbga: (
     projectId: string,
     opts?: { stageId?: string | null },
-  ) => Promise<{ brdContent: string; toBeManualContent: string; stageId: string } | null>;
+  ) => Promise<{ brdContent: string; stageId: string } | null>;
   legacyGenerateDeliverables: (projectId: string) => Promise<boolean>;
   fetchEstimation: (projectId: string) => Promise<LiveMetricsResult | null>;
   fetchAdrs: (projectId: string) => Promise<void>;
@@ -635,8 +635,8 @@ const initialState = {
     | "legacy-codebase-doc"
     | "legacy-mdd"
     | "legacy-as-is"
-    | "legacy-brd-tobe-suggest"
-    | "brd-tobe-from-dbga"
+    | "legacy-brd-suggest"
+    | "brd-from-dbga"
     | "legacy-deliverables"
     | "deliverables-cascade"
     | null,
@@ -2883,28 +2883,28 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     }
   },
 
-  legacySuggestBrdTobeFromCodebaseDoc: async (projectId, stageId) => {
+  legacySuggestBrdFromCodebaseDoc: async (projectId, stageId) => {
     if (!projectId?.trim()) return null;
-    set({ loading: true, loadingReason: "legacy-brd-tobe-suggest", error: null });
+    set({ loading: true, loadingReason: "legacy-brd-suggest", error: null });
     const body: Record<string, string> = {};
     if (stageId?.trim()) body.stageId = stageId.trim();
     try {
-      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/legacy/suggest-brd-tobe-from-codebase-doc`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/legacy/suggest-brd-from-codebase-doc`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        throw new Error((err as { message?: string }).message ?? "Error al generar BRD/To-Be");
+        throw new Error((err as { message?: string }).message ?? "Error al generar BRD");
       }
-      const data = (await r.json()) as { brdContent: string; toBeManualContent: string; stageId: string };
+      const data = (await r.json()) as { brdContent: string; stageId: string };
       await get().fetchProject(projectId.trim());
       set({ loading: false, loadingReason: null, error: null });
       return data;
     } catch (e) {
       set({
-        error: e instanceof Error ? e.message : "Error al sugerir BRD/To-Be",
+        error: e instanceof Error ? e.message : "Error al sugerir BRD",
         loading: false,
         loadingReason: null,
       });
@@ -2912,29 +2912,29 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     }
   },
 
-  suggestBrdTobeFromDbga: async (projectId, opts) => {
+  suggestBrdFromDbga: async (projectId, opts) => {
     if (!projectId?.trim()) return null;
-    set({ loading: true, loadingReason: "brd-tobe-from-dbga", error: null });
+    set({ loading: true, loadingReason: "brd-from-dbga", error: null });
     try {
       const body: { stageId?: string } = {};
       const sid = opts?.stageId?.trim();
       if (sid) body.stageId = sid;
-      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/suggest-brd-tobe-from-dbga`, {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/suggest-brd-from-dbga`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
-        throw new Error((err as { message?: string }).message ?? "Error al generar BRD/To-Be desde DBGA");
+        throw new Error((err as { message?: string }).message ?? "Error al generar BRD desde DBGA");
       }
-      const data = (await r.json()) as { brdContent: string; toBeManualContent: string; stageId: string };
+      const data = (await r.json()) as { brdContent: string; stageId: string };
       await get().fetchProject(projectId.trim());
       set({ loading: false, loadingReason: null, error: null });
       return data;
     } catch (e) {
       set({
-        error: e instanceof Error ? e.message : "Error al sugerir BRD/To-Be desde DBGA",
+        error: e instanceof Error ? e.message : "Error al sugerir BRD desde DBGA",
         loading: false,
         loadingReason: null,
       });

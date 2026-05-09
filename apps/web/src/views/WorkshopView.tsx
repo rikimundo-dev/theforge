@@ -378,7 +378,7 @@ export default function WorkshopView({
   const persistDbgaContent = useWorkshopStore((s) => s.persistDbgaContent);
   const clearDbgaContent = useWorkshopStore((s) => s.clearDbgaContent);
   const generateBenchmark = useWorkshopStore((s) => s.generateBenchmark);
-  const suggestBrdTobeFromDbga = useWorkshopStore((s) => s.suggestBrdTobeFromDbga);
+  const suggestBrdFromDbga = useWorkshopStore((s) => s.suggestBrdFromDbga);
   const mddJustGeneratedFromBenchmark = useWorkshopStore((s) => s.mddJustGeneratedFromBenchmark);
   const clearMddJustGeneratedFromBenchmark = useWorkshopStore((s) => s.clearMddJustGeneratedFromBenchmark);
   const phase0DeepResearch = useWorkshopStore((s) => s.phase0DeepResearch);
@@ -1992,14 +1992,14 @@ export default function WorkshopView({
                   <button
                     type="button"
                     onClick={async () => {
-                      await suggestBrdTobeFromDbga(projectId, { stageId: activeStageId ?? undefined });
+                      await suggestBrdFromDbga(projectId, { stageId: activeStageId ?? undefined });
                       setCentralPanel("brd");
                     }}
-                    disabled={loading && loadingReason === "brd-tobe-from-dbga"}
+                    disabled={loading && loadingReason === "brd-from-dbga"}
                     className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Generar BRD desde el Benchmark (DBGA); luego revisa y aprueba en el tab BRD"
                   >
-                    {loading && loadingReason === "brd-tobe-from-dbga" ? (
+                    {loading && loadingReason === "brd-from-dbga" ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <Play className="w-4 h-4" />
