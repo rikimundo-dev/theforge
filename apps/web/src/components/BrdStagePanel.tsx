@@ -1,3 +1,5 @@
+import MddViewer from "./MddViewer";
+
 export interface BrdStagePanelProps {
   projectId: string;
   activeStageId: string | null;
@@ -35,7 +37,7 @@ export function BrdStagePanel({
         <label className="shrink-0 text-xs text-[var(--muted-foreground)]">BRD (markdown)</label>
         {showPreview ? (
           <div className="min-h-0 flex-1 overflow-auto rounded-md border border-[var(--border)] bg-[var(--background)]/30 p-2 text-[var(--foreground)]">
-            <pre className="whitespace-pre-wrap font-mono text-xs">{brdContent}</pre>
+            <MddViewer content={brdContent} />
           </div>
         ) : (
           <textarea
