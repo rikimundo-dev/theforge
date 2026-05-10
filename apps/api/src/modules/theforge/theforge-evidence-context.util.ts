@@ -140,10 +140,10 @@ export function isLegacyCodebaseDocIndexSynthesisEnabled(): boolean {
 
 /** Tope de caracteres de evidencia+semántica que se inyectan en el prompt de síntesis MDD. */
 export function getLegacyCodebaseDocSynthesisInputMaxChars(): number {
-  return envInt("LEGACY_CODEBASE_DOC_SYNTHESIS_INPUT_MAX_CHARS", 28000);
+  return envInt("LEGACY_CODEBASE_DOC_SYNTHESIS_INPUT_MAX_CHARS", 64000);
 }
 
-const LEGACY_ANALYZER_INPUT_MAX = () => parsePositiveInt("LEGACY_ANALYZER_INPUT_MAX_CHARS", 14000);
+const LEGACY_ANALYZER_INPUT_MAX = () => parsePositiveInt("LEGACY_ANALYZER_INPUT_MAX_CHARS", 32000);
 
 /**
  * Agente intermedio: resumen estructurado desde evidencia MCP (sin archivos completos).
@@ -240,7 +240,7 @@ export function legacyAnalyzerIndicatesEmptyIndex(markdown: string): boolean {
 }
 
 /** Default antes 6000; subido para no truncar índices amplios tras subir `getLegacySemanticSearchLimit`. */
-const DEFAULT_LEGACY_SEMANTIC_SECTION_MAX_CHARS = 16_000;
+const DEFAULT_LEGACY_SEMANTIC_SECTION_MAX_CHARS = 32_000;
 
 /** Recorte configurable para bloques semantic_search (modo legacy clásico). */
 export function clipLegacySemanticSection(s: string): string {
@@ -248,7 +248,7 @@ export function clipLegacySemanticSection(s: string): string {
   return clip(s.trim(), max);
 }
 
-const DEFAULT_CODEBASE_DOC_SEMANTIC_MAX = 48_000;
+const DEFAULT_CODEBASE_DOC_SEMANTIC_MAX = 64_000;
 
 /**
  * Recorte del índice semántico **solo** al armar «MDD Inicial / doc. partida» (tope mayor que `clipLegacySemanticSection` genérico).
@@ -418,7 +418,7 @@ export async function buildLegacyEvidenceMarkdown(
     "Write a concise section in Spanish titled '## Resumen ejecutivo (solo evidencia)'. " +
     "Use at most 20 bullet points. Each bullet must restate something explicitly present in the evidence (file paths, symbols, endpoints). " +
     "If the evidence does not mention a topic, write '(no consta en el índice)' for that topic — do NOT invent stacks, files, or APIs.\n\n---\n\n" +
-    clip(evidenceBody, parsePositiveInt("LEGACY_SYNTHESIS_INPUT_MAX_CHARS", 28000));
+    clip(evidenceBody, parsePositiveInt("LEGACY_SYNTHESIS_INPUT_MAX_CHARS", 64000));
 
   const synthesis = await api.askCodebase(synthPrompt, projectId);
   if (!synthesis?.trim()) return evidenceBody;

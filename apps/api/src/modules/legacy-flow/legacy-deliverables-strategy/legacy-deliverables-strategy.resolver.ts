@@ -47,8 +47,8 @@ export function readLegacyDeliverablesSectionMergePolicy(): LegacyDeliverablesSe
 }
 
 function mddTheforgeContextMaxCharsForUx(): number {
-  const n = parseInt(process.env.LEGACY_MDD_THEFORGE_CONTEXT_MAX_CHARS ?? "24000", 10);
-  return Number.isFinite(n) && n > 0 ? n : 24000;
+  const n = parseInt(process.env.LEGACY_MDD_THEFORGE_CONTEXT_MAX_CHARS ?? "64000", 10);
+  return Number.isFinite(n) && n > 0 ? n : 64000;
 }
 
 function block(label: string, body: string): string {
