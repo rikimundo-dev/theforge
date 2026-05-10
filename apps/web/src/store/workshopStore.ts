@@ -2536,6 +2536,11 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           set({ mddContent: finalMarkdown, error: null, mddJustGeneratedFromBenchmark: true });
           const { persistMddContent, fetchProject, fetchEstimation } = get();
           await persistMddContent(finalMarkdown);
+          // Si persistMddContent falló (pipeline validation, etc.), mostrar el error en vez de recargar silenciosamente
+          if (get().error) {
+            set({ loading: false, loadingReason: null, agentProgress: [] });
+            return get().project;
+          }
           const data = await fetchProject(projectId);
           await fetchEstimation(projectId);
           set({ loading: false, loadingReason: null, agentProgress: [] });
@@ -2546,6 +2551,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           set({ mddContent: accumulatedMdd, error: null, mddJustGeneratedFromBenchmark: true });
           const { persistMddContent, fetchProject, fetchEstimation } = get();
           await persistMddContent(accumulatedMdd);
+          if (get().error) {
+            set({ loading: false, loadingReason: null, agentProgress: [] });
+            return get().project;
+          }
           const data = await fetchProject(projectId);
           await fetchEstimation(projectId);
           set({ loading: false, loadingReason: null, agentProgress: [] });
