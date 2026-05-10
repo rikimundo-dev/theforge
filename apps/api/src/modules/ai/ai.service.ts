@@ -478,9 +478,10 @@ export class AiService {
   /**
    * Genera el documento Tasks (breakdown) desde MDD + Blueprint.
    */
-  async generateTasks(mddContent: string, blueprintContent?: string | null, options?: LegacyGenerateOptions): Promise<string> {
+  async generateTasks(mddContent: string, blueprintContent?: string | null, options?: LegacyGenerateOptions & { navigationMap?: string }): Promise<string> {
     const mdd = (mddContent?.trim() ?? "").slice(0, 30000);
     const blueprint = (blueprintContent?.trim() ?? "").slice(0, 15000);
+    const navMap = (options?.navigationMap?.trim() ?? "").slice(0, 8000);
     let prompt =
       mdd.length > 0
         ? "Genera el documento Tasks según las instrucciones del system prompt.\n\nMDD:\n---\n" +
@@ -488,6 +489,9 @@ export class AiService {
         "\n---\n\n" +
         (blueprint ? "Blueprint:\n---\n" + blueprint + "\n---" : "")
         : "No hay MDD. Genera un documento Tasks genérico (Backend, Frontend, Infra) con ítems comprobables.";
+    if (navMap.length > 0) {
+      prompt += "\n\n## Mapa de Navegación del Proyecto\n\n" + navMap;
+    }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     return this.generateResponse(prompt, [], { systemPrompt: TASKS_PROMPT + NO_MILITAR_INSTRUCTION });
   }

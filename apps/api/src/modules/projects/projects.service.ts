@@ -868,11 +868,54 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) throw new NotFoundException("Project not found");
+
+    // Fetch navigation map from Ariadne MCP for legacy projects
+    let navigationMap: string | undefined;
+    const theforgeId = (project as any)?.theforgeProjectId;
+    if (theforgeId) {
+      navigationMap = await this.fetchNavigationMap(theforgeId).catch(() => undefined);
+    }
+
     const tasksContent = await this.ai.generateTasks(
       this.constitutionMarkdown(project),
       project.blueprintContent,
+      { navigationMap },
     );
     return this.update(projectId, { tasksContent: cleanDocumentContent(tasksContent) });
+  }
+
+  /**
+   * Obtiene el navigation map desde Ariadne MCP para enriquecer Tasks.
+   */
+  private async fetchNavigationMap(theforgeId: string): Promise<string | undefined> {
+    try {
+      const mcpUrl = process.env.ARIADNE_MCP_URL ?? "http://ariadne-mcp:3101";
+      const response = await fetch(`${mcpUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.MCP_AUTH_TOKEN ?? ""}`,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "generate_navigation_map",
+            arguments: { projectId: theforgeId, scope: "full" },
+          },
+          id: 1,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) return undefined;
+      const data = await response.json() as any;
+      const content = data?.result?.content?.[0]?.text;
+      // Truncate to avoid bloat — keep route structure, remove full form details
+      if (!content || content.length < 200) return undefined;
+      return content.slice(0, 6000);
+    } catch {
+      return undefined;
+    }
   }
 
   async generateArchitecturePreview(projectId: string): Promise<{ content: string }> {

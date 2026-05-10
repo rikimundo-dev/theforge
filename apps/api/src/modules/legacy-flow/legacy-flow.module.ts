@@ -12,6 +12,7 @@ import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { ChangeInterviewService } from "./change-interview.service.js";
 import { ResolveChangeToFilesService } from "./resolve-change-to-files.service.js";
 import { CheckNavigationImpactService } from "./check-navigation-impact.service.js";
+import { LegacyTransitionService } from "./legacy-transition.service.js";
 import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strategy/legacy-deliverables-strategy.service.js";
 
 @Module({
@@ -23,6 +24,7 @@ import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strateg
     ChangeInterviewService,
     ResolveChangeToFilesService,
     CheckNavigationImpactService,
+    LegacyTransitionService,
     LegacyDeliverablesStrategyService,
   ],
   exports: [
@@ -31,6 +33,7 @@ import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strateg
     ChangeInterviewService,
     ResolveChangeToFilesService,
     CheckNavigationImpactService,
+    LegacyTransitionService,
   ],
 })
 export class LegacyFlowModule {}

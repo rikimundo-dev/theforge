@@ -38,4 +38,30 @@ Si el **mensaje de usuario** trae **Contexto del codebase (TheForge)**, cada tar
 
 **Backend multi-stack:** deduce del contexto si el API es Strapi, Nest, u otro. Para **cambios de modelo/campo**: en Strapi la tarea debe apuntar a `schema.json` del content-type, no a `lifecycles.js` (salvo que el trabajo sean hooks). En Nest/Prisma/TypeORM, apunta a entidades, DTOs o `schema.prisma` según lo que TheForge muestre. No atribuyas rutas “que suenan bien” en la misma carpeta si otra extensión es la fuente de verdad del esquema.
 
-**No confundir capas:** Si TheForge muestra `src/Models/cliente.ts` (o similar) **dentro del repo o paquete de la SPA**, esas tareas son **Frontend** (tipos, validación de formulario, mapeo UI). Solo si la misma ruta o el inventario demuestran que es **código de servidor** (p. ej. `apps/api/src/...`, Strapi `src/api/...`) van en **Backend**.
+|**No confundir capas:** Si TheForge muestra `src/Models/cliente.ts` (o similar) **dentro del repo o paquete de la SPA**, esas tareas son **Frontend** (tipos, validación de formulario, mapeo UI). Solo si la misma ruta o el inventario demuestran que es **código de servidor** (p. ej. `apps/api/src/...`, Strapi `src/api/...`) van en **Backend**.
+|
+|## Coordenadas exactas (mejora) ##
+|
+|**CRÍTICO:** Cada tarea DEBE incluir coordenadas precisas del cambio cuando sea posible:
+|- **Archivo:** Ruta exacta del archivo a modificar (ej. `src/components/ClientForm.tsx`).
+|- **Función o componente:** Nombre de la función/clase/componente a modificar (ej. `handleSubmit()`, `ClientForm`).
+|- **Línea sugerida:** Línea o posición relativa donde insertar el cambio (ej. "después de la línea 142 (campo teléfono)").
+|- **Cambio esperado:** Descripción del cambio o diff sugerido.
+|
+|**Formato por tarea:**
+|```
+|## T-001: Agregar campo descuento a formulario de alta
+|**Archivo:** src/components/ClientForm.tsx
+|**Función:** render (o handleSubmit)
+|**Línea:** después de línea 142 (campo teléfono)
+|**Cambio:**
+|```diff
+|+ <FormField name="discount" label="Descuento (%)" type="number" required min={0} max={100} />
+|```
+|**Endpoint:** POST /api/clients — agregar campo `discount` al body
+|**DTO:** src/dtos/create-client.dto.ts — agregar `discount: number`
+|**Validación:** min 0, max 100
+|**Afecta también:** /clients/:id/edit (mismo campo en edición)
+|```
+|
+|Si no se puede determinar la línea exacta, al menos indicar el archivo y la función. Nunca inventes coordenadas — si no las sabes, omítelas.`;

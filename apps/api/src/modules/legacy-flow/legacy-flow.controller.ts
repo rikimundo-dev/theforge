@@ -3,6 +3,7 @@ import { generateCodebaseDocRequestSchema } from "@theforge/shared-types";
 import { LegacyCoordinatorService } from "./legacy-coordinator.service.js";
 import { ResolveChangeToFilesService } from "./resolve-change-to-files.service.js";
 import { CheckNavigationImpactService } from "./check-navigation-impact.service.js";
+import { LegacyTransitionService } from "./legacy-transition.service.js";
 
 /**
  * Controlador REST del flujo legacy: inicio (AriadneSpecs MCP), respuestas, generación de MDD y de entregables en cascada.
@@ -13,6 +14,7 @@ export class LegacyFlowController {
     private readonly coordinator: LegacyCoordinatorService,
     private readonly resolveChange: ResolveChangeToFilesService,
     private readonly navImpact: CheckNavigationImpactService,
+    private readonly legacyTransition: LegacyTransitionService,
   ) {}
 
   /**
@@ -49,6 +51,23 @@ export class LegacyFlowController {
     const componentPath = typeof body?.componentPath === "string" ? body.componentPath.trim() : "";
     if (!componentPath) throw new BadRequestException("componentPath is required");
     return this.navImpact.checkImpact(projectId, componentPath, body.stageId);
+  }
+
+  /**
+   * Verifica si el proyecto puede transicionar a flujo legacy.
+   * Consulta AriadneSpecs para saber si el código está indexado.
+   */
+  @Get("transition-status")
+  async transitionStatus(@Param("projectId") projectId: string) {
+    return this.legacyTransition.checkTransition(projectId);
+  }
+
+  /**
+   * Ejecuta la transición a flujo legacy: crea stage baseline con navigation map.
+   */
+  @Post("execute-transition")
+  async executeTransition(@Param("projectId") projectId: string) {
+    return this.legacyTransition.executeTransition(projectId);
   }
 
   /**
