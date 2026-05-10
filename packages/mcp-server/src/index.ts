@@ -649,6 +649,102 @@ const TOOLS: Tool[] = [
       required: ["projectId", "choice"],
     },
   },
+  // ── Legacy Flow — Nuevos servicios (ChangeInterview, Navigation Impact, Transición) ──
+  {
+    name: "legacy_interview_start",
+    description: "Inicia entrevista conversacional legacy: envía descripción, recibe preguntas contextuales basadas en navigation map del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto (debe ser tipo LEGACY)" },
+        description: { type: "string", description: "Descripción del cambio en lenguaje natural" },
+        stageId: { type: "string", description: "ID de etapa opcional para persistir resultado" },
+      },
+      required: ["projectId", "description"],
+    },
+  },
+  {
+    name: "legacy_interview_chat",
+    description: "Continúa la entrevista conversacional: envía mensaje del usuario y recibe respuesta con preguntas contextuales",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string", description: "Session ID del start" },
+        message: { type: "string", description: "Mensaje del usuario" },
+      },
+      required: ["sessionId", "message"],
+    },
+  },
+  {
+    name: "legacy_interview_confirm",
+    description: "Confirma y persiste el ChangeScope de la entrevista actual",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string", description: "Session ID del start" },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "legacy_interview_status",
+    description: "Obtiene el estado actual de la entrevista: mensajes, ChangeScope y rutas afectadas",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sessionId: { type: "string", description: "Session ID del start" },
+      },
+      required: ["sessionId"],
+    },
+  },
+  {
+    name: "legacy_resolve_change_to_files",
+    description: "Dada una descripción de cambio, resuelve los archivos exactos a modificar usando el navigation map del proyecto",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto" },
+        description: { type: "string", description: "Descripción del cambio" },
+        stageId: { type: "string", description: "Etapa base opcional" },
+      },
+      required: ["projectId", "description"],
+    },
+  },
+  {
+    name: "legacy_check_navigation_impact",
+    description: "Evalúa si modificar un componente afecta múltiples rutas en el mapa de navegación. Detecta componentes compartidos",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto" },
+        componentPath: { type: "string", description: "Ruta del componente a modificar (ej. src/shared/AddressForm.tsx)" },
+        stageId: { type: "string", description: "Etapa base opcional" },
+      },
+      required: ["projectId", "componentPath"],
+    },
+  },
+  {
+    name: "legacy_transition_status",
+    description: "Verifica si un proyecto NEW puede transicionar a flujo legacy (consulta AriadneSpecs para saber si el código está indexado)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "legacy_execute_transition",
+    description: "Ejecuta la transición a flujo legacy: crea stage baseline con navigation map inicial del código existente",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto" },
+      },
+      required: ["projectId"],
+    },
+  },
   // ── Phase 0 → Phase 1 Automation ──
   {
     name: "generate_phase0",
@@ -1007,6 +1103,41 @@ const handlers: Record<string, Handler> = {
         choice: args.choice,
       }),
     );
+  },
+  // Legacy — Nuevos servicios
+  async legacy_interview_start(args) {
+    const body: Record<string, unknown> = { description: args.description };
+    if (args.stageId !== undefined) body.stageId = args.stageId;
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/interview/start`, body));
+  },
+  async legacy_interview_chat(args) {
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/legacy/interview/${args.sessionId}/chat`, {
+        message: args.message,
+      }),
+    );
+  },
+  async legacy_interview_confirm(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/interview/${args.sessionId}/confirm`));
+  },
+  async legacy_interview_status(args) {
+    return JSON.stringify(await apiGet(`/projects/${args.projectId}/legacy/interview/${args.sessionId}`));
+  },
+  async legacy_resolve_change_to_files(args) {
+    const body: Record<string, unknown> = { description: args.description };
+    if (args.stageId !== undefined) body.stageId = args.stageId;
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/resolve-change-to-files`, body));
+  },
+  async legacy_check_navigation_impact(args) {
+    const body: Record<string, unknown> = { componentPath: args.componentPath };
+    if (args.stageId !== undefined) body.stageId = args.stageId;
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/check-navigation-impact`, body));
+  },
+  async legacy_transition_status(args) {
+    return JSON.stringify(await apiGet(`/projects/${args.projectId}/legacy/transition-status`));
+  },
+  async legacy_execute_transition(args) {
+    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/execute-transition`));
   },
   // Phase 0 → Phase 1: Zero to first draft
   async generate_phase0(args) {
