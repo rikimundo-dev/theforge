@@ -1,13 +1,35 @@
-import { BadRequestException, Body, Controller, Param, Patch, Post } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
 import { generateCodebaseDocRequestSchema } from "@theforge/shared-types";
 import { LegacyCoordinatorService } from "./legacy-coordinator.service.js";
+import { ResolveChangeToFilesService } from "./resolve-change-to-files.service.js";
 
 /**
  * Controlador REST del flujo legacy: inicio (AriadneSpecs MCP), respuestas, generación de MDD y de entregables en cascada.
  */
 @Controller("projects/:projectId/legacy")
 export class LegacyFlowController {
-  constructor(private readonly coordinator: LegacyCoordinatorService) {}
+  constructor(
+    private readonly coordinator: LegacyCoordinatorService,
+    private readonly resolveChange: ResolveChangeToFilesService,
+  ) {}
+
+  /**
+   * Resuelve los archivos a modificar a partir de una descripción de cambio.
+   * Usa el navigation map del proyecto para hacer matching semántico.
+   * @param projectId - ID del proyecto.
+   * @param body.description - Descripción del cambio en lenguaje natural.
+   * @param body.stageId - Etapa base opcional.
+   * @returns suggestedFiles, affectedRoutes, sharedComponents, sddImpact.
+   */
+  @Post("resolve-change-to-files")
+  async resolveChangeToFiles(
+    @Param("projectId") projectId: string,
+    @Body() body: { description?: string; stageId?: string },
+  ) {
+    const description = typeof body?.description === "string" ? body.description.trim() : "";
+    if (!description) throw new BadRequestException("description is required");
+    return this.resolveChange.resolve({ projectId, description, stageId: body.stageId });
+  }
 
   /**
    * Genera documentación de partida del codebase vía MCP (opcional, ideal como primer paso).
