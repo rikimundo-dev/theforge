@@ -11,12 +11,26 @@ import { LegacyCoordinatorService } from "./legacy-coordinator.service.js";
 import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { ChangeInterviewService } from "./change-interview.service.js";
 import { ResolveChangeToFilesService } from "./resolve-change-to-files.service.js";
+import { CheckNavigationImpactService } from "./check-navigation-impact.service.js";
 import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strategy/legacy-deliverables-strategy.service.js";
 
 @Module({
   imports: [PrismaModule, AiModule, ProjectsModule, TheForgeModule, AiAnalysisModule, AgentSupervisorModule],
   controllers: [LegacyFlowController, ChangeInterviewController],
-  providers: [LegacyCoordinatorService, LegacyReviewerService, ChangeInterviewService, ResolveChangeToFilesService, LegacyDeliverablesStrategyService],
-  exports: [LegacyCoordinatorService, LegacyReviewerService, ChangeInterviewService, ResolveChangeToFilesService],
+  providers: [
+    LegacyCoordinatorService,
+    LegacyReviewerService,
+    ChangeInterviewService,
+    ResolveChangeToFilesService,
+    CheckNavigationImpactService,
+    LegacyDeliverablesStrategyService,
+  ],
+  exports: [
+    LegacyCoordinatorService,
+    LegacyReviewerService,
+    ChangeInterviewService,
+    ResolveChangeToFilesService,
+    CheckNavigationImpactService,
+  ],
 })
 export class LegacyFlowModule {}

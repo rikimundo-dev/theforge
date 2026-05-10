@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Param, Patch, Post } from "
 import { generateCodebaseDocRequestSchema } from "@theforge/shared-types";
 import { LegacyCoordinatorService } from "./legacy-coordinator.service.js";
 import { ResolveChangeToFilesService } from "./resolve-change-to-files.service.js";
+import { CheckNavigationImpactService } from "./check-navigation-impact.service.js";
 
 /**
  * Controlador REST del flujo legacy: inicio (AriadneSpecs MCP), respuestas, generación de MDD y de entregables en cascada.
@@ -11,6 +12,7 @@ export class LegacyFlowController {
   constructor(
     private readonly coordinator: LegacyCoordinatorService,
     private readonly resolveChange: ResolveChangeToFilesService,
+    private readonly navImpact: CheckNavigationImpactService,
   ) {}
 
   /**
@@ -29,6 +31,24 @@ export class LegacyFlowController {
     const description = typeof body?.description === "string" ? body.description.trim() : "";
     if (!description) throw new BadRequestException("description is required");
     return this.resolveChange.resolve({ projectId, description, stageId: body.stageId });
+  }
+
+  /**
+   * Evalúa el impacto de modificar un componente en el mapa de navegación.
+   * Detecta si el componente es compartido y qué rutas afecta.
+   * @param projectId - ID del proyecto.
+   * @param body.componentPath - Ruta del componente a modificar.
+   * @param body.stageId - Etapa base opcional.
+   * @returns isShared, routesAffected, screenNames, warning.
+   */
+  @Post("check-navigation-impact")
+  async checkNavigationImpact(
+    @Param("projectId") projectId: string,
+    @Body() body: { componentPath?: string; stageId?: string },
+  ) {
+    const componentPath = typeof body?.componentPath === "string" ? body.componentPath.trim() : "";
+    if (!componentPath) throw new BadRequestException("componentPath is required");
+    return this.navImpact.checkImpact(projectId, componentPath, body.stageId);
   }
 
   /**
