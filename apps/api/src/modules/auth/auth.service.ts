@@ -115,7 +115,10 @@ export class AuthService {
         connectionTimeout: 25_000,
         greetingTimeout: 25_000,
         socketTimeout: 25_000,
-        ...(!secure && port === 587 ? { requireTLS: true as const } : {}),
+        ...(!secure && port === 587 && this.isGoogleSmtpHost(cfg.host)
+          ? // Gmail expects STARTTLS on 587; some other hosts reject strict requireTLS.
+            { requireTLS: true as const }
+          : {}),
       });
     }
     return this.transporter;

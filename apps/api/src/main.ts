@@ -8,9 +8,15 @@
  * @author Jorge Correa <jcorrea@e-personal.net>
  */
 import { config } from "dotenv";
+import dns from "node:dns";
 import { resolve } from "node:path";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
+
+// SMTP (p. ej. Gmail): priorizar IPv4 evita timeouts cuando IPv6 no llega al servidor de correo.
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
 
 // Cargar .env de la raíz del repo (turbo ejecuta con cwd = apps/api) y luego local
 config({ path: resolve(process.cwd(), "../../.env") });

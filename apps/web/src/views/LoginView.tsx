@@ -3,6 +3,7 @@ import { Flame, Loader2, Mail, Shield } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { LoginScreenChrome } from "@/components/login/LoginChrome";
 import { API_BASE, setAccessToken } from "@/utils/apiClient";
+import { parseErrorBodyText, parseErrorMessageFromResponse } from "@/utils/httpError";
 import { cn } from "@/lib/utils";
 
 interface LoginViewProps {
@@ -71,10 +72,8 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
         body: JSON.stringify({ email: normalized }),
       });
       if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(
-          typeof err.message === "string" ? err.message : "No se pudo enviar el código",
-        );
+        const msg = await parseErrorMessageFromResponse(r, "No se pudo enviar el código por correo");
+        throw new Error(msg);
       }
       setEmail(normalized);
       setStep("code");
@@ -95,14 +94,18 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim() }),
       });
-      const data = (await r.json().catch(() => ({}))) as {
+      const rawText = await r.text();
+      let data = {} as {
         accessToken?: string;
         message?: string | string[];
       };
+      try {
+        data = JSON.parse(rawText) as typeof data;
+      } catch {
+        /* empty */
+      }
       if (!r.ok) {
-        const msg = data.message;
-        const text = Array.isArray(msg) ? msg.join(", ") : msg;
-        throw new Error(text ?? "Código incorrecto");
+        throw new Error(parseErrorBodyText(rawText, "Código incorrecto", r.status));
       }
       if (typeof data.accessToken !== "string") {
         throw new Error("Respuesta inválida del servidor");
