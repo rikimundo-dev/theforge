@@ -4,7 +4,15 @@
  * With an open workshop project, shows deliverables under the project name and syncs
  * the active document tab via `useWorkshopStore`.
  */
-import { useCallback, useMemo, type MouseEvent, type ReactElement, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -164,6 +172,12 @@ export function DashboardSidebar({
   onExitWorkshop,
 }: DashboardSidebarProps) {
   const rail = collapsed;
+  /** Expanded/collapsed list under the workshop project name (header toggles this). */
+  const [workshopStepsExpanded, setWorkshopStepsExpanded] = useState(true);
+
+  useEffect(() => {
+    setWorkshopStepsExpanded(true);
+  }, [workshopProject?.id]);
 
   const handleScrollToProjects = useCallback(() => {
     document.getElementById("dashboard-projects")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -390,21 +404,21 @@ export function DashboardSidebar({
                 </button>
               </CollapsedRailHint>
 
-              {/* Plain div (not <details>): flex + min-h-0 height math is reliable for the scrollable steps list. */}
+              {/* Not <details>: flex + min-h-0 height math stays reliable; collapse is explicit state on the header button. */}
               <div
                 className="group/ws flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
                 role="group"
                 aria-label={`Proyecto ${workshopProject.name}`}
               >
-                <div
-                  className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2",
-                    "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]",
-                    rail && "sm:justify-center sm:px-0",
-                  )}
-                  title={rail ? undefined : workshopProject.name}
-                >
-                  {rail ? (
+                {rail ? (
+                  <div
+                    className={cn(
+                      "flex shrink-0 items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2",
+                      "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]",
+                      "sm:justify-center sm:px-0",
+                    )}
+                    title={undefined}
+                  >
                     <Tooltip delayDuration={200}>
                       <TooltipTrigger asChild>
                         <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--radius-md)]">
@@ -415,20 +429,36 @@ export function DashboardSidebar({
                         Proyecto: {workshopProject.name}
                       </TooltipContent>
                     </Tooltip>
-                  ) : (
-                    <>
-                      <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
-                      <span className="min-w-0 flex-1 truncate text-left text-sm font-medium">
-                        {workshopProject.name}
-                      </span>
-                      <ChevronDown
-                        className="h-4 w-4 shrink-0 rotate-180 text-[var(--muted-foreground)] transition-transform"
-                        aria-hidden
-                      />
-                    </>
-                  )}
-                </div>
-                <div className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-1">
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-expanded={workshopStepsExpanded}
+                    aria-controls="workshop-deliverables-panel"
+                    title={workshopProject.name}
+                    onClick={() => setWorkshopStepsExpanded((open) => !open)}
+                    className={cn(
+                      "flex w-full shrink-0 items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2 text-left",
+                      "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]",
+                      "outline-none transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]",
+                    )}
+                  >
+                    <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{workshopProject.name}</span>
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
+                        workshopStepsExpanded ? "rotate-180" : "rotate-0",
+                      )}
+                      aria-hidden
+                    />
+                  </button>
+                )}
+                {(rail || workshopStepsExpanded) ? (
+                <div
+                  id="workshop-deliverables-panel"
+                  className="mt-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-1"
+                >
                   <p
                     className={cn(
                       "mb-1.5 shrink-0 px-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]",
@@ -544,6 +574,7 @@ export function DashboardSidebar({
                     )}
                   </div>
                 </div>
+                ) : null}
               </div>
             </div>
           ) : (
