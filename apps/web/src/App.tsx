@@ -592,19 +592,42 @@ export default function App() {
           <UsersView />
         ) : (
         <div className="mx-auto w-full max-w-[min(100%,88rem)] space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-        <header className="flex flex-col gap-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between sm:pb-5">
-          <div>
+        <header className="flex flex-row items-center justify-between gap-3 border-b border-[var(--border)] pb-4 sm:items-end sm:pb-5">
+          <div className="min-w-0">
             <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--foreground-subtle)]">
               Panel
             </p>
-            <p className="mt-1 text-sm text-[var(--foreground-muted)] sm:text-base">
+            <p className="mt-1 hidden text-sm text-[var(--foreground-muted)] sm:mt-1 sm:block sm:text-base">
               Entrevista proactiva → MDD → Semáforo → Estimación
             </p>
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+          <div className="flex shrink-0 items-center gap-1.5 sm:flex-row sm:gap-2">
             <Button
               type="button"
-              className="w-full touch-manipulation min-h-11 sm:w-auto sm:min-h-10"
+              size="icon"
+              className="touch-manipulation sm:hidden"
+              onClick={() => setShowCreateWizard(true)}
+              disabled={loading}
+              aria-label="Crear nuevo proyecto"
+              title="Crear nuevo proyecto"
+            >
+              <Plus className="h-4 w-4 shrink-0" aria-hidden />
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="touch-manipulation sm:hidden"
+              onClick={() => void loadProjects()}
+              disabled={loading}
+              aria-label="Refrescar lista de proyectos"
+              title="Refrescar"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
+            </Button>
+            <Button
+              type="button"
+              className="hidden w-full touch-manipulation min-h-11 sm:inline-flex sm:w-auto sm:min-h-10"
               onClick={() => setShowCreateWizard(true)}
               disabled={loading}
             >
@@ -614,7 +637,7 @@ export default function App() {
             <Button
               type="button"
               variant="outline"
-              className="w-full touch-manipulation min-h-11 sm:w-auto sm:min-h-10"
+              className="hidden w-full touch-manipulation min-h-11 sm:inline-flex sm:w-auto sm:min-h-10"
               onClick={() => void loadProjects()}
               disabled={loading}
             >

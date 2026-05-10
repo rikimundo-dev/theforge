@@ -29,6 +29,7 @@ import {
   Check,
   Rocket,
   ChevronDown,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CodebaseDocResponseMode } from "@theforge/shared-types";
@@ -1044,62 +1045,80 @@ export default function WorkshopView({
       data-workshop-root
       className="workshop-root flex w-full min-h-0 flex-1 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased"
     >
-      <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-2.5 sm:px-5 sm:py-3 shrink-0 backdrop-blur-sm">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-          <h1 className="text-base sm:text-lg font-semibold tracking-tight text-[var(--foreground)] truncate max-w-[min(100%,14rem)] sm:max-w-none">
-            {projectName ?? project?.name ?? "Workshop"}
-          </h1>
-          {project?.projectType === "LEGACY" && (
-            <span
-              className="px-2 py-0.5 rounded text-xs font-medium bg-[var(--muted)] text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] border border-[var(--border)] shrink-0"
-              title="Proyecto legacy: documentación de cambios con Relic"
-            >
-              Legacy
-            </span>
+      <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-2.5 backdrop-blur-sm max-sm:py-2.5 sm:px-5 sm:py-3">
+        {/* Main toolbar: grid on sm+ keeps title, stage controls, and actions on one axis */}
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3 max-sm:gap-2.5 sm:items-center sm:gap-x-4 sm:gap-y-0",
+            workshopStagesList.length > 0
+              ? "sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+              : "sm:grid-cols-[minmax(0,1fr)_auto]",
           )}
-          <span className="flex items-center gap-1.5 text-xs text-[var(--foreground-subtle)] shrink-0" title={synced ? "Sincronizado" : "Sincronizando"}>
-            {synced ? (
-              <>
-                <Cloud className="w-3.5 h-3.5 text-[var(--success)]" />
-                <span className="hidden sm:inline">Sincronizado</span>
-              </>
-            ) : (
-              <>
-                <CloudOff className="w-3.5 h-3.5 text-[var(--primary)]" />
-                <span className="hidden sm:inline">Sincronizando…</span>
-              </>
-            )}
-          </span>
-          {project?.projectType === "LEGACY" && project?.theforgeProjectId?.trim() && (
-            <span
-              className="w-full sm:w-auto min-w-0 font-mono text-[10px] sm:text-[11px] text-[var(--foreground-subtle)] leading-tight"
-              title={`UUID guardado (theforgeProjectId). La API resuelve: ingest proyecto (ask_codebase, get_modification_plan) = id workspace; grafo/semantic = roots[].id; scope.repoIds en ask/plan. ${project.theforgeProjectId}`}
-            >
-              <span className="text-[color-mix(in_oklch,var(--foreground-subtle)_82%,var(--background))] select-none" aria-hidden>
-                MCP{" "}
+        >
+          {/* Column 1 — title + sync + legacy (single baseline on desktop) */}
+          <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 max-sm:justify-between sm:flex-nowrap sm:gap-x-3">
+              <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-[var(--foreground)] max-sm:text-[0.9375rem] max-sm:leading-tight sm:flex-1 sm:text-lg">
+                {projectName ?? project?.name ?? "Workshop"}
+              </h1>
+              {project?.projectType === "LEGACY" && (
+                <span
+                  className="shrink-0 rounded border border-[var(--border)] bg-[var(--muted)] px-2 py-0.5 text-xs font-medium text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]"
+                  title="Proyecto legacy: documentación de cambios con Relic"
+                >
+                  Legacy
+                </span>
+              )}
+              <span
+                role="status"
+                aria-live="polite"
+                aria-label={synced ? "Sincronizado con el servidor" : "Sincronizando con el servidor"}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 text-xs text-[var(--foreground-subtle)]",
+                  "max-sm:rounded-full max-sm:border max-sm:border-[color-mix(in_oklch,var(--border)_80%,transparent)] max-sm:bg-[color-mix(in_oklch,var(--card)_40%,transparent)] max-sm:px-2 max-sm:py-1",
+                )}
+                title={synced ? "Sincronizado" : "Sincronizando"}
+              >
+                {synced ? (
+                  <>
+                    <Cloud className="h-3.5 w-3.5 text-[var(--success)]" aria-hidden />
+                    <span className="hidden sm:inline">Sincronizado</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff className="h-3.5 w-3.5 text-[var(--primary)]" aria-hidden />
+                    <span className="hidden sm:inline">Sincronizando…</span>
+                  </>
+                )}
               </span>
-              <span className="text-[var(--muted-foreground)] break-all">{project.theforgeProjectId}</span>
-            </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5 justify-end w-full sm:w-auto sm:gap-2">
-          {workshopStagesList.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 sm:mr-0.5 w-full sm:w-auto min-w-0">
+            </div>
+          </div>
+
+          {/* Column 2 — stage selector (never wrap Nueva etapa to a new row) */}
+          {workshopStagesList.length > 0 ? (
+            <div
+              className={cn(
+                "flex min-w-0 flex-nowrap items-center gap-1.5",
+                "max-sm:w-full max-sm:gap-2",
+                "sm:max-w-[min(100%,24rem)] sm:justify-self-end",
+                "overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] sm:overflow-visible sm:pb-0",
+              )}
+            >
               <Layers
-                className="hidden sm:block h-4 w-4 shrink-0 self-center text-[var(--foreground-subtle)]"
+                className="hidden h-4 w-4 shrink-0 text-[var(--foreground-subtle)] sm:block"
                 strokeWidth={2}
                 aria-hidden
               />
               <label htmlFor="workshop-stage-select" className="sr-only">
                 Vista en vivo: etapa del Workshop (MDD y semáforo)
               </label>
-              <div className="relative min-w-0 max-w-full flex-1 sm:max-w-[240px] sm:flex-none">
+              <div className="relative min-w-[12rem] max-w-[240px] flex-1 sm:min-w-[14rem] sm:flex-none">
                 <select
                   id="workshop-stage-select"
                   className={cn(
                     WORKSHOP_HEADER_CTL,
                     WORKSHOP_HEADER_CTL_HOVER,
-                    "w-full cursor-pointer appearance-none py-0 pl-3 pr-10 leading-10 sm:leading-9",
+                    "w-full min-w-0 cursor-pointer appearance-none py-0 pl-3 pr-10 leading-10 sm:leading-9",
                   )}
                   value={activeStageId ?? workshopStagesList[0]?.id ?? ""}
                   onChange={(e) => setActiveStageId(e.target.value)}
@@ -1127,80 +1146,133 @@ export default function WorkshopView({
                 className={cn(
                   WORKSHOP_HEADER_CTL,
                   WORKSHOP_HEADER_CTL_HOVER,
-                  "shrink-0 whitespace-nowrap px-3 py-0 leading-10 sm:leading-9 inline-flex items-center justify-center",
+                  "hidden shrink-0 whitespace-nowrap px-3 py-0 leading-10 sm:inline-flex sm:leading-9",
                 )}
               >
                 Nueva etapa
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewStageName("");
+                  setCopyMddSourceStageId(activeStageId ?? "");
+                  setShowStageModal(true);
+                }}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:hidden",
+                )}
+                title="Nueva etapa"
+                aria-label="Nueva etapa"
+              >
+                <Plus className="h-5 w-5 shrink-0" aria-hidden />
+              </button>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowHelpModal(true)}
-            className={WORKSHOP_HEADER_SECONDARY}
-            title="Manual de uso del Workshop"
-          >
-            <HelpCircle className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-            <span className="hidden sm:inline">Ayuda</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
-              launchHermes(projectId).then((res: { success: boolean; status: number } | undefined) => {
-                if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
-              }).catch((err: Error) => setError(err.message));
-            }}
-            disabled={loading || hermesConfigured === false}
-            title={
-              hermesConfigured === null
-                ? "Verificando configuración…"
-                : hermesConfigured
-                  ? "Lanzar proyecto a Hermes Agent para desarrollo"
-                  : "Hermes no configurado — falta HERMES_WEBHOOK_URL y HERMES_API_KEY"
-            }
-            className={`flex items-center justify-center gap-1.5 px-3 py-2.5 sm:py-1.5 rounded-lg text-sm touch-manipulation min-h-[44px] sm:min-h-0 border transition-colors ${
-              hermesConfigured === false
-                ? "text-zinc-600 border-zinc-700 cursor-not-allowed"
-                : "text-zinc-300 hover:text-emerald-400 hover:bg-emerald-900/30 border-zinc-600 hover:border-emerald-700"
-            }`}
-          >
-            {loading && loadingReason === "launch-hermes" ? (
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-            ) : (
-              <Rocket className="w-4 h-4 shrink-0" />
+          ) : null}
+
+          {/* Column 3 — secondary actions (aligned end, same height tokens) */}
+          <div
+            className={cn(
+              "flex flex-nowrap items-center justify-end gap-1 sm:justify-self-end sm:gap-1.5",
+              "max-sm:grid max-sm:w-full max-sm:grid-cols-3 max-sm:gap-2 max-sm:border-t max-sm:border-[color-mix(in_oklch,var(--border)_85%,transparent)] max-sm:pt-2",
             )}
-            <span className="hidden sm:inline">Lanzar</span>
-          </button>
-          <button
-            type="button"
-            onClick={async () => {
-              const ok = await downloadDocumentsZip(
-                {
-                  dbgaContent: dbgaContent ?? project?.dbgaContent ?? null,
-                  phase0SummaryContent: phase0SummaryContent ?? project?.phase0SummaryContent ?? null,
-                  specContent: specContent ?? project?.specContent ?? null,
-                  mddContent: mddContent ?? project?.mddContent ?? "",
-                  uxUiGuideContent: uxUiGuideContent ?? project?.uxUiGuideContent ?? null,
-                  blueprintContent: blueprintContent ?? project?.blueprintContent ?? null,
-                  apiContractsContent: apiContractsContent ?? project?.apiContractsContent ?? null,
-                  logicFlowsContent: logicFlowsContent ?? project?.logicFlowsContent ?? null,
-                  tasksContent: tasksContent ?? project?.tasksContent ?? null,
-                  infraContent: infraContent ?? project?.infraContent ?? null,
-                  aemContent: aemContent ?? project?.aemContent ?? null,
-                },
-                projectName ?? project?.name ?? "Workshop",
-              );
-              if (ok) setError(null);
-              else setError("No hay documentos con contenido para descargar.");
-            }}
-            className={WORKSHOP_HEADER_SECONDARY}
-            title="Descargar todos los documentos del proyecto en un ZIP"
           >
-            <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-            <span className="hidden sm:inline">Descargar ZIP</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => setShowHelpModal(true)}
+              className={cn(WORKSHOP_HEADER_SECONDARY, "max-sm:mx-auto max-sm:w-full max-sm:justify-center")}
+              title="Manual de uso del Workshop"
+              aria-label="Ayuda — manual del Workshop"
+            >
+              <HelpCircle className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              <span className="hidden sm:inline">Ayuda</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
+                launchHermes(projectId)
+                  .then((res: { success: boolean; status: number } | undefined) => {
+                    if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
+                  })
+                  .catch((err: Error) => setError(err.message));
+              }}
+              disabled={loading || hermesConfigured === false}
+              title={
+                hermesConfigured === null
+                  ? "Verificando configuración…"
+                  : hermesConfigured
+                    ? "Lanzar proyecto a Hermes Agent para desarrollo"
+                    : "Hermes no configurado — falta HERMES_WEBHOOK_URL y HERMES_API_KEY"
+              }
+              aria-label={
+                hermesConfigured === null
+                  ? "Verificando Hermes"
+                  : hermesConfigured
+                    ? "Lanzar proyecto a Hermes Agent"
+                    : "Hermes no configurado"
+              }
+              className={cn(
+                "inline-flex h-11 min-h-[44px] shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-sm font-medium touch-manipulation transition-colors sm:h-9 sm:min-h-0 sm:min-w-0 sm:px-3 sm:py-0",
+                "max-sm:mx-auto max-sm:min-h-11 max-sm:w-full max-sm:justify-center max-sm:px-0",
+                hermesConfigured === false
+                  ? "cursor-not-allowed border-[var(--border)] text-[var(--muted-foreground)] opacity-60"
+                  : "border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_50%,transparent)] text-[var(--foreground)] hover:border-[color-mix(in_oklch,var(--primary)_45%,var(--border))] hover:bg-[color-mix(in_oklch,var(--muted)_40%,var(--card))] hover:text-[var(--foreground)]",
+              )}
+            >
+              {loading && loadingReason === "launch-hermes" ? (
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+              ) : (
+                <Rocket className="h-4 w-4 shrink-0" aria-hidden />
+              )}
+              <span className="hidden sm:inline">Lanzar</span>
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await downloadDocumentsZip(
+                  {
+                    dbgaContent: dbgaContent ?? project?.dbgaContent ?? null,
+                    phase0SummaryContent: phase0SummaryContent ?? project?.phase0SummaryContent ?? null,
+                    specContent: specContent ?? project?.specContent ?? null,
+                    mddContent: mddContent ?? project?.mddContent ?? "",
+                    uxUiGuideContent: uxUiGuideContent ?? project?.uxUiGuideContent ?? null,
+                    blueprintContent: blueprintContent ?? project?.blueprintContent ?? null,
+                    apiContractsContent: apiContractsContent ?? project?.apiContractsContent ?? null,
+                    logicFlowsContent: logicFlowsContent ?? project?.logicFlowsContent ?? null,
+                    tasksContent: tasksContent ?? project?.tasksContent ?? null,
+                    infraContent: infraContent ?? project?.infraContent ?? null,
+                    aemContent: aemContent ?? project?.aemContent ?? null,
+                  },
+                  projectName ?? project?.name ?? "Workshop",
+                );
+                if (ok) setError(null);
+                else setError("No hay documentos con contenido para descargar.");
+              }}
+              className={cn(WORKSHOP_HEADER_SECONDARY, "max-sm:mx-auto max-sm:w-full max-sm:justify-center")}
+              title="Descargar todos los documentos del proyecto en un ZIP"
+              aria-label="Descargar todos los documentos del proyecto en ZIP"
+            >
+              <Download className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+              <span className="hidden sm:inline">Descargar ZIP</span>
+            </button>
+          </div>
         </div>
+
+        {project?.projectType === "LEGACY" && project?.theforgeProjectId?.trim() ? (
+          <div className="mt-3 rounded-lg border border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--muted)_25%,transparent)] px-2.5 py-1.5 sm:mt-3">
+            <span
+              className="font-mono text-[10px] leading-snug text-[var(--foreground-subtle)] sm:text-[11px]"
+              title={`UUID guardado (theforgeProjectId). La API resuelve: ingest proyecto (ask_codebase, get_modification_plan) = id workspace; grafo/semantic = roots[].id; scope.repoIds en ask/plan. ${project.theforgeProjectId}`}
+            >
+              <span className="text-[color-mix(in_oklch,var(--foreground-subtle)_82%,var(--background))] select-none" aria-hidden>
+                MCP{" "}
+              </span>
+              <span className="break-all text-[var(--muted-foreground)]">{project.theforgeProjectId}</span>
+            </span>
+          </div>
+        ) : null}
       </header>
 
       {showStageModal && (
@@ -1337,9 +1409,9 @@ export default function WorkshopView({
               : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
           )}
         >
-          <div className="shrink-0 border-b border-[var(--border)] px-3 py-2.5 sm:px-4 sm:py-3 flex flex-col gap-2.5 text-sm text-[var(--muted-foreground)]">
+          <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--border)] px-3 py-2.5 text-sm text-[var(--muted-foreground)] sm:px-4 sm:py-3">
             <TooltipProvider delayDuration={280}>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <WorkshopDocToolbarHint
                 tier={effectiveComplexityForTabs as WorkshopComplexityTier}
                 isLegacyProject={isLegacyProject}
@@ -2147,13 +2219,14 @@ export default function WorkshopView({
                   role="region"
                   aria-label="Generar o regenerar el MDD"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
                     <button
                       type="button"
                       onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
                       disabled={loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")}
                       className={cn(
                         WORKSHOP_MDD_ACTION_PRIMARY,
+                        "w-full justify-center lg:w-auto lg:min-w-0",
                         "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
                       )}
                     >
@@ -2171,6 +2244,7 @@ export default function WorkshopView({
                         disabled={!canGenerate || cascadeRunning || mddReviewing}
                         className={cn(
                           WORKSHOP_MDD_ACTION_PRIMARY,
+                          "w-full justify-center lg:w-auto lg:min-w-0",
                           "bg-[var(--success)] text-[var(--success-foreground)] hover:bg-[color-mix(in_oklch,var(--success)_88%,black)]",
                         )}
                       >
@@ -2808,34 +2882,37 @@ export default function WorkshopView({
           <button
             type="button"
             onClick={() => setMobileWorkshopColumn("chat")}
+            aria-current={mobileWorkshopColumn === "chat" ? "page" : undefined}
             className={cn(
-              "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation min-h-[52px]",
+              "flex min-h-[52px] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation",
               mobileWorkshopColumn === "chat"
                 ? "text-[var(--primary)] bg-[color-mix(in_oklch,var(--card)_92%,var(--background))] border-t-2 border-t-[var(--primary)] -mt-px"
                 : "text-[var(--foreground-subtle)] border-t-2 border-t-transparent active:bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
             )}
           >
-            <MessageSquare className="w-5 h-5 shrink-0 opacity-90" aria-hidden />
+            <MessageSquare className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
             Chat
           </button>
           <button
             type="button"
             onClick={() => setMobileWorkshopColumn("workspace")}
+            aria-current={mobileWorkshopColumn === "workspace" ? "page" : undefined}
             className={cn(
-              "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation min-h-[52px]",
+              "flex min-h-[52px] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation",
               mobileWorkshopColumn === "workspace"
                 ? "text-[var(--primary)] bg-[color-mix(in_oklch,var(--card)_92%,var(--background))] border-t-2 border-t-[var(--primary)] -mt-px"
                 : "text-[var(--foreground-subtle)] border-t-2 border-t-transparent active:bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
             )}
           >
-            <FileText className="w-5 h-5 shrink-0 opacity-90" aria-hidden />
+            <FileText className="h-5 w-5 shrink-0 opacity-90" aria-hidden />
             Docs
           </button>
           <button
             type="button"
             onClick={() => setMobileWorkshopColumn("metrics")}
+            aria-current={mobileWorkshopColumn === "metrics" ? "page" : undefined}
             className={cn(
-              "flex flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation min-h-[52px]",
+              "flex min-h-[52px] flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium touch-manipulation",
               mobileWorkshopColumn === "metrics"
                 ? "text-[var(--primary)] bg-[color-mix(in_oklch,var(--card)_92%,var(--background))] border-t-2 border-t-[var(--primary)] -mt-px"
                 : "text-[var(--foreground-subtle)] border-t-2 border-t-transparent active:bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",

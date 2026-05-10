@@ -8,6 +8,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent,
   type ReactElement,
@@ -22,12 +23,14 @@ import {
   Flame,
   FolderOpen,
   LogOut,
+  Menu,
   Monitor,
   Moon,
   Search,
   Settings,
   Shield,
   Sun,
+  X,
 } from "lucide-react";
 import { Input } from "./ui/Input";
 import {
@@ -175,6 +178,9 @@ export function DashboardSidebar({
   onBeforeNavigateToProjects,
 }: DashboardSidebarProps) {
   const rail = collapsed;
+  /** Drawer navigation on viewports below sm; desktop sidebar unchanged from sm. */
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const projectSearchInputRef = useRef<HTMLInputElement | null>(null);
   /** Expanded/collapsed list under the workshop project name (header toggles this). */
   const [workshopStepsExpanded, setWorkshopStepsExpanded] = useState(true);
 
@@ -182,8 +188,47 @@ export function DashboardSidebar({
     setWorkshopStepsExpanded(true);
   }, [workshopProject?.id]);
 
+  const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (!mobileNavOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
+
+  useEffect(() => {
+    if (typeof globalThis.matchMedia !== "function") return;
+    const mq = globalThis.matchMedia("(min-width: 640px)");
+    function onChange() {
+      if (mq.matches) setMobileNavOpen(false);
+    }
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const handleOpenMobileSearch = useCallback(() => {
+    setMobileNavOpen(true);
+    requestAnimationFrame(() => {
+      projectSearchInputRef.current?.focus();
+    });
+  }, []);
+
   const handleScrollToProjects = useCallback(() => {
     onBeforeNavigateToProjects?.();
+    setMobileNavOpen(false);
     requestAnimationFrame(() => {
       document.getElementById("dashboard-projects")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -284,16 +329,72 @@ export function DashboardSidebar({
 
   const inWorkshop = !!workshopProject && typeof onExitWorkshop === "function";
 
+  const handleExitWorkshopNav = useCallback(() => {
+    closeMobileNav();
+    onExitWorkshop?.();
+  }, [closeMobileNav, onExitWorkshop]);
+
   return (
-    <TooltipProvider delayDuration={280}>
+    <div className="relative flex w-full shrink-0 flex-col sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0">
+      <header
+        className="sticky top-0 z-40 flex w-full items-center justify-between gap-2 border-b border-[color-mix(in_oklch,var(--sidebar-border)_90%,var(--sidebar))] bg-[var(--sidebar)] px-3 py-2.5 text-[var(--sidebar-foreground)] sm:hidden"
+        style={{ paddingTop: "max(0.625rem, env(safe-area-inset-top))" }}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--sidebar-foreground)_7%,var(--sidebar))] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_10%,transparent)]">
+            <Flame className="h-5 w-5 text-[var(--primary)]" aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold tracking-tight text-[var(--sidebar-foreground)]">TheForge</p>
+            <p className="truncate text-[11px] text-[var(--muted-foreground)]">Software Factory</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {!inWorkshop ? (
+            <button
+              type="button"
+              onClick={handleOpenMobileSearch}
+              title="Buscar proyectos"
+              aria-label="Buscar proyectos"
+              className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] text-[var(--sidebar-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]"
+            >
+              <Search className="h-5 w-5" aria-hidden />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((open) => !open)}
+            title={mobileNavOpen ? "Cerrar menú" : "Abrir menú"}
+            aria-label={mobileNavOpen ? "Cerrar menú de navegación" : "Abrir menú de navegación"}
+            aria-expanded={mobileNavOpen}
+            className="flex h-10 w-10 items-center justify-center rounded-[var(--radius-md)] border border-[color-mix(in_oklch,var(--sidebar-border)_70%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)] active:scale-[0.97]"
+          >
+            {mobileNavOpen ? <X className="h-5 w-5" aria-hidden /> : <Menu className="h-5 w-5" aria-hidden />}
+          </button>
+        </div>
+      </header>
+
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          aria-label="Cerrar menú"
+          className="fixed inset-0 z-30 bg-[color-mix(in_oklch,var(--background)_40%,black)] sm:hidden"
+          onClick={closeMobileNav}
+        />
+      ) : null}
+
+      <TooltipProvider delayDuration={280}>
     <aside
       className={cn(
         "flex w-full shrink-0 flex-col border-[var(--sidebar-border)] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] sm:border-b-0 sm:border-r sm:min-h-0 sm:self-stretch sm:sticky sm:top-0 sm:transition-[width] sm:duration-200 sm:ease-out",
-        // Workshop: cap height on narrow stacked layout; fill row height on sm+ so steps can scroll.
-        // overflow-y-auto on the steps list shows a scrollbar only when content overflows.
+        // Mobile: slide-over drawer; desktop: unchanged width and sticky column.
+        "max-sm:fixed max-sm:left-0 max-sm:top-0 max-sm:z-50 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-[min(19rem,92vw)] max-sm:overflow-y-auto max-sm:overscroll-y-contain max-sm:border-r max-sm:shadow-2xl max-sm:transition-transform max-sm:duration-200 max-sm:ease-out max-sm:[-webkit-overflow-scrolling:touch]",
+        mobileNavOpen
+          ? "max-sm:translate-x-0 max-sm:pointer-events-auto"
+          : "max-sm:-translate-x-full max-sm:pointer-events-none",
         !inWorkshop && "sm:h-full sm:max-h-[100dvh] sm:min-h-0",
         inWorkshop &&
-          "min-h-0 overflow-hidden max-sm:max-h-[min(38rem,calc(100svh-5.5rem))] max-sm:min-h-0 sm:h-full sm:max-h-[min(100dvh,100svh)] sm:min-h-0",
+          "min-h-0 overflow-hidden sm:h-full sm:max-h-[min(100dvh,100svh)] sm:min-h-0",
         // Expanded: 16rem / 256px (common nav width); rail stays 4rem.
         rail ? "sm:w-16 sm:min-w-[4rem]" : "sm:w-64 sm:min-w-64",
       )}
@@ -310,7 +411,7 @@ export function DashboardSidebar({
       >
         <div
           className={cn(
-            "flex w-full gap-2",
+            "flex w-full gap-2 max-sm:hidden",
             rail ? "sm:flex-col sm:items-center sm:gap-2.5" : "items-center justify-between",
           )}
         >
@@ -354,6 +455,7 @@ export function DashboardSidebar({
               aria-hidden
             />
             <Input
+              ref={projectSearchInputRef}
               type="search"
               value={projectSearchQuery}
               onChange={(e) => onProjectSearchChange(e.target.value)}
@@ -399,7 +501,7 @@ export function DashboardSidebar({
               <CollapsedRailHint rail={rail} label="Volver al panel de proyectos">
                 <button
                   type="button"
-                  onClick={onExitWorkshop}
+                  onClick={handleExitWorkshopNav}
                   title="Volver al panel de proyectos"
                   className={cn(
                     "flex w-full shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
@@ -520,7 +622,10 @@ export function DashboardSidebar({
                                     role="listitem"
                                     title={`${item.title}${done ? " — con contenido" : ""}`}
                                     aria-current={isCurrent ? "page" : undefined}
-                                    onClick={() => setWorkshopActiveDocPanel(item.id)}
+                                    onClick={() => {
+                                      closeMobileNav();
+                                      setWorkshopActiveDocPanel(item.id);
+                                    }}
                                     className={cn(
                                       "flex min-w-0 items-center font-medium transition-colors",
                                       rail
@@ -671,6 +776,7 @@ export function DashboardSidebar({
               className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--popover-foreground)] hover:bg-[var(--muted)]"
               onClick={(e) => {
                 closeDetailsFromEvent(e);
+                closeMobileNav();
                 onOpenSettings();
               }}
             >
@@ -683,6 +789,7 @@ export function DashboardSidebar({
                 className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--popover-foreground)] hover:bg-[var(--muted)]"
                 onClick={(e) => {
                   closeDetailsFromEvent(e);
+                  closeMobileNav();
                   onOpenUsers();
                 }}
               >
@@ -695,6 +802,7 @@ export function DashboardSidebar({
               className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--popover-foreground)] hover:bg-[var(--muted)]"
               onClick={(e) => {
                 closeDetailsFromEvent(e);
+                closeMobileNav();
                 onLogout();
               }}
             >
@@ -706,5 +814,6 @@ export function DashboardSidebar({
       </div>
     </aside>
     </TooltipProvider>
+    </div>
   );
 }
