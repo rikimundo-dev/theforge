@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   ServiceUnavailableException,
@@ -176,74 +178,75 @@ export class AuthService {
       throw new BadRequestException("email requerido");
     }
 
-    // Anti-enumeración: si el usuario no existe, devolvemos ok sin enviar nada.
-    const user = await this.prisma.user.findUnique({ where: { email }, select: { id: true } });
-    if (!user) {
-      this.logger.warn(`OTP solicitado para email no registrado: ${email}`);
-      return { ok: true };
-    }
-
-    const now = Date.now();
-    const last = this.lastOtpRequestAt.get(email) ?? 0;
-    if (now - last < OTP_RESEND_MS) {
-      return { ok: true };
-    }
-
-    if (isProduction() && !this.smtpConfig()) {
-      this.logger.error(
-        "SMTP_HOST, SMTP_USER y SMTP_PASS deben estar definidos en producción para OTP",
-      );
-      throw new ServiceUnavailableException("Envío de correo no disponible");
-    }
-
-    const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
-    this.otpByEmail.set(email, { code, expiresAt: now + OTP_TTL_MS });
-    this.lastOtpRequestAt.set(email, now);
-
-    const transport = this.smtpTransport();
-    if (!transport) {
-      this.logger.warn(`OTP para ${email} (solo dev, sin SMTP): ${code}`);
-      return { ok: true };
-    }
-
-    const from = this.mailFromHeader();
-
-    // iOS domain-bound + magic link
-    const appHost = this.resolveWebAppHostname();
-    const domainLine = appHost ? `@${appHost} #${code}` : null;
-    const magicLink = appHost
-      ? `https://${appHost}/auth/magic-link?otp=${code}&email=${encodeURIComponent(email)}`
-      : null;
-
-    // Texto plano con formato iOS
-    const textLines = [
-      code,
-      '',
-      `Use ${code} as your The Forge verification code.`,
-      '',
-      `Your verification code is: ${code}`,
-      '',
-      `Tu código: ${code}. Vence en 10 minutos. Si no lo pediste, ignora.`,
-    ];
-    if (domainLine) textLines.push('', domainLine);
-    if (magicLink) textLines.push('', `O toca este enlace: ${magicLink}`);
-    const textBody = textLines.join('\n');
-
-    const htmlMagicLink = magicLink
-      ? `<a href="${magicLink}" style="display:inline-block;margin:16px 0;padding:14px 28px;background:#059669;color:#fff;border-radius:12px;font-size:16px;font-weight:700;text-decoration:none;text-align:center;">👉 Acceder al instante</a>
-         <p style="margin:0 0 16px;font-size:13px;color:#64748b;">O ingresa el código manualmente.</p>`
-      : '';
-    const htmlDomainLine = domainLine
-      ? `<p style="margin:12px 0 0;font-size:12px;color:#64748b;word-break:break-all;font-family:ui-monospace,monospace;">${domainLine}</p>`
-      : '';
-
     try {
-      await transport.sendMail({
-        from,
-        to: email,
-        subject: `The Forge verification code ${code}`,
-        text: textBody,
-        html: `
+      // Anti-enumeración: si el usuario no existe, devolvemos ok sin enviar nada.
+      const user = await this.prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (!user) {
+        this.logger.warn(`OTP solicitado para email no registrado: ${email}`);
+        return { ok: true };
+      }
+
+      const now = Date.now();
+      const last = this.lastOtpRequestAt.get(email) ?? 0;
+      if (now - last < OTP_RESEND_MS) {
+        return { ok: true };
+      }
+
+      if (isProduction() && !this.smtpConfig()) {
+        this.logger.error(
+          "SMTP_HOST, SMTP_USER y SMTP_PASS deben estar definidos en producción para OTP",
+        );
+        throw new ServiceUnavailableException("Envío de correo no disponible");
+      }
+
+      const code = randomInt(0, 1_000_000).toString().padStart(6, "0");
+      this.otpByEmail.set(email, { code, expiresAt: now + OTP_TTL_MS });
+      this.lastOtpRequestAt.set(email, now);
+
+      const transport = this.smtpTransport();
+      if (!transport) {
+        this.logger.warn(`OTP para ${email} (solo dev, sin SMTP): ${code}`);
+        return { ok: true };
+      }
+
+      const from = this.mailFromHeader();
+
+      // iOS domain-bound + magic link
+      const appHost = this.resolveWebAppHostname();
+      const domainLine = appHost ? `@${appHost} #${code}` : null;
+      const magicLink = appHost
+        ? `https://${appHost}/auth/magic-link?otp=${code}&email=${encodeURIComponent(email)}`
+        : null;
+
+      // Texto plano con formato iOS
+      const textLines = [
+        code,
+        "",
+        `Use ${code} as your The Forge verification code.`,
+        "",
+        `Your verification code is: ${code}`,
+        "",
+        `Tu código: ${code}. Vence en 10 minutos. Si no lo pediste, ignora.`,
+      ];
+      if (domainLine) textLines.push("", domainLine);
+      if (magicLink) textLines.push("", `O toca este enlace: ${magicLink}`);
+      const textBody = textLines.join("\n");
+
+      const htmlMagicLink = magicLink
+        ? `<a href="${magicLink}" style="display:inline-block;margin:16px 0;padding:14px 28px;background:#059669;color:#fff;border-radius:12px;font-size:16px;font-weight:700;text-decoration:none;text-align:center;">👉 Acceder al instante</a>
+         <p style="margin:0 0 16px;font-size:13px;color:#64748b;">O ingresa el código manualmente.</p>`
+        : "";
+      const htmlDomainLine = domainLine
+        ? `<p style="margin:12px 0 0;font-size:12px;color:#64748b;word-break:break-all;font-family:ui-monospace,monospace;">${domainLine}</p>`
+        : "";
+
+      try {
+        await transport.sendMail({
+          from,
+          to: email,
+          subject: `The Forge verification code ${code}`,
+          text: textBody,
+          html: `
           <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;padding:20px;color:#1e293b;max-width:480px;">
             <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#059669;">The Forge</p>
             <p style="margin:0 0 8px;">Tu código de acceso:</p>
@@ -254,18 +257,28 @@ export class AuthService {
             ${htmlDomainLine}
           </div>
         `,
-      });
-      this.logger.log(`OTP enviado por SMTP a ${email}`);
-    } catch (err) {
-      this.otpByEmail.delete(email);
-      this.lastOtpRequestAt.delete(email);
-      const e = err as Error & { responseCode?: number | string; response?: string; command?: string };
-      const detail = [e.message, e.responseCode, e.response].filter(Boolean).join(" | ");
-      this.logger.error(`Fallo SMTP al enviar OTP: ${detail || String(err)}`);
-      throw new ServiceUnavailableException("No se pudo enviar el código por correo");
-    }
+        });
+        this.logger.log(`OTP enviado por SMTP a ${email}`);
+      } catch (err) {
+        this.otpByEmail.delete(email);
+        this.lastOtpRequestAt.delete(email);
+        const e = err as Error & { responseCode?: number | string; response?: string; command?: string };
+        const detail = [e.message, e.responseCode, e.response].filter(Boolean).join(" | ");
+        this.logger.error(`Fallo SMTP al enviar OTP: ${detail || String(err)}`);
+        throw new ServiceUnavailableException("No se pudo enviar el código por correo");
+      }
 
-    return { ok: true };
+      return { ok: true };
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`requestOtp falló antes/después de SMTP: ${msg}`, err instanceof Error ? err.stack : undefined);
+      throw new InternalServerErrorException(
+        isProduction()
+          ? "Error interno al solicitar el código. Revisa que la API tenga DATABASE_URL y SMTP correctos (logs del servidor)."
+          : `Error al solicitar código: ${msg}`,
+      );
+    }
   }
 
   async verifyOtp(rawEmail: string, rawCode: string): Promise<{

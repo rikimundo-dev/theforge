@@ -8,7 +8,7 @@
  * @author Jorge Correa <jcorrea@e-personal.net>
  */
 import { config } from "dotenv";
-import dns from "node:dns";
+import * as dns from "node:dns";
 import { resolve } from "node:path";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module.js";
