@@ -1734,7 +1734,7 @@ export default function WorkshopView({
                   <>
                     <div className="flex-1 overflow-auto min-h-0 flex flex-col">
                       {mddInicialViewMode === "preview" ? (
-                        <div className="flex-1 overflow-auto rounded border border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_78%,var(--card))] p-4 min-h-0">
+                        <div className="rounded border border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_78%,var(--card))] p-4">
                           <MddViewer content={mddInicialLocalContent || activeLegacyState?.codebaseDoc || ""} />
                         </div>
                       ) : (
