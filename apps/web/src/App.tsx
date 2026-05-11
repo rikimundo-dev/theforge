@@ -26,6 +26,7 @@ import { CreateProjectWizardDialog } from "./components/CreateProjectWizardDialo
 import { ProjectFolderTile } from "./components/ProjectFolderTile";
 import { DashboardSidebar } from "./components/DashboardSidebar";
 import { McpSecretCard } from "./components/McpSecretCard";
+import { AriadneConfigCard } from "./components/AriadneConfigCard";
 import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser } from "./utils/apiClient";
 import {
   Button,
@@ -398,12 +399,15 @@ export default function App() {
 
       {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-xl max-h-[85dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Ajustes</DialogTitle>
             <DialogDescription>Configuración de tu cuenta y herramientas.</DialogDescription>
           </DialogHeader>
-          <McpSecretCard />
+          <div className="space-y-4">
+            <McpSecretCard />
+            <AriadneConfigCard />
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Body, Logger } from "@nestjs/common";
+import { Controller, Get, Put, Post, Body, Logger } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service.js";
 
 @Controller("admin")
@@ -35,5 +35,44 @@ export class AdminController {
     await upsert("ariadne_mcp_token", typeof body.token === "string" ? body.token.trim() : undefined);
     this.logger.log(`[Admin] Ariadne config updated`);
     return { ok: true };
+  }
+
+  @Post("ariadne-config/test")
+  async testAriadneConnection(
+    @Body() body: { url: string; token: string },
+  ): Promise<{ ok: boolean; error?: string }> {
+    const { url, token } = body;
+    if (!url) return { ok: false, error: "URL es requerida" };
+    if (!token) return { ok: false, error: "Token es requerido" };
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-M2M-Token": token,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: "test-1",
+          method: "tools/list",
+          params: {},
+        }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "sin cuerpo");
+        return { ok: false, error: `HTTP ${response.status}: ${text.slice(0, 200)}` };
+      }
+      const data = (await response.json()) as Record<string, unknown>;
+      if (data.error) {
+        return {
+          ok: false,
+          error: typeof data.error === "object" ? JSON.stringify(data.error) : String(data.error),
+        };
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : "Error de conexión" };
+    }
   }
 }
