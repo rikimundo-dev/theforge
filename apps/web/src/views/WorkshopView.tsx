@@ -397,28 +397,86 @@ export default function WorkshopView({
     const { apiFetch, API_BASE } = await import("../utils/apiClient");
     const mdd = effectiveMddTrimmed || "";
     const blueprint = blueprintContent?.trim() || "";
-    const spec = specContent?.trim() || "";
+    const specContentStr = specContent?.trim() || "";
     const contextMd = [
-      mdd ? `## MDD\n${mdd.slice(0, 3000)}` : "",
-      blueprint ? `## Blueprint (data model)\n${blueprint.slice(0, 2000)}` : "",
-      spec ? `## Spec\n${spec.slice(0, 2000)}` : "",
+      mdd ? `## MDD\n${mdd.slice(0, 4000)}` : "",
+      blueprint ? `## Blueprint (data model)\n${blueprint.slice(0, 3000)}` : "",
+      specContentStr ? `## Spec\n${specContentStr.slice(0, 2000)}` : "",
     ].filter(Boolean).join("\n\n");
 
     const projectName = project?.name || "Proyecto";
-    const step = async (instruction: string): Promise<string> => {
-      setUxGenProgress(instruction.slice(0, 60));
+
+    try {
+      setUxGenerating(true);
+      setUxGenProgress("Generando DESIGN.md completo\u2026");
+
+      const fullPrompt =
+        `Eres un diseñador UX/UI experto. Genera el archivo DESIGN.md COMPLETO para el proyecto "${projectName}".\n\n` +
+        `El DESIGN.md debe tener formato YAML front matter seguido de secciones markdown, así:\n` +
+        `---\n` +
+        `name: "${projectName}"\n` +
+        `colors:\n` +
+        `  primary: '#...'\n` +
+        `  secondary: '#...'\n` +
+        `  ...\n` +
+        `typography:\n` +
+        `  font-sans: ['...', '...']\n` +
+        `  h1: { fontSize: ..., fontWeight: ..., lineHeight: ... }\n` +
+        `  ...\n` +
+        `rounded:\n` +
+        `  none: 0px\n` +
+        `  sm: 6px\n` +
+        `  md: 12px\n` +
+        `  lg: 20px\n` +
+        `  xl: 28px\n` +
+        `  full: 9999px\n` +
+        `spacing:\n` +
+        `  xxs: 2px\n` +
+        `  xs: 4px\n` +
+        `  sm: 8px\n` +
+        `  md: 16px\n` +
+        `  lg: 24px\n` +
+        `  xl: 32px\n` +
+        `  2xl: 48px\n` +
+        `  3xl: 64px\n` +
+        `elevation:\n` +
+        `  card: { boxShadow: '...' }\n` +
+        `  dropdown: { boxShadow: '...' }\n` +
+        `  modal: { boxShadow: '...' }\n` +
+        `  sticky: { boxShadow: '...' }\n` +
+        `components:\n` +
+        `  button-primary: { backgroundColor, textColor, rounded, padding, typography }\n` +
+        `  button-secondary: { ... }\n` +
+        `  button-ghost: { ... }\n` +
+        `  button-danger: { ... }\n` +
+        `  card: { ... }\n` +
+        `  badge: { ... }\n` +
+        `  input: { ... }\n` +
+        `  modal: { ... }\n` +
+        `  toast: { ... }\n` +
+        `  skeleton: { ... }\n` +
+        `---\n\n` +
+        `Luego las secciones markdown:\n` +
+        `## Overview\n## Colors\n## Typography\n## Layout & Spacing\n## Elevation Depth\n## Shapes\n## Components\n## Do's and Don'ts\n\n` +
+        `Incluye criterios WCAG AA (contraste 4.5:1, touch targets 44px, navegación por teclado).\n` +
+        `Usa {token.references} en las descripciones de los tokens.\n\n` +
+        `Contexto del proyecto:\n${contextMd}\n\n` +
+        `IMPORTANTE: Responde ÚNICAMENTE con el archivo DESIGN.md completo empezando por "---". NO agregues texto explicativo ni bloques \`\`\` alrededor.`;
+
       const body: Record<string, unknown> = {
         projectId,
-        message: `Eres un diseñador UX/UI experto. Genera EXACTAMENTE lo que se pide a continuación, sin incluir nada más.\n\n${instruction}\n\nContexto del proyecto:\n${contextMd}`,
+        message: fullPrompt,
         activeTab: "ux-ui-guide",
       };
       if (mdd) body.mddContent = mdd;
+
       const r = await apiFetch(`${API_BASE}/ai-orchestrator/chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!r.ok) throw new Error(`Error: ${r.status}`);
+
       const reader = r.body?.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -442,76 +500,23 @@ export default function WorkshopView({
           } catch { /* ignore */ }
         }
       }
-      return result.trim();
-    };
 
-    try {
-      setUxGenerating(true);
-      setUxGenProgress("Generando paleta de colores\u2026");
+      const trimmed = result.trim();
+      // Strip any wrapping ```yaml or ```markdown fences the orchestrator might add
+      const cleaned = trimmed
+        .replace(/^```(?:yaml|markdown)\s*\n?/i, "")
+        .replace(/\n?```\s*$/i, "")
+        .trim();
 
-      // 1. Colors
-      const colorsYaml = await step(
-        `Genera SOLO la secci\u00f3n \`colors:\` del YAML front matter para el DESIGN.md de "${projectName}".\n` +
-        "Debe incluir TODOS estos keys con valores reales del proyecto:\n" +
-        "primary, secondary, tertiary, neutral, foreground, background, muted, border, danger, success, warning, info\n" +
-        "Responde \u00daNICAMENTE con el bloque YAML (sin \`\`\`yaml ni explicaciones), empezando por \'colors:\'."
-      );
-
-      setUxGenProgress("Generando escala tipogr\u00e1fica\u2026");
-
-      // 2. Typography
-      const typographyYaml = await step(
-        `Genera SOLO la secci\u00f3n \`typography:\` del YAML front matter para el DESIGN.md de "${projectName}".\n` +
-        "Debe incluir TODOS: font-sans (fontFamily), h1, h2, h3, h4, body-md, body-sm, label-sm, caption, overline\n" +
-        "Cada uno con: fontSize, fontWeight, lineHeight, y letterSpacing cuando aplique.\n" +
-        "Responde \u00daNICAMENTE con el bloque YAML, empezando por \'typography:\'."
-      );
-
-      setUxGenProgress("Generando rounded, spacing y elevation\u2026");
-
-      // 3. Rounded + Spacing + Elevation
-      const layoutYaml = await step(
-        `Genera las secciones YAML de \`rounded:\`, \`spacing:\` y \`elevation:\` para "${projectName}".\n` +
-        "rounded: none(0px), sm(6px), md(12px), lg(20px), xl(28px), full(9999px)\n" +
-        "spacing: xxs(2px), xs(4px), sm(8px), md(16px), lg(24px), xl(32px), 2xl(48px), 3xl(64px)\n" +
-        "elevation: card, dropdown, modal, sticky (con box-shadow realistas)\n" +
-        "Responde \u00daNICAMENTE con los 3 bloques YAML seguidos."
-      );
-
-      setUxGenProgress("Generando componentes visuales\u2026");
-
-      // 4. Components
-      const componentsYaml = await step(
-        `Genera SOLO la secci\u00f3n \`components:\` del YAML para "${projectName}".\n` +
-        "Debe incluir TODOS: button-primary, button-secondary, button-ghost, button-danger, card, badge, input, modal, toast, skeleton\n" +
-        "Cada componente con: backgroundColor, textColor, rounded, padding, typography (usando {token.references} cuando aplique).\n" +
-        "Usa los colores del proyecto (primary, secondary, tertiary, danger, neutral, foreground, muted, background).\n" +
-        "Responde \u00daNICAMENTE con el bloque YAML, empezando por \'components:\'."
-      );
-
-      setUxGenProgress("Generando documentaci\u00f3n markdown\u2026");
-
-      // 5. Markdown documentation sections
-      const docSections = await step(
-        `Genera las secciones markdown del DESIGN.md para "${projectName}" (sin el YAML front matter).\n` +
-        "Secciones: ## Overview, ## Colors, ## Typography, ## Layout, ## Elevation " +
-        "Depth, ## Shapes, ## Components, ## Do\'s and Don\'ts.\n" +
-        "Incluye criterios WCAG AA (contraste 4.5:1, touch targets 44px, navegaci\u00f3n por teclado).\n" +
-        "Usa {token.references} en las descripciones.\n" +
-        "Responde \u00daNICAMENTE con las secciones markdown."
-      );
-
-      setUxGenProgress("Ensamblando DESIGN.md completo\u2026");
-
-      // 6. Assemble
-      const yamlParts = [colorsYaml, typographyYaml, layoutYaml, componentsYaml]
-        .map(p => p.replace(/^```yaml\n?/i, "").replace(/```\n?$/i, "").trim())
-        .join("\n");
-
-      const fullDesignMd = `---\nname: "${projectName}"\n${yamlParts}\n---\n\n${docSections}`;
-
-      setUxUiGuideContent(fullDesignMd);
-      await persistUxUiGuideContent(fullDesignMd);
+      if (!cleaned || !cleaned.startsWith("---")) {
+        // If the orchestrator didn't return YAML front matter, wrap what we got
+        // so the user sees something in preview mode
+        setUxUiGuideContent(cleaned || result);
+        await persistUxUiGuideContent(cleaned || result);
+      } else {
+        setUxUiGuideContent(cleaned);
+        await persistUxUiGuideContent(cleaned);
+      }
       setUxGenerating(false);
       setUxGenProgress(null);
     } catch (e) {
