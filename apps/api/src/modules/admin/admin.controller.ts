@@ -65,7 +65,37 @@ export class AdminController {
         const text = await response.text().catch(() => "sin cuerpo");
         return { ok: false, error: `HTTP ${response.status}: ${text.slice(0, 200)}` };
       }
-      const data = (await response.json()) as Record<string, unknown>;
+      const raw = await response.text();
+      // Intentar parsear como JSON-RPC directo
+      let data: Record<string, unknown> | null = null;
+      try {
+        data = JSON.parse(raw) as Record<string, unknown>;
+      } catch {
+        // Podría ser SSE (Streamable HTTP) — extraer JSON entre bloques
+        const lines = raw.split("\n");
+        const jsonBlocks: string[] = [];
+        let buf = "";
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            buf = line.slice(6).trim();
+          } else if (line.trim() === "" && buf) {
+            jsonBlocks.push(buf);
+            buf = "";
+          }
+        }
+        if (buf) jsonBlocks.push(buf);
+        for (const block of jsonBlocks) {
+          try {
+            data = JSON.parse(block) as Record<string, unknown>;
+            break;
+          } catch {
+            continue;
+          }
+        }
+      }
+      if (!data) {
+        return { ok: false, error: `Respuesta inesperada (${raw.slice(0, 200)})` };
+      }
       if (data.error) {
         return {
           ok: false,
