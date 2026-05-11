@@ -262,7 +262,7 @@ export class AuthService {
 </html>`;
 
     return {
-      subject: `Código de acceso — La Forja`,
+      subject: `Código de acceso — La Forja (${code})`,
       text: textBody,
       html: htmlBody.trim(),
     };
