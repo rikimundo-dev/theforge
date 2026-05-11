@@ -26,6 +26,14 @@ export class GraphMemoryService implements OnModuleInit, OnModuleDestroy {
             this.graph = this.client.selectGraph(this.graphName);
             this.logger.log(`Conectado a FalkorDB en ${url}`);
 
+            // Attach error handler para evitar crash si Redis/FalkorDB se desconecta después
+            this.client.on("error", (err: unknown) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                this.logger.error(`FalkorDB disconnected: ${msg}`);
+                this.client = null;
+                this.graph = null;
+            });
+
             // Inicializar índices vectoriales
             await this.initializeIndices();
         } catch (err) {

@@ -49,6 +49,8 @@ export class AdminController {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          "MCP-Protocol-Version": "2025-03-26",
           "X-M2M-Token": token,
         },
         body: JSON.stringify({
