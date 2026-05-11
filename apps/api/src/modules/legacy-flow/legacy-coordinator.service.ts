@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   HttpException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -47,6 +48,8 @@ import { AiService } from "../ai/ai.service.js";
 import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { loadLegacyKnowledgePack } from "./knowledge-loader.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
+import type { LLMProvider } from "../ai/interfaces/llm-provider.interface.js";
+import { LLM_PROVIDER } from "../ai/interfaces/llm-provider.interface.js";
 import { UX_UI_GUIDE_PROMPT } from "../ai/prompts/ux-ui-guide-prompt.js";
 import {
   isLegacyCodebaseDocMcpDebugUiEnabled,
@@ -498,6 +501,8 @@ export class LegacyCoordinatorService {
   private readonly logger = new Logger(LegacyCoordinatorService.name);
 
   constructor(
+    @Inject(LLM_PROVIDER)
+    private readonly llm: LLMProvider,
     private readonly prisma: PrismaService,
     private readonly projects: ProjectsService,
     private readonly theforge: TheForgeService,
@@ -2081,5 +2086,114 @@ export class LegacyCoordinatorService {
     );
 
     return { ok: true, lastDeliverablesDebug: report };
+  }
+
+  /** Mapping de tipo de documento a campo de proyecto. */
+  private static readonly DOCUMENT_TYPE_FIELD: Record<string, keyof import("@prisma/client").Prisma.ProjectUpdateInput> = {
+    spec: "specContent",
+    architecture: "architectureContent",
+    "use-cases": "useCasesContent",
+    "user-stories": "userStoriesContent",
+    blueprint: "blueprintContent",
+    "api-contracts": "apiContractsContent",
+    "logic-flows": "logicFlowsContent",
+    tasks: "tasksContent",
+    infra: "infraContent",
+  };
+
+  /** Prompt de generación por tipo de documento (español). */
+  private static readonly DOCUMENT_TYPE_PROMPTS: Record<string, string> = {
+    spec:
+      "A partir de la documentación del codebase (codebaseDoc) de un proyecto existente, genera un documento SPEC que describa: qué hace el sistema, sus funcionalidades principales, objetivos de negocio, stack tecnológico, y arquitectura de alto nivel. Basa todo en la evidencia del codebaseDoc.",
+    architecture:
+      "A partir de la documentación del codebase, genera un documento de ARQUITECTURA que describa: estructura de módulos, patrones de diseño, flujo de datos, base de datos, APIs externas, y diagrama de componentes. Basa todo en la evidencia.",
+    "use-cases":
+      "A partir de la documentación del codebase, genera CASOS DE USO describiendo: actores, flujos principales, flujos alternativos, y pre/post condiciones. Basa todo en la evidencia.",
+    "user-stories":
+      "A partir de la documentación del codebase, genera HISTORIAS DE USUARIO en formato 'Como [rol], quiero [funcionalidad] para [beneficio]'. Basa todo en la evidencia.",
+    blueprint:
+      "A partir de la documentación del codebase, genera un BLUEPRINT con: modelo de datos, entidades, relaciones, atributos, y restricciones. Basa todo en la evidencia.",
+    "api-contracts":
+      "A partir de la documentación del codebase, genera CONTRATOS DE API listando: endpoints, métodos HTTP, request/response, autenticación, y ejemplos. Basa todo en la evidencia.",
+    "logic-flows":
+      "A partir de la documentación del codebase, genera FLUJOS DE LÓGICA describiendo: reglas de negocio, validaciones, estados, transiciones, y secuencias. Basa todo en la evidencia.",
+    tasks:
+      "A partir de la documentación del codebase, genera TASKS desglosando: módulos, funcionalidades, y tareas técnicas. Basa todo en la evidencia.",
+    infra:
+      "A partir de la documentación del codebase, genera INFRAESTRUCTURA describiendo: Docker, servicios, base de datos, despliegue, y configuración. Basa todo en la evidencia.",
+  };
+
+  /**
+   * Genera un documento individual a partir del codebaseDoc del proyecto legacy.
+   * Lee el codebaseDoc (ya sea de legacyFlowState del proyecto o de la etapa),
+   * llama al LLM para generar el contenido del tipo solicitado y lo persiste.
+   *
+   * @param projectId - ID del proyecto.
+   * @param documentType - Tipo de documento (spec, architecture, use-cases, user-stories, blueprint, api-contracts, logic-flows, tasks, infra).
+   * @param stageId - Etapa base opcional (por defecto resuelve la etapa legacy).
+   * @returns Objeto con el contenido generado y el campo persistido.
+   */
+  async generateFromCodebase(
+    projectId: string,
+    documentType: string,
+    stageId?: string,
+  ): Promise<{ content: string; field: string }> {
+    await this.getLegacyProject(projectId);
+
+    const field = LegacyCoordinatorService.DOCUMENT_TYPE_FIELD[documentType];
+    if (!field) {
+      throw new BadRequestException(
+        `Tipo de documento no soportado: ${documentType}`,
+      );
+    }
+
+    // Resolver etapa
+    const stage = stageId?.trim()
+      ? await this.prisma.stage.findUnique({ where: { id: stageId.trim() } })
+      : await this.resolveLegacyGateStage(projectId);
+
+    // Leer proyecto con stages incluidos
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: { stages: true },
+    });
+    if (!project) {
+      throw new NotFoundException(`Proyecto ${projectId} no encontrado`);
+    }
+
+    // Obtener codebaseDoc desde stage o project
+    const state = this.getLegacyChangeState(stage, project);
+    const codebaseDoc = String(state.codebaseDoc ?? "").trim();
+
+    if (codebaseDoc.length < 300) {
+      throw new BadRequestException(
+        "Se requiere documentación de partida del codebase (mín. ~300 caracteres). Ejecuta primero generate-codebase-doc.",
+      );
+    }
+
+    // Construir prompt
+    const typePrompt = LegacyCoordinatorService.DOCUMENT_TYPE_PROMPTS[documentType];
+    const codebaseChunk = codebaseDoc.slice(0, 120_000);
+    const prompt = `${typePrompt}\n\n--- codebaseDoc ---\n\n${codebaseChunk}`;
+
+    // Llamar al LLM
+    const raw = await this.llm.generateResponse(prompt, [], {
+      systemPrompt:
+        "Eres un analista de software experto. Genera documentación técnica precisa basada en el codebase proporcionado.",
+    });
+
+    const content = cleanDocumentContent(raw ?? "");
+
+    // Persistir en el proyecto
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: { [field]: content },
+    });
+
+    this.logger.log(
+      `[LegacyCoordinator] generateFromCodebase project=${projectId.slice(0, 8)}… type=${documentType} field=${field} chars=${content.length}`,
+    );
+
+    return { content, field };
   }
 }

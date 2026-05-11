@@ -181,4 +181,29 @@ export class LegacyFlowController {
   ) {
     return this.coordinator.generateDeliverables(projectId, body.stageId);
   }
+
+  /**
+   * Genera un entregable individual (documento técnico) a partir del codebaseDoc del proyecto legacy.
+   * @param projectId - ID del proyecto.
+   * @param body.documentType - Tipo de documento a generar: spec | architecture | use-cases | user-stories | blueprint | api-contracts | logic-flows | tasks | infra.
+   * @param body.stageId - Etapa base opcional.
+   * @returns { content: string; field: string }
+   */
+  @Post("generate-from-codebase")
+  async generateFromCodebase(
+    @Param("projectId") projectId: string,
+    @Body() body: { documentType?: string; stageId?: string },
+  ) {
+    const VALID_TYPES = [
+      "spec", "architecture", "use-cases", "user-stories",
+      "blueprint", "api-contracts", "logic-flows", "tasks", "infra",
+    ] as const;
+    const docType = typeof body?.documentType === "string" ? body.documentType.trim() : "";
+    if (!VALID_TYPES.includes(docType as any)) {
+      throw new BadRequestException(
+        `documentType debe ser uno de: ${VALID_TYPES.join(", ")}`,
+      );
+    }
+    return this.coordinator.generateFromCodebase(projectId, docType, body.stageId);
+  }
 }
