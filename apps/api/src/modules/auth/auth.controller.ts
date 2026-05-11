@@ -114,9 +114,9 @@ export class AuthController {
 
   @Put("ariadne-config")
   @HttpCode(200)
-  async setAriadneConfig(@Body() body: { url?: string }) {
+  async setAriadneConfig(@Body() body: { url?: string; token?: string }) {
     const userId = getRequestUserId();
-    return this.auth.setAriadneConfig(userId, body.url ?? "");
+    return this.auth.setAriadneConfig(userId, body.url ?? "", body.token ?? "");
   }
 
   /** GET /auth/has-users — verifica si hay usuarios registrados (público). */

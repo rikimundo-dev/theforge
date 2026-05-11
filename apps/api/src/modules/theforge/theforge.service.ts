@@ -328,10 +328,10 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
       if (userId) {
         const user = await this.prisma.user.findUnique({
           where: { id: userId },
-          select: { mcpSecret: true, ariadneMcpUrl: true },
+          select: { ariadneMcpUrl: true, ariadneMcpToken: true },
         });
-        if (user?.mcpSecret) {
-          headers["X-M2M-Token"] = user.mcpSecret;
+        if (user?.ariadneMcpToken) {
+          headers["X-M2M-Token"] = user.ariadneMcpToken;
         }
         if (user?.ariadneMcpUrl?.trim()) {
           resolvedUrl = user.ariadneMcpUrl.trim();

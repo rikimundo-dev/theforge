@@ -23,6 +23,10 @@ model User {
   /// URL del MCP de Ariadne configurada por el usuario (opcional).
   /// Usada para llamar a AriadneSpecs MCP. Si no está definida, se usa el fallback global.
   ariadneMcpUrl String?
+  /// Token MCP de Ariadne configurado por el usuario (opcional).
+  /// Es el MCP Secret del usuario en Ariadne que actuará como base de conocimientos.
+  /// No confundir con mcpSecret (token de TheForge).
+  ariadneMcpToken String?
   projects  Project[]
   sessions  Session[]
 }

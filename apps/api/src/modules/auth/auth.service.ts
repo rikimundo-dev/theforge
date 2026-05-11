@@ -450,22 +450,25 @@ export class AuthService {
     return { mcpSecret };
   }
 
-  /** Obtiene la URL del MCP de Ariadne configurada por el usuario. */
-  async getAriadneConfig(userId: string): Promise<{ url: string }> {
+  /** Obtiene la URL y token del MCP de Ariadne configurados por el usuario. */
+  async getAriadneConfig(userId: string): Promise<{ url: string; token: string }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { ariadneMcpUrl: true },
+      select: { ariadneMcpUrl: true, ariadneMcpToken: true },
     });
-    return { url: user?.ariadneMcpUrl ?? "" };
+    return { url: user?.ariadneMcpUrl ?? "", token: user?.ariadneMcpToken ?? "" };
   }
 
-  /** Guarda la URL del MCP de Ariadne para el usuario. */
-  async setAriadneConfig(userId: string, url: string): Promise<{ ok: boolean }> {
+  /** Guarda la URL y token del MCP de Ariadne para el usuario. */
+  async setAriadneConfig(userId: string, url: string, token: string): Promise<{ ok: boolean }> {
     await this.prisma.user.update({
       where: { id: userId },
-      data: { ariadneMcpUrl: url.trim() || null },
+      data: {
+        ariadneMcpUrl: url.trim() || null,
+        ariadneMcpToken: token.trim() || null,
+      },
     });
-    this.logger.log(`Ariadne MCP URL actualizada para usuario ${userId}`);
+    this.logger.log(`Ariadne MCP config actualizada para usuario ${userId}`);
     return { ok: true };
   }
 
