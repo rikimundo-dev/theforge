@@ -589,6 +589,12 @@ interface WorkshopState {
     projectId: string,
     stageId?: string,
   ) => Promise<{ brdContent: string; stageId: string } | null>;
+  /** POST …/legacy/generate-from-codebase — genera entregable individual desde codebaseDoc. */
+  legacyGenerateFromCodebaseDoc: (
+    projectId: string,
+    documentType: string,
+    stageId?: string,
+  ) => Promise<{ content: string; field: string } | null>;
   /** POST …/projects/:id/suggest-brd-from-dbga — greenfield desde `dbgaContent`. */
   suggestBrdFromDbga: (
     projectId: string,
@@ -2914,6 +2920,35 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     } catch (e) {
       set({
         error: e instanceof Error ? e.message : "Error al sugerir BRD",
+        loading: false,
+        loadingReason: null,
+      });
+      return null;
+    }
+  },
+
+  legacyGenerateFromCodebaseDoc: async (projectId, documentType, stageId) => {
+    if (!projectId?.trim()) return null;
+    set({ loading: true, loadingReason: "legacy-brd-suggest", error: null });
+    const body: { documentType: string; stageId?: string } = { documentType };
+    if (stageId?.trim()) body.stageId = stageId.trim();
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/legacy/generate-from-codebase`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message ?? "Error al generar documento");
+      }
+      const data = (await r.json()) as { content: string; field: string };
+      await get().fetchProject(projectId.trim());
+      set({ loading: false, loadingReason: null, error: null });
+      return data;
+    } catch (e) {
+      set({
+        error: e instanceof Error ? e.message : "Error al generar documento desde codebase",
         loading: false,
         loadingReason: null,
       });

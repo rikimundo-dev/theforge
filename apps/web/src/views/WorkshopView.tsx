@@ -180,6 +180,10 @@ function DocEmptyState({
   hasMdd,
   generateBlocked,
   generateBlockedReason,
+  /** Etiqueta para botón "Generar desde MDD Inicial" en legacy etapa 1 */
+  legacyGenerateLabel,
+  onLegacyGenerate,
+  legacyGenerateLoading,
 }: {
   icon: LucideIcon;
   title: string;
@@ -190,6 +194,9 @@ function DocEmptyState({
   /** ej. Blueprint §3 incompleto — bloquea generación aunque haya MDD */
   generateBlocked?: boolean;
   generateBlockedReason?: string;
+  legacyGenerateLabel?: string;
+  onLegacyGenerate?: () => void;
+  legacyGenerateLoading?: boolean;
 }) {
   const blocked = !!generateBlocked;
   return (
@@ -209,6 +216,21 @@ function DocEmptyState({
       )}
       {blocked && generateBlockedReason && (
         <p className="text-xs text-[var(--primary)] max-w-md">{generateBlockedReason}</p>
+      )}
+      {legacyGenerateLabel && onLegacyGenerate && (
+        <button
+          type="button"
+          onClick={onLegacyGenerate}
+          disabled={legacyGenerateLoading}
+          className="inline-flex items-center gap-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] px-4 py-2 text-sm font-medium text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {legacyGenerateLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {legacyGenerateLabel}
+        </button>
       )}
     </div>
   );
@@ -299,6 +321,9 @@ export default function WorkshopView({
     !!((activeLegacyState?.codebaseDoc ?? "").trim()) &&
     !effectiveMddTrimmed;
   const effectiveComplexityForTabs = isReverseEngineering ? "HIGH" : complexity;
+  const hasCodebaseDoc = isLegacyProject && (activeLegacyState?.codebaseDoc ?? "").trim().length > 300;
+  const isStage1Legacy = isLegacyProject && activeWorkshopStage?.ordinal === 1;
+  const canGenerateFromCodebase = isStage1Legacy && hasCodebaseDoc;
   const canGenerate = useMemo(() => {
     if (isLegacyProject) {
       const hasMdd = effectiveMddTrimmed.length > 0;
@@ -388,6 +413,7 @@ export default function WorkshopView({
   const persistPhase0SummaryContent = useWorkshopStore((s) => s.persistPhase0SummaryContent);
   const legacyGenerateCodebaseDoc = useWorkshopStore((s) => s.legacyGenerateCodebaseDoc);
   const legacySuggestBrdFromCodebaseDoc = useWorkshopStore((s) => s.legacySuggestBrdFromCodebaseDoc);
+  const legacyGenerateFromCodebaseDoc = useWorkshopStore((s) => s.legacyGenerateFromCodebaseDoc);
   const legacyMcpDebugTrace = useWorkshopStore((s) => s.legacyMcpDebugTrace);
   const legacyUpdateCodebaseDoc = useWorkshopStore((s) => s.legacyUpdateCodebaseDoc);
   const legacyStart = useWorkshopStore((s) => s.legacyStart);
@@ -1720,6 +1746,17 @@ export default function WorkshopView({
                 : "flex-1 overflow-auto p-4 min-h-0 flex flex-col min-w-0"
             }
           >
+            {canGenerateFromCodebase && (
+              <div className="shrink-0 mb-3 rounded-lg border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_8%,var(--card))] px-3 py-2.5">
+                <p className="text-sm font-medium text-[color-mix(in_oklch,var(--primary)_65%,var(--foreground))] mb-2">
+                  Etapa 1 — Documentación AS-IS
+                </p>
+                <p className="text-xs text-[var(--muted-foreground)] leading-relaxed">
+                  Estás en la etapa inicial del proyecto legacy. Los paneles vacíos tienen un botón para generar su documento desde el <strong>MDD Inicial (codebase)</strong>.
+                  También puedes ir al panel <strong>MDD</strong> y usar "Generar todos los documentos" para generar todo de una vez.
+                </p>
+              </div>
+            )}
             {centralPanel === "mdd-inicial" && project?.projectType === "LEGACY" && projectId && (
               <div className="rounded-lg bg-[color-mix(in_oklch,var(--card)_88%,transparent)] border border-[var(--border)] p-6 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] text-sm space-y-4 flex flex-col min-h-0 flex-1">
                 <div className="shrink-0 space-y-3">
@@ -2497,6 +2534,9 @@ export default function WorkshopView({
                   onGenerate={() => generateSpec(projectId)}
                   loading={loading}
                   hasMdd={!!(dbgaContent?.trim() || effectiveMddTrimmed)}
+                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Spec desde MDD Inicial" : undefined}
+                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "spec", activeStageId ?? undefined) : undefined}
+                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
                 />
               )
             )}
@@ -2634,6 +2674,9 @@ export default function WorkshopView({
                   onGenerate={() => generateBlueprint(projectId, { preview: true })}
                   loading={loading || mddReviewing}
                   hasMdd={!!effectiveMddTrimmed}
+                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Blueprint desde MDD Inicial" : undefined}
+                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "blueprint", activeStageId ?? undefined) : undefined}
+                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
                 />
               )
             )}
@@ -2670,6 +2713,9 @@ export default function WorkshopView({
                   onGenerate={() => generateTasks(projectId)}
                   loading={loading}
                   hasMdd={!!(effectiveMddTrimmed && blueprintContent?.trim())}
+                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Tasks desde MDD Inicial" : undefined}
+                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "tasks", activeStageId ?? undefined) : undefined}
+                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
                 />
               )
             )}
@@ -2697,6 +2743,9 @@ export default function WorkshopView({
                   hasMdd={!!effectiveMddTrimmed}
                   generateBlocked={apiBlueprintDmBlocked}
                   generateBlockedReason={apiBlueprintBlockedHint}
+                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar API Contracts desde MDD Inicial" : undefined}
+                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "api-contracts", activeStageId ?? undefined) : undefined}
+                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
                 />
               )
             )}
@@ -2722,6 +2771,9 @@ export default function WorkshopView({
                   onGenerate={() => generateLogicFlows(projectId)}
                   loading={loading || mddReviewing}
                   hasMdd={!!effectiveMddTrimmed}
+                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Flujos desde MDD Inicial" : undefined}
+                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "logic-flows", activeStageId ?? undefined) : undefined}
+                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
                 />
               )
             )}
@@ -2747,6 +2799,9 @@ export default function WorkshopView({
                   onGenerate={() => generateInfra(projectId, { preview: true })}
                   loading={loading || mddReviewing}
                   hasMdd={!!effectiveMddTrimmed}
+                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Infra desde MDD Inicial" : undefined}
+                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "infra", activeStageId ?? undefined) : undefined}
+                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
                 />
               )
             )}
