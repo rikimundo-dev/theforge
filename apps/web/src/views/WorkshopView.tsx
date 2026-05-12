@@ -1876,7 +1876,46 @@ export default function WorkshopView({
                       )}
                     </div>
                     <LegacyMcpDebugPanel trace={legacyMcpDebugTrace} />
-                    <div className="shrink-0 pt-4 border-t border-[var(--border)] mt-4">
+                    <div className="shrink-0 pt-4 border-t border-[var(--border)] mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const hasLocalChanges = mddInicialLocalContent?.trim() && mddInicialViewMode === "source" && mddInicialLocalContent !== (activeLegacyState?.codebaseDoc ?? "");
+                          if (hasLocalChanges) await legacyUpdateCodebaseDoc(projectId, mddInicialLocalContent);
+                          const res = await legacySuggestBrdFromCodebaseDoc(projectId, activeStageId ?? undefined);
+                          if (res?.brdContent) setBrdWorkshopDraft(res.brdContent);
+                          setCentralPanel("brd");
+                        }}
+                        disabled={loading || !(mddInicialLocalContent || activeLegacyState?.codebaseDoc)?.trim()}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        title="Genera el BRD (Business Requirements Document) a partir del MDD Inicial del codebase"
+                      >
+                        {loading && loadingReason === "legacy-brd-suggest" ? (
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        ) : (
+                          <FileText className="w-4 h-4 shrink-0" />
+                        )}
+                        Generar BRD desde MDD Inicial
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const hasLocalChanges = mddInicialLocalContent?.trim() && mddInicialViewMode === "source" && mddInicialLocalContent !== (activeLegacyState?.codebaseDoc ?? "");
+                          if (hasLocalChanges) await legacyUpdateCodebaseDoc(projectId, mddInicialLocalContent);
+                          if (projectId) setCentralPanel("mdd");
+                          await legacyGenerateMdd(projectId, activeStageId ?? undefined);
+                        }}
+                        disabled={loading || !(mddInicialLocalContent || activeLegacyState?.codebaseDoc)?.trim()}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        title="Genera el MDD completo desde el MDD Inicial y el BRD de la etapa activa"
+                      >
+                        {loading && loadingReason === "legacy-mdd" ? (
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        ) : (
+                          <RefreshCw className="w-4 h-4 shrink-0" />
+                        )}
+                        Generar MDD Completo
+                      </button>
                       <button
                         type="button"
                         onClick={async () => {
