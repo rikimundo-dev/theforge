@@ -156,13 +156,18 @@ function ContributorAvatarStrip({ contributors }: { contributors: readonly Forge
                   sideOffset={10}
                   className="max-w-[16rem] border-0 bg-zinc-900 px-3 py-2.5 text-left text-white shadow-lg dark:bg-zinc-950"
                 >
-                  <div className="flex items-start gap-3">
+                  <a
+                    href={profileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-3"
+                  >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold leading-tight text-white">{c.displayName}</p>
                       <p className="mt-0.5 text-xs text-zinc-400">{getContributorRoleLabel(c.role)}</p>
                     </div>
-                    <Github className="mt-0.5 h-4 w-4 shrink-0 text-zinc-300" aria-hidden />
-                  </div>
+                    <Github className="mt-0.5 h-4 w-4 shrink-0 text-zinc-300 transition-colors hover:text-white" aria-hidden />
+                  </a>
                 </TooltipContent>
               </Tooltip>
             </li>
