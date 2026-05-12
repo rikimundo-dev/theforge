@@ -25,6 +25,7 @@ import UsersView from "./views/UsersView";
 import { CreateProjectWizardDialog } from "./components/CreateProjectWizardDialog";
 import { ProjectFolderTile } from "./components/ProjectFolderTile";
 import { DashboardSidebar } from "./components/DashboardSidebar";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { McpSecretCard } from "./components/McpSecretCard";
 import { AriadneConfigCard } from "./components/AriadneConfigCard";
 import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser } from "./utils/apiClient";
@@ -335,7 +336,7 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <ErrorBoundary>
       <CreateProjectWizardDialog
         open={showCreateWizard}
         onOpenChange={setShowCreateWizard}
@@ -781,6 +782,6 @@ export default function App() {
       </main>
         </div>
       )}
-    </>
+    </ErrorBoundary>
   );
 }
