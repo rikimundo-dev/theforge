@@ -936,33 +936,55 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
 
   /**
    * Recopila contratos de API reales desde el MCP de Ariadne para la generación del documento de Contratos de API.
-   * 1. Pregunta al codebase qué controladores/componentes existen
-   * 2. Para cada uno, llama a get_contract_specs
-   * 3. Devuelve un markdown con toda la evidencia
+   * 1. Busca en el grafo (semantic_search) controladores, rutas y servicios
+   * 2. Extrae nombres de nodos con patrones de identificadores reales
+   * 3. Para cada nombre válido, llama a get_contract_specs
+   * 4. Devuelve markdown con la evidencia o fallback a búsqueda semántica
    */
   async gatherContractSpecsForApi(projectId: string): Promise<string> {
     if (!this.isConfigured()) return "";
     try {
-      // Paso 1: Identificar componentes/controladores via ask_codebase
-      const componentList = await this.askCodebase(
-        "List ONLY the exact names of ALL controllers, route handlers, services and API-related components/functions in this project. Return each name on a separate line prefixed with '- '. Do NOT include descriptions, file paths or any other text — just the names.",
-        projectId,
-      );
-      if (!componentList?.trim()) return "";
+      // Paso 1: Buscar controladores, rutas y servicios en el grafo
+      const [searchControllers, searchRoutes, searchAPIs] = await Promise.all([
+        this.semanticSearch("controllers handlers routes services endpoints", projectId, 10),
+        this.semanticSearch("API routes REST endpoints controllers express nestjs", projectId, 10),
+        this.semanticSearch("components services interfaces types", projectId, 10),
+      ]);
 
-      // Extraer nombres de componentes (líneas que empiezan con "- " o simplemente nombres)
-      const lines = componentList.split("\n").map(l => l.trim()).filter(Boolean);
-      const names: string[] = [];
-      for (const line of lines) {
-        const name = line.replace(/^-\s*/, "").replace(/[^a-zA-Z0-9_]/g, "").trim();
-        if (name.length > 1 && name.length < 100) names.push(name);
+      const allSearchResults = [
+        searchControllers?.trim() || "",
+        searchRoutes?.trim() || "",
+        searchAPIs?.trim() || "",
+      ].filter(Boolean).join("\n\n---\n\n");
+
+      if (!allSearchResults) return "";
+
+      // Paso 2: Extraer nombres válidos de componentes del texto de búsqueda semántica
+      // Los nombres reales en el grafo suelen ser PascalCase (clases) o camelCase (funciones)
+      const names = new Set<string>();
+
+      // Patrón 1: Nombres PascalCase con sufijos conocidos (clases/componentes/controladores/screens, etc.)
+      const pascalMatches = allSearchResults.match(/\b[A-Z][a-zA-Z0-9]+(?:Controller|Service|Handler|Component|Route|Resource|Api|Helper|Util|Manager|Factory|Adapter|Provider|Module|Guard|Interceptor|Pipe|Filter|Middleware|Resolver|Directive|Screen|Page|View|Layout|Widget|Form|Modal|Card|List|Table|Button|Input|Select|Dropdown|Menu|Nav|Header|Footer|Section|Container|Wrapper|Provider|Context|Hook|Store|Action|Reducer|Selector|Thunk|Saga|Endpoint|Client|Server|Config|Plugin|Extension)\b/g);
+      if (pascalMatches) pascalMatches.forEach(n => names.add(n));
+
+      // Patrón 2: Nombres PascalCase genéricos (2+ palabras mayúsculas) — ej: UserProfile, OrderDetails
+      const genericPascal = allSearchResults.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g);
+      if (genericPascal) genericPascal.forEach(n => { if (n.length >= 4 && n.length <= 60) names.add(n); });
+
+      // Tomar máximo 5 nombres, priorizando los que tienen sufijos conocidos
+      const sortedNames = [...names].sort((a, b) => {
+        const aScore = /(?:Controller|Service|Handler|Component|Route|Api|Resource|Module|Resolver|Screen|Page|View)$/.test(a) ? 1 : 0;
+        const bScore = /(?:Controller|Service|Handler|Component|Route|Api|Resource|Module|Resolver|Screen|Page|View)$/.test(b) ? 1 : 0;
+        return bScore - aScore;
+      });
+      const topNames = sortedNames.slice(0, 5);
+
+      if (topNames.length === 0) {
+        // Fallback: devolver la búsqueda semántica como contexto útil
+        return `## Rutas y componentes identificados en el codebase\n\n${allSearchResults.slice(0, 6000)}`;
       }
 
-      // Tomar máximo 8 componentes para no abusar del MCP
-      const topNames = [...new Set(names)].slice(0, 8);
-      if (topNames.length === 0) return componentList.trim().slice(0, 4000);
-
-      // Paso 2: Obtener contract specs para cada componente
+      // Paso 3: Obtener contract specs para los nombres encontrados
       const parts: string[] = [];
       for (const name of topNames) {
         try {
@@ -976,11 +998,11 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
       }
 
       if (parts.length === 0) {
-        // Fallback: devolver el listado de componentes al menos
-        return `## Componentes identificados en el codebase\n\n${componentList.trim().slice(0, 4000)}`;
+        // Fallback: devolver la búsqueda semántica como contexto
+        return `## Rutas y componentes identificados en el codebase\n\n${allSearchResults.slice(0, 6000)}`;
       }
 
-      return `## Contratos reales desde el codebase (get_contract_specs)\n\n${parts.join("\n\n---\n\n")}`;
+      return parts.join("\n\n---\n\n");
     } catch (err) {
       this.logger.warn(`[TheForge] gatherContractSpecsForApi falló: ${err instanceof Error ? err.message : String(err)}`);
       return "";
