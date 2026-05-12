@@ -21,6 +21,8 @@ import {
   ListTodo,
   Download,
   Brain,
+  ArrowDown,
+  ArrowUp,
   HelpCircle,
   CheckCircle2,
   Layers,
@@ -647,6 +649,37 @@ export default function WorkshopView({
   );
   const [lgMetricsFlyoutOpen, setLgMetricsFlyoutOpen] = useState(false);
   const lgMetricsFlyoutRef = useRef<HTMLDivElement>(null);
+  const workspaceScrollRef = useRef<HTMLDivElement>(null);
+  const chatSectionRef = useRef<HTMLElement>(null);
+  const metricsSectionRef = useRef<HTMLElement>(null);
+  const [scrollFabDirection, setScrollFabDirection] = useState<"down" | "up">("down");
+
+  const getActiveScrollContainer = useCallback((): HTMLElement | null => {
+    if (mobileWorkshopColumn === "workspace") return workspaceScrollRef.current;
+    if (mobileWorkshopColumn === "chat") {
+      const section = chatSectionRef.current;
+      return section?.querySelector("[class*='overflow-y-auto']") as HTMLElement | null;
+    }
+    if (mobileWorkshopColumn === "metrics") return metricsSectionRef.current;
+    return null;
+  }, [mobileWorkshopColumn]);
+
+  useEffect(() => {
+    const updateDirection = () => {
+      const container = getActiveScrollContainer();
+      if (!container) { setScrollFabDirection("down"); return; }
+      const atBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 20;
+      setScrollFabDirection(atBottom ? "up" : "down");
+    };
+
+    updateDirection();
+
+    const container = getActiveScrollContainer();
+    if (!container) return;
+
+    container.addEventListener("scroll", updateDirection, { passive: true });
+    return () => container.removeEventListener("scroll", updateDirection);
+  }, [mobileWorkshopColumn, getActiveScrollContainer]);
 
   useEffect(() => {
     if (typeof globalThis.matchMedia !== "function") return;
@@ -1213,14 +1246,173 @@ export default function WorkshopView({
               >
                 <Plus className="h-5 w-5 shrink-0" aria-hidden />
               </button>
-            </div>
-          ) : null}
 
-          {/* Column 3 — secondary actions (aligned end, same height tokens) */}
+              {/* Mobile-only: secondary actions beside stage controls */}
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(true)}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:hidden",
+                )}
+                title="Manual de uso del Workshop"
+                aria-label="Ayuda — manual del Workshop"
+              >
+                <HelpCircle className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
+                  launchHermes(projectId)
+                    .then((res: { success: boolean; status: number } | undefined) => {
+                      if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
+                    })
+                    .catch((err: Error) => setError(err.message));
+                }}
+                disabled={loading || hermesConfigured === false}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:hidden",
+                  hermesConfigured === false && "cursor-not-allowed opacity-60",
+                )}
+                title={
+                  hermesConfigured === null
+                    ? "Verificando configuración…"
+                    : hermesConfigured
+                      ? "Lanzar proyecto a Hermes Agent"
+                      : "Hermes no configurado"
+                }
+                aria-label={
+                  hermesConfigured === null
+                    ? "Verificando Hermes"
+                    : hermesConfigured
+                      ? "Lanzar proyecto a Hermes Agent"
+                      : "Hermes no configurado"
+                }
+              >
+                {loading && loadingReason === "launch-hermes" ? (
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Rocket className="h-5 w-5 shrink-0" aria-hidden />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await downloadDocumentsZip(
+                    {
+                      dbgaContent: dbgaContent ?? project?.dbgaContent ?? null,
+                      phase0SummaryContent: phase0SummaryContent ?? project?.phase0SummaryContent ?? null,
+                      specContent: specContent ?? project?.specContent ?? null,
+                      mddContent: mddContent ?? project?.mddContent ?? "",
+                      uxUiGuideContent: uxUiGuideContent ?? project?.uxUiGuideContent ?? null,
+                      blueprintContent: blueprintContent ?? project?.blueprintContent ?? null,
+                      apiContractsContent: apiContractsContent ?? project?.apiContractsContent ?? null,
+                      logicFlowsContent: logicFlowsContent ?? project?.logicFlowsContent ?? null,
+                      tasksContent: tasksContent ?? project?.tasksContent ?? null,
+                      infraContent: infraContent ?? project?.infraContent ?? null,
+                      aemContent: aemContent ?? project?.aemContent ?? null,
+                    },
+                    projectName ?? project?.name ?? "Workshop",
+                  );
+                  if (ok) setError(null);
+                  else setError("No hay documentos con contenido para descargar.");
+                }}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl sm:hidden",
+                )}
+                title="Descargar todos los documentos en ZIP"
+                aria-label="Descargar todos los documentos en ZIP"
+              >
+                <Download className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          ) : (
+            /* No stages: still show secondary actions on mobile */
+            <div className="flex sm:hidden min-w-0 flex-nowrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(true)}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                )}
+                title="Manual de uso del Workshop"
+                aria-label="Ayuda — manual del Workshop"
+              >
+                <HelpCircle className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
+                  launchHermes(projectId)
+                    .then((res: { success: boolean; status: number } | undefined) => {
+                      if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
+                    })
+                    .catch((err: Error) => setError(err.message));
+                }}
+                disabled={loading || hermesConfigured === false}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                  hermesConfigured === false && "cursor-not-allowed opacity-60",
+                )}
+                title={hermesConfigured ? "Lanzar proyecto a Hermes Agent" : "Hermes no configurado"}
+                aria-label={hermesConfigured ? "Lanzar proyecto a Hermes Agent" : "Hermes no configurado"}
+              >
+                {loading && loadingReason === "launch-hermes" ? (
+                  <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                ) : (
+                  <Rocket className="h-5 w-5 shrink-0" aria-hidden />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await downloadDocumentsZip(
+                    {
+                      dbgaContent: dbgaContent ?? project?.dbgaContent ?? null,
+                      phase0SummaryContent: phase0SummaryContent ?? project?.phase0SummaryContent ?? null,
+                      specContent: specContent ?? project?.specContent ?? null,
+                      mddContent: mddContent ?? project?.mddContent ?? "",
+                      uxUiGuideContent: uxUiGuideContent ?? project?.uxUiGuideContent ?? null,
+                      blueprintContent: blueprintContent ?? project?.blueprintContent ?? null,
+                      apiContractsContent: apiContractsContent ?? project?.apiContractsContent ?? null,
+                      logicFlowsContent: logicFlowsContent ?? project?.logicFlowsContent ?? null,
+                      tasksContent: tasksContent ?? project?.tasksContent ?? null,
+                      infraContent: infraContent ?? project?.infraContent ?? null,
+                      aemContent: aemContent ?? project?.aemContent ?? null,
+                    },
+                    projectName ?? project?.name ?? "Workshop",
+                  );
+                  if (ok) setError(null);
+                  else setError("No hay documentos con contenido para descargar.");
+                }}
+                className={cn(
+                  WORKSHOP_HEADER_CTL,
+                  WORKSHOP_HEADER_CTL_HOVER,
+                  "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+                )}
+                title="Descargar todos los documentos en ZIP"
+                aria-label="Descargar todos los documentos en ZIP"
+              >
+                <Download className="h-5 w-5 shrink-0" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          )}
+
+          {/* Column 3 — secondary actions (desktop only, mobile actions move to stage row) */}
           <div
             className={cn(
-              "flex flex-nowrap items-center justify-end gap-1 sm:justify-self-end sm:gap-1.5",
-              "max-sm:grid max-sm:w-full max-sm:grid-cols-3 max-sm:gap-2 max-sm:border-t max-sm:border-[color-mix(in_oklch,var(--border)_85%,transparent)] max-sm:pt-2",
+              "hidden sm:flex flex-nowrap items-center justify-end gap-1 sm:justify-self-end sm:gap-1.5",
             )}
           >
             <button
@@ -1418,6 +1610,7 @@ export default function WorkshopView({
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)] lg:grid-rows-1 lg:items-stretch lg:overflow-visible">
         {/* Columna A: Chat (siempre a la izquierda, como en MDD) */}
         <section
+          ref={chatSectionRef}
           className={cn(
             "min-h-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
             "flex flex-col",
@@ -1454,7 +1647,7 @@ export default function WorkshopView({
               : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
           )}
         >
-          <div className="flex shrink-0 flex-col gap-2.5 border-b border-[var(--border)] px-3 py-2.5 text-sm text-[var(--muted-foreground)] sm:px-4 sm:py-3">
+          <div className="hidden lg:flex shrink-0 flex-col gap-2.5 border-b border-[var(--border)] px-3 py-2.5 text-sm text-[var(--muted-foreground)] sm:px-4 sm:py-3">
             <TooltipProvider delayDuration={280}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
               <WorkshopDocToolbarHint
@@ -1740,6 +1933,7 @@ export default function WorkshopView({
             </TooltipProvider>
           </div>
           <div
+            ref={workspaceScrollRef}
             className={
               centralPanel === "brd" || centralPanel === "to-be"
                 ? "flex-1 overflow-hidden p-4 min-h-0 flex flex-col min-w-0"
@@ -2900,6 +3094,7 @@ export default function WorkshopView({
 
         {/* Columna C: métricas — solo móvil (panel completo). En lg la pestaña flota sobre el área de trabajo (sin tercera columna). */}
         <section
+          ref={metricsSectionRef}
           className={cn(
             "workshop-metrics-column min-h-0 min-w-0 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] text-xs leading-snug lg:min-h-0",
             "flex flex-col",
@@ -3001,16 +3196,121 @@ export default function WorkshopView({
           </div>
         ) : null}
 
-        {/* ── Floating help FAB (mobile only) ── */}
-        <button
-          type="button"
-          onClick={() => setShowHelpModal(true)}
-          className="lg:hidden fixed bottom-[calc(52px+env(safe-area-inset-bottom)+8px)] right-4 z-20 flex h-11 w-11 min-h-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-black/25 transition-transform active:scale-90 hover:scale-105 touch-manipulation"
-          title="Ayuda — TheForge"
-          aria-label="Ayuda"
-        >
-          <HelpCircle className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-        </button>
+        {/* ── Mobile-only floating FABs ── */}
+        {(() => {
+          const fabBase = "lg:hidden fixed right-4 z-20 flex h-11 w-11 min-h-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--primary)_70%,transparent)] text-[var(--primary-foreground)] shadow-lg shadow-black/25 transition-transform active:scale-90 hover:scale-105 touch-manipulation";
+          const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
+            mddViewMode,
+            mddInicialViewMode,
+            specViewMode,
+            architectureViewMode,
+            useCasesViewMode,
+            userStoriesViewMode,
+            uxUiGuideViewMode,
+            aemViewMode,
+            blueprintViewMode,
+            apiContractsViewMode,
+            logicFlowsViewMode,
+            brdDocViewMode,
+            infraViewMode,
+          });
+          const { Icon: DocToggleIcon, tooltip: docToggleTooltip } = workshopDocSourceTogglePresentation(
+            centralPanel,
+            activeDocViewMode,
+          );
+          const showDocToggle =
+            centralPanel !== "benchmark" &&
+            centralPanel !== "tasks" &&
+            (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd", "mdd-inicial"] as const).includes(centralPanel as any) &&
+            (centralPanel === "spec" ||
+              centralPanel === "mdd" ||
+              centralPanel === "ux-ui-guide" ||
+              centralPanel === "aem" ||
+              (centralPanel === "blueprint" && blueprintContent) ||
+              (centralPanel === "api-contracts" && apiContractsContent) ||
+              (centralPanel === "architecture" && architectureContent) ||
+              (centralPanel === "use-cases" && useCasesContent) ||
+              (centralPanel === "user-stories" && userStoriesContent) ||
+              (centralPanel === "logic-flows" && logicFlowsContent) ||
+              (centralPanel === "infra" && infraContent) ||
+              (centralPanel === "mdd-inicial" && (activeLegacyState?.codebaseDoc || mddInicialLocalContent)) ||
+              (centralPanel === "brd" && !!activeStageId));
+          const showFlowOrder = effectiveComplexityForTabs === "HIGH";
+
+          let fabIndex = 0;
+          const getFabBottom = () => {
+            const offset = 52 + 8 + fabIndex * 52;
+            fabIndex++;
+            return `calc(${offset}px + env(safe-area-inset-bottom))`;
+          };
+
+          return (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const container = getActiveScrollContainer();
+                  if (!container) return;
+                  if (scrollFabDirection === "down") {
+                    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+                  } else {
+                    container.scrollTo({ top: 0, behavior: "smooth" });
+                  }
+                }}
+                className={fabBase}
+                style={{ bottom: getFabBottom() }}
+                title={scrollFabDirection === "down" ? "Ir al final" : "Ir al inicio"}
+                aria-label={scrollFabDirection === "down" ? "Ir al final del documento" : "Ir al inicio del documento"}
+              >
+                {scrollFabDirection === "down" ? (
+                  <ArrowDown className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                ) : (
+                  <ArrowUp className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                )}
+              </button>
+
+              {showDocToggle && (
+                <button
+                  type="button"
+                  className={fabBase}
+                  style={{ bottom: getFabBottom() }}
+                  title={docToggleTooltip}
+                  aria-label={docToggleTooltip}
+                  onClick={() => {
+                    if (centralPanel === "mdd") setMddViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "mdd-inicial") setMddInicialViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "spec") setSpecViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "architecture") setArchitectureViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "use-cases") setUseCasesViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "user-stories") setUserStoriesViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "ux-ui-guide") setUxUiGuideViewMode((m) => m === "design" ? "preview" : m === "preview" ? "source" : "design");
+                    else if (centralPanel === "aem") setAemViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "blueprint") setBlueprintViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "api-contracts") setApiContractsViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "logic-flows") setLogicFlowsViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "infra") setInfraViewMode((m) => (m === "preview" ? "source" : "preview"));
+                    else if (centralPanel === "brd") setBrdDocViewMode((m) => (m === "preview" ? "source" : "preview"));
+                  }}
+                >
+                  <DocToggleIcon className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                </button>
+              )}
+
+              {showFlowOrder && (
+                <button
+                  type="button"
+                  className={fabBase}
+                  style={{ bottom: getFabBottom() }}
+                  title="Ver orden completo de flujo"
+                  aria-label="Ver orden completo de flujo"
+                  onClick={() => setFlowOrderModalOpen(true)}
+                >
+                  <ListOrdered className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                </button>
+              )}
+            </>
+          );
+        })()}
 
         <nav
           className="lg:hidden shrink-0 sticky bottom-0 z-10 grid grid-cols-3 border-t border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_92%,black)] backdrop-blur-sm pb-[max(4px,env(safe-area-inset-bottom))]"
