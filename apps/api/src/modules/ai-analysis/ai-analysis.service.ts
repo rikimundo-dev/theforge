@@ -516,6 +516,9 @@ export class AiAnalysisService {
         mddStructured: lastState.mddStructured,
         mddDraft: raw || lastState.mddDraft,
       });
+      const mddDraftRaw = (lastState.mddDraft ?? "").trim();
+      this.logger.log(`[MDD:PersistCheck] mddDraft len=${mddDraftRaw.length} first200=${JSON.stringify(mddDraftRaw.slice(0, 200))}`);
+      this.logger.log(`[MDD:PersistCheck] markdown post-prepare len=${markdown.length} first200=${JSON.stringify(markdown.slice(0, 200))}`);
       logSection3Debug("final (stream done)", markdown);
       if (projectId?.trim()) this.estimationService.clearLiveDraft(projectId.trim(), estimationStage);
       yield { type: "done", markdown };
