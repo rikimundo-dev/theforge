@@ -3198,7 +3198,7 @@ export default function WorkshopView({
 
         {/* ── Mobile-only floating FABs ── */}
         {(() => {
-          const fabBase = "lg:hidden fixed right-4 z-20 flex h-11 w-11 min-h-0 items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-black/25 transition-transform active:scale-90 hover:scale-105 touch-manipulation";
+          const fabBase = "lg:hidden fixed right-4 z-20 flex h-11 w-11 min-h-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--primary)_70%,transparent)] text-[var(--primary-foreground)] shadow-lg shadow-black/25 transition-transform active:scale-90 hover:scale-105 touch-manipulation";
           const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
             mddViewMode,
             mddInicialViewMode,
