@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 
 /**
@@ -7,6 +7,8 @@ import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
  */
 @Injectable()
 export class CheckpointerService implements OnModuleInit {
+  private readonly logger = new Logger(CheckpointerService.name);
+
   private checkpointer: PostgresSaver | null = null;
   private setupPromise: Promise<void> | null = null;
 
@@ -39,7 +41,16 @@ export class CheckpointerService implements OnModuleInit {
     const saver = PostgresSaver.fromConnString(connString.trim(), {
       schema: "public",
     });
-    await saver.setup();
+    try {
+      await saver.setup();
+      this.logger.log("LangGraph PostgresSaver: setup() completed (checkpoints tables).");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `LangGraph PostgresSaver setup() failed — DBGA / Paso 0 need tables checkpoints, checkpoint_blobs, checkpoint_writes. Run DB migrations (e.g. prisma migrate deploy). ${message}`,
+      );
+      throw err;
+    }
     this.checkpointer = saver;
   }
 }

@@ -9,6 +9,8 @@ Prisma schema y client compartido.
 
 Desde la **raíz** del monorepo: `npm run db:generate` (o el `build` del paquete) genera el client. `npm run db:push` aplica el schema a la DB. `npm run db:migrate` ejecuta migraciones en producción.
 
+**LangGraph (Paso 0 / DBGA):** las tablas `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations` en `public` las crea `PostgresSaver.setup()` al arrancar la API y también la migración `20260513180000_langgraph_checkpoint_tables` (idempotente). Si ves `relation "public.checkpoints" does not exist`, aplica migraciones pendientes y redeploy de la API.
+
 **Imagen Docker (API):** el `ENTRYPOINT` del contenedor ejecuta `prisma migrate deploy` en cada arranque antes de levantar Nest; el CLI `prisma` va en `dependencies` de este package para que el deploy no dependa de devDependencies.
 
 **Memoria agéntica:** `Stage.shortTermContext` (JSON, STM); `EpisodicMemory` con `kind` (`REASONING_TRACE`, `ARCHITECTURE_DECISION`, `REFLEXION_FEEDBACK`, `EVALUATOR_REJECTION`, `TOOL_OUTPUT`). `Stage.isLegacy` y `Stage.theforgeProjectId` enrutan el flujo legacy; si `theforgeProjectId` es null en stage, aplica el del `Project`.
