@@ -1733,12 +1733,12 @@ export default function WorkshopView({
         <ComplexityPendingBanner />
       </div>
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)] lg:grid-rows-1 lg:items-stretch lg:overflow-visible">
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:items-stretch lg:gap-0 lg:overflow-visible">
         {/* Columna A: Chat (siempre a la izquierda, como en MDD) */}
         <section
           ref={chatSectionRef}
           className={cn(
-            "min-h-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
+            "min-h-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0 lg:border-r-0 lg:contents",
             "flex flex-col",
             mobileWorkshopColumn === "chat" ? "flex min-h-0 flex-1" : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
           )}
@@ -1766,14 +1766,14 @@ export default function WorkshopView({
         {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
         <section
           className={cn(
-            "min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
+            "min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0 lg:border-r-0 lg:contents",
             "flex flex-col",
             mobileWorkshopColumn === "workspace"
               ? "flex min-h-0 flex-1"
               : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
           )}
         >
-          <div className="hidden lg:flex shrink-0 flex-col gap-2.5 border-b border-[var(--border)] px-3 py-2.5 text-sm text-[var(--muted-foreground)] sm:px-4 sm:py-3">
+          <div className="hidden shrink-0 flex-col gap-2.5 border-b border-[var(--border)] px-3 py-2.5 text-sm text-[var(--muted-foreground)] sm:px-4 sm:py-3 lg:col-start-2 lg:row-start-1 lg:flex lg:flex-col lg:self-stretch">
             <TooltipProvider delayDuration={280}>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start lg:items-center sm:justify-between sm:gap-3">
               <WorkshopDocToolbarHint
@@ -2062,8 +2062,8 @@ export default function WorkshopView({
             ref={workspaceScrollRef}
             className={
               centralPanel === "brd" || centralPanel === "to-be"
-                ? "flex-1 overflow-hidden p-4 min-h-0 flex flex-col min-w-0"
-                : "flex-1 overflow-auto p-4 min-h-0 flex flex-col min-w-0"
+                ? "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-4 lg:col-start-2 lg:row-start-2 lg:min-h-0"
+                : "flex min-h-0 min-w-0 flex-1 flex-col overflow-auto p-4 lg:col-start-2 lg:row-start-2 lg:min-h-0"
             }
           >
             {canGenerateFromCodebase && (

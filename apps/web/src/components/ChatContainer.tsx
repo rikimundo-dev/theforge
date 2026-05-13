@@ -14,6 +14,7 @@ import { useWorkshopStore } from "../store/workshopStore";
 import type { ChatImagePart } from "@theforge/shared-types";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
 import { Button, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui";
+import { cn } from "@/lib/utils";
 
 export type ActiveTab =
   | "benchmark"
@@ -539,7 +540,7 @@ export default function ChatContainer({
   const showCenteredEmpty = embedded && (activeTab === "benchmark" ? benchmarkEmpty : messages.length === 0) && !loading;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className={cn("flex h-full min-h-0 flex-col", !embedded && "lg:contents")}>
       {showCenteredEmpty ? (
         <div className="flex-1 flex flex-col items-center justify-center min-h-0 p-6">
           <Target className="w-14 h-14 shrink-0 mb-4 text-[color-mix(in_oklch,var(--primary)_75%,var(--muted-foreground))]" />
@@ -651,7 +652,13 @@ export default function ChatContainer({
         </div>
       ) : (
         <>
-          <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_45%,var(--background))] px-3 py-2.5 sm:px-4 sm:py-3">
+          <header
+            className={cn(
+              "shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_45%,var(--background))] px-3 py-2.5 sm:px-4 sm:py-3",
+              !embedded &&
+                "lg:col-start-1 lg:row-start-1 lg:self-stretch lg:border-r lg:border-[var(--border)]",
+            )}
+          >
             <div className="flex min-w-0 items-start justify-between gap-4 lg:items-center">
               <div className="flex min-w-0 flex-1 items-start gap-2.5 lg:items-center">
                 <div
@@ -704,6 +711,12 @@ export default function ChatContainer({
               </div>
             </div>
           </header>
+          <div
+            className={cn(
+              "flex min-h-0 flex-1 flex-col",
+              !embedded && "lg:col-start-1 lg:row-start-2 lg:min-h-0 lg:border-r lg:border-[var(--border)]",
+            )}
+          >
           {multiStageChat && stageSwitchBannerOpen && (
             <div
               className="shrink-0 mx-3 mt-2 mb-1 px-3 py-2 rounded-lg border border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] text-[color-mix(in_oklch,var(--primary)_55%,var(--foreground))] text-xs leading-snug flex gap-2 items-start"
@@ -1033,6 +1046,7 @@ export default function ChatContainer({
                 {loading ? <Loader2 className="h-4 w-4 animate-spin shrink-0" aria-hidden /> : <Send className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />}
               </button>
             </div>
+          </div>
           </div>
         </>
       )}
