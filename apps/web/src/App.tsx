@@ -17,6 +17,8 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import WorkshopView from "./views/WorkshopView";
 import LoginView from "./views/LoginView";
@@ -51,6 +53,7 @@ import {
   AlertDialogTitle,
   EmptyState,
 } from "./components/ui";
+import { cn } from "@/lib/utils";
 
 type Status = "ROJO" | "AMARILLO" | "VERDE";
 
@@ -107,6 +110,7 @@ export default function App() {
   const [showTheForgeModal, setShowTheForgeModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [usersViewOpen, setUsersViewOpen] = useState(false);
+  const [showIaCost, setShowIaCost] = useState(() => localStorage.getItem("theforge_show_ia_cost") !== "0");
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
   const [theforgeModalTab, setTheForgeModalTab] = useState<"projects" | "repos">("projects");
   const [theforgeProjects, setTheForgeProjects] = useState<TheForgeProject[]>([]);
@@ -391,6 +395,33 @@ export default function App() {
           <div className="space-y-4">
             <McpSecretCard />
             <AriadneConfigCard />
+            <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 cursor-pointer">
+              <div className="flex items-center gap-2">
+                {showIaCost ? <Eye className="h-4 w-4 text-[var(--foreground-subtle)]" /> : <EyeOff className="h-4 w-4 text-[var(--foreground-subtle)]" />}
+                <span className="text-sm font-medium">Mostrar costo de IA en semáforo</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showIaCost}
+                onClick={() => {
+                  const next = !showIaCost;
+                  localStorage.setItem("theforge_show_ia_cost", next ? "1" : "0");
+                  setShowIaCost(next);
+                }}
+                className={cn(
+                  "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                  showIaCost ? "bg-[var(--primary)]" : "bg-[color-mix(in_oklch,var(--muted-foreground)_25%,var(--border))]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform duration-200 ease-in-out",
+                    showIaCost ? "translate-x-4" : "translate-x-0",
+                  )}
+                />
+              </button>
+            </label>
           </div>
         </DialogContent>
       </Dialog>

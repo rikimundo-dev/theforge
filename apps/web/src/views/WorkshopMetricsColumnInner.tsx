@@ -55,6 +55,7 @@ export function WorkshopMetricsColumnInner({
   const dbgaContentField = useWorkshopStore((s) => s.dbgaContent);
   const specContent = specContentField ?? project?.specContent ?? null;
   const dbgaContent = dbgaContentField ?? project?.dbgaContent ?? null;
+  const showIaCost = useMemo(() => localStorage.getItem("theforge_show_ia_cost") !== "0", []);
   const effectiveMddTrimmed = useMemo(
     () => (mddContent ?? "").trim() || (project?.mddContent ?? "").trim(),
     [mddContent, project?.mddContent],
@@ -590,12 +591,14 @@ export function WorkshopMetricsColumnInner({
                     ${costDisplay.totalMxn.toLocaleString("es-MX")}
                   </span>
                 </div>
+                {showIaCost && (
                 <div className="flex items-baseline justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
                   <span className="text-[11px] font-medium text-[var(--foreground)]">Costo IA</span>
                   <span className="tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--chart-2)_78%,var(--foreground))]">
                     ${costDisplay.totalMxnIA.toLocaleString("es-MX")}
                   </span>
                 </div>
+                )}
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-[11px] font-medium text-[var(--foreground)]">Mercado</span>
                   <span className="tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]">
