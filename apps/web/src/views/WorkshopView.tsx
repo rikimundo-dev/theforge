@@ -3237,7 +3237,9 @@ export default function WorkshopView({
 
         {/* ── Mobile-only floating FABs ── */}
         {(() => {
-          const fabBase = "lg:hidden fixed right-4 z-20 flex h-11 w-11 min-h-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--primary)_70%,transparent)] text-[var(--primary-foreground)] shadow-lg shadow-black/25 transition-transform active:scale-90 hover:scale-105 touch-manipulation";
+          /** Shared shape; position via wrapper or `fixed` + `bottom` for scroll-only control. */
+          const fabVisual =
+            "flex h-11 w-11 min-h-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--primary)_70%,transparent)] text-[var(--primary-foreground)] shadow-lg shadow-black/25 transition-transform active:scale-90 hover:scale-105 touch-manipulation";
           const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
             mddViewMode,
             mddInicialViewMode,
@@ -3276,12 +3278,13 @@ export default function WorkshopView({
               (centralPanel === "brd" && !!activeStageId));
           const showFlowOrder = effectiveComplexityForTabs === "HIGH";
 
-          let fabIndex = 0;
-          const getFabBottom = () => {
-            const offset = 52 + 8 + fabIndex * 52;
-            fabIndex++;
-            return `calc(${offset}px + env(safe-area-inset-bottom))`;
-          };
+          /** Chat tab: lift scroll FAB above composer + bottom nav so it does not cover Send. */
+          const mobileScrollFabBottom =
+            mobileWorkshopColumn === "chat"
+              ? "calc(3.25rem + 9.5rem + env(safe-area-inset-bottom, 0px))"
+              : "calc(3.25rem + 0.5rem + env(safe-area-inset-bottom, 0px))";
+
+          const showDocOrFlowFabStack = showDocToggle || showFlowOrder;
 
           return (
             <>
@@ -3296,8 +3299,8 @@ export default function WorkshopView({
                     container.scrollTo({ top: 0, behavior: "smooth" });
                   }
                 }}
-                className={fabBase}
-                style={{ bottom: getFabBottom() }}
+                className={cn(fabVisual, "lg:hidden fixed right-4 z-20")}
+                style={{ bottom: mobileScrollFabBottom }}
                 title={scrollFabDirection === "down" ? "Ir al final" : "Ir al inicio"}
                 aria-label={scrollFabDirection === "down" ? "Ir al final del documento" : "Ir al inicio del documento"}
               >
@@ -3308,45 +3311,47 @@ export default function WorkshopView({
                 )}
               </button>
 
-              {showDocToggle && (
-                <button
-                  type="button"
-                  className={fabBase}
-                  style={{ bottom: getFabBottom() }}
-                  title={docToggleTooltip}
-                  aria-label={docToggleTooltip}
-                  onClick={() => {
-                    if (centralPanel === "mdd") setMddViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "mdd-inicial") setMddInicialViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "spec") setSpecViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "architecture") setArchitectureViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "use-cases") setUseCasesViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "user-stories") setUserStoriesViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "ux-ui-guide") setUxUiGuideViewMode((m) => m === "design" ? "preview" : m === "preview" ? "source" : "design");
-                    else if (centralPanel === "aem") setAemViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "blueprint") setBlueprintViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "api-contracts") setApiContractsViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "logic-flows") setLogicFlowsViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "infra") setInfraViewMode((m) => (m === "preview" ? "source" : "preview"));
-                    else if (centralPanel === "brd") setBrdDocViewMode((m) => (m === "preview" ? "source" : "preview"));
-                  }}
-                >
-                  <DocToggleIcon className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-                </button>
-              )}
+              {showDocOrFlowFabStack ? (
+                <div className="lg:hidden pointer-events-none fixed right-4 top-1/2 z-20 flex -translate-y-1/2 flex-col items-end gap-3">
+                  {showFlowOrder ? (
+                    <button
+                      type="button"
+                      className={cn(fabVisual, "pointer-events-auto")}
+                      title="Ver orden completo de flujo"
+                      aria-label="Ver orden completo de flujo"
+                      onClick={() => setFlowOrderModalOpen(true)}
+                    >
+                      <ListOrdered className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                    </button>
+                  ) : null}
 
-              {showFlowOrder && (
-                <button
-                  type="button"
-                  className={fabBase}
-                  style={{ bottom: getFabBottom() }}
-                  title="Ver orden completo de flujo"
-                  aria-label="Ver orden completo de flujo"
-                  onClick={() => setFlowOrderModalOpen(true)}
-                >
-                  <ListOrdered className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-                </button>
-              )}
+                  {showDocToggle ? (
+                    <button
+                      type="button"
+                      className={cn(fabVisual, "pointer-events-auto")}
+                      title={docToggleTooltip}
+                      aria-label={docToggleTooltip}
+                      onClick={() => {
+                        if (centralPanel === "mdd") setMddViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "mdd-inicial") setMddInicialViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "spec") setSpecViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "architecture") setArchitectureViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "use-cases") setUseCasesViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "user-stories") setUserStoriesViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "ux-ui-guide") setUxUiGuideViewMode((m) => m === "design" ? "preview" : m === "preview" ? "source" : "design");
+                        else if (centralPanel === "aem") setAemViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "blueprint") setBlueprintViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "api-contracts") setApiContractsViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "logic-flows") setLogicFlowsViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "infra") setInfraViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        else if (centralPanel === "brd") setBrdDocViewMode((m) => (m === "preview" ? "source" : "preview"));
+                      }}
+                    >
+                      <DocToggleIcon className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           );
         })()}
