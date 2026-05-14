@@ -16,15 +16,19 @@ body,
 }
 
 /* Evita scroll horizontal causado por elementos que desbordan ligeramente
-   (sidebar drawer fixed, animaciones, 100vw) en móvil */
+   (sidebar drawer fixed, animaciones, 100vw) en móvil.
+   iOS Safari ignora overflow-x en html solo — necesita width + body también. */
 html {
   overflow-x: hidden;
+  width: 100%;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  overflow-x: hidden;
+  width: 100%;
 }
 
 ::selection {
