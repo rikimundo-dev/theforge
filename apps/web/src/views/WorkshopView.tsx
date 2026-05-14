@@ -1223,7 +1223,7 @@ export default function WorkshopView({
       data-workshop-root
       className="workshop-root flex w-full min-h-0 flex-1 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased"
     >
-      <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-2.5 backdrop-blur-sm max-sm:py-2.5 sm:px-5 sm:py-3">
+      <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-2.5 max-sm:py-2.5 sm:px-5 sm:py-3">
         {/* Main toolbar: grid on sm+ keeps title, stage controls, and actions on one axis */}
         <div
           className={cn(
@@ -3392,7 +3392,7 @@ export default function WorkshopView({
         })()}
 
         <nav
-          className="lg:hidden shrink-0 sticky bottom-0 z-10 grid grid-cols-3 border-t border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_92%,black)] backdrop-blur-sm pb-[max(4px,env(safe-area-inset-bottom))]"
+          className="lg:hidden shrink-0 sticky bottom-0 z-10 grid grid-cols-3 border-t border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_92%,black)] pb-[max(4px,env(safe-area-inset-bottom))]"
           aria-label="Cambiar panel del workshop"
         >
           <button
