@@ -21,11 +21,52 @@ const AGENT_LABELS: Record<string, string> = {
 const MDD_AUDITOR_LABEL = "Auditor (calidad MDD)";
 
 /**
- * Post-procesa el markdown para asegurar que bloques JSON sueltos (sin ```json)
- * tengan code fences. Detecta líneas que inician con `{` y contienen JSON válido.
+ * Escanea una línea para encontrar la posición del PRIMER `{` o `[` que NO
+ * esté dentro de un string JSON. Retorna el índice y el tipo ('object'|'array'),
+ * o null si no encuentra ninguno.
+ */
+function findFirstJsonStart(line: string): { idx: number; type: "object" | "array" } | null {
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (escaped) { escaped = false; continue; }
+    if (c === "\\") { escaped = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (!inStr) {
+      if (c === "{") return { idx: i, type: "object" };
+      if (c === "[") return { idx: i, type: "array" };
+    }
+  }
+  return null;
+}
+
+/**
+ * Calcula la profundidad de braces/paréntesis cuadrados JSON en un texto,
+ * IGNORANDO caracteres dentro de strings (incluye escapes \").
+ * Retorna un delta de profundidad para la línea completa.
+ */
+function braceDelta(line: string, open: "{" | "[", close: "}" | "]"): number {
+  let delta = 0;
+  let inStr = false;
+  let escaped = false;
+  for (const ch of line) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === "\\") { escaped = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === open) delta++;
+    else if (ch === close) delta--;
+  }
+  return delta;
+}
+
+/**
+ * Post-procesa el markdown para asegurar que bloques JSON/array sueltos
+ * (sin ```json o ```) tengan code fences. Detecta bloques que inician con
+ * `{` o `[` (incluso en medio de la línea) y los envuelve en ```json...```.
  */
 export function ensureJsonCodeFences(markdown: string): string {
-  // No procesar si ya está dentro de un bloque de código
   const lines = markdown.split("\n");
   const result: string[] = [];
   let insideFence = false;
@@ -40,37 +81,60 @@ export function ensureJsonCodeFences(markdown: string): string {
       result.push(line);
       continue;
     }
-    // Detectar bloque JSON: línea que empieza con `{` y no está ya en ```json
-    const trimmed = line.trim();
-    if (trimmed === "{" || trimmed.startsWith('{') && trimmed.length > 1) {
-      // Buscar el cierre del bloque JSON (llave balanceada)
-      let depth = 0;
-      let endIdx = i;
-      let started = false;
-      for (let j = i; j < lines.length; j++) {
-        const l = lines[j];
-        if (/^```/.test(l.trim())) break; // otro fence antes de cerrar JSON
-        for (const ch of l) {
-          if (ch === "{") { depth++; started = true; }
-          else if (ch === "}") { depth--; }
-        }
-        if (started && depth === 0) { endIdx = j; break; }
-      }
-      if (started && depth === 0 && endIdx > i) {
-        // Verificar que el bloque sea JSON válido
-        const jsonBlock = lines.slice(i, endIdx + 1).join("\n");
-        try {
-          JSON.parse(jsonBlock);
-          result.push("```json");
-          result.push(jsonBlock);
-          result.push("```");
-          i = endIdx;
-          continue;
-        } catch {
-          // No es JSON válido, pasar como está
-        }
+
+    // Buscar primer `{` o `[` fuera de strings en esta línea
+    const start = findFirstJsonStart(line);
+    if (!start) {
+      result.push(line);
+      continue;
+    }
+    const openChar = start.type === "object" ? "{" : "[";
+    const closeChar = start.type === "object" ? "}" : "]";
+
+    // Buscar el cierre del bloque (brace balanceado, ignorando strings)
+    let depth = 0;
+    let endIdx = i;
+    let started = false;
+    let allLinesBlock: string[] = [];
+
+    for (let j = i; j < lines.length; j++) {
+      const l = lines[j];
+      if (/^```/.test(l.trim())) break;
+
+      // Remover prefijos markdown comunes para el cálculo de profundidad
+      // (> , - , * , \d+\. ) PERO solo al inicio de la línea
+      const clean = l.replace(/^(> ?|[-*+] |\d+\.\s)/, "");
+
+      const dd = braceDelta(clean, openChar, closeChar);
+      depth += dd;
+      if (dd !== 0) started = true;
+
+      allLinesBlock.push(clean);
+
+      if (started && depth === 0) {
+        endIdx = j;
+        break;
       }
     }
+
+    if (started && depth === 0 && endIdx > i) {
+      // Intentar parsear como JSON — usar el bloque limpio de prefijos
+      const jsonBlock = allLinesBlock.join("\n");
+      try {
+        JSON.parse(jsonBlock);
+        // Éxito — fencearlo
+        result.push("```json");
+        // Las líneas originales (con prefijos) se ponen dentro del fence
+        const originalLines = lines.slice(i, endIdx + 1).join("\n");
+        result.push(originalLines);
+        result.push("```");
+        i = endIdx;
+        continue;
+      } catch {
+        // No es JSON válido, seguir como está
+      }
+    }
+
     result.push(line);
   }
   return result.join("\n");
