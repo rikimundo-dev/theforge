@@ -510,7 +510,6 @@ export default function WorkshopView({
   const generateInfra = useWorkshopStore((s) => s.generateInfra);
   const generateSpec = useWorkshopStore((s) => s.generateSpec);
   const generateTasks = useWorkshopStore((s) => s.generateTasks);
-  const persistTasksContent = useWorkshopStore((s) => s.persistTasksContent);
   const persistSpecContent = useWorkshopStore((s) => s.persistSpecContent);
   const setSpecContent = useWorkshopStore((s) => s.setSpecContent);
   const setUxUiGuideContent = useWorkshopStore((s) => s.setUxUiGuideContent);
@@ -1359,12 +1358,6 @@ export default function WorkshopView({
     const t = setTimeout(() => persistSpecContent(specContent ?? ""), 1500);
     return () => clearTimeout(t);
   }, [specContent, projectId, project?.specContent, project, persistSpecContent]);
-
-  useEffect(() => {
-    if (!projectId || !project || (tasksContent ?? "") === (project.tasksContent ?? "")) return;
-    const t = setTimeout(() => persistTasksContent(tasksContent ?? ""), 1500);
-    return () => clearTimeout(t);
-  }, [tasksContent, projectId, project?.tasksContent, project, persistTasksContent]);
 
   const handleAemBlur = useCallback(() => {
     if ((aemContent ?? "") !== (project?.aemContent ?? "")) {
