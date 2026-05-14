@@ -190,9 +190,9 @@ services:
       THEFORGE_API_URL: "http://theforge-api:3000"
       # MCP_M2M_SECRET se recibe del cliente via header HTTP — no va en env
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:$${PORT:-3000}/ | head -c 1 > /dev/null 2>&1 || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- --post-data='{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1}' http://127.0.0.1:$${PORT:-3000}/ 2>/dev/null | head -c 1 > /dev/null || exit 1"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       start_period: 10s
       retries: 3
 

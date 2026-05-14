@@ -16,7 +16,7 @@
 
 const API_BASE = process.env.THEFORGE_API_URL ?? "http://theforge-api:3000";
 const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
-const PORT = Number(process.env.PORT) || 3100;
+const PORT = Number(process.env.PORT) || 3000;
 const USE_HTTP = process.argv.includes("--http");
 
 // ── Local Types ────────────────────────────────────────────────────────
@@ -56,26 +56,39 @@ interface JSONRPCResponse {
 
 let jwtToken: string | null = null;
 let lastClientSecret: string = "";
+let tokenExpiresAt: number = 0;
 
 async function login(secret?: string): Promise<string> {
   const s = secret || lastClientSecret;
   if (!s) {
     throw new Error("MCP_M2M_SECRET header required — usa el secret de Settings en TheForge");
   }
-  lastClientSecret = s;
-  const res = await fetch(`${API_BASE}/auth/mcp-login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ secret: s }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`MCP login failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+  // Si el token sigue siendo válido (>5 min de margen), reusarlo
+  if (jwtToken && lastClientSecret === s && Date.now() < tokenExpiresAt - 300_000) {
+    return jwtToken;
   }
-  const data = (await res.json()) as { accessToken: string };
-  jwtToken = data.accessToken;
-  return jwtToken;
+  lastClientSecret = s;
+  try {
+    const res = await fetch(`${API_BASE}/auth/mcp-login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ secret: s }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`MCP login failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { accessToken: string };
+    jwtToken = data.accessToken;
+    // JWT típicamente expira en 1h; asumir 55 min para margen
+    tokenExpiresAt = Date.now() + 55 * 60 * 1000;
+    return jwtToken;
+  } catch (err) {
+    jwtToken = null;
+    tokenExpiresAt = 0;
+    throw err;
+  }
 }
 
 function authHeaders(): Record<string, string> {
@@ -93,24 +106,34 @@ async function apiFetch(
   retried = false,
 ): Promise<unknown> {
   const url = `${API_BASE}${path}`;
-  const res = await fetch(url, {
-    method,
-    headers: authHeaders(),
-    body: body != null ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  });
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: authHeaders(),
+      body: body != null ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
 
-  // 401 → re-login y reintentar una vez
-  if (res.status === 401 && !retried) {
-    await login();
-    return apiFetch(method, path, body, true);
-  }
+    // 401 → re-login y reintentar una vez
+    if (res.status === 401 && !retried) {
+      await login();
+      return apiFetch(method, path, body, true);
+    }
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${res.statusText}: ${text.slice(0, 500)}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText}: ${text.slice(0, 500)}`);
+    }
+    return res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request timed out after ${TIMEOUT_MS}ms: ${method} ${path}`);
+    }
+    if (err instanceof TypeError && err.message.includes("fetch")) {
+      throw new Error(`Network error connecting to API at ${API_BASE}${path}: ${err.message}`);
+    }
+    throw err;
   }
-  return res.json();
 }
 
 function apiGet(path: string): Promise<unknown> {
