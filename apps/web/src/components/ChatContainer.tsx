@@ -13,7 +13,18 @@ import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
 import type { ChatImagePart } from "@theforge/shared-types";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
-import { Button, AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "../components/ui";
+import {
+  Button,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui";
+import { AiGenerationChatBubble, AiGenerativeDots } from "./AiGenerationLoader";
 
 export type ActiveTab =
   | "benchmark"
@@ -850,30 +861,49 @@ export default function ChatContainer({
             ) : null}
 
             {showAgentProgress && (
-              <div className="space-y-1.5 pb-2 border-b border-[var(--border)]/50">
-                <p className="text-xs text-[var(--foreground-subtle)] font-medium">
-                  {agentProgress.length > 0 ? "Agentes trabajando:" : "Flujo MDD en curso…"}
+              <div
+                className="rounded-xl border border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-3 shadow-sm"
+                role="status"
+                aria-live="polite"
+              >
+                <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--foreground-subtle)]">
+                  {agentProgress.length > 0 ? "Agentes trabajando" : "Flujo MDD en curso"}
                 </p>
                 {agentProgress.length > 0 ? (
-                  <>
+                  <ul className="flex flex-col gap-2.5">
                     {agentProgress.map((p, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]">
-                        <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                        <span className="font-medium text-[var(--muted-foreground)]">{p.agent}</span>
-                        <span className="text-[var(--foreground-subtle)]">— {p.message}</span>
-                      </div>
+                      <li
+                        key={i}
+                        className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-0.5 text-sm text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]"
+                      >
+                        <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5" aria-hidden>
+                          <Check className="h-3.5 w-3.5 text-emerald-500" strokeWidth={2.5} />
+                        </span>
+                        <div className="min-w-0 flex flex-col gap-0.5">
+                          <span className="font-semibold leading-snug tracking-tight text-[var(--foreground)]">
+                            {p.agent}
+                          </span>
+                          <span className="text-xs leading-relaxed text-[var(--foreground-subtle)]">{p.message}</span>
+                        </div>
+                      </li>
                     ))}
                     {loading && (
-                      <div className="flex items-center gap-2 text-sm text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
-                        <span className="font-medium text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">Siguiente paso…</span>
-                      </div>
+                      <li className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 text-sm">
+                        <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
+                          <AiGenerativeDots />
+                        </span>
+                        <span className="min-w-0 pt-0.5 font-semibold leading-snug text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">
+                          Siguiente paso…
+                        </span>
+                      </li>
                     )}
-                  </>
+                  </ul>
                 ) : (
-                  <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[var(--primary)] shrink-0" />
-                    <span>Manager o agentes procesando…</span>
+                  <div className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 text-sm text-[var(--muted-foreground)]">
+                    <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
+                      <AiGenerativeDots />
+                    </span>
+                    <span className="min-w-0 pt-0.5 leading-snug">Manager o agentes procesando…</span>
                   </div>
                 )}
               </div>
@@ -891,9 +921,7 @@ export default function ChatContainer({
 
             {loading && !isLegacyLongRun && (
               <div className="flex justify-start">
-                <div className="rounded-lg px-3 py-2 bg-[var(--card)] border border-[var(--border)]">
-                  <Loader2 className="w-4 h-4 animate-spin text-[var(--primary)]" />
-                </div>
+                <AiGenerationChatBubble label="Generando…" />
               </div>
             )}
             <div ref={chatEndRef} />

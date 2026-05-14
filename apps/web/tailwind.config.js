@@ -78,12 +78,36 @@ export default {
           from: { transform: "translateY(-10px)", opacity: "0" },
           to: { transform: "translateY(0)", opacity: "1" },
         },
+        /** AI-style loader: soft vertical bounce for staggered dots */
+        "ai-dot-wave": {
+          "0%, 100%": { transform: "translateY(0)", opacity: "0.25" },
+          "50%": { transform: "translateY(-5px)", opacity: "1" },
+        },
+        /** Sweeping highlight across a panel (v0 / Lovable–style “building”) */
+        "ai-shimmer-sweep": {
+          "0%": { transform: "translateX(-120%) skewX(-8deg)" },
+          "100%": { transform: "translateX(220%) skewX(-8deg)" },
+        },
+        /** Slow bob for “floating” icons inside document build placeholders */
+        "ai-doc-float": {
+          "0%, 100%": { transform: "translateY(0) rotate(-2deg)", opacity: "0.32" },
+          "50%": { transform: "translateY(-10px) rotate(2deg)", opacity: "0.85" },
+        },
+        /** Horizontal shine across skeleton bars */
+        "ai-skeleton-shine": {
+          "0%": { transform: "translateX(-120%)" },
+          "100%": { transform: "translateX(120%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-in": "fade-in 0.2s ease-out",
         "slide-in": "slide-in 0.3s ease-out",
+        "ai-dot-wave": "ai-dot-wave 1.05s ease-in-out infinite",
+        "ai-shimmer-sweep": "ai-shimmer-sweep 2.4s ease-in-out infinite",
+        "ai-doc-float": "ai-doc-float 3.4s ease-in-out infinite",
+        "ai-skeleton-shine": "ai-skeleton-shine 2.1s ease-in-out infinite",
       },
     },
   },

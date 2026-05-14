@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Cloud,
   CloudOff,
@@ -34,6 +34,7 @@ import {
   Globe,
   Lock,
   Pencil,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CodebaseDocResponseMode } from "@theforge/shared-types";
@@ -59,6 +60,11 @@ import {
 } from "../components/ui";
 import { WorkshopFlowOrderModal } from "../components/WorkshopFlowOrderModal";
 import {
+  AiDocumentBuildingPlaceholder,
+  AiGenerationPanel,
+  AiGenerativeDots,
+} from "../components/AiGenerationLoader";
+import {
   LEGACY_CODEBASE_DOC_STEPS,
   LEGACY_DELIVERABLES_STEPS,
   LEGACY_MDD_STEPS,
@@ -81,9 +87,28 @@ const WORKSHOP_HEADER_ICON_BTN = cn(
 const WORKSHOP_MDD_ACTION_PRIMARY =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:cursor-not-allowed disabled:opacity-50";
 
-/** Preview/source toggle and flow-order: same outline chip in the doc toolbar. */
+/** Preview/source toggle and flow-order: same outline chip as `Button variant="outline"` (needs `border` width, not only color). */
 const WORKSHOP_DOC_TOOLBAR_ICON_BTN =
-  "rounded-xl border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_65%,var(--muted))] text-[var(--foreground)] shadow-sm hover:bg-[color-mix(in_oklch,var(--muted)_45%,var(--card))] hover:text-[var(--primary)] focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]";
+  "rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_65%,var(--muted))] text-[var(--foreground)] shadow-sm hover:border-[var(--border-hover)] hover:bg-[color-mix(in_oklch,var(--muted)_45%,var(--card))] hover:text-[var(--primary)] focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]";
+
+/** Same chrome as `Button size="icon"` + `WORKSHOP_DOC_TOOLBAR_ICON_BTN` for native `<button>` triggers. */
+const WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER = cn(
+  "inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:pointer-events-none disabled:opacity-50",
+  WORKSHOP_DOC_TOOLBAR_ICON_BTN,
+);
+
+/** Desktop workshop: chat column width (px). Al soltar el resize por debajo del mínimo, el panel se colapsa al rail. */
+const LG_CHAT_PANEL_WIDTH_MIN_PX = 260;
+const LG_CHAT_PANEL_WIDTH_MAX_PX = 420;
+const LG_CHAT_PANEL_DEFAULT_PX = 320;
+
+function clampLgChatPanelWidthPx(value: number): number {
+  if (!Number.isFinite(value)) return LG_CHAT_PANEL_DEFAULT_PX;
+  return Math.min(
+    LG_CHAT_PANEL_WIDTH_MAX_PX,
+    Math.max(LG_CHAT_PANEL_WIDTH_MIN_PX, Math.round(value)),
+  );
+}
 
 type WorkshopComplexityTier = "LOW" | "MEDIUM" | "HIGH";
 
@@ -186,6 +211,13 @@ function WorkshopDocToolbarHint({
   );
 }
 
+/** Primary CTA styling: shared by `DocEmptyState` and source-mode “first generate” rows. */
+const WORKSHOP_DOC_EMPTY_PRIMARY_BTN = cn(
+  "h-12 gap-2 rounded-xl text-base font-semibold shadow-md",
+  "shadow-[color-mix(in_oklch,var(--primary)_42%,transparent)]",
+  "hover:shadow-lg hover:shadow-[color-mix(in_oklch,var(--primary)_48%,transparent)]",
+);
+
 function DocEmptyState({
   icon: Icon,
   title,
@@ -214,39 +246,92 @@ function DocEmptyState({
   legacyGenerateLoading?: boolean;
 }) {
   const blocked = !!generateBlocked;
+  if (loading && !blocked) {
+    return (
+      <div className="flex min-h-[280px] w-full flex-1 flex-col items-center justify-center px-4 py-8 text-center sm:px-6">
+        <AiDocumentBuildingPlaceholder documentTitle={title} />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[200px] text-[var(--foreground-muted)] text-center gap-4">
-      <Icon className="w-12 h-12 text-[var(--foreground-subtle)]" />
-      <p className="text-sm">{description}</p>
-      <Button
-        variant="outline"
-        onClick={onGenerate}
-        disabled={loading || !hasMdd || blocked}
-        loading={loading}
-      >
-        Generar {title} desde MDD
-      </Button>
-      {!hasMdd && (
-        <p className="text-xs">Necesitas tener contenido en el MDD para generar este documento.</p>
-      )}
-      {blocked && generateBlockedReason && (
-        <p className="text-xs text-[var(--primary)] max-w-md">{generateBlockedReason}</p>
-      )}
-      {legacyGenerateLabel && onLegacyGenerate && (
-        <button
+    <div className="flex min-h-[260px] w-full flex-1 flex-col items-center justify-center gap-6 px-4 py-8 text-center sm:px-6">
+      <Icon
+        className="h-10 w-10 shrink-0 text-[color-mix(in_oklch,var(--primary)_45%,var(--muted-foreground))]"
+        strokeWidth={1.5}
+        aria-hidden
+      />
+      <div className="flex min-w-0 max-w-md flex-col gap-2">
+        <h3 className="text-lg font-semibold tracking-tight text-[var(--foreground)] sm:text-xl">{title}</h3>
+        <p className="text-sm leading-relaxed text-[var(--muted-foreground)]">{description}</p>
+      </div>
+      <div className="flex w-full max-w-md min-w-0 flex-col items-stretch gap-3">
+        <Button
           type="button"
-          onClick={onLegacyGenerate}
-          disabled={legacyGenerateLoading}
-          className="inline-flex items-center gap-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] px-4 py-2 text-sm font-medium text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:cursor-not-allowed disabled:opacity-50"
+          variant="default"
+          size="lg"
+          className={cn("w-full", WORKSHOP_DOC_EMPTY_PRIMARY_BTN)}
+          onClick={onGenerate}
+          disabled={loading || !hasMdd || blocked}
+          loading={loading}
+          generativeLoading={loading}
         >
-          {legacyGenerateLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          {legacyGenerateLabel}
-        </button>
-      )}
+          {!loading ? <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden /> : null}
+          Generar {title} desde MDD
+        </Button>
+        {!hasMdd && (
+          <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
+            Necesitas tener contenido en el MDD para generar este documento.
+          </p>
+        )}
+        {blocked && generateBlockedReason && (
+          <p className="text-xs font-medium leading-relaxed text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">
+            {generateBlockedReason}
+          </p>
+        )}
+        {legacyGenerateLabel && onLegacyGenerate && (
+          <Button
+            type="button"
+            variant="outline"
+            size="default"
+            className="h-11 w-full gap-2 rounded-xl font-medium"
+            onClick={onLegacyGenerate}
+            disabled={legacyGenerateLoading}
+            loading={legacyGenerateLoading}
+            generativeLoading={legacyGenerateLoading}
+          >
+            {!legacyGenerateLoading ? <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden /> : null}
+            {legacyGenerateLabel}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Save control above the markdown editor: full-width primary action (no nested card). */
+function WorkshopDocSourceSaveBar({
+  onSave,
+  disabled,
+  label = "Guardar",
+}: {
+  onSave: () => void | Promise<void>;
+  disabled: boolean;
+  label?: string;
+}) {
+  return (
+    <div className="shrink-0 w-full min-w-0">
+      <Button
+        type="button"
+        variant="default"
+        size="lg"
+        className={cn("w-full touch-manipulation", WORKSHOP_DOC_EMPTY_PRIMARY_BTN)}
+        disabled={disabled}
+        onClick={() => void onSave()}
+      >
+        <Save className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+        {label}
+      </Button>
     </div>
   );
 }
@@ -900,6 +985,161 @@ export default function WorkshopView({
     setBrdTobePersistBusy(false);
   }, [activeStageId, brdWorkshopDirty, brdWorkshopDraft, patchWorkshopStage]);
 
+  /** Desktop: chat column collapsed + width (resize). */
+  const lgChatCollapsedStorageKey = projectId
+    ? `theforge:workshop:lg-chat-collapsed:${projectId}`
+    : null;
+  const lgChatWidthStorageKey = projectId
+    ? `theforge:workshop:lg-chat-width-px:${projectId}`
+    : null;
+  const [lgWorkshopChatCollapsed, setLgWorkshopChatCollapsedState] = useState(false);
+  const [lgChatPanelWidthPx, setLgChatPanelWidthPx] = useState(LG_CHAT_PANEL_DEFAULT_PX);
+  const [lgChatPanelResizing, setLgChatPanelResizing] = useState(false);
+  const lgChatResizeDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const lgChatResizeLastPreviewRef = useRef<number>(LG_CHAT_PANEL_DEFAULT_PX);
+
+  useEffect(() => {
+    if (!projectId) return;
+    try {
+      const collapsed =
+        lgChatCollapsedStorageKey != null &&
+        globalThis.localStorage?.getItem(lgChatCollapsedStorageKey) === "1";
+      let width = LG_CHAT_PANEL_DEFAULT_PX;
+      const raw =
+        lgChatWidthStorageKey != null ? globalThis.localStorage?.getItem(lgChatWidthStorageKey) : null;
+      if (raw != null && raw !== "") {
+        const parsed = Number.parseInt(raw, 10);
+        if (!Number.isNaN(parsed)) width = clampLgChatPanelWidthPx(parsed);
+      }
+      setLgWorkshopChatCollapsedState(collapsed);
+      setLgChatPanelWidthPx(width);
+    } catch {
+      setLgWorkshopChatCollapsedState(false);
+      setLgChatPanelWidthPx(LG_CHAT_PANEL_DEFAULT_PX);
+    }
+  }, [projectId, lgChatCollapsedStorageKey, lgChatWidthStorageKey]);
+
+  const handleSetLgWorkshopChatCollapsed = useCallback(
+    (collapsed: boolean, opts?: { persistOpenWidthPx?: number }) => {
+      if (collapsed) {
+        const toSave =
+          opts?.persistOpenWidthPx != null
+            ? clampLgChatPanelWidthPx(opts.persistOpenWidthPx)
+            : clampLgChatPanelWidthPx(lgChatPanelWidthPx);
+        try {
+          if (lgChatWidthStorageKey) globalThis.localStorage?.setItem(lgChatWidthStorageKey, String(toSave));
+        } catch {
+          /* localStorage unavailable */
+        }
+      } else {
+        let restore = LG_CHAT_PANEL_DEFAULT_PX;
+        try {
+          const raw =
+            lgChatWidthStorageKey != null ? globalThis.localStorage?.getItem(lgChatWidthStorageKey) : null;
+          if (raw != null && raw !== "") {
+            const parsed = Number.parseInt(raw, 10);
+            if (!Number.isNaN(parsed)) restore = clampLgChatPanelWidthPx(parsed);
+          }
+        } catch {
+          /* */
+        }
+        setLgChatPanelWidthPx(restore);
+      }
+
+      setLgWorkshopChatCollapsedState(collapsed);
+
+      if (!lgChatCollapsedStorageKey) return;
+      try {
+        if (collapsed) globalThis.localStorage?.setItem(lgChatCollapsedStorageKey, "1");
+        else globalThis.localStorage?.removeItem(lgChatCollapsedStorageKey);
+      } catch {
+        /* localStorage unavailable */
+      }
+    },
+    [lgChatCollapsedStorageKey, lgChatWidthStorageKey, lgChatPanelWidthPx],
+  );
+
+  const handleLgChatResizePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (!isLgLayout || lgWorkshopChatCollapsed) return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.currentTarget.setPointerCapture(event.pointerId);
+      lgChatResizeDragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startWidth: lgChatPanelWidthPx,
+      };
+      lgChatResizeLastPreviewRef.current = lgChatPanelWidthPx;
+      setLgChatPanelResizing(true);
+    },
+    [isLgLayout, lgWorkshopChatCollapsed, lgChatPanelWidthPx],
+  );
+
+  const handleLgChatResizePointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = lgChatResizeDragRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const next = Math.round(drag.startWidth + (event.clientX - drag.startX));
+    const preview = Math.min(LG_CHAT_PANEL_WIDTH_MAX_PX, Math.max(72, next));
+    lgChatResizeLastPreviewRef.current = preview;
+    setLgChatPanelWidthPx(preview);
+  }, []);
+
+  const finishLgChatResizePointer = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const drag = lgChatResizeDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        /* not captured */
+      }
+      lgChatResizeDragRef.current = null;
+      setLgChatPanelResizing(false);
+
+      const raw = Math.round(drag.startWidth + (event.clientX - drag.startX));
+      const preview = Math.min(LG_CHAT_PANEL_WIDTH_MAX_PX, Math.max(72, raw));
+
+      if (preview < LG_CHAT_PANEL_WIDTH_MIN_PX) {
+        handleSetLgWorkshopChatCollapsed(true, { persistOpenWidthPx: drag.startWidth });
+        return;
+      }
+
+      const clamped = clampLgChatPanelWidthPx(preview);
+      setLgChatPanelWidthPx(clamped);
+      try {
+        if (lgChatWidthStorageKey) globalThis.localStorage?.setItem(lgChatWidthStorageKey, String(clamped));
+      } catch {
+        /* localStorage unavailable */
+      }
+    },
+    [handleSetLgWorkshopChatCollapsed, lgChatWidthStorageKey],
+  );
+
+  const handleLgChatResizeLostPointerCapture = useCallback(() => {
+    const drag = lgChatResizeDragRef.current;
+    if (!drag) return;
+    const startWidthBeforeDrag = drag.startWidth;
+    lgChatResizeDragRef.current = null;
+    setLgChatPanelResizing(false);
+    const preview = lgChatResizeLastPreviewRef.current;
+    if (preview < LG_CHAT_PANEL_WIDTH_MIN_PX) {
+      handleSetLgWorkshopChatCollapsed(true, { persistOpenWidthPx: startWidthBeforeDrag });
+      return;
+    }
+    const clamped = clampLgChatPanelWidthPx(preview);
+    setLgChatPanelWidthPx(clamped);
+    try {
+      if (lgChatWidthStorageKey) globalThis.localStorage?.setItem(lgChatWidthStorageKey, String(clamped));
+    } catch {
+      /* localStorage unavailable */
+    }
+  }, [handleSetLgWorkshopChatCollapsed, lgChatWidthStorageKey]);
+
   const handleGenerateDeliverables = useCallback(async () => {
     if (!projectId || !canGenerate || cascadeRunning) return;
     setError(null);
@@ -1182,6 +1422,14 @@ export default function WorkshopView({
   const mddDirty = (mddContent ?? "") !== (project?.mddContent ?? "");
   const specDirty = (specContent ?? "") !== (project?.specContent ?? "");
   const aemDirty = (aemContent ?? "") !== (project?.aemContent ?? "");
+  const architectureDirty = (architectureContent ?? "") !== (project?.architectureContent ?? "");
+  const useCasesDirty = (useCasesContent ?? "") !== (project?.useCasesContent ?? "");
+  const userStoriesDirty = (userStoriesContent ?? "") !== (project?.userStoriesContent ?? "");
+  const uxUiGuideDirty = (uxUiGuideContent ?? "") !== (project?.uxUiGuideContent ?? "");
+  const blueprintDirty = (blueprintContent ?? "") !== (project?.blueprintContent ?? "");
+  const apiContractsDirty = (apiContractsContent ?? "") !== (project?.apiContractsContent ?? "");
+  const logicFlowsDirty = (logicFlowsContent ?? "") !== (project?.logicFlowsContent ?? "");
+  const infraDirty = (infraContent ?? "") !== (project?.infraContent ?? "");
 
   if (error && !project) {
     return (
@@ -1681,40 +1929,121 @@ export default function WorkshopView({
         <ComplexityPendingBanner />
       </div>
 
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(260px,380px)_minmax(0,1fr)] lg:grid-rows-1 lg:items-stretch lg:overflow-visible">
-        {/* Columna A: Chat (siempre a la izquierda, como en MDD) */}
-        <section
-          ref={chatSectionRef}
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col lg:flex lg:flex-row lg:items-stretch lg:overflow-hidden lg:min-h-0">
+        {/* Columna A: Chat + rail “mostrar” (solo lg; ancho animado) */}
+        <div
           className={cn(
-            "min-h-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
-            "flex flex-col",
-            mobileWorkshopColumn === "chat" ? "flex min-h-0 flex-1" : "hidden lg:flex lg:h-full lg:min-h-0 lg:flex-col",
+            "flex min-h-0 shrink-0 flex-col lg:flex-row lg:items-stretch lg:overflow-visible",
+            mobileWorkshopColumn === "chat" ? "flex min-h-0 flex-1" : "hidden lg:flex lg:h-full lg:min-h-0",
           )}
         >
-          <ChatContainer
-            projectId={projectId}
-            activeTab={centralPanel as import("../components/ChatContainer").ActiveTab}
-            embedded={false}
-            onRevaluate={project ? handleRevaluateComplexity : undefined}
-            revaluateBusy={revaluateBusy}
-            benchmarkMode={
-              centralPanel === "benchmark"
-                ? {
-                  hasBenchmark: !!dbgaContent?.trim(),
-                  onGenerateBenchmark: (idea) => {
-                    setLastBenchmarkIdea(idea);
-                    generateBenchmark(projectId, idea);
-                  },
-                }
+          <div
+            className={cn(
+              "relative min-h-0 h-full min-w-0 overflow-hidden border-r border-[var(--border)] lg:shrink-0",
+              !lgChatPanelResizing &&
+                "lg:transition-[width] lg:duration-300 lg:ease-out motion-reduce:lg:transition-none",
+              isLgLayout && lgWorkshopChatCollapsed
+                ? "lg:w-0 lg:min-w-0 lg:border-transparent lg:pointer-events-none"
+                : "lg:max-w-[420px]",
+            )}
+            style={
+              isLgLayout && !lgWorkshopChatCollapsed
+                ? { width: lgChatPanelWidthPx, minWidth: 0 }
                 : undefined
             }
-          />
-        </section>
+          >
+            <section
+              ref={chatSectionRef}
+              className={cn(
+                "flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden",
+                mobileWorkshopColumn === "chat" ? "min-h-0 flex-1" : "lg:h-full lg:min-h-0 lg:flex-col",
+              )}
+              aria-hidden={isLgLayout && lgWorkshopChatCollapsed ? true : undefined}
+            >
+              <ChatContainer
+                projectId={projectId}
+                activeTab={centralPanel as import("../components/ChatContainer").ActiveTab}
+                embedded={false}
+                onRevaluate={project ? handleRevaluateComplexity : undefined}
+                revaluateBusy={revaluateBusy}
+                benchmarkMode={
+                  centralPanel === "benchmark"
+                    ? {
+                      hasBenchmark: !!dbgaContent?.trim(),
+                      onGenerateBenchmark: (idea) => {
+                        setLastBenchmarkIdea(idea);
+                        generateBenchmark(projectId, idea);
+                      },
+                    }
+                    : undefined
+                }
+              />
+            </section>
+            {!lgWorkshopChatCollapsed ? (
+              <div
+                className={cn(
+                  "pointer-events-auto hidden lg:block absolute inset-y-0 right-0 z-30 w-3 shrink-0 cursor-col-resize touch-none select-none",
+                  "hover:bg-[color-mix(in_oklch,var(--primary)_16%,transparent)] active:bg-[color-mix(in_oklch,var(--primary)_22%,transparent)]",
+                )}
+                style={{ cursor: "col-resize" }}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Redimensionar el chat. Si sueltas con el panel más estrecho que el mínimo, se colapsa; usa el botón Chat o el icono en la barra del documento para volver a mostrarlo."
+                onPointerDown={handleLgChatResizePointerDown}
+                onPointerMove={handleLgChatResizePointerMove}
+                onPointerUp={finishLgChatResizePointer}
+                onPointerCancel={finishLgChatResizePointer}
+                onLostPointerCapture={handleLgChatResizeLostPointerCapture}
+              />
+            ) : null}
+          </div>
+          <div
+            className={cn(
+              "hidden min-h-0 flex-col border-r border-[var(--border)] bg-transparent transition-[width,opacity,min-width,padding] duration-300 ease-out motion-reduce:transition-none lg:flex",
+              lgWorkshopChatCollapsed
+                ? "w-[2rem] min-w-[2rem] shrink-0 self-stretch items-center justify-center py-2"
+                : "w-0 min-w-0 overflow-hidden border-transparent p-0 opacity-0 pointer-events-none",
+            )}
+            aria-hidden={!lgWorkshopChatCollapsed}
+          >
+            <TooltipProvider delayDuration={280}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => handleSetLgWorkshopChatCollapsed(false)}
+                    className={cn(
+                      "group/pull-tab-chat relative z-[2] flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-md border-0 bg-transparent px-0.5 py-3 shadow-none ring-0",
+                      "text-[8px] font-semibold uppercase tracking-[0.14em] text-[color-mix(in_oklch,var(--foreground)_82%,var(--muted-foreground))]",
+                      "transition-[color,background-color] duration-200 ease-out",
+                      "hover:bg-[color-mix(in_oklch,var(--muted)_35%,transparent)] hover:text-[var(--primary)]",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                    )}
+                    title="Mostrar conversación"
+                    aria-label="Mostrar conversación"
+                  >
+                    <MessageSquare
+                      className="h-3 w-3 shrink-0 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] transition-colors duration-200 group-hover/pull-tab-chat:text-[var(--primary)]"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <span className="select-none uppercase leading-tight [writing-mode:vertical-rl] rotate-180">
+                      Chat
+                    </span>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-[14rem]">
+                  Mostrar conversación
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </div>
 
         {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
         <section
           className={cn(
-            "min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0",
+            "min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0 lg:flex-1",
             "flex flex-col",
             mobileWorkshopColumn === "workspace"
               ? "flex min-h-0 flex-1"
@@ -1729,6 +2058,25 @@ export default function WorkshopView({
                 isLegacyProject={isLegacyProject}
               />
               <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end sm:gap-2 sm:pt-0.5 lg:flex-nowrap lg:pt-0">
+                {isLgLayout && lgWorkshopChatCollapsed ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_BTN}
+                        aria-label="Mostrar conversación"
+                        onClick={() => handleSetLgWorkshopChatCollapsed(false)}
+                      >
+                        <MessageSquare className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[14rem]">
+                      Mostrar panel de conversación
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
                 {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd", "to-be"] as const).includes(
                   centralPanel as any,
                 ) && (
@@ -1822,185 +2170,311 @@ export default function WorkshopView({
                     </TooltipContent>
                   </Tooltip>
                 )}
-                {centralPanel === "architecture" && (
-                  <button
-                    type="button"
-                    onClick={() => generateArchitecture(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    title="Generar arquitectura desde el MDD"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {architectureContent?.trim() ? "Regenerar" : "Generar"}
-                  </button>
+                {centralPanel === "architecture" && !!architectureContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateArchitecture(projectId)}
+                        disabled={loading || !effectiveMddTrimmed}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar arquitectura desde el MDD"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar arquitectura desde el MDD
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "use-cases" && (
-                  <button
-                    type="button"
-                    onClick={() => generateUseCases(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    title="Generar casos de uso desde el MDD"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {useCasesContent?.trim() ? "Regenerar" : "Generar"}
-                  </button>
+                {centralPanel === "use-cases" && !!useCasesContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateUseCases(projectId)}
+                        disabled={loading || !effectiveMddTrimmed}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar casos de uso desde el MDD"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar casos de uso desde el MDD
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "user-stories" && (
-                  <button
-                    type="button"
-                    onClick={() => generateUserStories(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    title="Generar historias de usuario desde el MDD"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {userStoriesContent?.trim() ? "Regenerar" : "Generar"}
-                  </button>
+                {centralPanel === "user-stories" && !!userStoriesContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateUserStories(projectId)}
+                        disabled={loading || !effectiveMddTrimmed}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar historias de usuario desde el MDD"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar historias de usuario desde el MDD
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "blueprint" && (
-                  <button
-                    type="button"
-                    onClick={() => generateBlueprint(projectId, { preview: true })}
-                    disabled={loading || mddReviewing || !effectiveMddTrimmed}
-                    title="Generar blueprint desde el MDD (vista previa antes de guardar)"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Generar
-                  </button>
+                {centralPanel === "blueprint" && !!blueprintContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateBlueprint(projectId, { preview: true })}
+                        disabled={loading || mddReviewing || !effectiveMddTrimmed}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar blueprint desde el MDD (vista previa antes de guardar)"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar blueprint desde el MDD (vista previa antes de guardar)
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "api-contracts" && (
-                  <button
-                    type="button"
-                    onClick={() => generateApiContracts(projectId, { preview: true })}
-                    disabled={loading || mddReviewing || !effectiveMddTrimmed || apiBlueprintDmBlocked}
-                    title={
-                      apiBlueprintDmBlocked
+                {centralPanel === "api-contracts" && !!apiContractsContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateApiContracts(projectId, { preview: true })}
+                        disabled={loading || mddReviewing || !effectiveMddTrimmed || apiBlueprintDmBlocked}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label={
+                          apiBlueprintDmBlocked
+                            ? apiBlueprintBlockedHint
+                            : "Regenerar contratos API desde el MDD (vista previa antes de guardar)"
+                        }
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      {apiBlueprintDmBlocked
                         ? apiBlueprintBlockedHint
-                        : "Generar contratos API desde el MDD (vista previa antes de guardar)"
-                    }
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Generar
-                  </button>
+                        : "Regenerar contratos API desde el MDD (vista previa antes de guardar)"}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "logic-flows" && (
-                  <button
-                    type="button"
-                    onClick={() => generateLogicFlows(projectId)}
-                    disabled={loading || mddReviewing || !effectiveMddTrimmed}
-                    title="Regenerar flujos de lógica desde el MDD"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Regenerar
-                  </button>
+                {centralPanel === "logic-flows" && !!logicFlowsContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateLogicFlows(projectId)}
+                        disabled={loading || mddReviewing || !effectiveMddTrimmed}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar flujos de lógica desde el MDD"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar flujos de lógica desde el MDD
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "infra" && (
-                  <button
-                    type="button"
-                    onClick={() => generateInfra(projectId, { preview: true })}
-                    disabled={loading || mddReviewing || !effectiveMddTrimmed}
-                    title="Generar infraestructura desde el MDD (vista previa antes de guardar)"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Regenerar
-                  </button>
+                {centralPanel === "infra" && !!infraContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateInfra(projectId, { preview: true })}
+                        disabled={loading || mddReviewing || !effectiveMddTrimmed}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar infraestructura desde el MDD (vista previa antes de guardar)"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar infraestructura desde el MDD (vista previa antes de guardar)
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "mdd-inicial" && isLegacyProject && projectId && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const res = await legacyGenerateCodebaseDoc(projectId, {
-                        responseMode: codebaseDocResponseMode,
-                        stageId: activeStageId ?? undefined,
-                      });
-                      if (res) setCentralPanel("mdd-inicial");
-                    }}
-                    disabled={loading}
-                    title="Generar documentación de partida del codebase vía AriadneSpecs"
-                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed shrink-0 whitespace-nowrap"
-                  >
-                    {loading && loadingReason === "legacy-codebase-doc" ? (
-                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 shrink-0" />
-                    )}
-                    <span className="sm:hidden">
-                      {activeLegacyState?.codebaseDoc ? "Regenerar" : "Generar"} doc. partida
-                    </span>
-                    <span className="hidden sm:inline">
-                      {activeLegacyState?.codebaseDoc ? "Regenerar" : "Generar"} documentación de partida
-                    </span>
-                  </button>
+                {centralPanel === "mdd-inicial" &&
+                  isLegacyProject &&
+                  projectId &&
+                  !!(activeLegacyState?.codebaseDoc ?? "").trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await legacyGenerateCodebaseDoc(projectId, {
+                            responseMode: codebaseDocResponseMode,
+                            stageId: activeStageId ?? undefined,
+                          });
+                          if (res) setCentralPanel("mdd-inicial");
+                        }}
+                        disabled={loading}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar documentación de partida del codebase (AriadneSpecs)"
+                      >
+                        {loading && loadingReason === "legacy-codebase-doc" ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar documentación de partida del codebase vía AriadneSpecs
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {centralPanel === "mdd-inicial" && mddInicialViewMode === "source" && (mddInicialLocalContent || activeLegacyState?.codebaseDoc) && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setMddInicialSaving(true);
-                      await legacyUpdateCodebaseDoc(projectId, mddInicialLocalContent);
-                      setMddInicialSaving(false);
-                    }}
-                    disabled={mddInicialSaving || mddInicialLocalContent === (activeLegacyState?.codebaseDoc ?? "")}
-                    title="Guardar cambios en la documentación"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {mddInicialSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Guardar
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setMddInicialSaving(true);
+                          await legacyUpdateCodebaseDoc(projectId, mddInicialLocalContent);
+                          setMddInicialSaving(false);
+                        }}
+                        disabled={mddInicialSaving || mddInicialLocalContent === (activeLegacyState?.codebaseDoc ?? "")}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Guardar cambios en la documentación de partida"
+                      >
+                        {mddInicialSaving ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <Save className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Guardar cambios en la documentación
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {centralPanel === "brd" && brdDocViewMode === "source" && activeStageId && brdWorkshopDirty && (
-                  <button
-                    type="button"
-                    onClick={() => void persistBrdWorkshopDraft()}
-                    disabled={brdTobePersistBusy}
-                    title="Guardar BRD en la etapa activa"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {brdTobePersistBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                    Guardar
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => void persistBrdWorkshopDraft()}
+                        disabled={brdTobePersistBusy}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Guardar BRD en la etapa activa"
+                      >
+                        {brdTobePersistBusy ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <Save className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Guardar BRD en la etapa activa
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {/* to-be save button removed */}
-                {centralPanel === "spec" && (
-                  <button
-                    type="button"
-                    onClick={() => generateSpec(projectId)}
-                    disabled={loading}
-                    title="Regenerar Spec desde Benchmark y alcance"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Regenerar
-                  </button>
+                {centralPanel === "spec" && !!specContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateSpec(projectId)}
+                        disabled={loading}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar Spec desde Benchmark y alcance"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar Spec desde Benchmark y alcance
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "tasks" && (
-                  <button
-                    type="button"
-                    onClick={() => generateTasks(projectId)}
-                    disabled={loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
-                    title="Regenerar Tasks desde MDD y Blueprint"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Regenerar
-                  </button>
+                {centralPanel === "tasks" && !!tasksContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => generateTasks(projectId)}
+                        disabled={loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Regenerar Tasks desde MDD y Blueprint"
+                      >
+                        {loading ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Regenerar Tasks desde MDD y Blueprint
+                    </TooltipContent>
+                  </Tooltip>
                 )}
-                {centralPanel === "ux-ui-guide" && (
-                  <button
-                    type="button"
-                    onClick={generateUxGuideSequential}
-                    disabled={uxGenerating || loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
-                    title="Generar la Guía UX/UI en 5 pasos: colores → tipografía → espaciado → componentes → documentación"
-                    className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {uxGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {uxGenProgress ?? ((uxUiGuideContent ?? "").trim() ? "Regenerar" : "Generar")}
-                  </button>
+                {centralPanel === "ux-ui-guide" && !!uxUiGuideContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={generateUxGuideSequential}
+                        disabled={uxGenerating || loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label={uxGenProgress ?? "Regenerar guía UX/UI desde MDD y Blueprint"}
+                      >
+                        {uxGenerating ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      {uxGenProgress ?? "Regenerar guía UX/UI desde MDD y Blueprint"}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </div>
             </div>
@@ -2378,13 +2852,19 @@ export default function WorkshopView({
                         disabled={loading}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50"
                       >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {loading ? (
+                          <span className="text-[var(--primary)]" aria-hidden>
+                            <AiGenerativeDots />
+                          </span>
+                        ) : null}
                         Generar MDD
                       </button>
                     </div>
                     {loading && loadingReason === "legacy-mdd" && (
-                      <p className="mt-2 text-[color-mix(in_oklch,var(--primary)_65%,var(--muted-foreground))] text-xs flex items-center gap-2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                      <p className="mt-2 flex items-center gap-2 text-xs text-[color-mix(in_oklch,var(--primary)_65%,var(--muted-foreground))]">
+                        <span className="shrink-0 text-[var(--primary)]" aria-hidden>
+                          <AiGenerativeDots />
+                        </span>
                         {LEGACY_MDD_STEPS[legacyStepIndex % LEGACY_MDD_STEPS.length]}
                       </p>
                     )}
@@ -2582,50 +3062,70 @@ export default function WorkshopView({
                   role="region"
                   aria-label="Generar o regenerar el MDD"
                 >
-                  <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-                    <button
-                      type="button"
-                      onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
-                      disabled={loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")}
-                      className={cn(
-                        WORKSHOP_MDD_ACTION_PRIMARY,
-                        "w-full justify-center lg:w-auto lg:min-w-0",
-                        "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
-                      )}
-                    >
-                      {(loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")) ? (
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                      ) : (
-                        <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
-                      )}
-                      {mddContent?.trim() ? "Regenerar MDD" : "Generar MDD"}
-                    </button>
-                    {effectiveMddTrimmed.length > 200 && (
-                      <button
-                        type="button"
-                        onClick={handleGenerateDeliverables}
-                        disabled={!canGenerate || cascadeRunning || mddReviewing}
-                        className={cn(
-                          WORKSHOP_MDD_ACTION_PRIMARY,
-                          "w-full justify-center lg:w-auto lg:min-w-0",
-                          "bg-[var(--success)] text-[var(--success-foreground)] hover:bg-[color-mix(in_oklch,var(--success)_88%,black)]",
+                  {loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd") ? (
+                    <AiGenerationPanel
+                      title={mddContent?.trim() ? "Regenerando el MDD…" : "Generando el MDD…"}
+                      subtitle={
+                        isLegacyProject
+                          ? "A partir de BRD y To-Be de la etapa activa (y documentación de partida si aplica)."
+                          : "A partir del DBGA / Benchmark guardado en Paso 0. Puede tardar unos minutos."
+                      }
+                    />
+                  ) : (
+                    <>
+                      <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+                        <button
+                          type="button"
+                          onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
+                          disabled={loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")}
+                          className={cn(
+                            WORKSHOP_MDD_ACTION_PRIMARY,
+                            "w-full justify-center lg:w-auto lg:min-w-0",
+                            "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
+                          )}
+                        >
+                          {mddContent?.trim() ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                              Regenerar MDD
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                              Generar MDD
+                            </>
+                          )}
+                        </button>
+                        {effectiveMddTrimmed.length > 200 && (
+                          <button
+                            type="button"
+                            onClick={handleGenerateDeliverables}
+                            disabled={!canGenerate || cascadeRunning || mddReviewing}
+                            className={cn(
+                              WORKSHOP_MDD_ACTION_PRIMARY,
+                              "w-full justify-center lg:w-auto lg:min-w-0",
+                              "bg-[var(--success)] text-[var(--success-foreground)] hover:bg-[color-mix(in_oklch,var(--success)_88%,black)]",
+                            )}
+                          >
+                            {cascadeRunning ? (
+                              <span className="inline-flex items-center gap-2" aria-hidden>
+                                <span className="text-[var(--success-foreground)]">
+                                  <AiGenerativeDots />
+                                </span>
+                              </span>
+                            ) : (
+                              <Layers className="h-4 w-4 shrink-0" aria-hidden />
+                            )}
+                            {cascadeRunning ? "Generando documentos…" : "Generar todos los documentos"}
+                          </button>
                         )}
-                      >
-                        {cascadeRunning ? (
-                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                        ) : (
-                          <Layers className="h-4 w-4 shrink-0" aria-hidden />
-                        )}
-                        {cascadeRunning ? "Generando documentos…" : "Generar todos los documentos"}
-                      </button>
-                    )}
-                  </div>
-                  {(
-                    <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
-                      {isLegacyProject
-                        ? "Genera el MDD desde BRD y To-Be de la etapa activa (y doc. de partida si aplica)."
-                        : "Genera el MDD a partir del DBGA / Benchmark guardado en Paso 0."}
-                    </p>
+                      </div>
+                      <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
+                        {isLegacyProject
+                          ? "Genera el MDD desde BRD y To-Be de la etapa activa (y doc. de partida si aplica)."
+                          : "Genera el MDD a partir del DBGA / Benchmark guardado en Paso 0."}
+                      </p>
+                    </>
                   )}
                 </div>
                 {mddDirty && (
@@ -2672,163 +3172,240 @@ export default function WorkshopView({
             )}
             {centralPanel === "architecture" && (
               <>
-                {architectureViewMode === "preview" ? (
-                  <MddViewer content={architectureContent || ""} />
-                ) : (
-                  <textarea
-                    value={architectureContent ?? ""}
-                    onChange={(e) => setArchitectureContent(e.target.value)}
-                    onBlur={handleArchitectureBlur}
-                    placeholder="# Arquitectura del sistema\n\nMódulos, datos, APIs y flujos del producto (según MDD y codebase)..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
+                {architectureViewMode === "preview" && !architectureContent?.trim() ? (
+                  <DocEmptyState
+                    icon={Layers}
+                    title="Arquitectura"
+                    description="Módulos, datos, APIs y flujos del producto, alineados con el MDD y el codebase."
+                    onGenerate={() => generateArchitecture(projectId)}
+                    loading={loading}
+                    hasMdd={!!effectiveMddTrimmed}
                   />
+                ) : (
+                  <>
+                    {architectureViewMode === "preview" ? (
+                      <MddViewer content={architectureContent || ""} />
+                    ) : (
+                      <div className="flex min-h-0 flex-1 flex-col gap-2">
+                        <WorkshopDocSourceSaveBar
+                          onSave={() => void persistArchitectureContent(architectureContent ?? "")}
+                          disabled={!architectureDirty}
+                        />
+                        <textarea
+                          value={architectureContent ?? ""}
+                          onChange={(e) => setArchitectureContent(e.target.value)}
+                          onBlur={handleArchitectureBlur}
+                          placeholder="# Arquitectura del sistema\n\nMódulos, datos, APIs y flujos del producto (según MDD y codebase)..."
+                          className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                          spellCheck={false}
+                        />
+                      </div>
+                    )}
+                    {!architectureContent?.trim() && architectureViewMode === "source" ? (
+                      <div className="shrink-0 mt-4 flex min-h-[200px] w-full justify-center sm:justify-end">
+                        {loading ? (
+                          <AiDocumentBuildingPlaceholder documentTitle="Arquitectura" />
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="lg"
+                            className={cn("w-full max-w-md sm:w-auto sm:min-w-[280px]", WORKSHOP_DOC_EMPTY_PRIMARY_BTN)}
+                            onClick={() => generateArchitecture(projectId)}
+                            disabled={loading || !effectiveMddTrimmed}
+                          >
+                            <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+                            Generar Arquitectura desde MDD
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </>
                 )}
-                <div className="shrink-0 flex items-center justify-end gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => generateArchitecture(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {architectureContent?.trim() ? "Regenerar" : "Generar"} desde MDD
-                  </button>
-                </div>
               </>
             )}
             {centralPanel === "use-cases" && (
               <>
-                {useCasesViewMode === "preview" ? (
-                  <MddViewer content={useCasesContent || ""} />
-                ) : (
-                  <textarea
-                    value={useCasesContent ?? ""}
-                    onChange={(e) => setUseCasesContent(e.target.value)}
-                    onBlur={handleUseCasesBlur}
-                    placeholder="# Casos de Uso\n\nDescribe los escenarios de interacción y flujos transaccionales..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
+                {useCasesViewMode === "preview" && !useCasesContent?.trim() ? (
+                  <DocEmptyState
+                    icon={Target}
+                    title="Casos de uso"
+                    description="Escenarios de interacción y flujos transaccionales derivados del MDD."
+                    onGenerate={() => generateUseCases(projectId)}
+                    loading={loading}
+                    hasMdd={!!effectiveMddTrimmed}
                   />
+                ) : (
+                  <>
+                    {useCasesViewMode === "preview" ? (
+                      <MddViewer content={useCasesContent || ""} />
+                    ) : (
+                      <div className="flex min-h-0 flex-1 flex-col gap-2">
+                        <WorkshopDocSourceSaveBar
+                          onSave={() => void persistUseCasesContent(useCasesContent ?? "")}
+                          disabled={!useCasesDirty}
+                        />
+                        <textarea
+                          value={useCasesContent ?? ""}
+                          onChange={(e) => setUseCasesContent(e.target.value)}
+                          onBlur={handleUseCasesBlur}
+                          placeholder="# Casos de Uso\n\nDescribe los escenarios de interacción y flujos transaccionales..."
+                          className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                          spellCheck={false}
+                        />
+                      </div>
+                    )}
+                    {!useCasesContent?.trim() && useCasesViewMode === "source" ? (
+                      <div className="shrink-0 mt-4 flex min-h-[200px] w-full justify-center sm:justify-end">
+                        {loading ? (
+                          <AiDocumentBuildingPlaceholder documentTitle="Casos de uso" />
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="lg"
+                            className={cn("w-full max-w-md sm:w-auto sm:min-w-[280px]", WORKSHOP_DOC_EMPTY_PRIMARY_BTN)}
+                            onClick={() => generateUseCases(projectId)}
+                            disabled={loading || !effectiveMddTrimmed}
+                          >
+                            <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+                            Generar Casos de uso desde MDD
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </>
                 )}
-                <div className="shrink-0 flex items-center justify-end gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => generateUseCases(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {useCasesContent?.trim() ? "Regenerar" : "Generar"} desde MDD
-                  </button>
-                </div>
               </>
             )}
             {centralPanel === "user-stories" && (
               <>
-                {userStoriesViewMode === "preview" ? (
-                  <MddViewer content={userStoriesContent || ""} />
-                ) : (
-                  <textarea
-                    value={userStoriesContent ?? ""}
-                    onChange={(e) => setUserStoriesContent(e.target.value)}
-                    onBlur={handleUserStoriesBlur}
-                    placeholder="# Historias de Usuario\n\nDefine los requisitos en formato Agile (Como... quiero... para...)..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
+                {userStoriesViewMode === "preview" && !userStoriesContent?.trim() ? (
+                  <DocEmptyState
+                    icon={MessageSquare}
+                    title="Historias de usuario"
+                    description="Requisitos en formato ágil (Como / Quiero / Para) a partir del MDD."
+                    onGenerate={() => generateUserStories(projectId)}
+                    loading={loading}
+                    hasMdd={!!effectiveMddTrimmed}
                   />
+                ) : (
+                  <>
+                    {userStoriesViewMode === "preview" ? (
+                      <MddViewer content={userStoriesContent || ""} />
+                    ) : (
+                      <div className="flex min-h-0 flex-1 flex-col gap-2">
+                        <WorkshopDocSourceSaveBar
+                          onSave={() => void persistUserStoriesContent(userStoriesContent ?? "")}
+                          disabled={!userStoriesDirty}
+                        />
+                        <textarea
+                          value={userStoriesContent ?? ""}
+                          onChange={(e) => setUserStoriesContent(e.target.value)}
+                          onBlur={handleUserStoriesBlur}
+                          placeholder="# Historias de Usuario\n\nDefine los requisitos en formato Agile (Como... quiero... para...)..."
+                          className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                          spellCheck={false}
+                        />
+                      </div>
+                    )}
+                    {!userStoriesContent?.trim() && userStoriesViewMode === "source" ? (
+                      <div className="shrink-0 mt-4 flex min-h-[200px] w-full justify-center sm:justify-end">
+                        {loading ? (
+                          <AiDocumentBuildingPlaceholder documentTitle="Historias de usuario" />
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="lg"
+                            className={cn("w-full max-w-md sm:w-auto sm:min-w-[280px]", WORKSHOP_DOC_EMPTY_PRIMARY_BTN)}
+                            onClick={() => generateUserStories(projectId)}
+                            disabled={loading || !effectiveMddTrimmed}
+                          >
+                            <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+                            Generar Historias de usuario desde MDD
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </>
                 )}
-                <div className="shrink-0 flex items-center justify-end gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={() => generateUserStories(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50"
-                  >
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {userStoriesContent?.trim() ? "Regenerar" : "Generar"} desde MDD
-                  </button>
-                </div>
               </>
             )}
             {centralPanel === "ux-ui-guide" && (
               <>
-                {uxUiGuideViewMode === "design" ? (
-                  <div className="flex-1 overflow-auto min-h-0">
-                    <DesignMdPreview content={uxUiGuideContent ?? ""} />
-                  </div>
-                ) : uxUiGuideViewMode === "preview" ? (
-                  <MddViewer content={uxUiGuideContent ?? ""} />
-                ) : (
-                  <textarea
-                    value={uxUiGuideContent ?? ""}
-                    onChange={(e) => setUxUiGuideContent(e.target.value || null)}
-                    onBlur={handleUxUiGuideBlur}
-                    placeholder="# Guía UX/UI\n\nConversa con la IA sobre marca, estilos, prioridades y componentes; el contenido se irá generando aquí."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
+                {!uxUiGuideContent?.trim() && (uxUiGuideViewMode === "preview" || uxUiGuideViewMode === "design") ? (
+                  <DocEmptyState
+                    icon={Palette}
+                    title="Guía UX/UI"
+                    description="Colores, tipografía, espaciado, componentes y documentación; se apoya en el MDD y el Blueprint."
+                    onGenerate={generateUxGuideSequential}
+                    loading={uxGenerating || loading}
+                    hasMdd={!!(effectiveMddTrimmed && blueprintContent?.trim())}
                   />
+                ) : (
+                  <>
+                    {uxUiGuideViewMode === "design" ? (
+                      <div className="min-h-0 flex-1 overflow-auto">
+                        <DesignMdPreview content={uxUiGuideContent ?? ""} />
+                      </div>
+                    ) : uxUiGuideViewMode === "preview" ? (
+                      <MddViewer content={uxUiGuideContent ?? ""} />
+                    ) : (
+                      <div className="flex min-h-0 flex-1 flex-col gap-2">
+                        <WorkshopDocSourceSaveBar
+                          onSave={() => void persistUxUiGuideContent(uxUiGuideContent ?? "")}
+                          disabled={!uxUiGuideDirty}
+                        />
+                        <textarea
+                          value={uxUiGuideContent ?? ""}
+                          onChange={(e) => setUxUiGuideContent(e.target.value || null)}
+                          onBlur={handleUxUiGuideBlur}
+                          placeholder="# Guía UX/UI\n\nConversa con la IA sobre marca, estilos, prioridades y componentes; el contenido se irá generando aquí."
+                          className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                          spellCheck={false}
+                        />
+                      </div>
+                    )}
+                    {!uxUiGuideContent?.trim() && uxUiGuideViewMode === "source" ? (
+                      <div className="shrink-0 mt-4 flex min-h-[200px] w-full justify-center sm:justify-end">
+                        {uxGenerating || loading ? (
+                          <AiDocumentBuildingPlaceholder documentTitle="Guía UX/UI" />
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="default"
+                            size="lg"
+                            className={cn("w-full max-w-md sm:w-auto sm:min-w-[280px]", WORKSHOP_DOC_EMPTY_PRIMARY_BTN)}
+                            onClick={generateUxGuideSequential}
+                            disabled={uxGenerating || loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
+                          >
+                            <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
+                            Generar Guía UX/UI desde MDD
+                          </Button>
+                        )}
+                      </div>
+                    ) : null}
+                  </>
                 )}
-                <div className="shrink-0 flex items-center justify-end gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={generateUxGuideSequential}
-                    disabled={uxGenerating || loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
-                    title="Generar la Guía UX/UI en 5 pasos: colores → tipografía → espaciado → componentes → documentación"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {uxGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    {uxGenProgress ?? ((uxUiGuideContent ?? "").trim() ? "Regenerar" : "Generar")} guía
-                  </button>
-                </div>
               </>
             )}
             {centralPanel === "spec" && (
               specContent || specViewMode === "source" ? (
                 specViewMode === "preview" ? (
-                  <div className="flex flex-col gap-2 h-full min-h-0">
-                    <MddViewer content={specContent || ""} />
-                    <div className="self-end flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => generateSpec(projectId)}
-                        disabled={loading}
-                        title="Regenerar Spec desde Benchmark y alcance"
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                        Regenerar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => persistSpecContent(specContent || "")}
-                        disabled={!specDirty}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)]"
-                      >
-                        <Save className="w-4 h-4" />
-                        Guardar
-                      </button>
-                    </div>
-                  </div>
+                  <MddViewer content={specContent || ""} />
                 ) : (
-                  <div className="flex flex-col gap-2 h-full min-h-0">
-                    <div className="shrink-0 flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => persistSpecContent(specContent || "")}
-                        disabled={!specDirty}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)]"
-                      >
-                        <Save className="w-4 h-4" />
-                        Guardar
-                      </button>
-                    </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <WorkshopDocSourceSaveBar
+                      onSave={() => void persistSpecContent(specContent ?? "")}
+                      disabled={!specDirty}
+                    />
                     <textarea
                       value={specContent || ""}
                       onChange={(e) => setSpecContent(e.target.value)}
                       onBlur={handleSpecBlur}
                       placeholder="# Spec\n\nEl contenido del Spec se genera aquí o puedes escribirlo manualmente..."
-                      className="flex-1 min-h-0 w-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
                       spellCheck={false}
                     />
                   </div>
@@ -2850,39 +3427,19 @@ export default function WorkshopView({
             {centralPanel === "aem" && (
               aemContent || aemViewMode === "source" ? (
                 aemViewMode === "preview" ? (
-                  <div className="flex flex-col gap-2 h-full min-h-0">
-                    <MddViewer content={aemContent || ""} />
-                    <div className="self-end flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => persistAemContent(aemContent || "")}
-                        disabled={!aemDirty}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)]"
-                      >
-                        <Save className="w-4 h-4" />
-                        Guardar
-                      </button>
-                    </div>
-                  </div>
+                  <MddViewer content={aemContent || ""} />
                 ) : (
-                  <div className="flex flex-col gap-2 h-full min-h-0">
-                    <div className="shrink-0 flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => persistAemContent(aemContent || "")}
-                        disabled={!aemDirty}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)]"
-                      >
-                        <Save className="w-4 h-4" />
-                        Guardar
-                      </button>
-                    </div>
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <WorkshopDocSourceSaveBar
+                      onSave={() => void persistAemContent(aemContent ?? "")}
+                      disabled={!aemDirty}
+                    />
                     <textarea
                       value={aemContent || ""}
                       onChange={(e) => setAemContent(e.target.value)}
                       onBlur={handleAemBlur}
                       placeholder="# AEM\n\nAnálisis y Estrategia de Mercado — contenido sobre mercado, competencia, posicionamiento..."
-                      className="flex-1 min-h-0 w-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
                       spellCheck={false}
                     />
                   </div>
@@ -2964,14 +3521,20 @@ export default function WorkshopView({
                 blueprintViewMode === "preview" ? (
                   <MddViewer content={blueprintContent} />
                 ) : (
-                  <textarea
-                    value={blueprintContent}
-                    onChange={(e) => setBlueprintContent(e.target.value)}
-                    onBlur={handleBlueprintBlur}
-                    placeholder="# Blueprint\n\nEl contenido del blueprint se genera desde el MDD..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
-                  />
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <WorkshopDocSourceSaveBar
+                      onSave={() => void persistBlueprintContent(blueprintContent)}
+                      disabled={!blueprintDirty}
+                    />
+                    <textarea
+                      value={blueprintContent}
+                      onChange={(e) => setBlueprintContent(e.target.value)}
+                      onBlur={handleBlueprintBlur}
+                      placeholder="# Blueprint\n\nEl contenido del blueprint se genera desde el MDD..."
+                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                      spellCheck={false}
+                    />
+                  </div>
                 )
               ) : (
                 <DocEmptyState
@@ -2989,29 +3552,7 @@ export default function WorkshopView({
             )}
             {centralPanel === "tasks" && (
               tasksContent ? (
-                <div className="flex flex-col gap-2 h-full min-h-0">
-                  <MddViewer content={tasksContent} />
-                  <div className="self-end flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => generateTasks(projectId)}
-                      disabled={loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
-                      title="Regenerar Tasks desde MDD y Blueprint"
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                      Regenerar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => persistTasksContent(tasksContent)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm"
-                    >
-                      <Save className="w-4 h-4" />
-                      Guardar
-                    </button>
-                  </div>
-                </div>
+                <MddViewer content={tasksContent} />
               ) : (
                 <DocEmptyState
                   icon={ListTodo}
@@ -3031,14 +3572,20 @@ export default function WorkshopView({
                 apiContractsViewMode === "preview" ? (
                   <MddViewer content={apiContractsContent} />
                 ) : (
-                  <textarea
-                    value={apiContractsContent}
-                    onChange={(e) => setApiContractsContent(e.target.value)}
-                    onBlur={handleApiContractsBlur}
-                    placeholder="# Contratos de API (OpenAPI/Swagger)\n\n..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
-                  />
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <WorkshopDocSourceSaveBar
+                      onSave={() => void persistApiContractsContent(apiContractsContent)}
+                      disabled={!apiContractsDirty}
+                    />
+                    <textarea
+                      value={apiContractsContent}
+                      onChange={(e) => setApiContractsContent(e.target.value)}
+                      onBlur={handleApiContractsBlur}
+                      placeholder="# Contratos de API (OpenAPI/Swagger)\n\n..."
+                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                      spellCheck={false}
+                    />
+                  </div>
                 )
               ) : (
                 <DocEmptyState
@@ -3061,14 +3608,20 @@ export default function WorkshopView({
                 logicFlowsViewMode === "preview" ? (
                   <MddViewer content={logicFlowsContent} />
                 ) : (
-                  <textarea
-                    value={logicFlowsContent}
-                    onChange={(e) => setLogicFlowsContent(e.target.value)}
-                    onBlur={handleLogicFlowsBlur}
-                    placeholder="# Casos de Uso y Flujos de Lógica\n\n..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
-                  />
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <WorkshopDocSourceSaveBar
+                      onSave={() => void persistLogicFlowsContent(logicFlowsContent)}
+                      disabled={!logicFlowsDirty}
+                    />
+                    <textarea
+                      value={logicFlowsContent}
+                      onChange={(e) => setLogicFlowsContent(e.target.value)}
+                      onBlur={handleLogicFlowsBlur}
+                      placeholder="# Casos de Uso y Flujos de Lógica\n\n..."
+                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                      spellCheck={false}
+                    />
+                  </div>
                 )
               ) : (
                 <DocEmptyState
@@ -3089,14 +3642,20 @@ export default function WorkshopView({
                 infraViewMode === "preview" ? (
                   <MddViewer content={infraContent} />
                 ) : (
-                  <textarea
-                    value={infraContent}
-                    onChange={(e) => setInfraContent(e.target.value)}
-                    onBlur={handleInfraBlur}
-                    placeholder="# Infraestructura y Despliegue\n\n..."
-                    className="w-full min-h-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                    spellCheck={false}
-                  />
+                  <div className="flex min-h-0 flex-1 flex-col gap-2">
+                    <WorkshopDocSourceSaveBar
+                      onSave={() => void persistInfraContent(infraContent)}
+                      disabled={!infraDirty}
+                    />
+                    <textarea
+                      value={infraContent}
+                      onChange={(e) => setInfraContent(e.target.value)}
+                      onBlur={handleInfraBlur}
+                      placeholder="# Infraestructura y Despliegue\n\n..."
+                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                      spellCheck={false}
+                    />
+                  </div>
                 )
               ) : (
                 <DocEmptyState

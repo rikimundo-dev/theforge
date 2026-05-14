@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import { Loader2 } from "lucide-react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import { AiGenerativeDots } from "../AiGenerationLoader";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 font-medium rounded-[var(--radius)] transition-all duration-[var(--transition-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ring-offset)] disabled:pointer-events-none disabled:opacity-50",
@@ -38,10 +39,12 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   loading?: boolean;
+  /** When loading, show AI-style dots instead of a circular spinner (document / long tasks). */
+  generativeLoading?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant, size, loading, disabled, children, className, ...props }, ref) => {
+  ({ variant, size, loading, generativeLoading, disabled, children, className, ...props }, ref) => {
     return (
       <button
         ref={ref}
@@ -50,7 +53,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {...props}
       >
         {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          generativeLoading ? (
+            <span className="text-[var(--primary)]" aria-hidden>
+              <AiGenerativeDots />
+            </span>
+          ) : (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          )
         ) : null}
         {children}
       </button>

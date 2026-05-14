@@ -5,6 +5,7 @@ import { useCallback, useMemo } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   DollarSign,
   FileText,
   Lock,
@@ -27,6 +28,49 @@ const WORKSHOP_METRICS_BADGE_WARN =
 
 const WORKSHOP_METRICS_BADGE_ERR =
   "inline-flex shrink-0 items-center rounded-full bg-[color-mix(in_oklch,var(--destructive)_14%,transparent)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[color-mix(in_oklch,var(--destructive)_90%,var(--foreground))]";
+
+/** Stable column order for delivery roles in the estimation breakdown. */
+const WORKSHOP_DELIVERY_ROLE_ORDER: readonly string[] = [
+  "architect",
+  "techLead",
+  "pm",
+  "security",
+  "back",
+  "front",
+  "ux",
+  "qa",
+  "devops",
+];
+
+const WORKSHOP_DELIVERY_ROLE_LABELS: Record<string, string> = {
+  architect: "Arquitectura",
+  techLead: "Tech lead",
+  pm: "PM / delivery",
+  security: "Seguridad",
+  back: "Backend",
+  front: "Frontend",
+  ux: "UX / UI",
+  qa: "QA",
+  devops: "DevOps",
+};
+
+function formatWorkshopDeliveryRoleLabel(roleKey: string): string {
+  const k = roleKey.trim();
+  if (WORKSHOP_DELIVERY_ROLE_LABELS[k]) return WORKSHOP_DELIVERY_ROLE_LABELS[k];
+  return k.length > 0 ? `${k.charAt(0).toUpperCase()}${k.slice(1)}` : k;
+}
+
+function sortWorkshopDeliveryRoleEntries(entries: [string, number][]): [string, number][] {
+  const order = new Map(WORKSHOP_DELIVERY_ROLE_ORDER.map((key, index) => [key, index]));
+  return entries
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => {
+      const ia = order.get(a[0]) ?? 999;
+      const ib = order.get(b[0]) ?? 999;
+      if (ia !== ib) return ia - ib;
+      return a[0].localeCompare(b[0]);
+    });
+}
 
 export interface WorkshopMetricsColumnInnerProps {
   projectId: string;
@@ -190,6 +234,14 @@ export function WorkshopMetricsColumnInner({
           rolesHours: {} as Record<string, number>,
         };
 
+  const deliveryRoleRows = useMemo(
+    () =>
+      costDisplay.teamStructure && Object.keys(costDisplay.teamStructure).length > 0
+        ? sortWorkshopDeliveryRoleEntries(Object.entries(costDisplay.teamStructure))
+        : [],
+    [costDisplay.teamStructure],
+  );
+
   const effectiveStatus = mddEmpty ? "red" : (liveMetrics?.status ?? (precisionScore <= 40 ? "red" : precisionScore <= 90 ? "yellow" : "green"));
   const semaphoreConfig =
     effectiveStatus === "red"
@@ -316,153 +368,284 @@ export function WorkshopMetricsColumnInner({
                 </label>
               </div>
               <div className={cn(WORKSHOP_METRICS_CARD, "divide-y divide-[color-mix(in_oklch,var(--border)_90%,transparent)] p-0")}>
-                <div
-                  className="flex flex-col gap-1 px-2 py-1.5"
-                  title={conformance.blueprint.ok ? undefined : conformance.blueprint.gaps.join("; ")}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Blueprint</span>
-                    {conformance.blueprint.ok ? (
+                {conformance.blueprint.ok ? (
+                  <div
+                    className="flex flex-col gap-1 px-2 py-1.5"
+                    title={undefined}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Blueprint</span>
                       <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
-                    ) : (
-                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
-                    )}
+                    </div>
                   </div>
-                  {!conformance.blueprint.ok && (
-                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
-                      {conformance.blueprint.gaps.join("; ")}
-                    </p>
-                  )}
-                  {!conformance.blueprint.ok && conformance.blueprint.gaps.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => generateBlueprint(projectId!, { preview: true, gapsFeedback: conformance!.blueprint.gaps.join("\n") })}
-                      disabled={loading || mddReviewing}
-                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
-                    >
-                      Regenerar Blueprint con gaps
-                    </button>
-                  )}
-                </div>
-                <div
-                  className="flex flex-col gap-1 px-2 py-1.5"
-                  title={
-                    conformance.blueprintDataModel?.ok !== false
-                      ? "Alineado con Blueprint; puedes generar Contratos de API."
-                      : (conformance.blueprintDataModel?.gaps ?? []).join("; ")
-                  }
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Modelo §3</span>
-                    {conformance.blueprintDataModel?.ok !== false ? (
+                ) : (
+                  <details className="group min-w-0">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Blueprint</span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {conformance.blueprint.gaps.length > 0 ? (
+                          <span
+                            className="hidden max-w-[9rem] truncate text-[10px] font-normal text-[var(--muted-foreground)] group-open:hidden sm:inline"
+                            aria-hidden
+                          >
+                            {conformance.blueprint.gaps.length}{" "}
+                            {conformance.blueprint.gaps.length === 1 ? "hallazgo" : "hallazgos"}
+                          </span>
+                        ) : null}
+                        <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </span>
+                    </summary>
+                    <div className="space-y-2 border-t border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--background)_30%,transparent)] px-2 pb-2 pt-1.5">
+                      <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                        {conformance.blueprint.gaps.join("; ")}
+                      </p>
+                      {conformance.blueprint.gaps.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            generateBlueprint(projectId!, { preview: true, gapsFeedback: conformance!.blueprint.gaps.join("\n") })
+                          }
+                          disabled={loading || mddReviewing}
+                          className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Regenerar Blueprint con gaps
+                        </button>
+                      ) : null}
+                    </div>
+                  </details>
+                )}
+                {conformance.blueprintDataModel?.ok !== false ? (
+                  <div
+                    className="flex flex-col gap-1 px-2 py-1.5"
+                    title="Alineado con Blueprint; puedes generar Contratos de API."
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Modelo §3</span>
                       <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
-                    ) : (
-                      <span className={WORKSHOP_METRICS_BADGE_ERR}>Bloquea API</span>
-                    )}
+                    </div>
                   </div>
-                  {!conformance.blueprintDataModel?.ok && (
-                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]">
-                      {(conformance.blueprintDataModel?.gaps ?? []).join("; ")}
-                    </p>
-                  )}
-                  {!conformance.blueprintDataModel?.ok &&
-                    (conformance.blueprintDataModel?.gaps?.length ?? 0) > 0 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          generateBlueprint(projectId!, {
-                            preview: true,
-                            gapsFeedback: conformance!.blueprintDataModel!.gaps.join("\n"),
-                          })
-                        }
-                        disabled={loading || mddReviewing}
-                        className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
-                      >
-                        Regenerar Blueprint (gaps §3)
-                      </button>
-                    )}
-                </div>
-                <div className="flex flex-col gap-1 px-2 py-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">API</span>
-                    {conformance.api.ok ? (
+                ) : (
+                  <details className="group min-w-0">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Modelo §3</span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {(conformance.blueprintDataModel?.gaps?.length ?? 0) > 0 ? (
+                          <span
+                            className="hidden max-w-[9rem] truncate text-[10px] font-normal text-[var(--muted-foreground)] group-open:hidden sm:inline"
+                            aria-hidden
+                          >
+                            {conformance.blueprintDataModel?.gaps?.length}{" "}
+                            {(conformance.blueprintDataModel?.gaps?.length ?? 0) === 1 ? "hallazgo" : "hallazgos"}
+                          </span>
+                        ) : null}
+                        <span className={WORKSHOP_METRICS_BADGE_ERR}>Bloquea API</span>
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </span>
+                    </summary>
+                    <div className="space-y-2 border-t border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--background)_30%,transparent)] px-2 pb-2 pt-1.5">
+                      <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]">
+                        {(conformance.blueprintDataModel?.gaps ?? []).join("; ")}
+                      </p>
+                      {(conformance.blueprintDataModel?.gaps?.length ?? 0) > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            generateBlueprint(projectId!, {
+                              preview: true,
+                              gapsFeedback: conformance!.blueprintDataModel!.gaps.join("\n"),
+                            })
+                          }
+                          disabled={loading || mddReviewing}
+                          className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Regenerar Blueprint (gaps §3)
+                        </button>
+                      ) : null}
+                    </div>
+                  </details>
+                )}
+                {conformance.api.ok ? (
+                  <div className="flex flex-col gap-1 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">API</span>
                       <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
-                    ) : (
-                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Revisar</span>
-                    )}
+                    </div>
                   </div>
-                  {!conformance.api.ok && (
-                    <p className="break-words text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
-                      Faltan en el doc. de API: {conformance.api.missingInApi.join(", ")}
-                    </p>
-                  )}
-                  {!conformance.api.ok && (conformance.api.missingInApi.length > 0 || conformance.api.extraInApi.length > 0) && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        generateApiContracts(projectId!, {
-                          preview: true,
-                          gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n"),
-                        })
-                      }
-                      disabled={loading || mddReviewing || apiBlueprintDmBlocked}
-                      title={apiBlueprintDmBlocked ? apiBlueprintBlockedHint : undefined}
-                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
-                    >
-                      Regenerar API con gaps
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 px-2 py-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Flujos</span>
-                    {conformance.logicFlows.ok ? (
+                ) : (
+                  <details className="group min-w-0">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">API</span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        <span
+                          className="hidden max-w-[11rem] truncate text-right text-[10px] font-normal leading-tight text-[var(--muted-foreground)] group-open:hidden sm:inline"
+                          aria-hidden
+                        >
+                          {conformance.api.missingInApi.length > 0
+                            ? `${conformance.api.missingInApi.length} sin documentar${
+                                conformance.api.extraInApi.length > 0
+                                  ? ` · ${conformance.api.extraInApi.length} extra`
+                                  : ""
+                              }`
+                            : conformance.api.extraInApi.length > 0
+                              ? `${conformance.api.extraInApi.length} en doc. a contrastar`
+                              : "Ver detalle"}
+                        </span>
+                        <span className={WORKSHOP_METRICS_BADGE_WARN}>Revisar</span>
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </span>
+                    </summary>
+                    <div className="space-y-2 border-t border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--background)_30%,transparent)] px-2 pb-2 pt-1.5">
+                      {conformance.api.missingInApi.length > 0 ? (
+                        <div>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                            Rutas del MDD sin ver en el documento de API
+                          </p>
+                          <ul className="max-h-40 space-y-0.5 overflow-y-auto rounded-md border border-[var(--border)]/80 bg-[color-mix(in_oklch,var(--card)_55%,var(--background))] px-2 py-1.5 font-mono text-[10px] leading-relaxed text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))] [scrollbar-gutter:stable]">
+                            {conformance.api.missingInApi.map((ep) => (
+                              <li key={ep} className="break-all">
+                                {ep}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                          Revisa la alineación entre el MDD y el contrato de API.
+                        </p>
+                      )}
+                      {conformance.api.extraInApi.length > 0 ? (
+                        <div>
+                          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                            En el doc. de API pero no referenciadas igual en el chequeo
+                          </p>
+                          <ul className="max-h-24 space-y-0.5 overflow-y-auto rounded-md border border-[var(--border)]/80 bg-[color-mix(in_oklch,var(--card)_55%,var(--background))] px-2 py-1.5 font-mono text-[10px] leading-relaxed [scrollbar-gutter:stable]">
+                            {conformance.api.extraInApi.map((ep) => (
+                              <li key={ep} className="break-all">
+                                {ep}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {(conformance.api.missingInApi.length > 0 || conformance.api.extraInApi.length > 0) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            generateApiContracts(projectId!, {
+                              preview: true,
+                              gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n"),
+                            })
+                          }
+                          disabled={loading || mddReviewing || apiBlueprintDmBlocked}
+                          title={apiBlueprintDmBlocked ? apiBlueprintBlockedHint : undefined}
+                          className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Regenerar API con gaps
+                        </button>
+                      )}
+                    </div>
+                  </details>
+                )}
+                {conformance.logicFlows.ok ? (
+                  <div className="flex flex-col gap-1 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Flujos</span>
                       <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
-                    ) : (
-                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
-                    )}
+                    </div>
                   </div>
-                  {!conformance.logicFlows.ok && (
-                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
-                      {conformance.logicFlows.gaps.join("; ")}
-                    </p>
-                  )}
-                  {!conformance.logicFlows.ok && conformance.logicFlows.gaps.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => generateLogicFlows(projectId!, { gapsFeedback: conformance!.logicFlows.gaps.join("\n") })}
-                      disabled={loading || mddReviewing}
-                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
-                    >
-                      Regenerar Flujos con gaps
-                    </button>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1 px-2 py-1.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Infra</span>
-                    {conformance.infra.ok ? (
+                ) : (
+                  <details className="group min-w-0">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Flujos</span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {conformance.logicFlows.gaps.length > 0 ? (
+                          <span
+                            className="hidden max-w-[9rem] truncate text-[10px] font-normal text-[var(--muted-foreground)] group-open:hidden sm:inline"
+                            aria-hidden
+                          >
+                            {conformance.logicFlows.gaps.length}{" "}
+                            {conformance.logicFlows.gaps.length === 1 ? "hallazgo" : "hallazgos"}
+                          </span>
+                        ) : null}
+                        <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </span>
+                    </summary>
+                    <div className="space-y-2 border-t border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--background)_30%,transparent)] px-2 pb-2 pt-1.5">
+                      <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                        {conformance.logicFlows.gaps.join("; ")}
+                      </p>
+                      {conformance.logicFlows.gaps.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => generateLogicFlows(projectId!, { gapsFeedback: conformance!.logicFlows.gaps.join("\n") })}
+                          disabled={loading || mddReviewing}
+                          className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Regenerar Flujos con gaps
+                        </button>
+                      ) : null}
+                    </div>
+                  </details>
+                )}
+                {conformance.infra.ok ? (
+                  <div className="flex flex-col gap-1 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Infra</span>
                       <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
-                    ) : (
-                      <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
-                    )}
+                    </div>
                   </div>
-                  {!conformance.infra.ok && (
-                    <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
-                      {conformance.infra.gaps.join("; ")}
-                    </p>
-                  )}
-                  {!conformance.infra.ok && conformance.infra.gaps.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => generateInfra(projectId!, { preview: true, gapsFeedback: conformance!.infra.gaps.join("\n") })}
-                      disabled={loading || mddReviewing}
-                      className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
-                    >
-                      Regenerar Infra con gaps
-                    </button>
-                  )}
-                </div>
+                ) : (
+                  <details className="group min-w-0">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2 py-1.5 marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]">
+                      <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Infra</span>
+                      <span className="flex shrink-0 items-center gap-1.5">
+                        {conformance.infra.gaps.length > 0 ? (
+                          <span
+                            className="hidden max-w-[9rem] truncate text-[10px] font-normal text-[var(--muted-foreground)] group-open:hidden sm:inline"
+                            aria-hidden
+                          >
+                            {conformance.infra.gaps.length}{" "}
+                            {conformance.infra.gaps.length === 1 ? "hallazgo" : "hallazgos"}
+                          </span>
+                        ) : null}
+                        <span className={WORKSHOP_METRICS_BADGE_WARN}>Gaps</span>
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200 group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </span>
+                    </summary>
+                    <div className="space-y-2 border-t border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--background)_30%,transparent)] px-2 pb-2 pt-1.5">
+                      <p className="text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
+                        {conformance.infra.gaps.join("; ")}
+                      </p>
+                      {conformance.infra.gaps.length > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => generateInfra(projectId!, { preview: true, gapsFeedback: conformance!.infra.gaps.join("\n") })}
+                          disabled={loading || mddReviewing}
+                          className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
+                        >
+                          Regenerar Infra con gaps
+                        </button>
+                      ) : null}
+                    </div>
+                  </details>
+                )}
               </div>
             </div>
           )}
@@ -575,54 +758,105 @@ export function WorkshopMetricsColumnInner({
               Estimación (MXN)
             </h3>
             <p
-              className="line-clamp-2 text-[11px] text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]"
-              title="Totales orientativos en MXN: nómina interna, coste de IA y valor de mercado. El cálculo sigue activo aunque el semáforo esté en rojo."
+              className="line-clamp-3 text-[11px] leading-snug text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]"
+              title="Nómina: coste interno estimado. IA: uso aproximado de generación. Mercado: referencia comercial. El cuadro inferior separa personas sugeridas y horas repartidas por rol."
             >
-              Totales orientativos en MXN: nómina interna, coste de IA y valor de mercado. El cálculo sigue activo aunque el semáforo esté en rojo.
+              <strong className="font-medium text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))]">Nómina</strong> = coste interno del equipo;{" "}
+              <strong className="font-medium text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))]">IA</strong> = uso aproximado de generación;{" "}
+              <strong className="font-medium text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))]">Mercado</strong> = referencia de precio. Abajo:{" "}
+              <strong className="font-medium text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))]">personas</strong> por rol y{" "}
+              <strong className="font-medium text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))]">horas</strong> asignadas (orientativo).
             </p>
-            <div className={cn(WORKSHOP_METRICS_CARD, "space-y-2 p-2.5")}>
-              <p className="text-[11px] font-medium text-[var(--foreground)]">
-                {costDisplay.totalHours.toFixed(1)} h totales
-              </p>
-              <div className="flex flex-col gap-2">
-                <div className="flex items-baseline justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
-                  <span className="text-[11px] font-medium text-[var(--foreground)]">Nómina</span>
-                  <span className="tabular-nums text-base font-bold text-[var(--primary)]">
+            <div className={cn(WORKSHOP_METRICS_CARD, "overflow-hidden p-0")}>
+              <div className="border-b border-[var(--border)]/60 bg-[color-mix(in_oklch,var(--muted)_18%,transparent)] px-3 py-2.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-[11px] font-medium text-[color-mix(in_oklch,var(--foreground)_94%,var(--muted-foreground))]">
+                    Horas estimadas
+                  </span>
+                  <span className="tabular-nums text-sm font-semibold tracking-tight text-[var(--foreground)]">
+                    {costDisplay.totalHours.toFixed(1)} h
+                  </span>
+                </div>
+              </div>
+              <div className="divide-y divide-[var(--border)]/60 px-3">
+                <div className="flex items-start justify-between gap-3 py-2.5">
+                  <div className="min-w-0 pr-1">
+                    <span className="block text-[11px] font-medium text-[var(--foreground)]">Nómina interna</span>
+                    <span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted-foreground)]">
+                      Σ (horas rol × tarifa)
+                    </span>
+                  </div>
+                  <span className="shrink-0 tabular-nums text-base font-bold text-[var(--primary)]">
                     ${costDisplay.totalMxn.toLocaleString("es-MX")}
                   </span>
                 </div>
-                {showIaCost && (
-                <div className="flex items-baseline justify-between gap-2 border-b border-[var(--border)]/60 pb-2">
-                  <span className="text-[11px] font-medium text-[var(--foreground)]">Costo IA</span>
-                  <span className="tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--chart-2)_78%,var(--foreground))]">
-                    ${costDisplay.totalMxnIA.toLocaleString("es-MX")}
-                  </span>
-                </div>
-                )}
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[11px] font-medium text-[var(--foreground)]">Mercado</span>
-                  <span className="tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]">
+                {showIaCost ? (
+                  <div className="flex items-start justify-between gap-3 py-2.5">
+                    <div className="min-w-0 pr-1">
+                      <span className="block text-[11px] font-medium text-[var(--foreground)]">Coste IA (aprox.)</span>
+                      <span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted-foreground)]">
+                        Tokens / llamadas orientativas
+                      </span>
+                    </div>
+                    <span className="shrink-0 tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--chart-2)_78%,var(--foreground))]">
+                      ${costDisplay.totalMxnIA.toLocaleString("es-MX")}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="flex items-start justify-between gap-3 py-2.5">
+                  <div className="min-w-0 pr-1">
+                    <span className="block text-[11px] font-medium text-[var(--foreground)]">Referencia mercado</span>
+                    <span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted-foreground)]">
+                      Precio orientativo de venta
+                    </span>
+                  </div>
+                  <span className="shrink-0 tabular-nums text-base font-bold text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]">
                     ${(costDisplay.totalMxnMarket ?? costDisplay.totalMxn).toLocaleString("es-MX")}
                   </span>
                 </div>
               </div>
-              {costDisplay.teamStructure &&
-                Object.keys(costDisplay.teamStructure).length > 0 && (
-                  <div className="max-h-20 space-y-0.5 overflow-y-auto border-t border-[var(--border)]/70 pt-2 text-[10px] leading-tight text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--foreground))]">
-                    {Object.entries(costDisplay.teamStructure).map(
-                      ([role, count]) =>
-                        count ? (
-                          <div key={role} className="flex justify-between gap-2">
-                            <span className="min-w-0 truncate capitalize text-[var(--muted-foreground)]">{role}</span>
-                            <span className="shrink-0 tabular-nums">
+              {deliveryRoleRows.length > 0 ? (
+                <div className="border-t border-[var(--border)]/70 bg-[color-mix(in_oklch,var(--background)_35%,transparent)]">
+                  <p className="px-3 pt-2.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                    Equipo sugerido (orientativo)
+                  </p>
+                  <div
+                    className="max-h-44 overflow-y-auto px-3 pb-2.5 pt-1.5"
+                    role="region"
+                    aria-label="Personas y horas por rol"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-[minmax(0,1fr)_4.75rem_4.25rem] gap-x-2 border-b border-[var(--border)]/50 pb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                        <span>Rol</span>
+                        <span className="text-right">Personas</span>
+                        <span className="text-right">Horas</span>
+                      </div>
+                      {deliveryRoleRows.map(([role, count]) => {
+                        const hours = costDisplay.rolesHours?.[role];
+                        return (
+                          <div
+                            key={role}
+                            className="grid grid-cols-[minmax(0,1fr)_4.75rem_4.25rem] gap-x-2 text-[11px] leading-tight"
+                          >
+                            <span className="min-w-0 truncate font-medium text-[color-mix(in_oklch,var(--foreground)_95%,var(--muted-foreground))]">
+                              {formatWorkshopDeliveryRoleLabel(role)}
+                            </span>
+                            <span
+                              className="text-right tabular-nums text-[color-mix(in_oklch,var(--foreground)_92%,var(--muted-foreground))]"
+                              title={count === 1 ? "1 persona asignada" : `${count} personas asignadas`}
+                            >
                               {count}
-                              {costDisplay.rolesHours?.[role] != null ? ` · ${Number(costDisplay.rolesHours[role]).toFixed(1)}h` : ""}
+                            </span>
+                            <span className="text-right tabular-nums text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]">
+                              {hours != null ? `${Number(hours).toFixed(1)} h` : "—"}
                             </span>
                           </div>
-                        ) : null,
-                    )}
+                        );
+                      })}
+                    </div>
                   </div>
-                )}
+                </div>
+              ) : null}
             </div>
           </div>
 
