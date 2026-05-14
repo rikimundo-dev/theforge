@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/theforge-banner.png" alt="TheForge" width="600" />
+  <img src="docs/assets/theforge-logo.png" alt="TheForge" width="128" height="128" />
   <h3>TheForge</h3>
   <p>Monorepo NestJS + React (Vite) + Prisma con motor LLM, semáforo MDD y estimación MXN.<br/>Despliegue Dokploy-ready con Docker.</p>
 </div>
