@@ -132,7 +132,7 @@ function workshopDocSourceTogglePresentation(
     if (activeViewMode === "design") return { Icon: Palette, tooltip: "Ver preview diseño" };
     return { Icon: FileText, tooltip: "Ver preview visual" };
   }
-  if (activeViewMode === "preview") return { Icon: Pencil, tooltip: "Ver fuente" };
+  if (activeViewMode === "preview") return { Icon: Pencil, tooltip: "Editar" };
   return { Icon: FileText, tooltip: "Ver previsualización" };
 }
 
@@ -2473,7 +2473,7 @@ export default function WorkshopView({
                         className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm"
                       >
                         {benchmarkViewMode === "preview" ? (
-                          <><Pencil className="w-4 h-4" /> Ver fuente</>
+                          <><Pencil className="w-4 h-4" /> Editar</>
                         ) : (
                           <><FileText className="w-4 h-4" /> Ver previsualización</>
                         )}
@@ -2525,7 +2525,7 @@ export default function WorkshopView({
                         className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm"
                       >
                         {phase0SummaryViewMode === "preview" ? (
-                          <><Pencil className="w-4 h-4" /> Ver fuente</>
+                          <><Pencil className="w-4 h-4" /> Editar</>
                         ) : (
                           <><FileText className="w-4 h-4" /> Ver previsualización</>
                         )}
