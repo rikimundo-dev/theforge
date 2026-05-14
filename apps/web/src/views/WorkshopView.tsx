@@ -512,7 +512,6 @@ export default function WorkshopView({
   const generateTasks = useWorkshopStore((s) => s.generateTasks);
   const persistSpecContent = useWorkshopStore((s) => s.persistSpecContent);
   const setSpecContent = useWorkshopStore((s) => s.setSpecContent);
-  const persistTasksContent = useWorkshopStore((s) => s.persistTasksContent);
   const setUxUiGuideContent = useWorkshopStore((s) => s.setUxUiGuideContent);
   const fetchConformance = useWorkshopStore((s) => s.fetchConformance);
   const confirmDeliverable = useWorkshopStore((s) => s.confirmDeliverable);
