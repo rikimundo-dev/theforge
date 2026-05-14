@@ -388,7 +388,7 @@ export function DashboardSidebar({
       className={cn(
         "flex w-full shrink-0 flex-col border-[var(--sidebar-border)] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] sm:border-b-0 sm:border-r sm:min-h-0 sm:self-stretch sm:sticky sm:top-0 sm:transition-[width] sm:duration-200 sm:ease-out",
         // Mobile: slide-over drawer; desktop: unchanged width and sticky column.
-        "max-sm:fixed max-sm:left-0 max-sm:top-0 max-sm:z-50 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-[min(19rem,92vw)] max-sm:overflow-y-auto max-sm:overscroll-y-contain max-sm:border-r max-sm:shadow-2xl max-sm:transition-transform max-sm:duration-200 max-sm:ease-out max-sm:[-webkit-overflow-scrolling:touch]",
+        "max-sm:absolute max-sm:left-0 max-sm:top-0 max-sm:z-50 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-[min(19rem,92vw)] max-sm:overflow-y-auto max-sm:overscroll-y-contain max-sm:border-r max-sm:shadow-2xl max-sm:transition-transform max-sm:duration-200 max-sm:ease-out max-sm:[-webkit-overflow-scrolling:touch]",
         mobileNavOpen
           ? "max-sm:translate-x-0 max-sm:pointer-events-auto"
           : "max-sm:-translate-x-full max-sm:pointer-events-none",
