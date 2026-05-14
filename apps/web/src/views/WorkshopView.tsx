@@ -1468,7 +1468,7 @@ export default function WorkshopView({
   return (
     <div
       data-workshop-root
-      className="workshop-root flex w-full min-h-0 flex-1 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased"
+      className="workshop-root flex w-full min-w-0 min-h-0 flex-1 flex-col bg-[var(--background)] text-[var(--foreground)] antialiased"
     >
       <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-2.5 max-sm:py-2.5 sm:px-5 sm:py-3">
         {/* Main toolbar: grid on sm+ keeps title, stage controls, and actions on one axis */}
