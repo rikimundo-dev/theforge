@@ -21,12 +21,27 @@ export function stripChatLabel(text: string): string {
 export function cleanDocumentContent(text: string): string {
   if (!text) return "";
   let cleaned = text.trim();
-  cleaned = cleaned.replace(/^\s*```(?:markdown)?\s*/i, "");
-  const headerMatch = cleaned.match(/^\s*#+|(?<=\n)\s*#+/);
-  if (headerMatch && headerMatch.index !== undefined) {
-    cleaned = cleaned.slice(headerMatch.index).trim();
+  cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
+  // Saltar bloque YAML (---\\n...\\n---) — el frontmatter es contenido válido,
+  // no un preámbulo que deba cortarse. Buscar # heading solo después del YAML.
+  const yamlMatch = cleaned.match(/^---[\s\S]*?\n---\s*\n?/);
+  const searchStart = yamlMatch ? yamlMatch[0].length : 0;
+  if (searchStart > 0) {
+    // Tiene YAML frontmatter — buscar # heading solo en el cuerpo después del YAML
+    const body = cleaned.slice(searchStart);
+    const bodyHeader = body.match(/^#+|(?<=\n)\s*#+/);
+    if (bodyHeader && bodyHeader.index !== undefined && bodyHeader.index > 0) {
+      // Hay texto antes del primer heading en el body — cortar ese preámbulo
+      cleaned = cleaned.slice(0, searchStart) + body.slice(bodyHeader.index).trimStart();
+    }
+  } else {
+    // Sin YAML — comportamiento original: buscar # en todo el contenido
+    const headerMatch = cleaned.match(/^#+|(?<=\n)\s*#+/);
+    if (headerMatch && headerMatch.index !== undefined) {
+      cleaned = cleaned.slice(headerMatch.index).trim();
+    }
   }
-  cleaned = cleaned.replace(/^\s*```(?:markdown)?\s*/i, "");
+  cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
   cleaned = cleaned.replace(/\s*```\s*$/i, "");
   return repairMarkdownFences(cleaned.trim());
 }

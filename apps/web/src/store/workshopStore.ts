@@ -25,17 +25,16 @@ const cleanDoc = (text: string | null) => {
   if (!c) return null;
 
   // Encontrar el primer # para quitar preámbulos, sin regex lookbehind
-  const firstHashIndex = c.indexOf("#");
+  // IMPORTANTE: Si hay bloque YAML (---\\n...\\n---), buscar # solo después de ese bloque
+  // para no cortar el frontmatter
+  const yamlBlockEnd = c.startsWith("---") ? c.indexOf("\\n---", 3) : -1;
+  const searchStart = yamlBlockEnd !== -1 ? yamlBlockEnd + 5 : 0; // +5 = \\n + --- + \\n
+  const firstHashIndex = c.indexOf("#", searchStart);
   if (firstHashIndex !== -1) {
-    // Verificar si es comienzo de línea o comienzo de string
-    // Un indexOf simple no basta para saber si es inicio de línea, pero
-    // para robustez, si el hash está muy adelante, podemos simplemente cortar.
-    // La lógica original buscaba /^#|(?<=\n)#/
-    // Simplificamos: Si empieza con #, bien. Si no, buscamos \n#
-    if (c.startsWith("#")) {
-      // ok, empieza ahí
+    if (c.startsWith("#", searchStart)) {
+      // ok, empieza ahí (o después del YAML)
     } else {
-      const newlineHashIndex = c.indexOf("\n#");
+      const newlineHashIndex = c.indexOf("\\n#", searchStart);
       if (newlineHashIndex !== -1) {
         c = c.slice(newlineHashIndex + 1).trim();
       }
