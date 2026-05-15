@@ -615,7 +615,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateBenchmark(projectId: string, userIdea: string, urls?: string[]) {
-    const project = await this.assertProjectAccess(projectId);
+    await this.assertProjectAccess(projectId);
     const resolvedUrls = resolveUrls(urls, userIdea);
     let scrapedContext: string | undefined;
     if (resolvedUrls.length > 0) {
