@@ -264,20 +264,46 @@ export class SessionsService {
     else if (hasUseCases) rawChat = useCasesSplit!.chatPart;
     else if (hasStories) rawChat = storiesSplit!.chatPart;
 
-    // Fallback: tab ux-ui-guide sin delimitador ---FIN_UX_UI--- pero respuesta con "# Guía UX/UI" → documento + opcional separador (---) + texto para chat
+    // Fallback: tab ux-ui-guide sin delimitador ---FIN_UX_UI---
     const isUxTab = (options?.activeTab ?? "mdd").trim() === "ux-ui-guide";
     const looksLikeUxGuide =
       safeResponse.length > 200 &&
-      (/#\s*Guía\s*UX\/UI/i.test(safeResponse) || /^#?\s*Guía\s*UX\/UI/im.test(safeResponse));
+      (/#\s*Guía\s*UX\/UI/i.test(safeResponse) ||
+       /^#?\s*Guía\s*UX\/UI/im.test(safeResponse) ||
+       // YAML frontmatter (---\nname: ... o name: ...)
+       /^---\s*\n/i.test(safeResponse.trim()) ||
+       /^name:\s*["']?[A-Z]/i.test(safeResponse.trim()) ||
+       // Design token patterns
+       /colors:\s*\n/i.test(safeResponse) ||
+       /typography:\s*\n/i.test(safeResponse) ||
+       /components:\s*\n/i.test(safeResponse));
     if (isUxTab && !hasUx && looksLikeUxGuide) {
       hasUx = true;
       const trimmed = safeResponse.trim();
       const docStartMatch = trimmed.match(/#\s*Guía\s*UX\/UI/i);
+      const yamlStartMatch = trimmed.match(/^---\s*\n/);
+      const yamlInlineStart =
+        !docStartMatch &&
+        !yamlStartMatch &&
+        /^name:\s*["']?[A-Z]/i.test(trimmed);
       const docStartIdx = docStartMatch?.index ?? 0;
       const hasIntro = docStartIdx > 0 && trimmed.slice(0, docStartIdx).trim().length > 0;
-      let docSection = docStartIdx > 0 ? trimmed.slice(docStartIdx) : trimmed;
-      const chatParts: string[] = [];
-      if (hasIntro) chatParts.push(trimmed.slice(0, docStartIdx).trim());
+      let docSection: string;
+      let chatParts: string[] = [];
+
+      if (docStartMatch) {
+        docSection = docStartIdx > 0 ? trimmed.slice(docStartIdx) : trimmed;
+        if (hasIntro) chatParts.push(trimmed.slice(0, docStartIdx).trim());
+      } else if (yamlStartMatch) {
+        // YAML frontmatter: doc starts at ---
+        docSection = trimmed;
+      } else if (yamlInlineStart) {
+        // YAML sin --- al inicio: probablemente todo el response es el documento
+        docSection = trimmed;
+      } else {
+        docSection = trimmed;
+      }
+
       const hrMatch = docSection.match(/\n\s*[-*_]{3,}\s*\n/);
       if (hrMatch && hrMatch.index != null) {
         uxDocPart = docSection.slice(0, hrMatch.index).trim();
@@ -287,7 +313,7 @@ export class SessionsService {
         uxDocPart = docSection.trim();
       }
       rawChat = chatParts.length > 0 ? chatParts.join("\n\n") : "Guía UX/UI generada. Revisa el panel del documento.";
-      console.log("[Chat] fallback: uxUiGuideContent length:", uxDocPart?.length ?? 0, "chat length:", rawChat.length);
+      console.log("[Chat] fallback (mejorado): uxUiGuideContent length:", uxDocPart?.length ?? 0, "chat length:", rawChat.length, "match type:", docStartMatch ? "h1" : yamlStartMatch ? "yaml" : yamlInlineStart ? "yaml-inline" : "other");
     }
 
     const assistantContent = this.parser.stripChatLabel(rawChat);
