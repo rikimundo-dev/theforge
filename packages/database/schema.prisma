@@ -29,6 +29,7 @@ model User {
   ariadneMcpToken String?
   projects  Project[]
   sessions  Session[]
+  changeLogs ChangeLog[]
 }
 
 enum ProjectType {
@@ -149,6 +150,7 @@ model Project {
   /// Estado del flujo legacy: { description?, filesToModify?, questions?, answers? }
   legacyFlowState      Json?
   agentCheckpoints     AgentStateCheckpoint[]
+  changeLogs           ChangeLog[]
   createdAt            DateTime  @default(now())
 
   @@index([userId])
@@ -210,6 +212,24 @@ enum Status {
 /// Configuración global de la aplicación (clave-valor).
 /// Usada para almacenar ajustes de integración externa,
 /// ej. `ariadne_mcp_url` y `ariadne_mcp_token`.
+/// Bitácora de cambios en documentos del proyecto (SHARED multi-usuario).
+/// Cada entrada registra qué campo se modificó, quién lo hizo, y un resumen del cambio.
+/// Las entradas se insertan al persistir contenido de documentos (no settings).
+model ChangeLog {
+  id        String   @id @default(uuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Campo del proyecto o stage modificado: "mddContent" | "uxUiGuideContent" | "specContent" | "blueprintContent" | etc.
+  field     String
+  /// Resumen del cambio generado automáticamente (primeros caracteres del contenido o descripción).
+  summary   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt(sort: Desc)])
+}
+
 model AppConfig {
   key   String @id
   value String

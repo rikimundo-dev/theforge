@@ -798,6 +798,18 @@ const TOOLS: Tool[] = [
     },
   },
   {
+    name: "get_change_log",
+    description: "Obtiene la bitácora de cambios de un proyecto (quién modificó qué y cuándo).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        projectId: { type: "string", description: "ID del proyecto" },
+        limit: { type: "number", description: "Máximo de entradas (default 50)" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
     name: "list_theforge_projects",
     description: "Lista proyectos indexados en TheForge/Ariadne (multi-root)",
     inputSchema: { type: "object", properties: {}, required: [] },
@@ -1225,6 +1237,14 @@ const handlers: Record<string, Handler> = {
     const { projectId, content } = args as { projectId: string; content: string };
     return JSON.stringify(await apiPatch(`/projects/${projectId}`, { aemContent: content }));
   },
+  // ChangeLog
+  async get_change_log(args) {
+    const { projectId, limit } = args as { projectId: string; limit?: number };
+    let path = `/projects/${projectId}/change-log`;
+    if (limit != null) path += `?limit=${limit}`;
+    return JSON.stringify(await apiGet(path));
+  },
+  // TheForge
   async list_theforge_projects() {
     return JSON.stringify(await apiGet("/theforge/projects"));
   },
