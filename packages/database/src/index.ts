@@ -12,6 +12,7 @@ export {
   Prisma,
   type Project,
   type Session,
+  type ChangeLog,
   type Estimation,
   type Stage,
   type EpisodicMemory,

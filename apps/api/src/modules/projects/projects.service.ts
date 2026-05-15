@@ -15,6 +15,7 @@ import { DiscoveryService } from "../ai/discovery.service.js";
 import { ScraperService } from "../scraper/scraper.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
+import { ChangeLogService } from "../change-log/change-log.service.js";
 import type { IOrchestratorProjectsPort } from "./projects-service.port.js";
 import { resolveUrls } from "../scraper/url-utils.js";
 import {
@@ -82,6 +83,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     private readonly semaphore: SemaphoreService,
     private readonly theforge: TheForgeService,
     private readonly graphMemory: GraphMemoryService,
+    private readonly changeLog: ChangeLogService,
   ) {}
 
   private buildSemaphoreBase(
@@ -158,7 +160,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   /** Recalcula semáforo de la etapa principal cuando cambian entregables/complejidad sin tocar el MDD. */
   private async refreshStageSemaphoreFromProject(projectId: string): Promise<void> {
     const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
+      where: { id: projectId },
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
     if (!project) return;
@@ -342,6 +344,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
           precisionScore: result.precisionScore,
         },
       });
+      await this.changeLog.log(id, "mddContent", result.sanitizedMdd);
     }
 
     const mddForRecalc =
@@ -362,9 +365,21 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       cpInput !== undefined;
     if (hasProjectFieldUpdates) {
       await this.prisma.project.update({
-        where: this.projectWhereForUser(id),
+        where: { id },
         data: updatePayload,
       });
+      // Bitácora de cambios para campos de contenido documental
+      const documentFields = [
+        "dbgaContent", "specContent", "architectureContent", "useCasesContent",
+        "userStoriesContent", "blueprintContent", "tasksContent",
+        "apiContractsContent", "logicFlowsContent", "infraContent",
+        "uxUiGuideContent", "phase0SummaryContent", "aemContent",
+      ] as const;
+      for (const field of documentFields) {
+        if ((rest as Record<string, unknown>)[field] !== undefined) {
+          await this.changeLog.log(id, field, (rest as Record<string, string | null | undefined>)[field]);
+        }
+      }
     }
 
     const shouldRefreshSemaphoreWithoutMdd =
@@ -523,11 +538,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async listStages(projectId: string) {
-    const p = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      select: { id: true },
-    });
-    if (!p) throw new NotFoundException("Project not found");
+    await this.assertProjectAccess(projectId);
     const stages = await this.prisma.stage.findMany({
       where: { projectId },
       orderBy: { ordinal: "asc" },
@@ -552,12 +563,20 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   async patchStage(projectId: string, stageId: string, body: unknown) {
     const dto = patchStageBodySchema.parse(body);
     const uid = getRequestUserId();
+    // Verificar acceso SHARED/PRIVATE
+    await this.assertProjectAccess(projectId);
     const stage = await this.prisma.stage.findFirst({
-      where: { id: stageId, project: { id: projectId, userId: uid } },
+      where: { id: stageId, projectId },
       include: { estimation: true },
     });
     if (!stage) throw new NotFoundException("Etapa no encontrada");
 
+    // Solo el owner puede activar etapas o cambiar ordinal (cambios estructurales)
+    const ownerId = (await this.prisma.project.findUnique({ where: { id: projectId }, select: { userId: true } }))?.userId;
+    const isOwner = ownerId === uid;
+    if ((dto.activate === true || dto.ordinal !== undefined) && !isOwner) {
+      throw new BadRequestException("Only the project owner can restructure stages");
+    }
     if (dto.activate === true) {
       await this.activateStageExclusive(projectId, stageId);
     }
@@ -572,7 +591,6 @@ export class ProjectsService implements IOrchestratorProjectsPort {
           projectId,
           ordinal: dto.ordinal,
           NOT: { id: stageId },
-          project: { userId: uid },
         },
       });
       if (clash) throw new BadRequestException(`Ordinal ${dto.ordinal} ya está en uso`);
@@ -583,8 +601,13 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       await this.prisma.stage.update({ where: { id: stageId }, data });
     }
 
+    // Bitácora para brdContent
+    if (dto.brdContent !== undefined) {
+      await this.changeLog.log(projectId, "brdContent", dto.brdContent);
+    }
+
     const out = await this.prisma.stage.findFirst({
-      where: { id: stageId, project: { id: projectId, userId: uid } },
+      where: { id: stageId, projectId },
       include: { estimation: true },
     });
     if (!out) throw new NotFoundException("Etapa no encontrada");
@@ -592,11 +615,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateBenchmark(projectId: string, userIdea: string, urls?: string[]) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const resolvedUrls = resolveUrls(urls, userIdea);
     let scrapedContext: string | undefined;
     if (resolvedUrls.length > 0) {
@@ -635,11 +654,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
    * Útil para proyectos existentes que quieren re-valorar el nivel según el alcance documentado.
    */
   async reassessComplexity(projectId: string, options?: { note?: string }) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
 
     const dbga = (project.dbgaContent ?? "").trim();
     const mdd = this.mddFromStages(project.stages).trim();
@@ -731,11 +746,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
    * Guía UX/UI generada por LLM (mismo criterio que legacy, sin Relic).
    */
   async generateUxUiGuide(projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const mdd = this.constitutionMarkdown(project);
     const bp = (project.blueprintContent ?? "").trim();
     const uxPrompt =
@@ -752,7 +763,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   private async ensureBlueprintForApi(projectId: string): Promise<void> {
-    const project = await this.prisma.project.findFirst({ where: this.projectWhereForUser(projectId) });
+    const project = await this.assertProjectAccess(projectId).catch(() => null);
     if (!project) return;
     if ((project.blueprintContent ?? "").trim().length > 48) return;
     await this.generateBlueprint(projectId);
@@ -808,11 +819,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     projectId: string,
     onProgress?: (p: { step: DeliverableKind; index: number; total: number }) => void,
   ) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     if (project.projectType === "LEGACY") {
       throw new BadRequestException("Usa el flujo de entregables legacy del proyecto.");
     }
@@ -837,11 +844,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     projectId: string,
     options: { userIdea?: string; urls?: string[]; includeBenchmark?: boolean },
   ) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     if ((project as { projectType?: string }).projectType === "LEGACY") {
       throw new BadRequestException(
         "Paso 0 (Deep Research) no aplica a proyectos legacy. Usa el flujo de modificaciones en el chat.",
@@ -879,11 +882,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateSpec(projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     if ((project as { projectType?: string }).projectType === "LEGACY") {
       throw new BadRequestException(
         "Generar Spec con este flujo es solo para proyectos nuevos. En legacy usa el flujo de entregables legacy.",
@@ -901,11 +900,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateTasks(projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
 
     // Fetch navigation map from Ariadne MCP for legacy projects
     let navigationMap: string | undefined;
@@ -936,11 +931,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateArchitecturePreview(projectId: string): Promise<{ content: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateArchitecture(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -949,11 +940,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateArchitecture(projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateArchitecture(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -962,31 +949,19 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateUseCasesPreview(projectId: string): Promise<{ content: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateUseCases(this.constitutionMarkdown(project), project.specContent);
     return { content: cleanDocumentContent(content) };
   }
 
   async generateUseCases(projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateUseCases(this.constitutionMarkdown(project), project.specContent);
     return this.update(projectId, { useCasesContent: cleanDocumentContent(content) });
   }
 
   async generateUserStoriesPreview(projectId: string): Promise<{ content: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateUserStories(
       this.constitutionMarkdown(project),
       project.specContent,
@@ -996,11 +971,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateUserStories(projectId: string) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateUserStories(
       this.constitutionMarkdown(project),
       project.specContent,
@@ -1010,11 +981,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateBlueprintPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const mddContent = this.constitutionMarkdown(project);
     const p = project as { projectType?: string; theforgeProjectId?: string | null };
     let legacyOpts: { theforgeContext: string } | undefined;
@@ -1027,11 +994,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateBlueprint(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const mddContent = this.constitutionMarkdown(project);
     const p = project as { projectType?: string; theforgeProjectId?: string | null };
     let legacyOpts: { theforgeContext: string } | undefined;
@@ -1044,11 +1007,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateApiContractsPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     this.assertBlueprintCoversMddDataModel(project);
 
     // Obtener BRD de la primera etapa (si existe)
@@ -1081,11 +1040,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateInfraPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateInfra(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -1095,11 +1050,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateApiContracts(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     this.assertBlueprintCoversMddDataModel(project);
 
     // Obtener BRD de la primera etapa (si existe)
@@ -1132,21 +1083,13 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async generateLogicFlows(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateLogicFlows(this.constitutionMarkdown(project), gapsFeedback);
     return this.update(projectId, { logicFlowsContent: cleanDocumentContent(content) });
   }
 
   async generateInfra(projectId: string, gapsFeedback?: string | null) {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     const content = await this.ai.generateInfra(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -1165,11 +1108,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
   }> {
-    const p = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!p) throw new NotFoundException("Project not found");
+    const p = await this.assertProjectAccess(projectId);
     const mdd = this.constitutionMarkdown(p);
 
     const blueprintDataModel = this.conformance.checkBlueprintDataModel(mdd, p.blueprintContent);
@@ -1208,11 +1147,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     projectId: string,
     deliverable: "blueprint" | "api" | "infra",
   ): Promise<string> {
-    const p = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!p) throw new NotFoundException("Project not found");
+    const p = await this.assertProjectAccess(projectId);
     const doc =
       deliverable === "blueprint"
         ? p.blueprintContent
@@ -1230,11 +1165,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     projectId: string,
     opts?: { stageId?: string | null },
   ): Promise<{ brdContent: string; stageId: string }> {
-    const project = await this.prisma.project.findFirst({
-      where: this.projectWhereForUser(projectId),
-      include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    const project = await this.assertProjectAccess(projectId);
     if (project.projectType === "LEGACY") {
       throw new BadRequestException(
         "En proyectos legacy usa POST …/legacy/suggest-brd-from-codebase-doc (documentación Ariadne).",

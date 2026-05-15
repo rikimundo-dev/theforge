@@ -24,6 +24,7 @@ import { TheForgeModule } from "./modules/theforge/theforge.module.js";
 import { LegacyFlowModule } from "./modules/legacy-flow/legacy-flow.module.js";
 import { AudioModule } from "./modules/audio/audio.module.js";
 import { AdminModule } from "./modules/admin/admin.module.js";
+import { ChangeLogModule } from "./modules/change-log/change-log.module.js";
 
 @Module({
   controllers: [HealthController],
@@ -41,6 +42,7 @@ import { AdminModule } from "./modules/admin/admin.module.js";
     LegacyFlowModule,
     AudioModule,
     AdminModule,
+    ChangeLogModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
