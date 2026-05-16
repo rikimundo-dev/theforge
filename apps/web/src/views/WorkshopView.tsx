@@ -37,6 +37,7 @@ import {
   Lock,
   Pencil,
   Sparkles,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CodebaseDocResponseMode } from "@theforge/shared-types";
@@ -703,6 +704,19 @@ export default function WorkshopView({
       console.error("Error generating UX guide:", e);
     }
   }, [projectId, project, effectiveMddTrimmed, blueprintContent, specContent, setUxUiGuideContent, persistUxUiGuideContent, setError]);
+
+  /** Repara el YAML frontmatter de la guía UX/UI desde el markdown existente.
+   * Útil cuando el contenido fue generado por una IA externa o copiado manualmente
+   * y no tiene el YAML frontmatter que DesignMdPreview necesita para el preview visual. */
+  const repairUxGuide = useCallback(() => {
+    const current = uxUiGuideContent ?? "";
+    if (!current.trim()) return;
+    const repaired = replaceYamlFrontMatter(current, projectName);
+    if (repaired !== current) {
+      setUxUiGuideContent(repaired);
+      persistUxUiGuideContent(repaired);
+    }
+  }, [uxUiGuideContent, projectName, setUxUiGuideContent, persistUxUiGuideContent]);
 
   const persistArchitectureContent = useWorkshopStore((s) => s.persistArchitectureContent);
   const persistUseCasesContent = useWorkshopStore((s) => s.persistUseCasesContent);
@@ -2568,6 +2582,24 @@ export default function WorkshopView({
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
                       Regenerar Tasks desde MDD y Blueprint
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {centralPanel === "ux-ui-guide" && !!uxUiGuideContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={repairUxGuide}
+                        disabled={uxGenerating || loading}
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
+                        aria-label="Reparar YAML frontmatter de la guía UX/UI desde el contenido existente"
+                      >
+                        <Wrench className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Reparar YAML frontmatter — genera el YAML estructurado desde el markdown existente
                     </TooltipContent>
                   </Tooltip>
                 )}
