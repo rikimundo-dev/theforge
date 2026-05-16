@@ -104,10 +104,10 @@ function parseDesignMdContent(content: string): DesignTokens | null {
       }
     }
     // Markdown table pattern: | Rol | ... | #HEX | ... |
-    const tableRowRe = /\|\s*(\w[\w\s]*?)\s*\|[^|]*\|\s*#([A-Fa-f0-9]{6})\s*\|/gm;
+    const tableRowRe = /\|\s*\*{0,2}([\w\s\-áéíóúñÑ/]+?)\*{0,2}\s*\|[^|]*\|\s*`?(?:#([A-Fa-f0-9]{6}))`?\s*\|/gm;
     let trm: RegExpExecArray | null;
     while ((trm = tableRowRe.exec(colorsSection)) !== null) {
-      const name = trm[1]!.toLowerCase().trim().replace(/\s+/g, '-');
+      const name = trm[1]!.replace(/\*\*/g, '').toLowerCase().trim().replace(/\s+/g, '-');
       const hex = `#${trm[2]!.toUpperCase()}`;
       if (name && !Object.values(colors).includes(hex)) {
         colors[name] = hex;
