@@ -2055,7 +2055,8 @@ export default function WorkshopView({
         >
           <div
             className={cn(
-              "relative min-h-0 h-full min-w-0 overflow-hidden border-r border-[var(--border)] lg:shrink-0",
+              "relative min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] flex flex-col lg:shrink-0",
+              mobileWorkshopColumn === "chat" ? "flex-1" : "lg:h-full lg:min-h-0",
               !lgChatPanelResizing &&
                 "lg:transition-[width] lg:duration-300 lg:ease-out motion-reduce:lg:transition-none",
               isLgLayout && lgWorkshopChatCollapsed
