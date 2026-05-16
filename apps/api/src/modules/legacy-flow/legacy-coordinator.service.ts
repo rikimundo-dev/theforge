@@ -673,7 +673,8 @@ export class LegacyCoordinatorService {
       ? "Eres analista de negocio. A partir del **MDD inicial** (documentación del codebase existente a continuación), " +
         "deriva un borrador en español, en markdown, que refleje fielmente el sistema documentado.\n\n" +
         "IMPORTANTE: Este NO es un documento de cambio. Debes **reflejar el sistema existente** descrito en el MDD inicial.\n\n"
-      : "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), redacta un borrador en español, en markdown, como documento de cambio.\n\n" +
+      : "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), " +
+        "redacta un borrador en español, en markdown, como documento de cambio.\n\n" +
         "IMPORTANTE: Este es un **documento de cambio**, no una descripción del sistema completo. Céntrate en qué cambia, qué se agrega y qué se modifica.\n\n";
 
     const codebaseChunk = codebaseDoc.slice(0, 120_000);
@@ -681,8 +682,18 @@ export class LegacyCoordinatorService {
     const brdPrompt =
       basePrompt +
       (isInitialLegacyStage
-        ? "Genera el **BRD (sistema actual):** problema de negocio que resuelve el sistema existente, alcance actual, usuarios, supuestos y riesgos identificados. Cita módulos o rutas del MDD inicial.\n\n"
-        : "Genera el **BRD de cambio:** problema que resuelve este cambio, alcance del cambio, supuestos, riesgos; cita rutas o módulos del documento fuente que este cambio toca.\n\n") +
+        ? "Genera el **BRD (sistema actual):** El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»**:\n" +
+          "1. **Mapa de dolores** — tabla con: dolor que resuelve el sistema, quién lo siente, qué usaban antes (workaround), gap.\n" +
+          "2. **Validación de demanda** — señales de mercado del dominio del sistema.\n" +
+          "3. **Perfil del cliente objetivo** — tipo de usuario/empresa que usa el sistema.\n" +
+          "4. **Consecuencias de no actuar** — qué pasaba antes del sistema.\n\n" +
+          "Luego continúa con: problema de negocio que resuelve el sistema existente, alcance actual, usuarios, supuestos y riesgos identificados. Cita módulos o rutas del MDD inicial.\n\n"
+        : "Genera el **BRD de cambio:** El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»**:\n" +
+          "1. **Mapa de dolores** — tabla con: dolor que resuelve este cambio, quién lo siente, qué usan hoy (workaround), gap.\n" +
+          "2. **Validación de demanda** — por qué este cambio es necesario.\n" +
+          "3. **Perfil del cliente/usuario impactado** — quién se beneficia del cambio.\n" +
+          "4. **Consecuencias de no implementar** — qué sigue doliendo sin este cambio.\n\n" +
+          "Luego continúa con: problema que resuelve este cambio, alcance del cambio, supuestos, riesgos; cita rutas o módulos del documento fuente que este cambio toca.\n\n") +
       baselineBrdBlock +
       "Responde **solo** con este formato exacto (delimitadores literales):\n" +
       "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n\n" +
