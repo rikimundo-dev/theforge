@@ -36,7 +36,7 @@ import { flattenStageDeliverables, pickPrimaryStage } from "./stage-helpers.js";
 
 /** System prompt para sintetizar BRD/To-Be desde DBGA (greenfield); más ligero que el coordinador legacy + KNOWLEDGE. */
 const DBGA_BRD_TOBE_SUGGEST_SYSTEM =
-  "Eres analista de producto y arquitecto de soluciones en español. Produces BRD y manuales To-Be en markdown coherentes con el benchmark de dominio (DBGA); no inventes requisitos que contradigan el texto; usa «no consta» cuando falte evidencia.";
+  "Eres analista de producto y arquitecto de soluciones en español. Produces BRD en markdown coherentes con el benchmark de dominio (DBGA). El BRD DEBE incluir la sección «Pain Points & Problem Statement» al inicio, detallando dolores del cliente, soluciones actuales y validación de demanda. No inventes requisitos que contradigan el texto; usa «no consta» cuando falte evidencia.";
 
 type StageWithEst = Stage & { estimation: Estimation | null };
 
@@ -1191,8 +1191,14 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     // Generar BRD
     const brdPrompt =
       "Eres analista de negocio. A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente, " +
-      "genera **solo el BRD** en español, en markdown:\n" +
-      "**BRD:** problema, alcance de producto, supuestos, riesgos y métricas de éxito alineadas con el DBGA.\n\n" +
+      "genera **solo el BRD** en español, en markdown.\n\n" +
+      "El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»** que incluya:\n" +
+      "1. **Mapa de dolores** — tabla con: dolor, quién lo siente, frecuencia/impacto, solución actual (workaround), gap/precio.\n" +
+      "2. **Validación de demanda** — señales de mercado, menciones en comunidades, competidores directos.\n" +
+      "3. **Perfil del cliente objetivo** — tamaño de empresa, stack, presupuesto mensual estimado.\n" +
+      "4. **Consecuencias de no actuar** — qué pierde el cliente si no existe esta solución, cuánto gasta hoy en workarounds.\n\n" +
+      "Luego continúa con: problema, alcance de producto, supuestos, riesgos y métricas de éxito alineadas con el DBGA.\n" +
+      "Extrae la información de Pain Points del DBGA; si algún dato no está disponible, indícalo como «Por validar».\n\n" +
       "Responde **solo** con este formato exacto (delimitadores literales):\n" +
       "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n\n" +
       "--- DBGA ---\n\n" +
