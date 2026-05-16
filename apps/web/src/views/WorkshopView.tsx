@@ -3359,38 +3359,24 @@ export default function WorkshopView({
               </>
             )}
             {centralPanel === "spec" && (
-              specContent || specViewMode === "source" ? (
-                specViewMode === "preview" ? (
-                  <MddViewer content={specContent || ""} />
-                ) : (
-                  <div className="flex min-h-0 flex-1 flex-col gap-2">
-                    <WorkshopDocSourceSaveBar
-                      onSave={() => void persistSpecContent(specContent ?? "")}
-                      disabled={!specDirty}
-                    />
-                    <textarea
-                      value={specContent || ""}
-                      onChange={(e) => setSpecContent(e.target.value)}
-                      onBlur={handleSpecBlur}
-                      placeholder="# Spec\n\nEl contenido del Spec se genera aquí o puedes escribirlo manualmente..."
-                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                      spellCheck={false}
-                    />
-                  </div>
-                )
-              ) : (
-                <DocEmptyState
-                  icon={ListOrdered}
-                  title="Spec"
-                  description="Spec = Benchmark + alcance. Alimenta el MDD; revísalo antes de dar por cerrado el MDD."
-                  onGenerate={() => generateSpec(projectId)}
-                  loading={loading}
-                  hasMdd={!!(dbgaContent?.trim() || effectiveMddTrimmed)}
-                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Spec desde MDD Inicial" : undefined}
-                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "spec", activeStageId ?? undefined) : undefined}
-                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
-                />
-              )
+              <StandardDocPanel
+                icon={ListOrdered}
+                title="Spec"
+                description="Spec = Benchmark + alcance. Alimenta el MDD; revísalo antes de dar por cerrado el MDD."
+                content={specContent}
+                onContentChange={(v) => setSpecContent(v)}
+                onSave={() => void persistSpecContent(specContent ?? "")}
+                isDirty={specDirty}
+                viewMode={specViewMode}
+                onGenerate={() => generateSpec(projectId)}
+                canGenerate={!!(dbgaContent?.trim() || effectiveMddTrimmed)}
+                isLoading={loading}
+                placeholder="# Spec\n\nEl contenido del Spec se genera aquí o puedes escribirlo manualmente..."
+                onBlur={handleSpecBlur}
+                legacyGenerateLabel={canGenerateFromCodebase ? "Generar Spec desde MDD Inicial" : undefined}
+                onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "spec", activeStageId ?? undefined) : undefined}
+                legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+              />
             )}
             {centralPanel === "aem" && (
               <StandardDocPanel
@@ -3472,38 +3458,24 @@ export default function WorkshopView({
             )}
             {/* to-be tab removed — secciones To-Be y As-Is eliminadas del sistema */}
             {centralPanel === "blueprint" && (
-              blueprintContent ? (
-                blueprintViewMode === "preview" ? (
-                  <MddViewer content={blueprintContent} />
-                ) : (
-                  <div className="flex min-h-0 flex-1 flex-col gap-2">
-                    <WorkshopDocSourceSaveBar
-                      onSave={() => void persistBlueprintContent(blueprintContent)}
-                      disabled={!blueprintDirty}
-                    />
-                    <textarea
-                      value={blueprintContent}
-                      onChange={(e) => setBlueprintContent(e.target.value)}
-                      onBlur={handleBlueprintBlur}
-                      placeholder="# Blueprint\n\nEl contenido del blueprint se genera desde el MDD..."
-                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                      spellCheck={false}
-                    />
-                  </div>
-                )
-              ) : (
-                <DocEmptyState
-                  icon={LayoutTemplate}
-                  title="Blueprint"
-                  description="El blueprint se genera a partir del MDD guardado (vista previa antes de guardar)."
-                  onGenerate={() => generateBlueprint(projectId, { preview: true })}
-                  loading={loading || mddReviewing}
-                  hasMdd={!!effectiveMddTrimmed}
-                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar Blueprint desde MDD Inicial" : undefined}
-                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "blueprint", activeStageId ?? undefined) : undefined}
-                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
-                />
-              )
+              <StandardDocPanel
+                icon={LayoutTemplate}
+                title="Blueprint"
+                description="El blueprint se genera a partir del MDD guardado (vista previa antes de guardar)."
+                content={blueprintContent}
+                onContentChange={(v) => setBlueprintContent(v)}
+                onSave={() => void persistBlueprintContent(blueprintContent ?? "")}
+                isDirty={blueprintDirty}
+                viewMode={blueprintViewMode}
+                onGenerate={() => generateBlueprint(projectId, { preview: true })}
+                canGenerate={!!effectiveMddTrimmed}
+                isLoading={loading || mddReviewing}
+                placeholder="# Blueprint\n\nEl contenido del blueprint se genera desde el MDD..."
+                onBlur={handleBlueprintBlur}
+                legacyGenerateLabel={canGenerateFromCodebase ? "Generar Blueprint desde MDD Inicial" : undefined}
+                onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "blueprint", activeStageId ?? undefined) : undefined}
+                legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+              />
             )}
             {centralPanel === "tasks" && (
               tasksContent ? (
@@ -3523,40 +3495,26 @@ export default function WorkshopView({
               )
             )}
             {centralPanel === "api-contracts" && (
-              apiContractsContent ? (
-                apiContractsViewMode === "preview" ? (
-                  <MddViewer content={apiContractsContent} />
-                ) : (
-                  <div className="flex min-h-0 flex-1 flex-col gap-2">
-                    <WorkshopDocSourceSaveBar
-                      onSave={() => void persistApiContractsContent(apiContractsContent)}
-                      disabled={!apiContractsDirty}
-                    />
-                    <textarea
-                      value={apiContractsContent}
-                      onChange={(e) => setApiContractsContent(e.target.value)}
-                      onBlur={handleApiContractsBlur}
-                      placeholder="# Contratos de API (OpenAPI/Swagger)\n\n..."
-                      className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                      spellCheck={false}
-                    />
-                  </div>
-                )
-              ) : (
-                <DocEmptyState
-                  icon={FileCode}
-                  title="Contratos de API"
-                  description="OpenAPI/Swagger desde el MDD (vista previa antes de guardar)."
-                  onGenerate={() => generateApiContracts(projectId, { preview: true })}
-                  loading={loading || mddReviewing}
-                  hasMdd={!!effectiveMddTrimmed}
-                  generateBlocked={apiBlueprintDmBlocked}
-                  generateBlockedReason={apiBlueprintBlockedHint}
-                  legacyGenerateLabel={canGenerateFromCodebase ? "Generar API Contracts desde MDD Inicial" : undefined}
-                  onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "api-contracts", activeStageId ?? undefined) : undefined}
-                  legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
-                />
-              )
+              <StandardDocPanel
+                icon={FileCode}
+                title="Contratos de API"
+                description="OpenAPI/Swagger desde el MDD (vista previa antes de guardar)."
+                content={apiContractsContent}
+                onContentChange={(v) => setApiContractsContent(v)}
+                onSave={() => void persistApiContractsContent(apiContractsContent ?? "")}
+                isDirty={apiContractsDirty}
+                viewMode={apiContractsViewMode}
+                onGenerate={() => generateApiContracts(projectId, { preview: true })}
+                canGenerate={!!effectiveMddTrimmed}
+                isLoading={loading || mddReviewing}
+                placeholder="# Contratos de API (OpenAPI/Swagger)\n\n..."
+                onBlur={handleApiContractsBlur}
+                generateBlocked={apiBlueprintDmBlocked}
+                generateBlockedReason={apiBlueprintBlockedHint}
+                legacyGenerateLabel={canGenerateFromCodebase ? "Generar API Contracts desde MDD Inicial" : undefined}
+                onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "api-contracts", activeStageId ?? undefined) : undefined}
+                legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+              />
             )}
             {centralPanel === "logic-flows" && (
               <StandardDocPanel
