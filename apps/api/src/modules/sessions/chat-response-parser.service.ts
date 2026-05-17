@@ -101,6 +101,7 @@ export class ChatResponseParserService {
       tasks: /^#\s*(?:Tareas|Tasks)\b/i,
       infra: /^#\s*(?:Infraestructura|Infrastructure|Infra(?![a-z]))(?:\s|$)/im,
       benchmark: /^#\s*(?:Benchmark|Domain Benchmark|Análisis)\b/im,
+      brd: /^#\s*(?:BRD|Business Requirements Document)\b/im,
     };
 
     const pattern = HEADING_PATTERNS[activeTab];
