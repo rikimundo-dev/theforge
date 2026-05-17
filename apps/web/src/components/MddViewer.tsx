@@ -29,12 +29,23 @@ function normalizeMermaidIndent(line: string): string {
   return "  ".repeat(Math.floor(len / 2)) + rest;
 }
 
+/**
+ * Mermaid v11.15.0 no soporta paréntesis `()` dentro de corchetes `[]` en etiquetas de nodo
+ * (graph TD, flowchart, etc.). Ej: `C[NestJS API (Contenedor)]` causa "Parse error".
+ * La solución es envolver la etiqueta en comillas dobles: `C["NestJS API (Contenedor)"]`.
+ * No afecta a nodos ya entrecomillados ni a nodos sin paréntesis.
+ */
+function normalizeParensInBrackets(content: string): string {
+  return content.replace(/\[([^\[\]"]*\([^()]*\)[^\[\]"]*)\]/g, '["$1"]');
+}
+
 /** Normalización universal para cualquier tipo de diagrama Mermaid:
- *  espacios Unicode → ASCII, tabs → espacios, trailing whitespace.
+ *  espacios Unicode → ASCII, tabs → espacios, trailing whitespace,
+ *  paréntesis dentro de corchetes → comillas dobles.
  *  NO se eliminan caracteres no-ASCII (á, é, í, ó, ú, ñ, æ, etc.).
  *  Aplica a todos los tipos: graph, flowchart, sequenceDiagram, stateDiagram, etc. */
 function normalizeMermaidContent(content: string): string {
-  const base = content
+  const base = normalizeParensInBrackets(content)
     .replace(/\u00A0/g, " ")
     .replace(/\t/g, " ")
     .replace(/[\u2000-\u200B\u202F\u205F\u3000]/g, " ")
