@@ -1,6 +1,6 @@
 **Constitución del proyecto:** El MDD que recibes es el documento de gobernanza (Constitution). Tu Blueprint debe **cumplirlo** en stack, arquitectura, contratos y seguridad. Al final incluye **Cumplimiento con el MDD** (2–4 ítems verificables).
 
-**Anti-redundancia con el MDD:** Si el MDD §3 ya documenta tablas, SQL y diagrama ER completos, **no reescribas** el modelo físico entero: incluye una subsección **Cobertura del modelo (MDD §3)** con la **lista nominal de tablas/nodos** y una frase de integridad; remite al MDD para columnas y tipos. El valor del Blueprint está en **plan de implementación, mapeo API→código, pipelines y componentes transversales**, no en duplicar el ER.
+**Anti-redundancia con el MDD:** Si el MDD §3 ya documenta tablas, SQL y diagrama ER completos, **no reescribas** el modelo físico entero. Sin embargo, incluye una subsección **Cobertura del modelo (MDD §3)** con la **lista nominal COMPLETA de tablas/nodos** (ESTO ES OBLIGATORIO — un verificador automático comprueba que cada entidad de §3 aparece por nombre en el Blueprint). Añade una frase de integridad y remite al MDD para columnas y tipos. El valor del Blueprint está en **plan de implementación, mapeo API→código, pipelines y componentes transversales**, no en duplicar el ER.
 
 **Proyectos existentes (contexto TheForge/MCP):** Si en el prompt se incluye un bloque "Contexto del codebase (TheForge)", el proyecto es **existente** y ese contexto describe la estructura y stack **reales** indexados. En ese caso el Blueprint DEBE describir únicamente esa realidad: repos y carpetas que existan, frameworks y runtime que el codebase use. No inventes Turborepo, Nx, NestJS, ni nuevos backends ni directorios; el sistema puede ser multi-repo — indica los repos y rutas reales. Solo añade o modifica lo que el MDD exija para el cambio.
 
@@ -21,7 +21,7 @@ El **MDD** del proyecto (secciones: Contexto, Arquitectura §2, Modelo §3, Cont
 **Razona:** dominio → stack §2 → contratos §4 → componentes de integración (IA, pipelines, grafo) → riesgos §5 → seguridad §6.
 
 1. **Stack (obligatorio):** Extrae del MDD §2 **todas** las tecnologías nombradas e inclúyelas **por nombre** en el Blueprint (PostgreSQL, PostGIS, FalkorDB, NestJS, Docker, etc.). Un verificador compara §2 vs Blueprint.
-2. **Modelo de datos:** Lista **todas** las tablas/entidades que §3 define (nombres exactos). Si §3 ya tiene SQL detallado, **no dupliques** columnas: checklist + remisión a §3. Si el MDD es escueto en §3, entonces sí amplía tipos físicos e índices en el Blueprint.
+2. **Modelo de datos:** Lista **TODAS** las tablas/entidades que §3 define (nombres exactos, OBLIGATORIO — el verificador automático revisa presencia por nombre). Si §3 ya tiene SQL detallado, **no dupliques** columnas: checklist + remisión a §3. Si el MDD es escueto en §3, entonces sí amplía tipos físicos e índices en el Blueprint.
 3. **Contratos API → implementación (obligatorio si §4 lista rutas):** Tabla o lista **ruta HTTP (prefijo + método)** → **módulo/capa de backend** (p. ej. `SitesModule`, `HealthModule`), **responsabilidad** en una línea. Cubre **todos** los endpoints de la tabla resumen de §4.A.
 4. **Componentes transversales del MDD:** Para cada capacidad descrita en §1/§2 (no genéricas): **puente NL→Cypher / IA**, **pipeline de ingesta** (p. ej. SHP, ogr2ogr, graph weaving si §1 lo describe), **sincronización almacenes** (p. ej. PostGIS ↔ Falkor si el MDD lo nombra), **consultas a terceros** (DENUE, INEGI, DatsWhy, etc. solo si §1 los nombra). Una subsección por bloque con: **entrada/salida**, **dependencias**, **fallos** que remiten a §5.
 5. **Alineación con §5 (Lógica y edge cases):** Subsección breve **Riesgos y mitigaciones (trazabilidad §5)**: para cada tema crítico del MDD §5 (p. ej. datos corruptos, ciclos en grafo, timeouts si §1 los plantea), **1–2 líneas** de mitigación en capa de código u operación; **no copies** §5 entero.
@@ -65,7 +65,7 @@ A continuación genera el contenido obligatorio del Blueprint:
 ### Reglas de oro
 
 - **Cobertura stack:** Cada tecnología del MDD §2 debe aparecer **por nombre** en el Blueprint.
-- **Cobertura entidades:** **Todas** las tablas/nodos del §3 deben nombrarse (checklist o descripción); cero omisiones silenciosas.
+- **Cobertura entidades:** **TODAS** las tablas/nodos del §3 deben nombrarse (obligatorio, verificado automáticamente); cero omisiones.
 - **Cobertura API:** Toda fila de la tabla de §4.A debe tener **fila** en el mapa §4→módulos.
 - No sobre-arquitecturar (colas, event buses) si el MDD no los exige.
 - Ambigüedad: si el MDD no detalla, aplica OWASP ASVS Nivel 3 y documenta. Prohibido `any`.
