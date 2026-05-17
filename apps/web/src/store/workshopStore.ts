@@ -32,6 +32,53 @@ function friendlyFetchError(e: unknown): string {
   return String(e);
 }
 
+/**
+ * POST a un generate-* endpoint con ?queue=true y hace polling al job hasta completar.
+ * Si el backend no tiene cola (respuesta síncrona directa), retorna el dato directamente.
+ */
+async function queueAndPoll<T>(
+  url: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  const r = await apiFetch(`${url}?queue=true`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error((err as { message?: string }).message ?? "Error");
+  }
+  const data = (await r.json()) as Record<string, unknown>;
+
+  // Si el backend respondió síncrono (sin cola), devolver el dato directamente
+  if (!data.queued) return data as unknown as T;
+
+  // Polling: GET /projects/jobs/:jobId cada 2s
+  const jobId = data.jobId as string;
+  const pollUrl = `${API_BASE}/projects/jobs/${jobId}`;
+  for (let attempt = 0; attempt < 150; attempt++) {
+    if (signal?.aborted) throw new Error("Cancelado por el usuario");
+    await new Promise((r) => setTimeout(r, 2_000));
+    const pr = await apiFetch(pollUrl);
+    if (!pr.ok) {
+      if (pr.status === 404) throw new Error("Job no encontrado");
+      continue;
+    }
+    const status = (await pr.json()) as {
+      status: string;
+      result?: unknown;
+      error?: string;
+      retrying_at?: string;
+    };
+    if (status.status === "completed") return status.result as T;
+    if (status.status === "failed") throw new Error(status.error ?? "Error en la generación");
+    // "queued", "active", "retrying" → seguir esperando
+  }
+  throw new Error("Tiempo de espera agotado (5 min)");
+}
+
 function pickEvaluatorCritique(data: Record<string, unknown>): string | null {
   const c = data.evaluatorCritique;
   return typeof c === "string" && c.trim().length > 0 ? c.trim() : null;
@@ -1787,35 +1834,42 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
   generateBlueprint: async (projectId, options) => {
     if (!projectId?.trim()) return null;
+    if (options?.preview) {
+      // Preview: síncrono, retorna contenido no el proyecto
+      set({ loading: true, error: null });
+      try {
+        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-blueprint`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ preview: true, ...(options?.gapsFeedback?.trim() ? { gapsFeedback: options.gapsFeedback.trim() } : {}) }),
+        });
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
+        const data = (await r.json()) as { content?: string };
+        if (data.content != null) {
+          set({ pendingDeliverablePreview: { kind: "blueprint", content: data.content }, error: null });
+        }
+        return null;
+      } catch (e) {
+        set({ error: friendlyFetchError(e) });
+        return null;
+      } finally {
+        set({ loading: false });
+      }
+    }
+    // Normal: encolar con queueAndPoll
     set({ loading: true, error: null });
     try {
-      const body: { preview?: boolean; gapsFeedback?: string } = {};
-      if (options?.preview) body.preview = true;
+      const body: Record<string, unknown> = {};
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-blueprint`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar blueprint");
-      }
-      const data = await r.json();
-      if (options?.preview && data.content != null) {
-        set({ pendingDeliverablePreview: { kind: "blueprint", content: data.content }, error: null });
-        return null;
-      }
-      const proj = data as Project;
-      const raw = proj.blueprintContent ?? "";
+      const data = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-blueprint`, body);
+      const raw = data.blueprintContent ?? "";
       const cleaned = raw.replace(/^\s*```(?:markdown)?\s*/i, "").replace(/^\s*```\s*/, "").replace(/\s*```\s*$/, "");
-      const newProj = { ...proj, blueprintContent: cleaned || null };
-
-      set({ project: newProj, blueprintContent: cleaned || null, error: null });
+      const proj = { ...data, blueprintContent: cleaned || null };
+      set({ project: proj, blueprintContent: cleaned || null, error: null });
       get().fetchConformance(projectId).catch(() => { });
-      return newProj;
+      return proj;
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar blueprint" });
+      set({ error: friendlyFetchError(e) });
       return null;
     } finally {
       set({ loading: false });
@@ -1828,54 +1882,52 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateApiContracts: async (projectId, options) => {
     if (!projectId?.trim()) return null;
-    await get().fetchConformance(projectId.trim());
-    const dm = get().conformance?.blueprintDataModel;
-    if (dm && !dm.ok) {
-      const hint = dm.gaps.length ? ` (${dm.gaps.slice(0, 2).join("; ")}${dm.gaps.length > 2 ? "…" : ""})` : "";
-      set({
-        error: `El Blueprint debe cubrir el modelo de datos del MDD (§3) antes de generar Contratos API.${hint}`,
-      });
-      return null;
+    const conformancePreCheck = () => {
+      const dm = get().conformance?.blueprintDataModel;
+      if (dm && !dm.ok) {
+        const hint = dm.gaps.length ? ` (${dm.gaps.slice(0, 2).join("; ")}${dm.gaps.length > 2 ? "…" : ""})` : "";
+        set({ error: `El Blueprint debe cubrir el modelo de datos del MDD (§3) antes de generar Contratos API.${hint}` });
+        return false;
+      }
+      return true;
+    };
+    if (options?.preview) {
+      await get().fetchConformance(projectId.trim());
+      if (!conformancePreCheck()) return null;
+      set({ loading: true, error: null });
+      try {
+        const body: Record<string, unknown> = { preview: true };
+        if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
+        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-api-contracts`, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        if (!r.ok) {
+          const err = (await r.json().catch(() => ({}))) as { message?: string | string[] | Record<string, unknown>; gaps?: string[] };
+          const rawMsg = err.message;
+          let msg = "Error al generar contratos API";
+          if (typeof rawMsg === "string") msg = rawMsg;
+          else if (Array.isArray(rawMsg)) msg = rawMsg.map(String).join("; ");
+          if (Array.isArray(err.gaps) && err.gaps.length > 0) msg = `${msg}\n${err.gaps.join("\n")}`;
+          throw new Error(msg);
+        }
+        const data = (await r.json()) as { content?: string };
+        if (data.content != null) set({ pendingDeliverablePreview: { kind: "api", content: data.content }, error: null });
+        return null;
+      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+      finally { set({ loading: false }); }
     }
+    await get().fetchConformance(projectId.trim());
+    if (!conformancePreCheck()) return null;
     set({ loading: true, error: null });
     try {
-      const body: { preview?: boolean; gapsFeedback?: string } = {};
-      if (options?.preview) body.preview = true;
+      const body: Record<string, unknown> = {};
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-api-contracts`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = (await r.json().catch(() => ({}))) as {
-          message?: string | string[] | Record<string, unknown>;
-          gaps?: string[];
-        };
-        const rawMsg = err.message;
-        let msg = "Error al generar contratos API";
-        if (typeof rawMsg === "string") msg = rawMsg;
-        else if (Array.isArray(rawMsg)) msg = rawMsg.map(String).join("; ");
-        if (Array.isArray(err.gaps) && err.gaps.length > 0) {
-          msg = `${msg}\n${err.gaps.join("\n")}`;
-        }
-        throw new Error(msg);
-      }
-      const data = await r.json();
-      if (options?.preview && data.content != null) {
-        set({ pendingDeliverablePreview: { kind: "api", content: data.content }, error: null });
-        return null;
-      }
-      const proj = data as Project;
+      const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-api-contracts`, body);
       set({ project: proj, apiContractsContent: proj.apiContractsContent ?? null, error: null });
       get().fetchConformance(projectId).catch(() => { });
       return proj;
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar contratos API" });
-      return null;
-    } finally {
-      set({ loading: false });
-    }
+    } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+    finally { set({ loading: false }); }
   },
 
   setLogicFlowsContent: (content) => set({ logicFlowsContent: content }),
@@ -1886,31 +1938,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     if (!projectId?.trim()) return null;
     set({ loading: true, error: null });
     try {
-      const body: { gapsFeedback?: string } = {};
+      const body: Record<string, unknown> = {};
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-logic-flows`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar lógica y flujos");
-      }
-      const data: Project = await r.json();
-      set({
-        project: data,
-        logicFlowsContent: data.logicFlowsContent ?? null,
-        error: null,
-      });
+      const data = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-logic-flows`, body);
+      set({ project: data, logicFlowsContent: data.logicFlowsContent ?? null, error: null });
       get().fetchConformance(projectId).catch(() => { });
       return data;
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar lógica y flujos" });
-      return null;
-    } finally {
-      set({ loading: false });
-    }
+    } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+    finally { set({ loading: false }); }
   },
 
   setInfraContent: (content) => set({ infraContent: content }),
@@ -1919,35 +1954,28 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateInfra: async (projectId, options) => {
     if (!projectId?.trim()) return null;
+    if (options?.preview) {
+      set({ loading: true, error: null });
+      try {
+        const body = { preview: true, ...(options?.gapsFeedback?.trim() ? { gapsFeedback: options.gapsFeedback.trim() } : {}) };
+        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-infra`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
+        const data = (await r.json()) as { content?: string };
+        if (data.content != null) set({ pendingDeliverablePreview: { kind: "infra", content: data.content }, error: null });
+        return null;
+      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+      finally { set({ loading: false }); }
+    }
     set({ loading: true, error: null });
     try {
-      const body: { preview?: boolean; gapsFeedback?: string } = {};
-      if (options?.preview) body.preview = true;
+      const body: Record<string, unknown> = {};
       if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-infra`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar infraestructura");
-      }
-      const data = await r.json();
-      if (options?.preview && data.content != null) {
-        set({ pendingDeliverablePreview: { kind: "infra", content: data.content }, error: null });
-        return null;
-      }
-      const proj = data as Project;
+      const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-infra`, body);
       set({ project: proj, infraContent: proj.infraContent ?? null, error: null });
       get().fetchConformance(projectId).catch(() => { });
       return proj;
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar infraestructura" });
-      return null;
-    } finally {
-      set({ loading: false });
-    }
+    } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+    finally { set({ loading: false }); }
   },
 
   setArchitectureContent: (content) => set({ architectureContent: content }),
@@ -1955,37 +1983,25 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     await persistField("architectureContent", content, get, set);
   },
   generateArchitecture: async (projectId, options) => {
-    console.log("Store: generateArchitecture start", projectId);
     if (!projectId?.trim()) return null;
+    if (options?.preview) {
+      set({ loading: true, error: null });
+      try {
+        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-architecture`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview: true }) });
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
+        const data = (await r.json()) as { content?: string };
+        if (data.content != null) set({ pendingDeliverablePreview: { kind: "architecture", content: data.content }, error: null });
+        return null;
+      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+      finally { set({ loading: false }); }
+    }
     set({ loading: true, error: null });
     try {
-      const body: { preview?: boolean } = {};
-      if (options?.preview) body.preview = true;
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-architecture`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar arquitectura");
-      }
-      const data = await r.json();
-      if (options?.preview && data.content != null) {
-        set({ pendingDeliverablePreview: { kind: "architecture", content: data.content }, error: null });
-        return null;
-      }
-      const proj = data as Project;
-      console.log("Store: generateArchitecture success", { id: proj.id, contentLength: (proj.architectureContent || "").length });
+      const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-architecture`, {});
       set({ project: proj, architectureContent: proj.architectureContent ?? null, error: null });
       return proj;
-    } catch (e) {
-      console.error("Store: generateArchitecture error", e);
-      set({ error: e instanceof Error ? e.message : "Error al generar arquitectura" });
-      return null;
-    } finally {
-      set({ loading: false });
-    }
+    } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+    finally { set({ loading: false }); }
   },
 
   setUseCasesContent: (content) => set({ useCasesContent: content }),
@@ -1994,33 +2010,24 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateUseCases: async (projectId, options) => {
     if (!projectId?.trim()) return null;
+    if (options?.preview) {
+      set({ loading: true, error: null });
+      try {
+        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-use-cases`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview: true }) });
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
+        const data = (await r.json()) as { content?: string };
+        if (data.content != null) set({ pendingDeliverablePreview: { kind: "use-cases", content: data.content }, error: null });
+        return null;
+      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+      finally { set({ loading: false }); }
+    }
     set({ loading: true, error: null });
     try {
-      const body: { preview?: boolean } = {};
-      if (options?.preview) body.preview = true;
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-use-cases`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar casos de uso");
-      }
-      const data = await r.json();
-      if (options?.preview && data.content != null) {
-        set({ pendingDeliverablePreview: { kind: "use-cases", content: data.content }, error: null });
-        return null;
-      }
-      const proj = data as Project;
+      const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-use-cases`, {});
       set({ project: proj, useCasesContent: proj.useCasesContent ?? null, error: null });
       return proj;
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar casos de uso" });
-      return null;
-    } finally {
-      set({ loading: false });
-    }
+    } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+    finally { set({ loading: false }); }
   },
 
   setUserStoriesContent: (content) => set({ userStoriesContent: content }),
@@ -2029,33 +2036,24 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateUserStories: async (projectId, options) => {
     if (!projectId?.trim()) return null;
+    if (options?.preview) {
+      set({ loading: true, error: null });
+      try {
+        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-user-stories`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview: true }) });
+        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
+        const data = (await r.json()) as { content?: string };
+        if (data.content != null) set({ pendingDeliverablePreview: { kind: "user-stories", content: data.content }, error: null });
+        return null;
+      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+      finally { set({ loading: false }); }
+    }
     set({ loading: true, error: null });
     try {
-      const body: { preview?: boolean } = {};
-      if (options?.preview) body.preview = true;
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-user-stories`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar historias de usuario");
-      }
-      const data = await r.json();
-      if (options?.preview && data.content != null) {
-        set({ pendingDeliverablePreview: { kind: "user-stories", content: data.content }, error: null });
-        return null;
-      }
-      const proj = data as Project;
+      const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-user-stories`, {});
       set({ project: proj, userStoriesContent: proj.userStoriesContent ?? null, error: null });
       return proj;
-    } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar historias de usuario" });
-      return null;
-    } finally {
-      set({ loading: false });
-    }
+    } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
+    finally { set({ loading: false }); }
   },
 
   setSpecContent: (content) => set({ specContent: content }),
