@@ -363,6 +363,7 @@ export default function WorkshopView({
   const loading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
   const cascadeRunning = loading && (loadingReason === "deliverables-cascade" || loadingReason === "legacy-deliverables");
+  const cascadeProgress = useWorkshopStore((s) => s.agentProgress);
   const error = useWorkshopStore((s) => s.error);
   const setError = useWorkshopStore((s) => s.setError);
   const launchHermes = useWorkshopStore((s) => s.launchHermes);
@@ -2925,6 +2926,11 @@ export default function WorkshopView({
                                 <span className="text-[var(--success-foreground)]">
                                   <AiGenerativeDots />
                                 </span>
+                                {cascadeProgress.length > 0 && (
+                                  <span className="text-xs font-normal text-[var(--success-foreground)] opacity-80">
+                                    {cascadeProgress[0]?.message}
+                                  </span>
+                                )}
                               </span>
                             ) : (
                               <Layers className="h-4 w-4 shrink-0" aria-hidden />
