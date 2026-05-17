@@ -358,8 +358,6 @@ export default function WorkshopView({
   const auditTrailRaw = useWorkshopStore((s) => s.auditTrail);
   const auditTrail = useMemo(() => auditTrailRaw || [], [auditTrailRaw]);
 
-  const pendingDeliverablePreviewRaw = useWorkshopStore((s) => s.pendingDeliverablePreview);
-  const pendingDeliverablePreview = useMemo(() => pendingDeliverablePreviewRaw, [pendingDeliverablePreviewRaw]);
   const synced = useWorkshopStore((s) => s.synced);
   const loading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
@@ -397,8 +395,6 @@ export default function WorkshopView({
   const setSpecContent = useWorkshopStore((s) => s.setSpecContent);
   const setUxUiGuideContent = useWorkshopStore((s) => s.setUxUiGuideContent);
   const fetchConformance = useWorkshopStore((s) => s.fetchConformance);
-  const confirmDeliverable = useWorkshopStore((s) => s.confirmDeliverable);
-  const discardDeliverable = useWorkshopStore((s) => s.discardDeliverable);
   const setDbgaContent = useWorkshopStore((s) => s.setDbgaContent);
   const persistDbgaContent = useWorkshopStore((s) => s.persistDbgaContent);
   const clearDbgaContent = useWorkshopStore((s) => s.clearDbgaContent);
@@ -3626,38 +3622,6 @@ export default function WorkshopView({
                   >
                     Cerrar
                   </button>
-                </div>
-              </div>
-            </div>
-          )
-        }
-        {
-          pendingDeliverablePreview && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div className="bg-[var(--background)] border border-[var(--border)] rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] shrink-0">
-                  <h2 className="text-lg font-semibold text-[var(--primary)]">
-                    Vista previa: {pendingDeliverablePreview.kind === "blueprint" ? "Blueprint" : pendingDeliverablePreview.kind === "api" ? "Contratos API" : "Infra"}
-                  </h2>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => discardDeliverable()}
-                      className="px-3 py-1.5 rounded bg-[var(--muted)] text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] hover:bg-[var(--muted)] text-sm"
-                    >
-                      Descartar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => confirmDeliverable()}
-                      className="px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm font-medium"
-                    >
-                      Confirmar y guardar
-                    </button>
-                  </div>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto p-4">
-                  <MddViewer content={pendingDeliverablePreview.content} />
                 </div>
               </div>
             </div>

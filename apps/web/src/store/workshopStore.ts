@@ -529,8 +529,7 @@ interface WorkshopState {
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
   } | null;
-  /** HITL (Fase 4): vista previa antes de persistir */
-  pendingDeliverablePreview: { kind: "blueprint" | "api" | "infra" | "architecture" | "use-cases" | "user-stories"; content: string } | null;
+  /** Vista previa de entregable eliminada — regeneración directa sin modal */
   loading: boolean;
   /** Razón del loading para mostrar mensajes específicos (ej. deep research tarda más) */
   loadingReason:
@@ -637,28 +636,28 @@ interface WorkshopState {
   persistAndReviewMdd: () => Promise<void>;
   setBlueprintContent: (content: string | null) => void;
   persistBlueprintContent: (content: string) => Promise<void>;
-  generateBlueprint: (projectId: string, options?: { preview?: boolean; gapsFeedback?: string }) => Promise<Project | null>;
+  generateBlueprint: (projectId: string, options?: { gapsFeedback?: string }) => Promise<Project | null>;
   setApiContractsContent: (content: string | null) => void;
   persistApiContractsContent: (content: string) => Promise<void>;
-  generateApiContracts: (projectId: string, options?: { preview?: boolean; gapsFeedback?: string }) => Promise<Project | null>;
+  generateApiContracts: (projectId: string, options?: { gapsFeedback?: string }) => Promise<Project | null>;
   setLogicFlowsContent: (content: string | null) => void;
   persistLogicFlowsContent: (content: string) => Promise<void>;
   generateLogicFlows: (projectId: string, options?: { gapsFeedback?: string }) => Promise<Project | null>;
   setInfraContent: (content: string | null) => void;
   persistInfraContent: (content: string) => Promise<void>;
-  generateInfra: (projectId: string, options?: { preview?: boolean; gapsFeedback?: string }) => Promise<Project | null>;
+  generateInfra: (projectId: string, options?: { gapsFeedback?: string }) => Promise<Project | null>;
 
   setArchitectureContent: (content: string | null) => void;
   persistArchitectureContent: (content: string) => Promise<void>;
-  generateArchitecture: (projectId: string, options?: { preview?: boolean }) => Promise<Project | null>;
+  generateArchitecture: (projectId: string, options?: Record<string, never>) => Promise<Project | null>;
 
   setUseCasesContent: (content: string | null) => void;
   persistUseCasesContent: (content: string) => Promise<void>;
-  generateUseCases: (projectId: string, options?: { preview?: boolean }) => Promise<Project | null>;
+  generateUseCases: (projectId: string, options?: Record<string, never>) => Promise<Project | null>;
 
   setUserStoriesContent: (content: string | null) => void;
   persistUserStoriesContent: (content: string) => Promise<void>;
-  generateUserStories: (projectId: string, options?: { preview?: boolean }) => Promise<Project | null>;
+  generateUserStories: (projectId: string, options?: Record<string, never>) => Promise<Project | null>;
   setSpecContent: (content: string | null) => void;
   persistSpecContent: (content: string) => Promise<void>;
   setAemContent: (content: string | null) => void;
@@ -677,9 +676,6 @@ interface WorkshopState {
   reassessComplexity: (projectId: string, note?: string) => Promise<Project | null>;
   fetchConformance: (projectId: string, options?: { useLlm?: boolean }) => Promise<void>;
   verifyDeliverable: (projectId: string, deliverable: "blueprint" | "api" | "infra" | "architecture" | "use-cases" | "user-stories") => Promise<string>;
-  setPendingDeliverablePreview: (v: { kind: "blueprint" | "api" | "infra" | "architecture" | "use-cases" | "user-stories"; content: string } | null) => void;
-  confirmDeliverable: () => Promise<void>;
-  discardDeliverable: () => void;
   setDbgaContent: (content: string | null) => void;
   persistDbgaContent: (content: string) => Promise<void>;
   clearDbgaContent: (projectId: string) => Promise<void>;
@@ -755,8 +751,13 @@ const initialState = {
     api: ApiConformanceResult;
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
+  conformance: null as {
+    blueprint: ConformanceResult;
+    blueprintDataModel: ConformanceResult;
+    api: ApiConformanceResult;
+    logicFlows: ConformanceResult;
+    infra: ConformanceResult;
   } | null,
-  pendingDeliverablePreview: null as { kind: "blueprint" | "api" | "infra" | "architecture" | "use-cases" | "user-stories"; content: string } | null,
   loading: false,
   loadingReason: null as
     | "benchmark"
@@ -1834,28 +1835,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
   generateBlueprint: async (projectId, options) => {
     if (!projectId?.trim()) return null;
-    if (options?.preview) {
-      // Preview: síncrono, retorna contenido no el proyecto
-      set({ loading: true, error: null });
-      try {
-        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-blueprint`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ preview: true, ...(options?.gapsFeedback?.trim() ? { gapsFeedback: options.gapsFeedback.trim() } : {}) }),
-        });
-        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
-        const data = (await r.json()) as { content?: string };
-        if (data.content != null) {
-          set({ pendingDeliverablePreview: { kind: "blueprint", content: data.content }, error: null });
-        }
-        return null;
-      } catch (e) {
-        set({ error: friendlyFetchError(e) });
-        return null;
-      } finally {
-        set({ loading: false });
-      }
-    }
+    // Preview mode eliminado — regeneración directa
     // Normal: encolar con queueAndPoll
     set({ loading: true, error: null });
     try {
@@ -1891,31 +1871,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       }
       return true;
     };
-    if (options?.preview) {
-      await get().fetchConformance(projectId.trim());
-      if (!conformancePreCheck()) return null;
-      set({ loading: true, error: null });
-      try {
-        const body: Record<string, unknown> = { preview: true };
-        if (options?.gapsFeedback?.trim()) body.gapsFeedback = options.gapsFeedback.trim();
-        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-api-contracts`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-        });
-        if (!r.ok) {
-          const err = (await r.json().catch(() => ({}))) as { message?: string | string[] | Record<string, unknown>; gaps?: string[] };
-          const rawMsg = err.message;
-          let msg = "Error al generar contratos API";
-          if (typeof rawMsg === "string") msg = rawMsg;
-          else if (Array.isArray(rawMsg)) msg = rawMsg.map(String).join("; ");
-          if (Array.isArray(err.gaps) && err.gaps.length > 0) msg = `${msg}\n${err.gaps.join("\n")}`;
-          throw new Error(msg);
-        }
-        const data = (await r.json()) as { content?: string };
-        if (data.content != null) set({ pendingDeliverablePreview: { kind: "api", content: data.content }, error: null });
-        return null;
-      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
-      finally { set({ loading: false }); }
-    }
+    // Preview mode eliminado — regeneración directa
     await get().fetchConformance(projectId.trim());
     if (!conformancePreCheck()) return null;
     set({ loading: true, error: null });
@@ -1954,18 +1910,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateInfra: async (projectId, options) => {
     if (!projectId?.trim()) return null;
-    if (options?.preview) {
-      set({ loading: true, error: null });
-      try {
-        const body = { preview: true, ...(options?.gapsFeedback?.trim() ? { gapsFeedback: options.gapsFeedback.trim() } : {}) };
-        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-infra`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
-        const data = (await r.json()) as { content?: string };
-        if (data.content != null) set({ pendingDeliverablePreview: { kind: "infra", content: data.content }, error: null });
-        return null;
-      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
-      finally { set({ loading: false }); }
-    }
+    // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
     try {
       const body: Record<string, unknown> = {};
@@ -1984,17 +1929,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateArchitecture: async (projectId, options) => {
     if (!projectId?.trim()) return null;
-    if (options?.preview) {
-      set({ loading: true, error: null });
-      try {
-        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-architecture`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview: true }) });
-        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
-        const data = (await r.json()) as { content?: string };
-        if (data.content != null) set({ pendingDeliverablePreview: { kind: "architecture", content: data.content }, error: null });
-        return null;
-      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
-      finally { set({ loading: false }); }
-    }
+    // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
     try {
       const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-architecture`, {});
@@ -2010,17 +1945,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateUseCases: async (projectId, options) => {
     if (!projectId?.trim()) return null;
-    if (options?.preview) {
-      set({ loading: true, error: null });
-      try {
-        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-use-cases`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview: true }) });
-        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
-        const data = (await r.json()) as { content?: string };
-        if (data.content != null) set({ pendingDeliverablePreview: { kind: "use-cases", content: data.content }, error: null });
-        return null;
-      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
-      finally { set({ loading: false }); }
-    }
+    // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
     try {
       const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-use-cases`, {});
@@ -2036,17 +1961,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateUserStories: async (projectId, options) => {
     if (!projectId?.trim()) return null;
-    if (options?.preview) {
-      set({ loading: true, error: null });
-      try {
-        const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-user-stories`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ preview: true }) });
-        if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message ?? "Error");
-        const data = (await r.json()) as { content?: string };
-        if (data.content != null) set({ pendingDeliverablePreview: { kind: "user-stories", content: data.content }, error: null });
-        return null;
-      } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
-      finally { set({ loading: false }); }
-    }
+    // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
     try {
       const proj = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-user-stories`, {});
@@ -2274,21 +2189,6 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       return "";
     }
   },
-  setPendingDeliverablePreview: (v) => set({ pendingDeliverablePreview: v }),
-  confirmDeliverable: async () => {
-    const { pendingDeliverablePreview, projectId } = get();
-    if (!pendingDeliverablePreview || !projectId) return;
-    const { kind, content } = pendingDeliverablePreview;
-    if (kind === "blueprint") await get().persistBlueprintContent(content);
-    else if (kind === "api") await get().persistApiContractsContent(content);
-    else if (kind === "infra") await get().persistInfraContent(content);
-    else if (kind === "architecture") await get().persistArchitectureContent(content);
-    else if (kind === "use-cases") await get().persistUseCasesContent(content);
-    else if (kind === "user-stories") await get().persistUserStoriesContent(content);
-    set({ pendingDeliverablePreview: null });
-  },
-  discardDeliverable: () => set({ pendingDeliverablePreview: null }),
-
   setDbgaContent: (content) => set({ dbgaContent: content }),
 
   persistDbgaContent: async (content) => {

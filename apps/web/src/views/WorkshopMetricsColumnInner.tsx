@@ -407,7 +407,7 @@ export function WorkshopMetricsColumnInner({
                         <button
                           type="button"
                           onClick={() =>
-                            generateBlueprint(projectId!, { preview: true, gapsFeedback: conformance!.blueprint.gaps.join("\n") })
+                            generateBlueprint(projectId!, { gapsFeedback: conformance!.blueprint.gaps.join("\n") })
                           }
                           disabled={loading || mddReviewing}
                           className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
@@ -458,7 +458,6 @@ export function WorkshopMetricsColumnInner({
                           type="button"
                           onClick={() =>
                             generateBlueprint(projectId!, {
-                              preview: true,
                               gapsFeedback: conformance!.blueprintDataModel!.gaps.join("\n"),
                             })
                           }
@@ -542,7 +541,6 @@ export function WorkshopMetricsColumnInner({
                           type="button"
                           onClick={() =>
                             generateApiContracts(projectId!, {
-                              preview: true,
                               gapsFeedback: [...conformance!.api.missingInApi, ...conformance!.api.extraInApi].join("\n"),
                             })
                           }
@@ -636,7 +634,7 @@ export function WorkshopMetricsColumnInner({
                       {conformance.infra.gaps.length > 0 ? (
                         <button
                           type="button"
-                          onClick={() => generateInfra(projectId!, { preview: true, gapsFeedback: conformance!.infra.gaps.join("\n") })}
+                          onClick={() => generateInfra(projectId!, { gapsFeedback: conformance!.infra.gaps.join("\n") })}
                           disabled={loading || mddReviewing}
                           className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
                         >
