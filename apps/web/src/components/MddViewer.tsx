@@ -29,14 +29,18 @@ function normalizeMermaidIndent(line: string): string {
   return "  ".repeat(Math.floor(len / 2)) + rest;
 }
 
-/** Sanitiza Mermaid erDiagram: timestamptz→datetime, un key por atributo (PK, FK→PK), 2 espacios ASCII. */
+/** Sanitiza Mermaid erDiagram: timestamptz→datetime, un key por atributo (PK, FK→PK), 2 espacios ASCII.
+ *  NO se eliminan caracteres no-ASCII (á, é, í, ó, ú, ñ, æ, etc.) porque Mermaid v11 los
+ *  renderiza correctamente en etiquetas, participantes y textos.
+ *  PostgreSQL tipos no estándar → tipos que Mermaid renderiza sin error. */
 function normalizeMermaidForRender(content: string): string {
   const base = content
     .replace(/\u00A0/g, " ")
     .replace(/\t/g, " ")
     .replace(/[\u2000-\u200B\u202F\u205F\u3000]/g, " ")
-    .replace(/[^\x20-\x7E\n]/g, "")
     .replace(/\btimestamptz\b/gi, "datetime")
+    .replace(/\binet\b/gi, "string")
+    .replace(/\bjsonb\b/gi, "json")
     .replace(/\b(PK)\s*,\s*FK\b/gi, "$1")
     .replace(/\b(FK)\s*,\s*PK\b/gi, "$1")
     .split("\n")
