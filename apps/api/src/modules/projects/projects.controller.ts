@@ -12,7 +12,7 @@ import {
   Res,
 } from "@nestjs/common";
 import type { Response } from "express";
-import { getRequestUserId, getRequestUserRole } from "../../common/request-user.store.js";
+import { getRequestUserRole } from "../../common/request-user.store.js";
 import { DeliverablesQueueService, type GenerateJobType } from "./deliverables-queue.service.js";
 import { ProjectsService } from "./projects.service.js";
 import {
@@ -73,7 +73,6 @@ export class ProjectsController {
   /** SSE: progreso de cascada de entregables en cola BullMQ (`REDIS_URL`). */
   @Get(":id/deliverables-jobs/:jobId/stream")
   async deliverablesJobStream(
-    @Param("id") projectId: string,
     @Param("jobId") jobId: string,
     @Res({ passthrough: false }) res: Response,
   ): Promise<void> {

@@ -1,6 +1,5 @@
 import OpenAI from "openai";
 import {
-  type APIError,
   RateLimitError,
   InternalServerError,
   APIConnectionError,
