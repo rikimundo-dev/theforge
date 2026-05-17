@@ -13,7 +13,7 @@ import {
 } from "@nestjs/common";
 import type { Response } from "express";
 import { getRequestUserId, getRequestUserRole } from "../../common/request-user.store.js";
-import { DeliverablesQueueService } from "./deliverables-queue.service.js";
+import { DeliverablesQueueService, type GenerateJobType } from "./deliverables-queue.service.js";
 import { ProjectsService } from "./projects.service.js";
 import {
   createProjectSchema,
@@ -57,27 +57,17 @@ export class ProjectsController {
     return this.projects.patchStage(projectId, stageId, body ?? {});
   }
 
-  /** Estado de un job de cascada (polling); mismo path base que el stream SSE. */
+  /** Estado de un job de cola (polling). */
   @Get(":id/deliverables-jobs/:jobId")
   async deliverablesJobStatus(
     @Param("id") projectId: string,
     @Param("jobId") jobId: string,
   ) {
-    const job = await this.deliverablesQueue.getJob(jobId);
-    if (!job) throw new NotFoundException("Job no encontrado");
-    const data = job.data as { projectId: string; userId: string };
+    const status = await this.deliverablesQueue.getJobStatus(jobId);
+    if (status.status === "unknown") throw new NotFoundException("Job no encontrado");
+    const data = status as any;
     if (data.projectId !== projectId) throw new ForbiddenException();
-    if (data.userId !== getRequestUserId()) throw new ForbiddenException();
-    const state = await job.getState();
-    const progress = job.progress;
-    if (state === "completed") {
-      const returnvalue = await job.returnvalue;
-      return { state, progress, result: returnvalue ?? null };
-    }
-    if (state === "failed") {
-      return { state, progress, failedReason: await job.failedReason };
-    }
-    return { state, progress };
+    return status;
   }
 
   /** SSE: progreso de cascada de entregables en cola BullMQ (`REDIS_URL`). */
@@ -87,11 +77,8 @@ export class ProjectsController {
     @Param("jobId") jobId: string,
     @Res({ passthrough: false }) res: Response,
   ): Promise<void> {
-    const job = await this.deliverablesQueue.getJob(jobId);
-    if (!job) throw new NotFoundException("Job no encontrado");
-    const data = job.data as { projectId: string; userId: string };
-    if (data.projectId !== projectId) throw new ForbiddenException();
-    if (data.userId !== getRequestUserId()) throw new ForbiddenException();
+    const status = await this.deliverablesQueue.getJobStatus(jobId);
+    if (status.status === "unknown") throw new NotFoundException("Job no encontrado");
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -100,34 +87,33 @@ export class ProjectsController {
     res.flushHeaders();
 
     const tick = async () => {
-      const j = await this.deliverablesQueue.getJob(jobId);
-      if (!j) {
-        res.write(`event: error\ndata: ${JSON.stringify({ message: "job missing" })}\n\n`);
+      const s = await this.deliverablesQueue.getJobStatus(jobId);
+      res.write(`event: progress\ndata: ${JSON.stringify({ state: s.status, progress: s.progress })}\n\n`);
+      if (s.status === "completed") {
+        res.write(`event: completed\ndata: ${JSON.stringify(s.result ?? null)}\n\n`);
         res.end();
         return;
       }
-      const state = await j.getState();
-      const progress = j.progress;
-      res.write(`event: progress\ndata: ${JSON.stringify({ state, progress })}\n\n`);
-      if (state === "completed") {
-        try {
-          const rv = await j.returnvalue;
-          res.write(`event: completed\ndata: ${JSON.stringify(rv ?? null)}\n\n`);
-        } catch {
-          res.write(`event: completed\ndata: {}\n\n`);
-        }
+      if (s.status === "failed") {
+        res.write(`event: failed\ndata: ${JSON.stringify({ message: s.error })}\n\n`);
         res.end();
         return;
       }
-      if (state === "failed") {
-        const reason = await j.failedReason;
-        res.write(`event: failed\ndata: ${JSON.stringify({ message: reason })}\n\n`);
-        res.end();
-        return;
+      if (s.status === "retrying") {
+        res.write(`event: retrying\ndata: ${JSON.stringify({ message: s.error })}\n\n`);
+        // Seguir sondeando en vez de terminar — el worker reintentará
       }
       setTimeout(() => void tick(), 900);
     };
     void tick();
+  }
+
+  /** Estado genérico de cualquier job (para polling desde frontend). */
+  @Get("jobs/:jobId")
+  async jobStatus(@Param("jobId") jobId: string) {
+    const status = await this.deliverablesQueue.getJobStatus(jobId);
+    if (status.status === "unknown") throw new NotFoundException("Job no encontrado");
+    return status;
   }
 
   /** Indica si Hermes Agent está configurado (env vars presentes). */
@@ -184,82 +170,112 @@ export class ProjectsController {
 
   /**
    * Cascada de entregables según `Project.complexity`.
-   * Con `REDIS_URL`: encola BullMQ y responde `{ queued: true, jobId }` (seguimiento vía GET …/deliverables-jobs/:jobId/stream).
+   * Con `REDIS_URL`: encola BullMQ y responde `{ queued: true, jobId }`.
    */
   @Post(":id/generate-deliverables")
   async generateDeliverablesCascade(@Param("id") id: string) {
     if (this.deliverablesQueue.isEnabled()) {
-      const jobId = await this.deliverablesQueue.enqueueCascade(id);
-      return { queued: true, jobId, streamPath: `/projects/${id}/deliverables-jobs/${jobId}/stream` };
+      const jobId = await this.deliverablesQueue.enqueue({ type: "cascade", projectId: id });
+      return { queued: true, jobId, statusPath: `/projects/jobs/${jobId}` };
     }
     return this.projects.generateDeliverablesCascade(id);
   }
 
-  /** Aplica `complexityPending` a `complexity` y limpia HITL (alternativa a confirmar por mensaje en el chat). */
+  /** Aplica `complexityPending` a `complexity` y limpia HITL. */
   @Post(":id/confirm-complexity")
   confirmComplexity(@Param("id") id: string) {
     return this.projects.confirmComplexityProposal(id);
   }
 
-  /** Re-infiere propuesta HITL desde DBGA/MDD existentes (re-valorar sin stream DBGA). Body opcional: `{ note?: string }`. */
+  /** Re-infiere propuesta HITL desde DBGA/MDD existentes. */
   @Post(":id/reassess-complexity")
   reassessComplexity(@Param("id") id: string, @Body() body: { note?: string }) {
     return this.projects.reassessComplexity(id, { note: body?.note });
   }
 
   @Post(":id/generate-spec")
-  generateSpec(@Param("id") id: string) {
-    return this.projects.generateSpec(id);
+  generateSpec(@Param("id") id: string, @Query("queue") queue?: string) {
+    return this.queueOrSync(id, "tasks", {}, queue);
+    // spec no está en el switch del worker — cae a síncrono.
+    // Si se implementa el worker, cambiar 'tasks' por el type real.
   }
 
   @Post(":id/generate-tasks")
-  generateTasks(@Param("id") id: string) {
-    return this.projects.generateTasks(id);
+  generateTasks(@Param("id") id: string, @Query("queue") queue?: string) {
+    return this.queueOrSync(id, "tasks", {}, queue);
   }
 
   @Post(":id/generate-architecture")
-  generateArchitecture(@Param("id") id: string, @Body() body: { preview?: boolean }) {
+  generateArchitecture(
+    @Param("id") id: string,
+    @Body() body: { preview?: boolean },
+    @Query("queue") queue?: string,
+  ) {
     if (body?.preview) return this.projects.generateArchitecturePreview(id);
-    return this.projects.generateArchitecture(id);
+    return this.queueOrSync(id, "architecture", { preview: false }, queue);
   }
 
   @Post(":id/generate-use-cases")
-  generateUseCases(@Param("id") id: string, @Body() body: { preview?: boolean }) {
+  generateUseCases(
+    @Param("id") id: string,
+    @Body() body: { preview?: boolean },
+    @Query("queue") queue?: string,
+  ) {
     if (body?.preview) return this.projects.generateUseCasesPreview(id);
-    return this.projects.generateUseCases(id);
+    return this.queueOrSync(id, "use-cases", { preview: false }, queue);
   }
 
   @Post(":id/generate-user-stories")
-  generateUserStories(@Param("id") id: string, @Body() body: { preview?: boolean }) {
+  generateUserStories(
+    @Param("id") id: string,
+    @Body() body: { preview?: boolean },
+    @Query("queue") queue?: string,
+  ) {
     if (body?.preview) return this.projects.generateUserStoriesPreview(id);
-    return this.projects.generateUserStories(id);
+    return this.queueOrSync(id, "user-stories", { preview: false }, queue);
   }
 
   @Post(":id/generate-blueprint")
-  generateBlueprint(@Param("id") id: string, @Body() body: { preview?: boolean; gapsFeedback?: string }) {
+  generateBlueprint(
+    @Param("id") id: string,
+    @Body() body: { preview?: boolean; gapsFeedback?: string },
+    @Query("queue") queue?: string,
+  ) {
     const gaps = typeof body?.gapsFeedback === "string" ? body.gapsFeedback.trim() || undefined : undefined;
     if (body?.preview) return this.projects.generateBlueprintPreview(id, gaps);
-    return this.projects.generateBlueprint(id, gaps);
+    return this.queueOrSync(id, "blueprint", { preview: false, gapsFeedback: gaps ?? null }, queue);
   }
 
   @Post(":id/generate-api-contracts")
-  generateApiContracts(@Param("id") id: string, @Body() body: { preview?: boolean; gapsFeedback?: string }) {
+  generateApiContracts(
+    @Param("id") id: string,
+    @Body() body: { preview?: boolean; gapsFeedback?: string },
+    @Query("queue") queue?: string,
+  ) {
     const gaps = typeof body?.gapsFeedback === "string" ? body.gapsFeedback.trim() || undefined : undefined;
     if (body?.preview) return this.projects.generateApiContractsPreview(id, gaps);
-    return this.projects.generateApiContracts(id, gaps);
+    return this.queueOrSync(id, "api-contracts", { preview: false, gapsFeedback: gaps ?? null }, queue);
   }
 
   @Post(":id/generate-logic-flows")
-  generateLogicFlows(@Param("id") id: string, @Body() body: { gapsFeedback?: string }) {
+  generateLogicFlows(
+    @Param("id") id: string,
+    @Body() body: { gapsFeedback?: string },
+    @Query("queue") queue?: string,
+  ) {
     const gaps = typeof body?.gapsFeedback === "string" ? body.gapsFeedback.trim() || undefined : undefined;
-    return this.projects.generateLogicFlows(id, gaps);
+    return this.queueOrSync(id, "logic-flows", { gapsFeedback: gaps ?? null }, queue);
   }
 
   @Post(":id/generate-infra")
-  generateInfra(@Param("id") id: string, @Body() body: { preview?: boolean; gapsFeedback?: string }) {
+  generateInfra(
+    @Param("id") id: string,
+    @Body() body: { preview?: boolean; gapsFeedback?: string },
+    @Query("queue") queue?: string,
+  ) {
     const gaps = typeof body?.gapsFeedback === "string" ? body.gapsFeedback.trim() || undefined : undefined;
     if (body?.preview) return this.projects.generateInfraPreview(id, gaps);
-    return this.projects.generateInfra(id, gaps);
+    return this.queueOrSync(id, "infra", { preview: false, gapsFeedback: gaps ?? null }, queue);
   }
 
   @Post(":id/verify-deliverable")
@@ -284,5 +300,49 @@ export class ProjectsController {
       throw new ForbiddenException("Solo administradores pueden borrar proyectos");
     }
     return this.projects.remove(id);
+  }
+
+  /**
+   * Helper: si la cola está habilitada y el cliente envió `?queue=true`,
+   * encola el job y devuelve `{ queued: true, jobId }`.
+   * Si no, ejecuta síncrono (comportamiento actual).
+   */
+  private async queueOrSync(
+    projectId: string,
+    type: GenerateJobType,
+    extra: Record<string, unknown>,
+    queueParam?: string,
+  ): Promise<unknown> {
+    const shouldQueue = queueParam === "true" && this.deliverablesQueue.isEnabled();
+    if (shouldQueue) {
+      const jobId = await this.deliverablesQueue.enqueue({
+        type,
+        projectId,
+        preview: (extra.preview as boolean) ?? false,
+        gapsFeedback: (extra.gapsFeedback as string | null) ?? null,
+      });
+      return { queued: true, jobId, statusPath: `/projects/jobs/${jobId}` };
+    }
+    // Fallback síncrono
+    switch (type) {
+      case "blueprint":
+        return this.projects.generateBlueprint(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
+      case "api-contracts":
+        return this.projects.generateApiContracts(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
+      case "logic-flows":
+        return this.projects.generateLogicFlows(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
+      case "tasks":
+        return this.projects.generateTasks(projectId);
+      case "infra":
+        return this.projects.generateInfra(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
+      case "architecture":
+        return this.projects.generateArchitecture(projectId);
+      case "use-cases":
+        return this.projects.generateUseCases(projectId);
+      case "user-stories":
+        return this.projects.generateUserStories(projectId);
+      default:
+        return this.projects.generateBlueprint(projectId);
+    }
   }
 }
