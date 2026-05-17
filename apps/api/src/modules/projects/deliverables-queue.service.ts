@@ -36,6 +36,7 @@ export interface GenerateJobData {
 /** Estado público de un job para polling del frontend. */
 export interface GenerateJobStatus {
   jobId: string;
+  projectId?: string;
   type: GenerateJobType | null;
   status: "queued" | "active" | "completed" | "failed" | "retrying" | "unknown";
   progress: number;
@@ -210,6 +211,7 @@ export class DeliverablesQueueService implements OnModuleInit, OnModuleDestroy {
 
     return {
       jobId,
+      projectId: data?.projectId,
       type: data?.type ?? null,
       status,
       progress: (job.progress as number) ?? 0,
