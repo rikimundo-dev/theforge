@@ -1921,7 +1921,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   persistArchitectureContent: async (content) => {
     await persistField("architectureContent", content, get, set);
   },
-  generateArchitecture: async (projectId, options) => {
+  generateArchitecture: async (projectId) => {
     if (!projectId?.trim()) return null;
     // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
@@ -1937,7 +1937,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   persistUseCasesContent: async (content) => {
     await persistField("useCasesContent", content, get, set);
   },
-  generateUseCases: async (projectId, options) => {
+  generateUseCases: async (projectId) => {
     if (!projectId?.trim()) return null;
     // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
@@ -1953,7 +1953,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   persistUserStoriesContent: async (content) => {
     await persistField("userStoriesContent", content, get, set);
   },
-  generateUserStories: async (projectId, options) => {
+  generateUserStories: async (projectId) => {
     if (!projectId?.trim()) return null;
     // Preview mode eliminado — regeneración directa
     set({ loading: true, error: null });
