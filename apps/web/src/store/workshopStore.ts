@@ -751,12 +751,6 @@ const initialState = {
     api: ApiConformanceResult;
     logicFlows: ConformanceResult;
     infra: ConformanceResult;
-  conformance: null as {
-    blueprint: ConformanceResult;
-    blueprintDataModel: ConformanceResult;
-    api: ApiConformanceResult;
-    logicFlows: ConformanceResult;
-    infra: ConformanceResult;
   } | null,
   loading: false,
   loadingReason: null as
