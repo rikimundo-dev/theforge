@@ -1,7 +1,7 @@
 # Build stage — context = repo root
-FROM node:20-alpine AS builder
+FROM node:21-alpine AS builder
 
-ARG BUILD_CACHE_BUST=20
+ARG BUILD_CACHE_BUST=21
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 RUN apk add --no-cache gcompat openssl
@@ -27,7 +27,7 @@ ENV DATABASE_URL="postgresql://local:local@db:5432/theforge"
 RUN npx turbo run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
 
 # Production stage — layout npm workspaces desde builder
-FROM node:20-alpine AS runner
+FROM node:21-alpine AS runner
 
 RUN apk add --no-cache wget openssl
 

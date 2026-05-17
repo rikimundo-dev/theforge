@@ -1,7 +1,7 @@
 # Build stage — context = repo root
-FROM node:20-alpine AS builder
+FROM node:21-alpine AS builder
 
-ARG BUILD_CACHE_BUST=20
+ARG BUILD_CACHE_BUST=21
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 WORKDIR /app
