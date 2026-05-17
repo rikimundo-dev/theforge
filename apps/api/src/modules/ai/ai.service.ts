@@ -177,29 +177,7 @@ export class AiService {
           }
           if (at === "brd") {
             systemPrompt +=
-              "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**
-
-**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:
-
-```
-[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]
----FIN_BRD---
-[breve mensaje de chat resumiendo lo que cambiaste]
-```
-
-EJEMPLO:
-```
-# Business Requirements Document: CRM Inmobiliario
-
-## Alcance
-### Funcional
-RF-1: ...
-RF-15: ...
----FIN_BRD---
-Agregado RF-15 al alcance.
-```
-
-**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
+              "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
           }
           if (at === "to-be") {
             systemPrompt +=
@@ -362,29 +340,7 @@ Agregado RF-15 al alcance.
         }
         if (at === "brd") {
           systemPrompt +=
-            "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**
-
-**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:
-
-```
-[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]
----FIN_BRD---
-[breve mensaje de chat resumiendo lo que cambiaste]
-```
-
-EJEMPLO:
-```
-# Business Requirements Document: CRM Inmobiliario
-
-## Alcance
-### Funcional
-RF-1: ...
-RF-15: ...
----FIN_BRD---
-Agregado RF-15 al alcance.
-```
-
-**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
+            "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
         }
         if (at === "to-be") {
           systemPrompt +=
