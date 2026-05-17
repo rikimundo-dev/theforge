@@ -29,20 +29,15 @@ function normalizeMermaidIndent(line: string): string {
   return "  ".repeat(Math.floor(len / 2)) + rest;
 }
 
-/** Sanitiza Mermaid erDiagram: timestamptz→datetime, un key por atributo (PK, FK→PK), 2 espacios ASCII.
- *  NO se eliminan caracteres no-ASCII (á, é, í, ó, ú, ñ, æ, etc.) porque Mermaid v11 los
- *  renderiza correctamente en etiquetas, participantes y textos.
- *  PostgreSQL tipos no estándar → tipos que Mermaid renderiza sin error. */
-function normalizeMermaidForRender(content: string): string {
+/** Normalización universal para cualquier tipo de diagrama Mermaid:
+ *  espacios Unicode → ASCII, tabs → espacios, trailing whitespace.
+ *  NO se eliminan caracteres no-ASCII (á, é, í, ó, ú, ñ, æ, etc.).
+ *  Aplica a todos los tipos: graph, flowchart, sequenceDiagram, stateDiagram, etc. */
+function normalizeMermaidContent(content: string): string {
   const base = content
     .replace(/\u00A0/g, " ")
     .replace(/\t/g, " ")
     .replace(/[\u2000-\u200B\u202F\u205F\u3000]/g, " ")
-    .replace(/\btimestamptz\b/gi, "datetime")
-    .replace(/\binet\b/gi, "string")
-    .replace(/\bjsonb\b/gi, "json")
-    .replace(/\b(PK)\s*,\s*FK\b/gi, "$1")
-    .replace(/\b(FK)\s*,\s*PK\b/gi, "$1")
     .split("\n")
     .map((line) => line.trimEnd())
     .join("\n")
@@ -53,6 +48,21 @@ function normalizeMermaidForRender(content: string): string {
     .map(normalizeMermaidIndent)
     .join("\n")
     .trim();
+}
+
+/** Normalización exclusiva para erDiagram: tipos PostgreSQL → tipos Mermaid seguros. */
+function normalizeErDiagramTypes(content: string): string {
+  return content
+    .replace(/\btimestamptz\b/gi, "datetime")
+    .replace(/\binet\b/gi, "string")
+    .replace(/\bjsonb\b/gi, "json")
+    .replace(/\b(PK)\s*,\s*FK\b/gi, "$1")
+    .replace(/\b(FK)\s*,\s*PK\b/gi, "$1");
+}
+
+/** Sanitiza Mermaid erDiagram: content + PG types + indent. */
+function normalizeMermaidForRender(content: string): string {
+  return normalizeMermaidContent(normalizeErDiagramTypes(content));
 }
 
 /**
@@ -159,7 +169,7 @@ function MermaidBlock({ content, blockKey }: { content: string; blockKey: string
     let cancelled = false;
     const toRender = /erDiagram/i.test(content)
       ? normalizeMermaidForRender(content)
-      : normalizeMermaidFirstLineKeywords(content.trim());
+      : normalizeMermaidFirstLineKeywords(normalizeMermaidContent(content));
     if (!toRender) return;
 
     const doRender = async () => {
@@ -247,7 +257,7 @@ const MdSection = memo(function MdSection({ content }: { content: string }) {
               const trimmed = source.trim();
               const normalized = /erDiagram/i.test(trimmed)
                 ? normalizeMermaidForRender(trimmed)
-                : normalizeMermaidFirstLineKeywords(trimmed);
+                : normalizeMermaidFirstLineKeywords(normalizeMermaidContent(trimmed));
               const key = mermaidKey(normalized);
               return (
                 <MermaidBlockErrorBoundary content={normalized} blockKey={key}>
