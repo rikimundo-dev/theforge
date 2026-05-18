@@ -751,11 +751,36 @@ export class AiAnalysisService {
       if (rawMarkdown.length < 200 && existingMdd.length >= 200) {
         rawMarkdown = existingMdd;
       }
-      const markdown = prepareMddForOutput({
+      let markdown = prepareMddForOutput({
         mddStructured: lastState?.mddStructured,
         mddDraft: rawMarkdown,
       });
       logSection3Debug("final (stream/manager done)", markdown);
+      // AUTO-FIX §6: si la IA saltó §6, forzar generación con el nodo de seguridad
+      if (!/^##\s+(?:\d+\.\s*)?Seguridad\b/im.test(markdown)) {
+        this.logger.log("[MDD auto-fix §6] §6 falta — ejecutando nodo de seguridad...");
+        try {
+          const llm = createDbgaLLM();
+          const securityNode = createMddSecurityNode(llm);
+          const state = {
+            ...defaultMDDState,
+            mddDraft: markdown,
+            clarifiedScope: lastState?.clarifiedScope ?? "",
+            acceptedProposalDirective: lastState?.acceptedProposalDirective,
+            auditorFeedback: lastState?.auditorFeedback,
+            projectId: lastState?.projectId,
+            dbgaContent: lastState?.dbgaContent ?? "",
+          };
+          const result = await securityNode(state as MDDStateType);
+          const fixedDraft = (result.mddDraft ?? markdown).trim();
+          if (fixedDraft.length > markdown.length) {
+            markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: fixedDraft });
+            this.logger.log(`[MDD auto-fix §6] §6 insertada. markdownLen: ${markdown.length}`);
+          }
+        } catch (err) {
+          this.logger.warn(`[MDD auto-fix §6] error: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       if (projectId?.trim()) {
         this.estimationService.clearLiveDraft(projectId.trim(), estimationStageId);
         this.clearMddCheckpoint(projectId.trim(), mddStageKey).catch(() => { });
@@ -1061,11 +1086,36 @@ export class AiAnalysisService {
         if (isBrokenMetadataDocument && lastNonEmptyDraft && lastNonEmptyDraft.length > 80) {
           raw = lastNonEmptyDraft;
         }
-        const markdown = prepareMddForOutput({
+        let markdown = prepareMddForOutput({
           mddStructured: lastState?.mddStructured,
           mddDraft: raw,
         });
         logSection3Debug("final (stream/resume done)", markdown);
+        // AUTO-FIX §6: si la IA saltó §6, forzar generación con el nodo de seguridad
+        if (!/^##\s+(?:\d+\.\s*)?Seguridad\b/im.test(markdown)) {
+          this.logger.log("[MDD auto-fix §6] §6 falta — ejecutando nodo de seguridad...");
+          try {
+            const llm = createDbgaLLM();
+            const securityNode = createMddSecurityNode(llm);
+            const state = {
+              ...defaultMDDState,
+              mddDraft: markdown,
+              clarifiedScope: lastState?.clarifiedScope ?? "",
+              acceptedProposalDirective: lastState?.acceptedProposalDirective,
+              auditorFeedback: lastState?.auditorFeedback,
+              projectId: lastState?.projectId,
+              dbgaContent: lastState?.dbgaContent ?? "",
+            };
+            const result = await securityNode(state as MDDStateType);
+            const fixedDraft = (result.mddDraft ?? markdown).trim();
+            if (fixedDraft.length > markdown.length) {
+              markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: fixedDraft });
+              this.logger.log(`[MDD auto-fix §6] §6 insertada. markdownLen: ${markdown.length}`);
+            }
+          } catch (err) {
+            this.logger.warn(`[MDD auto-fix §6] error: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
         if (projectId?.trim()) {
           this.estimationService.clearLiveDraft(projectId.trim(), estimationStage);
           this.clearMddCheckpoint(projectId.trim(), cp.mddStageId).catch(() => { });
