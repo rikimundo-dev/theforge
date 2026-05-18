@@ -26,6 +26,7 @@ import {
   replaceContextWhenOnlyMetadata,
   replaceSection1BodyFromAnyHeading,
   replaceSections2To5InDraft,
+  replaceSection6Or7InDraft,
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
 } from "./utils/mdd-sanitize.js";
@@ -772,13 +773,24 @@ export class AiAnalysisService {
             dbgaContent: lastState?.dbgaContent ?? "",
           };
           const result = await securityNode(state as MDDStateType);
-          const fixedDraft = (result.mddDraft ?? markdown).trim();
-          if (fixedDraft.length > markdown.length) {
-            markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: fixedDraft });
-            this.logger.log(`[MDD auto-fix §6] §6 insertada. markdownLen: ${markdown.length}`);
+          let fixedDraft = (result.mddDraft ?? markdown).trim();
+          // Fallback directo si el nodo de seguridad no insertó §6
+          if (!/^##\s+(?:\d+\.\s*)?Seguridad\b/im.test(fixedDraft)) {
+            fixedDraft = replaceSection6Or7InDraft(markdown, 6, "## 6. Seguridad\n\n(Pendiente de definir.)");
+            this.logger.log("[MDD auto-fix §6] fallback: placeholder insertado vía replaceSection6Or7InDraft");
+          }
+          if (fixedDraft !== markdown) {
+            markdown = normalizeMddFormat(fixedDraft);
+            this.logger.log(`[MDD auto-fix §6] §6 asegurada. markdownLen: ${markdown.length}`);
           }
         } catch (err) {
           this.logger.warn(`[MDD auto-fix §6] error: ${err instanceof Error ? err.message : String(err)}`);
+          // Último fallback: insertar placeholder directamente
+          const placeholder = replaceSection6Or7InDraft(markdown, 6, "## 6. Seguridad\n\n(Pendiente de definir.)");
+          if (placeholder !== markdown) {
+            markdown = normalizeMddFormat(placeholder);
+            this.logger.log("[MDD auto-fix §6] último fallback: placeholder insertado tras error");
+          }
         }
       }
       if (projectId?.trim()) {
@@ -1107,13 +1119,24 @@ export class AiAnalysisService {
               dbgaContent: lastState?.dbgaContent ?? "",
             };
             const result = await securityNode(state as MDDStateType);
-            const fixedDraft = (result.mddDraft ?? markdown).trim();
-            if (fixedDraft.length > markdown.length) {
-              markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: fixedDraft });
-              this.logger.log(`[MDD auto-fix §6] §6 insertada. markdownLen: ${markdown.length}`);
+            let fixedDraft = (result.mddDraft ?? markdown).trim();
+            // Fallback directo si el nodo de seguridad no insertó §6
+            if (!/^##\s+(?:\d+\.\s*)?Seguridad\b/im.test(fixedDraft)) {
+              fixedDraft = replaceSection6Or7InDraft(markdown, 6, "## 6. Seguridad\n\n(Pendiente de definir.)");
+              this.logger.log("[MDD auto-fix §6] fallback: placeholder insertado vía replaceSection6Or7InDraft");
+            }
+            if (fixedDraft !== markdown) {
+              markdown = normalizeMddFormat(fixedDraft);
+              this.logger.log(`[MDD auto-fix §6] §6 asegurada. markdownLen: ${markdown.length}`);
             }
           } catch (err) {
             this.logger.warn(`[MDD auto-fix §6] error: ${err instanceof Error ? err.message : String(err)}`);
+            // Último fallback: insertar placeholder directamente
+            const placeholder = replaceSection6Or7InDraft(markdown, 6, "## 6. Seguridad\n\n(Pendiente de definir.)");
+            if (placeholder !== markdown) {
+              markdown = normalizeMddFormat(placeholder);
+              this.logger.log("[MDD auto-fix §6] último fallback: placeholder insertado tras error");
+            }
           }
         }
         if (projectId?.trim()) {
