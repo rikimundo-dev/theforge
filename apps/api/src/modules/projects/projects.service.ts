@@ -843,7 +843,6 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     let index = 0;
     const errors: { step: string; error: string }[] = [];
     for (const step of deliverablesToRun) {
-      onProgress?.({ step, index, total });
       try {
         await this.runDeliverableStep(step, projectId);
       } catch (e) {
@@ -851,8 +850,12 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         this.logger.warn(`[Cascade] Paso ${step} saltado: ${message}. Continuando con el siguiente.`);
         errors.push({ step, error: message });
       }
+      // Reportar progreso DESPUÉS de que el paso se completó, no antes
+      onProgress?.({ step, index, total });
       index += 1;
     }
+    // Señal de finalización: reportar un paso "done" para que el frontend sepa que terminó
+    onProgress?.({ step: "done" as DeliverableKind, index: total, total });
     if (errors.length > 0) {
       this.logger.warn(
         `[Cascade] Completada con ${errors.length}/${total} paso(s) saltado(s): ${errors.map((e) => `${e.step}: ${e.error}`).join("; ")}`,
