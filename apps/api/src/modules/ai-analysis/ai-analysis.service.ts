@@ -57,7 +57,7 @@ function resolveLangGraphRecursionLimit(): number {
     const n = Number(raw);
     if (Number.isFinite(n) && n >= 10 && n <= 500) return Math.floor(n);
   }
-  return 25;
+  return 100;
 }
 
 const LANGGRAPH_RECURSION_LIMIT = resolveLangGraphRecursionLimit();
@@ -299,7 +299,10 @@ export class AiAnalysisService {
     const config = checkpointer
       ? { configurable: { thread_id: threadId } as Record<string, string> }
       : undefined;
-    const finalState = await graph.invoke(initialState, config);
+    const finalState = await graph.invoke(initialState, {
+      ...config,
+      recursionLimit: LANGGRAPH_RECURSION_LIMIT,
+    });
     return finalState as DBGAState;
   }
 
@@ -316,6 +319,7 @@ export class AiAnalysisService {
 
     let threadId: string;
     if (projectId?.trim()) {
+      await this.clearMddCheckpoint(projectId.trim(), "");
       const row = await this.prisma.agentStateCheckpoint.upsert({
         where: {
           projectId_mddStageId: { projectId: projectId.trim(), mddStageId: "" },
@@ -360,6 +364,7 @@ export class AiAnalysisService {
     try {
       const stream = await graph.stream(initialState, {
         ...config,
+        recursionLimit: LANGGRAPH_RECURSION_LIMIT,
         streamMode: "values",
       });
 
@@ -421,7 +426,12 @@ export class AiAnalysisService {
         ...(complexityProposal != null ? { complexityProposal } : {}),
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error en el análisis";
+      const raw = err instanceof Error ? err.message : "Error en el análisis";
+      const isRecursionLimit =
+        /recursion limit/i.test(raw) || /GRAPH_RECURSION/i.test(raw);
+      const message = isRecursionLimit
+        ? "No se pudieron identificar competidores directos tras varios intentos. Esto suele ocurrir en dominios internos B2B o nichos muy específicos. Puedes continuar con un análisis sin competidores de referencia o reformular la idea con más contexto."
+        : raw;
       yield { type: "error", message };
     }
   }

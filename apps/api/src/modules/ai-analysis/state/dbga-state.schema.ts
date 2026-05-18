@@ -58,6 +58,8 @@ export const dbgaStateSchema = z.object({
   refinedQuery: z.string().optional(),
   /** Preferencias arquitectónicas del usuario (memoria semántica) para alinear benchmark */
   userPreferences: z.string().optional(),
+  /** Veces que el Critic ha evaluado (límite de bucles scout→auditor→critic) */
+  criticIterations: z.number().int().min(0).optional(),
 });
 
 export type DBGAState = z.infer<typeof dbgaStateSchema>;
@@ -73,4 +75,5 @@ export const defaultDBGAState: DBGAState = {
   criticDecision: undefined,
   refinedQuery: undefined,
   userPreferences: undefined,
+  criticIterations: 0,
 };

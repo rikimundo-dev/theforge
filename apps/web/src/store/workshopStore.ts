@@ -2437,6 +2437,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   clearDbgaContent: async (projectId) => {
     if (!projectId?.trim()) return;
     try {
+      void apiFetch(
+        `${API_BASE}/ai-analysis/dbga/checkpoint?projectId=${encodeURIComponent(projectId.trim())}`,
+        { method: "DELETE" },
+      ).catch(() => { });
       const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
