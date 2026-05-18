@@ -236,9 +236,9 @@ const MDD_REFERENCE_PATTERNS: { pattern: RegExp; example: string }[] = [
   // "Ver diagrama en §2.3", "ver §2 del MDD", "véase §3"
   { pattern: /\bver\s+(?:diagrama|figura|tabla|secci[oó]n|el)\s*(?:en\s+)?[§][\d.]/gi, example: "ver diagrama en §2.3" },
   { pattern: /\b(?:v[ée]ase|v[ée]r)\s+[§]\d/gi, example: "véase §3" },
-  { pattern: /\b(?:remitimos?\s+al?\s+MDD|remite\s+al\s+MDD)\b/i, example: "remite al MDD" },
-  { pattern: /\b(?:el\s+MDD\s+(?:define|describe|detalla|contiene|especifica|tiene|l[Ii]sta))\b/i, example: "el MDD define..." },
-  { pattern: /\b(?:consultar\s+(?:el\s+)?MDD|v[ée]r\s+(?:el\s+)?MDD)\b/i, example: "consultar el MDD" },
+  { pattern: /\b(?:remitimos?\s+al?\s+MDD|remite\s+al\s+MDD)\b/gi, example: "remite al MDD" },
+  { pattern: /\b(?:el\s+MDD\s+(?:define|describe|detalla|contiene|especifica|tiene|l[Ii]sta))\b/gi, example: "el MDD define..." },
+  { pattern: /\b(?:consultar\s+(?:el\s+)?MDD|v[ée]r\s+(?:el\s+)?MDD)\b/gi, example: "consultar el MDD" },
 ];
 
 /**
