@@ -76,6 +76,14 @@ Solo si §1 nombra fuentes externas: referencia de contrato (rutas según provee
 
 Decisiones **acotadas al alcance**: transporte, secretos, auth si hay API expuesta, RBAC solo si hay actores/roles en §1. Sin exigir tablas de auditoría si §1 no pide trazabilidad persistida.
 
+**Parámetros concretos obligatorios:** Para toda política de seguridad que el alcance mencione (bloqueo de cuentas, expiración de sesiones, MFA, contraseñas), usa valores de industria estándar (OWASP ASVS, NIST) cuando el usuario no especifique un número exacto. Ejemplos:
+- Bloqueo por intentos fallidos: **5 intentos en 15 minutos** (OWASP ASVS V3.1.1, NIST SP 800-63B)
+- Expiracion de refresh token: **7 días** (estándar OAuth 2.0)
+- Sesión MFA: **24h** o hasta cerrar sesión
+- Longitud mínima contraseña: **8 caracteres** (NIST SP 800-63B)
+- Rate limiting login: **10 solicitudes/minuto por IP**
+No dejes valores indefinidos ni frases genéricas como "número de intentos definido por política" — pon el valor estándar con referencias a OWASP/NIST.
+
 ---
 
 ## 7. Infraestructura
