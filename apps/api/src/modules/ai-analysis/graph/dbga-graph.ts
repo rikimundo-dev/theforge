@@ -25,8 +25,14 @@ export function createDbgaGraph(checkpointer?: BaseCheckpointSaver | null) {
   const criticNode = createCriticNode(llm);
   const synthesisNode = createSynthesisNode(llm);
 
+  /** Máximo de bucles scout→auditor→critic antes de forzar síntesis. */
+  const MAX_CRITIC_ITERATIONS = 2;
+
   /** After Critic: re-research (scout) or continue to Synthesis. */
   function routeCritic(state: DBGAStateType): string {
+    const iterations = state.criticIterations ?? 0;
+    if (iterations >= MAX_CRITIC_ITERATIONS) return "synthesis";
+    if (state.competitors.length === 0 && iterations >= 2) return "synthesis";
     return state.criticDecision === "scout" ? "scout" : "synthesis";
   }
 

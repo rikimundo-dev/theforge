@@ -26,6 +26,7 @@ export function createCriticNode(llm: BaseChatModel) {
     return {
       criticDecision: parsed.criticDecision,
       refinedQuery: parsed.refinedQuery ?? undefined,
+      criticIterations: (state.criticIterations ?? 0) + 1,
     };
   };
 }

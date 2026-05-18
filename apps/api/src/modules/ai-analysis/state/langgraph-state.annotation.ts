@@ -13,8 +13,7 @@ export const DBGAStateAnnotation = Annotation.Root({
     default: () => [],
   }),
   techStackInsights: Annotation<string[]>({
-    reducer: (left, right) =>
-      Array.isArray(right) ? left.concat(right) : left.concat([right]),
+    reducer: (_left, right) => (Array.isArray(right) ? right : [right]),
     default: () => [],
   }),
   userPainPoints: Annotation<string[]>({
@@ -27,6 +26,7 @@ export const DBGAStateAnnotation = Annotation.Root({
   criticDecision: Annotation<CriticDecision | undefined>(),
   refinedQuery: Annotation<string | undefined>(),
   userPreferences: Annotation<string | undefined>(),
+  criticIterations: Annotation<number | undefined>(),
 });
 
 /** Inferred state type for nodes: (state: DBGAStateType) => Partial<DBGAStateType> */
