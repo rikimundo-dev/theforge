@@ -17,6 +17,8 @@ import {
   checkBlueprintSpanishQuality,
   checkBlueprintSelfContained,
   checkBlueprintTableFormat,
+  extractEntities,
+  extractSection,
 } from "../engine/conformance.service.js";
 import { AiService } from "../ai/ai.service.js";
 import { DiscoveryService } from "../ai/discovery.service.js";
@@ -1004,35 +1006,52 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     return this.update(projectId, { userStoriesContent: cleanDocumentContent(content) });
   }
 
+  /** Pre-extrae entidades del MDD §3 y las agrega como texto literal en el prompt para la IA. */
+  private enrichMddWithEntities(mddContent: string): string {
+    const section3 = extractSection(
+      mddContent,
+      /^#+\s*(?:3\.\s*)?(?:modelo\s+de\s+datos|datos\s*\/\s*entidades)/im,
+    );
+    const mddEntities = extractEntities(section3);
+    const entityList = Array.from(mddEntities).sort().join(", ");
+    if (!entityList) return mddContent;
+    return mddContent +
+      `\n\n**LISTA EXACTA DE ENTIDADES DEL MDD §3 (extraídas automáticamente del SQL):** ${entityList}\n\n` +
+      `TODAS estas entidades DEBEN aparecer por nombre en la sección "### 2. Persistencia y datos" del Blueprint, ` +
+      `como cabeceras ### o viñetas -. NO omitas ninguna.\n\n`;
+  }
+
   async generateBlueprintPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
     const project = await this.assertProjectAccess(projectId);
     const mddContent = this.constitutionMarkdown(project);
+    const enrichedMdd = this.enrichMddWithEntities(mddContent);
     const p = project as { projectType?: string; theforgeProjectId?: string | null };
     let legacyOpts: { theforgeContext: string } | undefined;
     if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
       const theforgeContext = await this.theforge.getContextForDeliverables(p.theforgeProjectId);
       if (theforgeContext.trim()) legacyOpts = { theforgeContext };
     }
-    const content = await this.ai.generateBlueprint(mddContent, gapsFeedback, legacyOpts);
+    const content = await this.ai.generateBlueprint(enrichedMdd, gapsFeedback, legacyOpts);
     return { content: cleanDocumentContent(content) };
   }
 
   async generateBlueprint(projectId: string, gapsFeedback?: string | null) {
     const project = await this.assertProjectAccess(projectId);
     const mddContent = this.constitutionMarkdown(project);
+    const enrichedMdd = this.enrichMddWithEntities(mddContent);
     const p = project as { projectType?: string; theforgeProjectId?: string | null };
     let legacyOpts: { theforgeContext: string } | undefined;
     if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
       const theforgeContext = await this.theforge.getContextForDeliverables(p.theforgeProjectId);
       if (theforgeContext.trim()) legacyOpts = { theforgeContext };
     }
-    let blueprintContent = await this.ai.generateBlueprint(mddContent, gapsFeedback, legacyOpts);
+    let blueprintContent = await this.ai.generateBlueprint(enrichedMdd, gapsFeedback, legacyOpts);
     blueprintContent = cleanDocumentContent(blueprintContent);
 
     // GUARD: Si gapsFeedback provocó un resultado vacío/corto, reintentar SIN gaps
     if (gapsFeedback && blueprintContent.length < 80) {
       this.logger.warn(`[Blueprint] Resultado vacío/corto (${blueprintContent.length} chars) con gapsFeedback — reintentando sin gaps`);
-      blueprintContent = await this.ai.generateBlueprint(mddContent, null, legacyOpts);
+      blueprintContent = await this.ai.generateBlueprint(enrichedMdd, null, legacyOpts);
       blueprintContent = cleanDocumentContent(blueprintContent);
     }
 
@@ -1082,7 +1101,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         ? `Faltan las siguientes entidades del MDD §3 en el Blueprint (DEBES incluirlas como cabeceras ### o viñetas -): ${entityNames}.${otherSummary}`
         : allGaps.slice(0, 6).join("; ");
       this.logger.warn(`[Blueprint] Calidad insuficiente (${entityCheck.gaps.length} entidades, ${sectionCheck.gaps.length} secciones, ${generalTableCheck.gaps.length} tablaGral, ${spanishCheck.gaps.length} español, ${selfContainedCheck.gaps.length} autocontenido) — reintentando con feedback: ${gapFeedback}`);
-      blueprintContent = await this.ai.generateBlueprint(mddContent, gapFeedback, legacyOpts);
+      blueprintContent = await this.ai.generateBlueprint(enrichedMdd, gapFeedback, legacyOpts);
       blueprintContent = cleanDocumentContent(blueprintContent);
     }
 

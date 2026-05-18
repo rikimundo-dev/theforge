@@ -81,8 +81,11 @@ function extractStackKeywords(text: string): Set<string> {
   return keywords;
 }
 
+/** Extrae el cuerpo de la primera sección cuyo título coincide con el patrón (hasta el siguiente ##). (EXPORTADO) */
+export { extractSection };
+
 /** Extrae nombres de entidades/tablas (CREATE TABLE, **Entity**, tabla markdown, listas) de un bloque. */
-function extractEntities(text: string): Set<string> {
+export function extractEntities(text: string): Set<string> {
   const entities = new Set<string>();
   const createTable = text.matchAll(/\bcreate\s+table\s+(?:if\s+not\s+exists\s+)?["`]?([a-z_][a-z0-9_]*)/gi);
   for (const m of createTable) {
