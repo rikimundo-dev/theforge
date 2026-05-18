@@ -1,7 +1,7 @@
 # Build stage — context = repo root
 FROM node:20-alpine AS builder
 
-ARG BUILD_CACHE_BUST=41
+ARG BUILD_CACHE_BUST=42
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 RUN apk add --no-cache gcompat openssl
