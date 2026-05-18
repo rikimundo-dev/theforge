@@ -51,7 +51,7 @@ A continuación genera EXACTAMENTE las siguientes secciones. NO omitas ninguna. 
 
 ### 2. Persistencia y datos (OBLIGATORIO — NO OMITIR)
  
-- **Cobertura §3:** Lista COMPLETA de TODAS las tablas que aparecen en §3 del MDD. Copia los nombres exactos del MDD. Formato obligatorio: cabeceras markdown `### nombre_tabla` (una por línea). Ejemplo:
+- **Cobertura §3:** Lista COMPLETA de TODAS las tablas que aparecen en §3 del MDD. Copia los nombres exactos del MDD. **Formato obligatorio: cabeceras markdown `### nombre_tabla` (una por línea) o viñetas `- nombre_tabla`.** Prohibido lista inline en medio de un párrafo (como "Las tablas developers, users..." dentro de un párrafo de texto). El verificador automático NO reconoce entidades dentro de párrafos, solo como cabeceras o viñetas independientes. Ejemplo:
   ```
   ### developers
   ### users
@@ -60,7 +60,7 @@ A continuación genera EXACTAMENTE las siguientes secciones. NO omitas ninguna. 
   ### bookings
   ### payment_plans
   ```
-  Si el MDD §3 ya detalla SQL completo, NO dupliques columnas ni CREATE TABLE — solo lista los nombres como se muestra arriba y añade "(ver §3 del MDD para columnas, tipos e índices)". NUNCA sustituyas la lista por "véase §3", "remite al MDD", "no se duplica" o frases similares. La lista nominal DEBE estar presente.
+  Si el MDD §3 ya detalla SQL completo, NO dupliques columnas ni CREATE TABLE — solo lista los nombres como se muestra arriba y añade "(ver §3 del MDD para columnas, tipos e índices)". NUNCA sustituyas la lista por "véase §3", "remite al MDD", "no se duplica" o frases similares. **Prohibido lista inline en párrafo** — debe ser cabeceras o viñetas independientes. La lista nominal DEBE estar presente y en formato detectable.
 - **Índices:** BTREE/GIST según geo y consultas del MDD.
 - **Auditoría / sesiones:** Solo si el MDD §3 o §6 lo exigen.
 
@@ -104,7 +104,7 @@ Prohibido:
 IMPORTANTE: Esta sección debe aparecer al final del documento y debe constar de los siguientes ítems, marcados con ✅ (cumple) o ❌ (no cumple). DEBES marcar cada uno basándote en lo que realmente generaste:
 
 - ✅/❌ Sec 1: Stack técnico listado con tecnologías y versiones del MDD §2
-- ✅/❌ Sec 2: Lista nominal de TODAS las entidades del MDD §3 presente (ninguna omitida)
+- ✅/❌ Sec 2: Lista nominal de TODAS las entidades del MDD §3 presente en cabeceras `###` o viñetas `-` (ninguna omitida)
 - ✅/❌ Sec 3: Tabla API completa con cada endpoint del MDD §4 en una fila
 - ✅/❌ Sec 4: Componentes transversales cubiertos (si aplican según MDD §1/§2)
 - ✅/❌ Sec 5: Seguridad en despliegue alineada con MDD §6
@@ -128,7 +128,7 @@ Ejemplo de salida correcta:
 ### Reglas de oro
 
 - **Cobertura stack:** Cada tecnología del MDD §2 debe aparecer **por nombre** en el Blueprint.
-- **Cobertura entidades:** **TODAS** las tablas/nodos del §3 deben nombrarse (obligatorio, verificado automáticamente); cero omisiones. Prohibido sustituir la lista por frases como "véase §3" o "remite al MDD".
+- **Cobertura entidades:** **TODAS** las tablas/nodos del §3 deben nombrarse (obligatorio, verificado automáticamente); cero omisiones. Prohibido sustituir la lista por frases como "véase §3" o "remite al MDD". **Prohibido lista inline en párrafo** — solo cabeceras `###` o viñetas `-`.
 - **Cobertura API:** Toda fila de la tabla de §4.A debe tener **fila** en el mapa §4→módulos.
 - **Formato tabla API:** La tabla debe tener cabeceras claras (Método | Ruta | Módulo | Notas) y formato markdown válido con la fila de separación `|---|---|---|`.
 - **Autocontenido:** El Blueprint debe ser legible sin el MDD. Prohibido "ver §X", "véase §X", "remite al MDD" como sustituto del contenido. Las únicas excepciones son "(ver §3 del MDD para columnas)" y "(ver §6 para flujo SSO completo)".
@@ -147,6 +147,7 @@ Blueprint en markdown. Primer carácter `#`. Sin introducciones ni envolver el d
 - No omitir tecnologías §2 ni entidades §3 (al menos por nombre).
 - **Prohibido** Blueprint que solo parafrasee §3 sin mapa §4, sin componentes transversales cuando §1/§2 mencionan IA, grafo o pipeline, y sin vínculo a §5.
 - **Prohibido** omitir la sección "### 2. Persistencia y datos" o escribir "véase §3" sin lista nominal explícita de tablas.
+- **Prohibido** lista de entidades en formato inline (dentro de un párrafo). Deben ser cabeceras `###` o viñetas `-` independientes.
 - **Prohibido** omitir la sección "### 8. Checklist de verificación del Blueprint" al final del documento.
 - **Prohibido** usar palabras inexistentes como "valúa", "setear", "del switch", "encolada" — usa español correcto siempre.
 - **Prohibido** frases como "ver diagrama en §X", "remitimos al MDD para", "véase §X del MDD" como sustituto del contenido del Blueprint. Las únicas excepciones son "(ver §3 del MDD para columnas)" o "(ver §6 para el flujo SSO completo)".

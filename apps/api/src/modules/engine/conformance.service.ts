@@ -118,6 +118,35 @@ function extractEntities(text: string): Set<string> {
       entities.add(m[1].toLowerCase());
     }
   }
+  // Extraer de listas inline en párrafos: "Las tablas developers, users, properties..."
+  // Busca frases como "tablas X, Y, Z" o "entidades X, Y, Z" o "tables X, Y, Z"
+  // y extrae los nombres separados por coma.
+  const inlineEntityLists = text.matchAll(
+    /\b(?:tablas?|entidades?|tables?|entities?|modelos?)\s+([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)+)/gi,
+  );
+  for (const m of inlineEntityLists) {
+    const names = m[1].split(/\s*,\s*/);
+    for (const name of names) {
+      const clean = name.trim().toLowerCase();
+      if (clean.length > 2 && !genericHeaders.test(clean)) {
+        entities.add(clean);
+      }
+    }
+  }
+  // También captura: "developers, users, properties" al inicio de una línea tras viñeta o
+  // como parte de "incluye: developers, users..."
+  const colonLists = text.matchAll(
+    /(?:incluye|contiene|son|tiene|lista|list):\s*([a-z_][a-z0-9_]*(?:\s*,\s*[a-z_][a-z0-9_]*)+)/gi,
+  );
+  for (const m of colonLists) {
+    const names = m[1].split(/\s*,\s*/);
+    for (const name of names) {
+      const clean = name.trim().toLowerCase();
+      if (clean.length > 2 && !genericHeaders.test(clean) && !entities.has(clean)) {
+        entities.add(clean);
+      }
+    }
+  }
   return entities;
 }
 
