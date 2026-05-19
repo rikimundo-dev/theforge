@@ -30,6 +30,7 @@ import { DashboardSidebar } from "./components/DashboardSidebar";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { McpSecretCard } from "./components/McpSecretCard";
 import { AriadneConfigCard } from "./components/AriadneConfigCard";
+import { AIProvidersCard } from "./components/AIProvidersCard";
 import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser } from "./utils/apiClient";
 import {
   Button,
@@ -410,12 +411,13 @@ export default function App() {
 
       {/* Settings Dialog */}
       <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="max-w-xl max-h-[85dvh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[85dvh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Ajustes</DialogTitle>
             <DialogDescription>Configuración de tu cuenta y herramientas.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            <AIProvidersCard />
             <McpSecretCard />
             <AriadneConfigCard />
             <label className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 cursor-pointer">
@@ -610,6 +612,7 @@ export default function App() {
                 projectId={workshopProject.id}
                 projectName={workshopProject.name}
                 onBack={handleExitWorkshop}
+                onOpenSettings={() => setShowSettings(true)}
               />
             )}
           </div>

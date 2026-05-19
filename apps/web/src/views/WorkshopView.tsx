@@ -54,6 +54,7 @@ import { useWorkshopStore, type Status } from "../store/workshopStore";
 import { apiFetch, API_BASE } from "../utils/apiClient";
 import ChatContainer from "../components/ChatContainer";
 import ComplexityPendingBanner from "../components/ComplexityPendingBanner";
+import { AIProviderBanner } from "../components/AIProviderBanner";
 import MddViewer from "../components/MddViewer";
 import { replaceYamlFrontMatter } from "../components/DesignMdPreview";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
@@ -210,6 +211,7 @@ interface WorkshopViewProps {
   projectId: string;
   projectName?: string;
   onBack?: () => void;
+  onOpenSettings?: () => void;
 }
 
 /** First vertically scrollable region under `root` (BFS) for mobile scroll FAB targeting. */
@@ -233,6 +235,7 @@ export default function WorkshopView({
   projectId,
   projectName,
   onBack,
+  onOpenSettings,
 }: WorkshopViewProps) {
   const project = useWorkshopStore((s) => s.project);
   const activeStageId = useWorkshopStore((s) => s.activeStageId);
@@ -1845,6 +1848,7 @@ export default function WorkshopView({
       )}
 
       <div className="shrink-0">
+        <AIProviderBanner onOpenSettings={onOpenSettings} />
         <ComplexityPendingBanner />
       </div>
 
