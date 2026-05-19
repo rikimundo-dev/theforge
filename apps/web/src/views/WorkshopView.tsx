@@ -549,10 +549,12 @@ export default function WorkshopView({
 
       const trimmed = result.trim();
       // Strip any wrapping ```yaml or ```markdown fences the orchestrator might add
-      const cleaned = trimmed
+      let cleaned = trimmed
         .replace(/^```(?:yaml|markdown)\s*\n?/i, "")
         .replace(/\n?```\s*$/i, "")
         .trim();
+      // Strip ---FIN_UX_UI--- delimiter and chat message (same regex as backend generateUxUiGuide)
+      cleaned = cleaned.replace(/\n?-{1,}FIN_UX_UI-{1,}[\s\S]*$/i, "").trim();
 
       if (!cleaned || !cleaned.startsWith("---")) {
         // If the orchestrator didn't return YAML front matter, generate it
