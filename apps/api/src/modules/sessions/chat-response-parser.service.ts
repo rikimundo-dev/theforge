@@ -77,6 +77,56 @@ export class ChatResponseParserService {
     return [before, cleaned, after].filter(Boolean).join("\n\n");
   }
 
+  /**
+   * Generic merge for documents with numbered sections (## N. or ### N.).
+   * If newPart is a full document (≥2 sections), returns as-is.
+   * If it's a single section, merges it into currentDoc.
+   * If it's too short or no section header, returns currentDoc unchanged.
+   * Handles both ## and ### heading levels.
+   */
+  mergeDocSectionOrUseFull(currentDoc: string | undefined, newPart: string): string {
+    const cleaned = newPart.trim();
+    if (!cleaned) return (currentDoc ?? "").trim();
+    const current = (currentDoc ?? "").trim();
+
+    // Detect heading level (## or ###)
+    const headingMatch = cleaned.match(/^#{2,3}\s*(\d+)\.\s+/m);
+    if (!headingMatch) {
+      // No numbered section header — if it's short, preserve existing
+      if (cleaned.length < 600) return current;
+      return cleaned;
+    }
+
+    const headingPrefix = headingMatch[0].match(/^#{2,3}/)?.[0] ?? "##";
+    const sectionNum = parseInt(headingMatch[1], 10);
+
+    // Check if it looks like a FULL document (has multiple sections)
+    const nextSectionRe = new RegExp(`\\n${headingPrefix}\\s*\\d+\\.\\s+`, "i");
+    const hasMultipleSections = (cleaned.match(nextSectionRe)?.length ?? 0) >= 2;
+    if (hasMultipleSections) return cleaned;
+
+    // Single section — merge into existing document
+    if (!current) return cleaned;
+    const escNum = sectionNum;
+    const escPrefix = headingPrefix.replace("#", "\\#");
+    const sectionStart = current.match(
+      new RegExp(`(?:^|\\n)(${escPrefix}\\s*${escNum}\\.\\s+)`, "i"),
+    );
+    if (!sectionStart?.index) {
+      // Section number not found — append cleaned to document
+      return `${current}\n\n${cleaned}`;
+    }
+    const from = sectionStart.index + (sectionStart[0].startsWith("\n") ? 1 : 0);
+    const nextSection = current.slice(from + 1).match(
+      new RegExp(`\\n${escPrefix}\\s*\\d+\\.\\s+`),
+    );
+    const to =
+      nextSection?.index != null ? from + 1 + nextSection.index : current.length;
+    const before = current.slice(0, from).trimEnd();
+    const after = current.slice(to).trimStart();
+    return [before, cleaned, after].filter(Boolean).join("\n\n");
+  }
+
   cleanDocumentContent(text: string): string {
     return cleanDocumentContentUtil(text);
   }
