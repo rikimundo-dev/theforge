@@ -100,43 +100,44 @@ const cleanDoc = (text: string | null) => {
   let c = text.trim();
   if (!c) return null;
 
-  // Encontrar el primer # para quitar preámbulos, sin regex lookbehind
-  // IMPORTANTE: Si hay bloque YAML (---\\n...\\n---), buscar # solo después de ese bloque
-  // para no cortar el frontmatter
-  const yamlBlockEnd = c.startsWith("---") ? c.indexOf("\n---", 3) : -1;
-  const searchStart = yamlBlockEnd !== -1 ? yamlBlockEnd + 5 : 0; // +5 = \\n + --- + \\n
-  const firstHashIndex = c.indexOf("#", searchStart);
+  // Si empieza con --- (YAML frontmatter), preservarlo completo -- no cortar preambulos
+  if (c.startsWith("---")) {
+    // Saltar la limpieza de preamble para contenido con YAML (ej. Guia UX/UI)
+    // Solo quitar fences ``` y retornar
+    return cleanFences(c);
+  }
+
+  // Encontrar el primer # para quitar preambulos, sin regex lookbehind
+  const firstHashIndex = c.indexOf("#");
   if (firstHashIndex !== -1) {
-    if (c.startsWith("#", searchStart)) {
-      // ok, empieza ahí (o después del YAML)
+    if (c.startsWith("#")) {
+      // ok, empieza ahi
     } else {
-      const newlineHashIndex = c.indexOf("\n#", searchStart);
+      const newlineHashIndex = c.indexOf("\n#");
       if (newlineHashIndex !== -1) {
         c = c.slice(newlineHashIndex + 1).trim();
       }
     }
   }
 
+  return cleanFences(c);
+};
+
+function cleanFences(c: string): string | null {
   // Quitar fences de markdown ```
-  // REPLACE manual con slices para evitar Regex
   if (c.startsWith("```")) {
     const firstNewline = c.indexOf("\n");
     if (firstNewline !== -1) {
-      // Intentar quitar la etiqueta de lenguaje (```python\n -> ...)
       c = c.slice(firstNewline + 1).trim();
     } else {
-      // Solo hay ```...? Raro, pero lo quitamos
       c = c.slice(3).trim();
     }
   }
-
-  // Quitar ``` al final
   if (c.endsWith("```")) {
     c = c.slice(0, -3).trim();
   }
-
   return c || null;
-};
+}
 
 /**
  * Helper para persist*Content: aplica retry, offline queue y setea error en el store.
