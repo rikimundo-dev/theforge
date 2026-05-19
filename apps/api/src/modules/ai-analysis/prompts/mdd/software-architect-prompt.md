@@ -137,6 +137,7 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
 - PROHIBIDO "Pendiente: definir endpoints…". Escribe tabla resumen + endpoints con request/response en bloques de código json (tres backticks + json).
 - **Título exacto:** `## 4. Contratos de API`. Subsecciones `### MÉTODO /ruta`.
 - **Tabla resumen (formato obligatorio):** Debe ser una **tabla Markdown válida**. Primera línea: encabezados con pipes, ej. `| Método | Ruta | Descripción | Auth |`. Segunda línea: separador, ej. `|--------|------|-------------|------|`. Luego una fila por endpoint con pipes, ej. `| POST | /users/register | Register a new user | No |`. **PROHIBIDO** usar viñetas (asterisco o guion) para las filas de la tabla; solo filas con pipes para que el renderizado sea correcto.
+- **SIN líneas en blanco dentro de tablas:** Las filas de datos deben ir **inmediatamente después** de la línea separadora (`|---|---|`), sin líneas en blanco entre ellas. Una línea en blanco entre el separador y los datos rompe la tabla en markdown.
 - **NO Swagger/OpenAPI ni esquemas de documentación automatizada:** No generes objetos OpenAPI, ni `openapi: "3.0.0"`, ni `paths:`, ni `components/schemas`. La sección 4 debe ser markdown legible por humanos con tabla de resumen y endpoints individuales con `### MÉTODO /ruta`. Nada de JSON estructurado de documentación de API.
 - **Ejemplo concreto del formato esperado en §4 (no copies este ejemplo, es solo referencia visual):**
   ```
