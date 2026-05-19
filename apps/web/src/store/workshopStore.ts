@@ -554,7 +554,10 @@ interface WorkshopState {
   /** Tab del mensaje en streaming (para filtrar por tab) */
   streamingTab: string | null;
   /** Progreso de agentes DBGA (Benchmark): qué agente trabaja y qué hace */
-  agentProgress: Array<{ agent: string; message: string }>;
+  agentProgress: Array<{ agent: string; message: string; step?: string; status?: string }>;
+  /** Conteo de docs completados en cascada (para botón) */
+  cascadeCompleted: number;
+  cascadeTotal: number;
   /** Métricas en vivo (Semáforo + estimación) desde GET /ai-analysis/estimation */
   liveMetrics: LiveMetricsResult | null;
   /** ThreadId del flujo Manager (MDD); cuando está definido, el siguiente mensaje en tab MDD va a resume */
@@ -768,7 +771,9 @@ const initialState = {
   streamingUserImages: null as ChatImagePart[] | null,
   streamingContent: null as string | null,
   streamingTab: null as string | null,
-  agentProgress: [] as Array<{ agent: string; message: string }>,
+  agentProgress: [] as Array<{ agent: string; message: string; step?: string; status?: string }>,
+  cascadeCompleted: 0,
+  cascadeTotal: 0,
   liveMetrics: null as LiveMetricsResult | null,
   managerThreadId: null as string | null,
   mddReviewing: false,
@@ -2024,7 +2029,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   generateDeliverablesCascade: async (projectId) => {
     if (!projectId?.trim()) return null;
     const pid = projectId.trim();
-    set({ loading: true, loadingReason: "deliverables-cascade", error: null, agentProgress: [] });
+    set({ loading: true, loadingReason: "deliverables-cascade", error: null, agentProgress: [], cascadeCompleted: 0, cascadeTotal: 0 });
     try {
       const r = await apiFetch(`${API_BASE}/projects/${pid}/generate-deliverables`, { method: "POST" });
       if (!r.ok) {
@@ -2034,6 +2039,25 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const data = (await r.json()) as { queued?: boolean; jobId?: string; streamPath?: string };
       if (data.queued === true && typeof data.jobId === "string") {
         const deadline = Date.now() + 45 * 60 * 1000;
+
+        // Inicializar agentProgress con los 11 docs en "Generando…"
+        const allStepLabels = [
+          "MDD Canonical", "Blueprint", "Spec", "Arquitectura",
+          "Casos de Uso", "Historias de Usuario", "Guía UX/UI",
+          "Contratos API", "Flujos de Lógica", "Tareas", "Infraestructura",
+        ];
+        set({
+          agentProgress: allStepLabels.map((label) => ({
+            agent: "Entregables",
+            message: `⚪ ${label} — Generando…`,
+            step: label,
+            status: "generando",
+          })),
+          cascadeTotal: allStepLabels.length,
+          cascadeCompleted: 0,
+        });
+
+        const completedSteps = new Set<string>();
         while (Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 1200));
           const st = await apiFetch(`${API_BASE}/projects/${pid}/deliverables-jobs/${data.jobId}`);
@@ -2051,18 +2075,29 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           }
           if (j.state === "completed") break;
           const prog = j.progress;
-          if (prog && typeof prog.index === "number" && typeof prog.total === "number") {
+          if (prog && prog.step && !completedSteps.has(prog.step)) {
+            completedSteps.add(prog.step);
             set((s) => ({
-              agentProgress: [
-                ...s.agentProgress,
-                {
-                  agent: "Entregables",
-                  message: `✅ ${String(prog.step ?? "paso")} (${(prog.index as number) + 1}/${prog.total as number})`,
-                },
-              ],
+              agentProgress: s.agentProgress.map((item) =>
+                item.step === prog.step
+                  ? { ...item, message: `✅ ${prog.step} — Terminado`, status: "terminado" }
+                  : item,
+              ),
+              cascadeCompleted: completedSteps.size,
             }));
           }
         }
+        // Si quedaron pendientes (timeout), marcarlos como terminados igual
+        set((s) => ({
+          agentProgress: s.agentProgress.map((item) =>
+            item.status === "generando"
+              ? { ...item, message: `✅ ${item.step} — Terminado`, status: "terminado" }
+              : item,
+          ),
+          cascadeCompleted: allStepLabels.length,
+        }));
+        // Esperar un momento para que el chat vea el estado final antes de limpiar
+        await new Promise((resolve) => setTimeout(resolve, 1500));
         set({ agentProgress: [] });
         const projQueued = await get().fetchProject(pid);
         await get().fetchEstimation(pid).catch(() => {});

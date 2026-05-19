@@ -362,7 +362,8 @@ export default function WorkshopView({
   const loading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
   const cascadeRunning = loading && (loadingReason === "deliverables-cascade" || loadingReason === "legacy-deliverables");
-  const cascadeProgress = useWorkshopStore((s) => s.agentProgress);
+  const cascadeCompleted = useWorkshopStore((s) => s.cascadeCompleted);
+  const cascadeTotal = useWorkshopStore((s) => s.cascadeTotal);
   const error = useWorkshopStore((s) => s.error);
   const setError = useWorkshopStore((s) => s.setError);
   const launchHermes = useWorkshopStore((s) => s.launchHermes);
@@ -2953,8 +2954,8 @@ export default function WorkshopView({
                               <Layers className="h-4 w-4 shrink-0" aria-hidden />
                             )}
                             {cascadeRunning
-                              ? cascadeProgress.length > 0
-                                ? `Generando documentos (${cascadeProgress.length})`
+                              ? cascadeCompleted > 0
+                                ? `Generando documentos (${cascadeCompleted}/${cascadeTotal})`
                                 : "Generando documentos…"
                               : "Generar todos los documentos"}
                           </button>

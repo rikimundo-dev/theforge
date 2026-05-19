@@ -2,6 +2,19 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.7.1] — 2026-05-21
+
+### Fixed
+
+- **Botón "Generar documentos" mostraba conteo incorrecto (125):** Cambiado de `cascadeProgress.length` (cuenta todos los ticks de polling) a `cascadeCompleted/cascadeTotal` (solo docs únicos completados).
+- **Progreso sin visibilidad en el chat:** `agentProgress` ahora se muestra en el ChatContainer durante la cascada de entregables (`loadingReason === "deliverables-cascade"`).
+
+### Changed
+
+- **UX de progreso en cascada:** Ahora se inicializan los 11 documentos con `⚪ Nombre — Generando…` y al completarse cambian a `✅ Nombre — Terminado`. Se actualizan in-place en vez de acumular entradas duplicadas.
+
+---
+
 ## [0.7.0] — 2026-05-19
 
 ### Added

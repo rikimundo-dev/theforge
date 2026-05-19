@@ -283,7 +283,11 @@ export default function ChatContainer({
   const pendingPlanApproval = useWorkshopStore((s) => s.pendingPlanApproval);
   const isBenchmarkStreaming = activeTab === "benchmark" && loading && loadingReason === "benchmark";
   const isMddStreaming = loading && loadingReason === "mdd";
-  const showAgentProgress = isBenchmarkStreaming || isMddStreaming;
+  const showAgentProgress =
+    isBenchmarkStreaming ||
+    isMddStreaming ||
+    loadingReason === "deliverables-cascade" ||
+    loadingReason === "legacy-deliverables";
   /** Generación larga en segundo plano (mismo criterio que el panel central en WorkshopView). */
   const isLegacyLongRun =
     loading &&
