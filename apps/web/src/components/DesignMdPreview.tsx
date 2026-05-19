@@ -305,7 +305,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
       const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
       if (kv) {
         const k = kv[1]!;
-        const v = kv[2]!.replace(/["']/g, "").replace(/\s*#.*$/, "");
+        const v = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
         const typoKeys = tokens.typography ? Object.keys(tokens.typography) : [];
         if (typoKeys.length > 0) {
           const lastKey: string = typoKeys[typoKeys.length - 1]!;
@@ -327,7 +327,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
       const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
       if (kv) {
         const k = kv[1]!;
-        const v = kv[2]!.replace(/["']/g, "").replace(/\s*#.*$/, "");
+        const v = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
         const compKeys = tokens.components ? Object.keys(tokens.components) : [];
         if (compKeys.length > 0) {
           const lastKey: string = compKeys[compKeys.length - 1]!;
@@ -342,7 +342,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
       const kv = t.match(/^(\S+):\s*["']?(.+?)["']?\s*$/);
       if (kv) {
         const k = kv[1]!;
-        const v = kv[2]!.replace(/["']/g, "").replace(/\s*#.*$/, "");
+        const v = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
         const s = tokens as Record<string, Record<string, string>>;
         if (!s[currentSection]) s[currentSection] = {};
         s[currentSection]![k] = v;
@@ -353,7 +353,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
     if (!currentSection) {
       const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
       if (kv && kv[1] && ["name", "description", "version"].includes(kv[1])) {
-        (tokens as Record<string, string>)[kv[1]] = kv[2]!.replace(/["']/g, "").replace(/\s*#.*$/, "");
+        (tokens as Record<string, string>)[kv[1]] = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
       }
     }
   }
