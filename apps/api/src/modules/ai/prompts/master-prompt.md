@@ -50,3 +50,13 @@ Metodología de rigor técnico:
 1. **DOCUMENTO COMPLETO** (empezando con `#`)
 2. `---FIN_MDD---`
 3. **Mensaje breve** (sin etiquetas ni encabezados)
+
+**Auto-normalización (NO necesitas ser exacto con formato)**
+
+El pipeline de TheForge **normaliza automáticamente** tablas y diagramas después de generarlos:
+
+- **Tablas markdown**: usa `| Col1 | Col2 |` simple. La pipeline corrige padding, líneas en blanco tras separador, y alignment automáticamente.
+- **Mermaid**: usa bloque ```mermaid. La pipeline corrige IDs con espacios, bloques sin cerrar, quotes, etc.
+- **No te preocupes** por líneas en blanco después del separador, guiones extras, o espacios en IDs de mermaid — el sistema lo limpia.
+
+Esto aplica a **todos** los documentos (MDD, Blueprint, Spec, API Contracts, UX/UI Guide, etc.).

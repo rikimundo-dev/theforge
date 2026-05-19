@@ -71,6 +71,6 @@ CREATE TABLE ...
 - Si una sección tiene "(Pendiente)", déjalo así
 - NO incluyas texto antes ni después del markdown
 - TODO en español, términos técnicos en inglés
-- **EVITA tablas markdown** cuando las celdas tengan texto largo (>50 caracteres). Usa listas de viñetas con formato `**Categoría:** valor — descripción` en vez de tablas. Las tablas markdown con columnas anchas se ven mal en la UI.
-- **NO Swagger/OpenAPI en §4:** La sección 4 (Contratos de API) debe ser markdown plano con tabla de resumen (pipes) y endpoints como `### MÉTODO /ruta` + bloques ```json. No generes `openapi:`, `paths:`, `components:` ni ningún formato de documentación automatizada.
-- **SIN líneas en blanco en tablas:** La línea separadora (`|---|---|`) debe ir seguida inmediatamente de las filas de datos, sin líneas en blanco. Una línea en blanco rompe la tabla.
+- **EVITA tablas markdown** cuando las celdas tengan texto largo (>50 caracteres). Usa listas de viñetas con formato `**Categoria:** valor — descripcion` en vez de tablas. Las tablas markdown con columnas anchas se ven mal en la UI.
+- **NO Swagger/OpenAPI en §4:** La seccion 4 (Contratos de API) debe ser markdown plano con tabla de resumen (pipes) y endpoints como `### MÉTODO /ruta` + bloques ```json. No generes `openapi:`, `paths:`, `components:` ni ningun formato de documentacion automatizada.
+- **Tablas markdown:** Usa formato estandar con `|` pipes. El pipeline normaliza automaticamente padding, lineas en blanco tras separador y alignment.
