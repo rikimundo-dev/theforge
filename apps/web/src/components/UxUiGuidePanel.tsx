@@ -55,11 +55,13 @@ export function UxUiGuidePanel({
   return (
     <>
       {viewMode === "design" ? (
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div key="design-view" className="min-h-0 flex-1 overflow-auto">
           <DesignMdPreview content={content ?? ""} />
         </div>
       ) : viewMode === "preview" ? (
-        <MddViewer content={content ?? ""} />
+        <div key="preview-view" className="min-h-0 flex-1">
+          <MddViewer content={content ?? ""} />
+        </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-2">
           <WorkshopDocSourceSaveBar onSave={onSave} disabled={!isDirty} />

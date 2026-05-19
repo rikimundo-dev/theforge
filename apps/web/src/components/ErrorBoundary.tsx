@@ -48,7 +48,6 @@ export class ErrorBoundary extends Component<Props, State> {
           variant="outline"
           onClick={() => {
             this.setState({ error: null });
-            window.location.reload();
           }}
         >
           Reintentar
