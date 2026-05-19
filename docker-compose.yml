@@ -67,7 +67,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-68}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-69}
     container_name: theforge-api
     # Carga THEFORGE_MCP_URL / MCP_* desde `.env` local sin pisar con "" si Compose no
     # tiene esas claves al interpolar `${VAR:-}`. En Dokploy: también inyecta por servicio
@@ -159,7 +159,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-68}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-69}
     container_name: theforge-web
     networks:
       - default
@@ -184,7 +184,7 @@ services:
       context: .
       dockerfile: packages/mcp-server/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-68}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-69}
     container_name: theforge-mcp
     networks:
       - default

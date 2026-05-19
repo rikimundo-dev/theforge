@@ -2052,14 +2052,15 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           if (j.state === "completed") break;
           const prog = j.progress;
           if (prog && typeof prog.index === "number" && typeof prog.total === "number") {
-            set({
+            set((s) => ({
               agentProgress: [
+                ...s.agentProgress,
                 {
                   agent: "Entregables",
-                  message: `${String(prog.step ?? "paso")} (${prog.index + 1}/${prog.total})`,
+                  message: `✅ ${String(prog.step ?? "paso")} (${prog.index + 1}/${prog.total})`,
                 },
               ],
-            });
+            }));
           }
         }
         set({ agentProgress: [] });

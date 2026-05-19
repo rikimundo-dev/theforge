@@ -2954,7 +2954,7 @@ export default function WorkshopView({
                             )}
                             {cascadeRunning
                               ? cascadeProgress.length > 0
-                                ? `Generando ${cascadeProgress[0]?.message ?? "documentos…"}`
+                                ? `Generando documentos (${cascadeProgress.length})`
                                 : "Generando documentos…"
                               : "Generar todos los documentos"}
                           </button>

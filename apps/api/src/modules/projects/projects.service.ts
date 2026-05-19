@@ -849,12 +849,29 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     const total = deliverablesToRun.length;
     const errors: { step: string; error: string }[] = [];
 
+    // Map de nombres legibles para la UI
+    const stepLabel: Record<string, string> = {
+      mdd_canonical: "MDD Canonical",
+      blueprint: "Blueprint",
+      spec: "Spec",
+      architecture: "Arquitectura",
+      use_cases: "Casos de Uso",
+      user_stories: "Historias de Usuario",
+      ux_ui_guide: "Guía UX/UI",
+      api_contracts: "Contratos API",
+      logic_flows: "Flujos de Lógica",
+      tasks: "Tareas",
+      infra: "Infraestructura",
+    };
+
     // [PARALELO] Todos los documentos son generaciones LLM independientes.
     // No comparten estado ni LangGraph — cada uno se guarda directo a DB.
     // Promise.allSettled asegura que si un paso falla, los demás continúan.
+    // Usamos contador atómico (no array index) para progreso real.
+    let completedCount = 0;
     const stepList = [...deliverablesToRun];
     await Promise.allSettled(
-      stepList.map(async (step, idx) => {
+      stepList.map(async (step) => {
         try {
           await this.runDeliverableStep(step, projectId);
         } catch (e) {
@@ -862,8 +879,9 @@ export class ProjectsService implements IOrchestratorProjectsPort {
           this.logger.warn(`[Cascade] Paso ${step} saltado: ${message}.`);
           errors.push({ step, error: message });
         }
-        // Reportar progreso por paso completado
-        onProgress?.({ step, index: idx, total });
+        completedCount++;
+        const label = stepLabel[step] ?? step;
+        onProgress?.({ step: label as DeliverableKind, index: completedCount - 1, total });
       }),
     );
     // Señal de finalización: reportar un paso "done" para que el frontend sepa que terminó

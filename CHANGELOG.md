@@ -131,6 +131,26 @@ Este documento representa el estado incremental del proyecto a fecha de **2 de m
 
 ---
 
+## [0.7.0] — 2026-05-19
+
+### Added
+
+- **Cascada de documentos en paralelo:** `generateDeliverablesCascade` reemplaza `for...of await` con `Promise.allSettled()`. Los 11 documentos (Blueprint, Spec, Arquitectura, etc.) se generan simultáneamente. HIGH: de ~5-22min a ~30s-2min. Cada documento es una llamada LLM independiente sin estado compartido — riesgo cero de `INVALID_CONCURRENT_GRAPH_UPDATE`.
+- **Progreso visible en el chat:** `agentProgress` ahora acumula (append) cada documento completado con icono ✅. El botón muestra "Generando documentos (N)" con el conteo en vivo.
+
+### Changed
+
+- **`projects.service.ts`**: `completedCount` atómico en vez de array index para progreso real con paralelismo. Labels legibles para la UI (Blueprint, Spec, Arquitectura, etc.).
+- **`workshopStore.ts`**: `generateDeliverablesCascade` usa `set((s) => ({ agentProgress: [...s.agentProgress, { agent, message }] }))` en vez de reemplazar.
+- **`WorkshopView.tsx`**: Botón muestra "Generando documentos (N)" en vez de "Generando step (N/11)".
+
+### Fixed
+
+- **INVALID_CONCURRENT_GRAPH_UPDATE revertido (PR #175):** Security e Integration escriben ambos a `mddStructured` (canal `LastValue`). Revertidos a secuencial. CrossConsistency+DiagramInjector permanecen en paralelo porque escriben a canales distintos.
+- **Docker build mcp-server (PR #171, #173, #174):** Contexto cambiado de subdirectorio a repo root para resolver workspaces npm. Agregados `@theforge/shared-types` y `@theforge/config` como dependencias. Producción copia `node_modules` raíz (npm hoist).
+
+---
+
 ## [0.6.0] — 2026-05-19
 
 ### Added
