@@ -697,7 +697,6 @@ export default function WorkshopView({
     | "mdd-inicial"
     | "spec"
     | "brd"
-    | "to-be"
     | "mdd"
     | "ux-ui-guide"
     | "blueprint"
@@ -708,7 +707,6 @@ export default function WorkshopView({
     | "use-cases"
     | "user-stories"
     | "infra"
-    | "adrs"
     | "aem";
   const centralPanel = useWorkshopStore((s) => s.workshopActiveDocPanel) as DocPanel;
   const setCentralPanel = useWorkshopStore((s) => s.setWorkshopActiveDocPanel);
@@ -1979,7 +1977,7 @@ export default function WorkshopView({
                     </TooltipContent>
                   </Tooltip>
                 ) : null}
-                {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd", "to-be"] as const).includes(
+                {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd"] as const).includes(
                   centralPanel as any,
                 ) && (
                     (centralPanel === "spec" ||
@@ -1995,9 +1993,8 @@ export default function WorkshopView({
                       (centralPanel === "logic-flows" && logicFlowsContent) ||
                       (centralPanel === "infra" && infraContent) ||
                       (centralPanel === "mdd-inicial" && (activeLegacyState?.codebaseDoc || mddInicialLocalContent)) ||
-                      (centralPanel === "brd" && !!activeStageId) ||
-                      (centralPanel === "to-be" && !!activeStageId)) &&
-                    centralPanel !== "tasks" && (() => {
+                      (centralPanel === "brd" && !!activeStageId)) &&
+                     centralPanel !== "tasks" && (() => {
                       const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
                         mddViewMode,
                         mddInicialViewMode,

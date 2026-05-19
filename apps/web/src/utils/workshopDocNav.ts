@@ -33,7 +33,6 @@ export interface WorkshopDocNavBuildContext {
   activeLegacyState: { description?: string; codebaseDoc?: string } | null | undefined;
   phase0SummaryContent: string | null | undefined;
   dbgaContent: string | null | undefined;
-  activeWorkshopStage: { brdContent?: string | null; toBeManualContent?: string | null } | null | undefined;
   mddContent: string | null | undefined;
   specContent: string | null | undefined;
   architectureContent: string | null | undefined;

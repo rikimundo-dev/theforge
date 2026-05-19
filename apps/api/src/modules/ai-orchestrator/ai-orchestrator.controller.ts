@@ -25,7 +25,6 @@ export class AiOrchestratorController {
       uxUiGuideContent?: string | null;
       dbgaContent?: string | null;
       brdContent?: string | null;
-      toBeManualContent?: string | null;
       activeTab?: string;
       stageId?: string;
       images?: unknown;

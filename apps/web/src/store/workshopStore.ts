@@ -231,7 +231,6 @@ export interface PrecisionBreakdown {
 /** Breakdown de completitud por documento (0-100). Coincide con backend PlanningDocumentFields. */
 export interface DocumentCompleteness {
   brdContent: number;
-  toBeManualContent: number;
   asIsManualContent: number;
   specContent: number;
   architectureContent: number;

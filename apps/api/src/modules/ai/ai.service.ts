@@ -73,7 +73,6 @@ export class AiService {
   private static readonly ACTIVE_TAB_LABELS: Record<string, string> = {
     spec: "Spec (SDD: what/why)",
     brd: "BRD (etapa)",
-    "to-be": "Manual To-Be (etapa)",
     mdd: "MDD",
     architecture: "Arquitectura del sistema",
     "use-cases": "Casos de Uso",
@@ -154,7 +153,6 @@ export class AiService {
           mdd: "MDD",
           spec: "SPEC",
           brd: "BRD",
-          "to-be": "TOBE",
           architecture: "ARCH",
           "use-cases": "USECASES",
           "user-stories": "STORIES",
@@ -178,10 +176,6 @@ export class AiService {
           if (at === "brd") {
             systemPrompt +=
               "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
-          }
-if (at === "to-be") {
-            systemPrompt +=
-              "\n\n**Para persistir el Manual To-Be debes usar `---FIN_TOBE---`.** Si decides hacer cambios al To-Be, DEBES devolver el **markdown completo** actualizado terminando con `---FIN_TOBE---`. Decirlo en el chat sin el delimitador no persiste nada.";
           }
           if (at === "blueprint") {
             systemPrompt +=
@@ -235,12 +229,6 @@ if (at === "to-be") {
           systemPrompt +=
             "\n\n[BRD actual de la etapa del Workshop. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_BRD---.]\n---\n" +
             options.currentBrdContent.trim().slice(0, 8000) +
-            "\n---";
-        }
-        if (options?.activeTab?.trim() === "to-be" && options?.currentToBeManualContent?.trim()) {
-          systemPrompt +=
-            "\n\n[Manual To-Be actual de la etapa. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_TOBE---.]\n---\n" +
-            options.currentToBeManualContent.trim().slice(0, 8000) +
             "\n---";
         }
         if (options?.learningHistory?.trim()) {
@@ -325,7 +313,6 @@ if (at === "to-be") {
         mdd: "MDD",
         spec: "SPEC",
         brd: "BRD",
-        "to-be": "TOBE",
         architecture: "ARCH",
         "use-cases": "USECASES",
         "user-stories": "STORIES",
@@ -350,10 +337,6 @@ if (at === "to-be") {
           systemPrompt +=
             "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
         }
-if (at === "to-be") {
-            systemPrompt +=
-              "\n\n**Para persistir el Manual To-Be debes usar `---FIN_TOBE---`.** Si decides hacer cambios al To-Be, DEBES devolver el **markdown completo** actualizado terminando con `---FIN_TOBE---`. Decirlo en el chat sin el delimitador no persiste nada.";
-          }
           if (at === "blueprint") {
             systemPrompt +=
               "\n\n**OBLIGATORIO - Blueprint:** Cuando el usuario pida **agregar, modificar o eliminar** algo del Blueprint, **debes** devolver el **Blueprint completo actualizado** (conservando TODO el contenido existente) terminando con `---FIN_BLUEPRINT---`. Si solo envías una sección, el sistema la **fusiona** automáticamente con el contenido actual. Nunca respondas solo con un mensaje tipo \"El Blueprint ha sido actualizado\" — el sistema solo persiste cuando encuentra el contenido del documento seguido de `---FIN_BLUEPRINT---`.";
@@ -402,12 +385,6 @@ if (at === "to-be") {
         systemPrompt +=
           "\n\n[BRD actual de la etapa del Workshop. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_BRD---.]\n---\n" +
           options.currentBrdContent.trim().slice(0, 8000) +
-          "\n---";
-      }
-      if (options?.activeTab?.trim() === "to-be" && options?.currentToBeManualContent?.trim()) {
-        systemPrompt +=
-          "\n\n[Manual To-Be actual de la etapa. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_TOBE---.]\n---\n" +
-          options.currentToBeManualContent.trim().slice(0, 8000) +
           "\n---";
       }
       if (options?.activeTab?.trim() === "architecture" && (options as any).currentArchitectureContent?.trim()) {

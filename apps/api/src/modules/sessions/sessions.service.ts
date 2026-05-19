@@ -130,7 +130,6 @@ export class SessionsService {
       currentBlueprintContent?: string;
       currentSpecContent?: string;
       currentBrdContent?: string;
-      currentToBeManualContent?: string;
       activeTab?: string;
       /** Override system prompt (ej. modo legacy con TheForge). */
       systemPrompt?: string;
@@ -191,7 +190,6 @@ export class SessionsService {
         currentBlueprintContent: options?.currentBlueprintContent,
         currentSpecContent: options?.currentSpecContent,
         currentBrdContent: options?.currentBrdContent,
-        currentToBeManualContent: options?.currentToBeManualContent,
         activeTab: options?.activeTab,
         learningHistory: learningHistory || undefined,
         systemPrompt: options?.systemPrompt,
@@ -220,7 +218,6 @@ export class SessionsService {
     let dbgaSplit = this.parser.splitDbgaAndChat(safeResponse);
     let specSplit = this.parser.splitDocAndChat(safeResponse, "SPEC");
     let brdSplit = this.parser.splitDocAndChat(safeResponse, "BRD");
-    const tobeSplit = this.parser.splitDocAndChat(safeResponse, "TOBE");
     let blueSplit = this.parser.splitDocAndChat(safeResponse, "BLUEPRINT");
     let apiSplit = this.parser.splitDocAndChat(safeResponse, "API");
     let flowsSplit = this.parser.splitDocAndChat(safeResponse, "FLOWS");
@@ -235,7 +232,6 @@ export class SessionsService {
     let hasDbga = dbgaSplit !== null;
     let hasSpec = specSplit !== null;
     let hasBrd = brdSplit !== null;
-    const hasTobe = tobeSplit !== null;
     let hasBlue = blueSplit !== null;
     let hasApi = apiSplit !== null;
     let hasFlows = flowsSplit !== null;
@@ -254,7 +250,6 @@ export class SessionsService {
     else if (hasDbga) rawChat = dbgaSplit!.chatPart;
     else if (hasSpec) rawChat = specSplit!.chatPart;
     else if (hasBrd) rawChat = brdSplit!.chatPart;
-    else if (hasTobe) rawChat = tobeSplit!.chatPart;
     else if (hasBlue) rawChat = blueSplit!.chatPart;
     else if (hasApi) rawChat = apiSplit!.chatPart;
     else if (hasFlows) rawChat = flowsSplit!.chatPart;
@@ -397,7 +392,6 @@ export class SessionsService {
       dbgaContent: dbgaDocPart ? this.parser.cleanDocumentContent(dbgaDocPart) : undefined,
       specContent: hasSpec ? this.parser.cleanDocumentContent(specSplit!.docPart) : undefined,
       brdContent: hasBrd ? this.parser.cleanDocumentContent(brdSplit!.docPart) : undefined,
-      toBeManualContent: hasTobe ? this.parser.cleanDocumentContent(tobeSplit!.docPart) : undefined,
       blueprintContent: hasBlue ? this.parser.mergeDocSectionOrUseFull(options?.currentBlueprintContent, this.parser.cleanDocumentContent(blueSplit!.docPart)) : undefined,
       apiContractsContent: hasApi ? this.parser.cleanDocumentContent(apiSplit!.docPart) : undefined,
       logicFlowsContent: hasFlows ? this.parser.cleanDocumentContent(flowsSplit!.docPart) : undefined,
@@ -422,7 +416,6 @@ export class SessionsService {
       currentBlueprintContent?: string;
       currentSpecContent?: string;
       currentBrdContent?: string;
-      currentToBeManualContent?: string;
       currentArchitectureContent?: string;
       currentUseCasesContent?: string;
       currentUserStoriesContent?: string;
@@ -495,7 +488,6 @@ export class SessionsService {
         currentBlueprintContent: options?.currentBlueprintContent,
         currentSpecContent: options?.currentSpecContent,
         currentBrdContent: options?.currentBrdContent,
-        currentToBeManualContent: options?.currentToBeManualContent,
         activeTab: options?.activeTab,
         learningHistory: learningHistory || undefined,
         systemPrompt: options?.systemPrompt,
@@ -509,7 +501,7 @@ export class SessionsService {
       throw err;
     }
 
-    const DOC_DELIMITER_RE = /-{1,}\s*FIN_(?:MDD|UX_UI|DBGA|SPEC|BRD|TOBE|BLUEPRINT|API|FLOWS|TASKS|INFRA|ARCH|USECASES|STORIES)\s*-{1,}/i;
+    const DOC_DELIMITER_RE = /-{1,}\s*FIN_(?:MDD|UX_UI|DBGA|SPEC|BRD|BLUEPRINT|API|FLOWS|TASKS|INFRA|ARCH|USECASES|STORIES)\s*-{1,}/i;
     let buffer = "";
     let documentChunksDone = false;
     for await (const chunk of stream) {
@@ -544,7 +536,6 @@ export class SessionsService {
     let dbgaSplit = this.parser.splitDbgaAndChat(safeResponse);
     let specSplit = this.parser.splitDocAndChat(safeResponse, "SPEC");
     let brdSplit = this.parser.splitDocAndChat(safeResponse, "BRD");
-    const tobeSplit = this.parser.splitDocAndChat(safeResponse, "TOBE");
     let blueSplit = this.parser.splitDocAndChat(safeResponse, "BLUEPRINT");
     let apiSplit = this.parser.splitDocAndChat(safeResponse, "API");
     let flowsSplit = this.parser.splitDocAndChat(safeResponse, "FLOWS");
@@ -559,7 +550,6 @@ export class SessionsService {
     let hasDbga = dbgaSplit !== null;
     let hasSpec = specSplit !== null;
     let hasBrd = brdSplit !== null;
-    const hasTobe = tobeSplit !== null;
     let hasBlue = blueSplit !== null;
     let hasApi = apiSplit !== null;
     let hasFlows = flowsSplit !== null;
@@ -578,7 +568,6 @@ export class SessionsService {
     else if (hasDbga) rawChat = dbgaSplit!.chatPart;
     else if (hasSpec) rawChat = specSplit!.chatPart;
     else if (hasBrd) rawChat = brdSplit!.chatPart;
-    else if (hasTobe) rawChat = tobeSplit!.chatPart;
     else if (hasBlue) rawChat = blueSplit!.chatPart;
     else if (hasApi) rawChat = apiSplit!.chatPart;
     else if (hasFlows) rawChat = flowsSplit!.chatPart;
@@ -696,7 +685,6 @@ export class SessionsService {
       dbgaContent: dbgaDocPart ? this.parser.cleanDocumentContent(dbgaDocPart) : undefined,
       specContent: hasSpec ? this.parser.cleanDocumentContent(specSplit!.docPart) : undefined,
       brdContent: hasBrd ? this.parser.cleanDocumentContent(brdSplit!.docPart) : undefined,
-      toBeManualContent: hasTobe ? this.parser.cleanDocumentContent(tobeSplit!.docPart) : undefined,
       blueprintContent: hasBlue ? this.parser.mergeDocSectionOrUseFull(options?.currentBlueprintContent, this.parser.cleanDocumentContent(blueSplit!.docPart)) : undefined,
       apiContractsContent: hasApi ? this.parser.cleanDocumentContent(apiSplit!.docPart) : undefined,
       logicFlowsContent: hasFlows ? this.parser.cleanDocumentContent(flowsSplit!.docPart) : undefined,
@@ -745,17 +733,6 @@ export class SessionsService {
     if (activeTabNorm === "brd") {
       return `Hola${p}. En esta pestaña trabajamos el **BRD de la etapa**: problema, objetivos, alcance, riesgos (markdown en el panel + **Guardar** / **Aprobar BRD**).${tail}`;
     }
-    if (activeTabNorm === "to-be") {
-      return `Hola${p}. En **Manual To-Be** describes cómo debe **comportarse** el producto o el cambio (flujos, reglas, pantallas). El panel tiene **Guardar** / **Aprobar To-Be**; aquí refinamos por chat.${tail}`;
-    }
-    if (activeTabNorm === "ux-ui-guide") {
-      return `Hola${p}. Trabajaremos la **Guía UX/UI** (estilo, tokens, accesibilidad, etc.).${tail}`;
-    }
-    if (activeTabNorm === "benchmark") {
-      return `Hola${p}. En **Paso 0** refinamos el benchmark y las brechas.${tail}`;
-    }
-    return `Hola${p}. Continuamos cuando quieras con el documento activo.${tail}`;
-  }
 
   /**
    * Genera mensaje de bienvenida (y primera pregunta si no hay contenido, o continuación si ya hay MDD/historial)
@@ -792,7 +769,6 @@ export class SessionsService {
     const isBenchmarkTab = activeTab === "benchmark";
     const isUxUiGuideTab = activeTab === "ux-ui-guide";
     const isBrdTab = activeTab === "brd";
-    const isToBeTab = activeTab === "to-be";
 
     const activeTabHint = context.activeTab?.trim()
       ? ` El usuario tiene abierto el tab "${context.activeTab}": adapta tu mensaje EXCLUSIVAMENTE a ese documento (Paso 0 = Benchmark & Gap Analysis; MDD = Master Design Document; etc.).`
