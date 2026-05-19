@@ -80,7 +80,7 @@ services:
       - default
       - dokploy-network
     # Nest lee el entorno fusionado: variables del bloque `environment` + claves de `.env` (env_file).
-    # IA: define al menos OPENROUTER_API_KEY en `.env` o en Dokploy (Environment del servicio). Aliases: AI_API_KEY, OPENAI_API_KEY.
+    # IA BYOK: claves LLM por usuario (UI). Servidor: TOKEN_MASTER_KEYS + TOKEN_ACTIVE_KEY_VERSION.
     environment:
       DATABASE_URL: postgresql://theforge:theforge@theforge-db:5432/theforge
       # BullMQ: REDIS_URL apunta al Redis de cola (servicio siguiente). Requerido para entregables asíncronos resilientes.
@@ -92,21 +92,10 @@ services:
       FALKORDB_URL: redis://theforge-falkor-sdd:6379
       # Evaluador legacy + crítica en respuesta chat (opcional; por defecto desactivado).
       AGENT_EVALUATOR_LEGACY: ${AGENT_EVALUATOR_LEGACY:-}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-}
-      OPENROUTER_CHAT_MODEL: ${OPENROUTER_CHAT_MODEL:-}
-      OPENROUTER_CHAT_MODEL_FALLBACK: ${OPENROUTER_CHAT_MODEL_FALLBACK:-}
-      OPENROUTER_CHAT_MODEL_FALLBACKS: ${OPENROUTER_CHAT_MODEL_FALLBACKS:-}
-      OPENROUTER_CHAT_FALLBACK_ON_429: ${OPENROUTER_CHAT_FALLBACK_ON_429:-}
-      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-}
-      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-}
-      OPENROUTER_APP_TITLE: ${OPENROUTER_APP_TITLE:-}
-      OPENROUTER_EMBEDDING_API_KEY: ${OPENROUTER_EMBEDDING_API_KEY:-}
-      AI_API_KEY: ${AI_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      TOKEN_MASTER_KEYS: ${TOKEN_MASTER_KEYS:-}
+      TOKEN_ACTIVE_KEY_VERSION: ${TOKEN_ACTIVE_KEY_VERSION:-1}
       OPENAI_EMBEDDING_DIM: ${OPENAI_EMBEDDING_DIM:-}
-      LLM_EMBEDDINGS_PROVIDER: ${LLM_EMBEDDINGS_PROVIDER:-}
-      OPENAI_EMBEDDING_API_KEY: ${OPENAI_EMBEDDING_API_KEY:-}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-}
       # Scout (DBGA): búsqueda web vía @langchain/tavily; sin clave el Scout puede limitarse a scrape/otras rutas.
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       # THEFORGE_MCP_URL / MCP_AUTH_TOKEN / MCP_X_M2M_TOKEN: no usar ${VAR:-} aquí (quedan
