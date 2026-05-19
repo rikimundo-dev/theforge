@@ -558,8 +558,21 @@ export default function WorkshopView({
       // extracts before the ---FIN_UX_UI--- delimiter). The chunk events only
       // carry the chat message after the delimiter.
       if (doneUxUiGuideContent) {
-        setUxUiGuideContent(doneUxUiGuideContent);
-        await persistUxUiGuideContent(doneUxUiGuideContent);
+        // Apply replaceYamlFrontMatter in case the backend returned markdown
+        // without YAML frontmatter
+        if (!doneUxUiGuideContent.startsWith("---")) {
+          try {
+            const fixed = replaceYamlFrontMatter(doneUxUiGuideContent, projectName);
+            setUxUiGuideContent(fixed);
+            await persistUxUiGuideContent(fixed);
+          } catch {
+            setUxUiGuideContent(doneUxUiGuideContent);
+            await persistUxUiGuideContent(doneUxUiGuideContent);
+          }
+        } else {
+          setUxUiGuideContent(doneUxUiGuideContent);
+          await persistUxUiGuideContent(doneUxUiGuideContent);
+        }
       } else {
         const trimmed = result.trim();
         let cleaned = trimmed
