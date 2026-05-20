@@ -6,9 +6,9 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 
 ### Fixed
 
-- **Cascada de documentos trabada en "Generando...":** El polling frontend consultaba j.state pero la API devuelve j.status. Nunca detectaba "completed" y el loop seguía hasta el deadline de 45 min.
-- **Modificaciones al MDD vía chat no se aplicaban:** El LLM respondía solo con "MDD generado" sin incluir el documento actualizado con el delimitador ---FIN_MDD---. Reforzada la instrucción en el system prompt del tab MDD para que SIEMPRE devuelva el MDD completo con los cambios.
-- **Botón reparar YAML frontmatter de Guía UX/UI ahora usa LLM con contexto MDD:** Antes solo hacía regex sobre el body existente (fallaba si el formato no era limpio). Ahora llama al endpoint POST /projects/:id/repair-ux-ui-guide que genera el YAML de diseño desde el MDD, Blueprint y Spec.
+- **Cascada de documentos trabada en "Generando...":** El polling frontend consultaba `j.state` pero la API devuelve `j.status`. Nunca detectaba "completed" y el loop seguía hasta el deadline de 45 min.
+- **Modificaciones al MDD vía chat no se aplicaban:** El LLM respondía solo con "MDD generado" sin incluir el documento actualizado con el delimitador `---FIN_MDD---`. Reforzada la instrucción en el system prompt del tab MDD para que SIEMPRE devuelva el MDD completo con los cambios.
+- **Botón reparar YAML frontmatter de Guía UX/UI ahora usa LLM con contexto MDD:** Antes solo hacía regex sobre el body existente (fallaba si el formato no era limpio). Ahora llama al endpoint `POST /projects/:id/repair-ux-ui-guide` que genera el YAML de diseño desde el MDD, Blueprint y Spec.
 - **Botón "Generar documentos" mostraba conteo incorrecto (125):** Cambiado de `cascadeProgress.length` (cuenta todos los ticks de polling) a `cascadeCompleted/cascadeTotal` (solo docs únicos completados).
 - **Progreso sin visibilidad en el chat:** `agentProgress` ahora se muestra en el ChatContainer durante la cascada de entregables (`loadingReason === "deliverables-cascade"`).
 
