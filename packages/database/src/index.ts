@@ -16,6 +16,7 @@ export {
   type Estimation,
   type Stage,
   type EpisodicMemory,
+  type ProviderInstance,
   Status,
   StageStatus,
   EpisodicMemoryKind,

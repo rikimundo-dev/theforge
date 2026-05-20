@@ -10,7 +10,7 @@
     "build": "prisma generate && tsc && node -e \"require('fs').cpSync('src/generated', 'dist/generated', { recursive: true })\"",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:resolve-project-type": "prisma migrate resolve --applied 20250311000000_add_project_type_relic",
     "db:resolve-relic-to-theforge": "prisma migrate resolve --applied 20260319190000_rename_relic_to_theforge"
@@ -20,6 +20,7 @@
     "prisma": "^5.22.0"
   },
   "devDependencies": {
+    "dotenv-cli": "^8.0.0",
     "typescript": "^5.6.3"
   },
   "peerDependencies": {

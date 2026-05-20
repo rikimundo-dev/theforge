@@ -33,17 +33,51 @@ model User {
   favorites  FavoriteProject[]
   aiSettings UserAISettings?
   providerConfigs UserProviderConfig[]
+  providerInstancesCreated ProviderInstance[] @relation("ProviderInstanceCreatedBy")
 }
 
 /// Preferencias de IA por usuario (proveedor activo, embeddings).
 model UserAISettings {
-  userId             String   @id
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  activeProvider     String
+  userId                 String   @id
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeProvider         String
+  /// Instancia de proveedor a nivel tenant activa para el usuario (si enabledForUsers).
+  activeTenantInstanceId String?
+  activeTenantInstance   ProviderInstance? @relation(fields: [activeTenantInstanceId], references: [id], onDelete: SetNull)
   /// Proveedor BYOK para embeddings cuando el activo no los expone (p. ej. anthropic).
-  embeddingProvider  String?
-  embeddingsEnabled  Boolean  @default(true)
-  updatedAt          DateTime @updatedAt
+  embeddingProvider      String?
+  embeddingsEnabled      Boolean  @default(true)
+  updatedAt              DateTime @updatedAt
+}
+
+/// Instancia de proveedor IA a nivel tenant (gestionada por super_admin).
+model ProviderInstance {
+  id                     String   @id @default(uuid())
+  providerType           String
+  slug                   String
+  displayName            String
+  tokenCiphertext        String   @db.Text
+  tokenKeyVersion        Int
+  chatModel              String
+  chatModelFallbacks     String[] @default([])
+  embeddingModel         String?
+  embeddingDimension     Int?
+  sttModel               String?
+  baseUrl                String?
+  extras                 Json?
+  enabledForUsers        Boolean  @default(false)
+  allowedChatModels      String[] @default([])
+  allowedEmbeddingModels String[] @default([])
+  isTenantDefault        Boolean  @default(false)
+  createdByUserId        String
+  createdByUser          User     @relation("ProviderInstanceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  userAISettings         UserAISettings[]
+
+  @@unique([providerType, slug])
+  @@index([providerType])
+  @@index([enabledForUsers])
 }
 
 /// Configuración BYOK por proveedor (token cifrado + modelos).
