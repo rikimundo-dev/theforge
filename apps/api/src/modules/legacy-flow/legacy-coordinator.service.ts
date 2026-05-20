@@ -47,6 +47,12 @@ import { AiService } from "../ai/ai.service.js";
 import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { loadLegacyKnowledgePack } from "./knowledge-loader.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
+import {
+  brdGenerationErrorMessage,
+  extractBrdFromLlmResponse,
+  type BrdExtractFailure,
+} from "../ai/utils/brd-extract.util.js";
+import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.util.js";
 import { AIFactory } from "../ai/ai.factory.js";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { UX_UI_GUIDE_PROMPT } from "../ai/prompts/ux-ui-guide-prompt.js";
@@ -675,9 +681,10 @@ export class LegacyCoordinatorService {
         "redacta un borrador en español, en markdown, como documento de cambio.\n\n" +
         "IMPORTANTE: Este es un **documento de cambio**, no una descripción del sistema completo. Céntrate en qué cambia, qué se agrega y qué se modifica.\n\n";
 
-    const codebaseChunk = codebaseDoc.slice(0, 120_000);
+    const { text: codebaseChunk, truncated: sourceTruncated } =
+      truncateSourceDocForBrdPrompt(codebaseDoc);
 
-    const brdPrompt =
+    const brdPromptBase =
       basePrompt +
       (isInitialLegacyStage
         ? "Genera el **BRD (sistema actual):** El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»**:\n" +
@@ -699,23 +706,35 @@ export class LegacyCoordinatorService {
       codebaseChunk;
 
     let brd = "";
+    let lastFailure: BrdExtractFailure = "no_delimiter";
+    let lastRawLength = 0;
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const raw = await this.ai.generateResponse(brdPrompt, [], {
+      const formatReminder =
+        attempt > 1
+          ? "\n\n**IMPORTANTE:** El intento anterior no siguió el formato. Responde ÚNICAMENTE con:\n<<<BRD>>>\n(markdown BRD completo)\n<<<END_BRD>>>\nSin texto antes ni después de los delimitadores."
+          : "";
+      const raw = await this.ai.generateResponse(brdPromptBase + formatReminder, [], {
         systemPrompt: COORDINATOR_SYSTEM,
       });
-      const brdMatch = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim().match(/<<<\s*BRD\s*>>>\s*([\s\S]*?)\s*<<<_?END_BRD_?>>>/i);
-      const extracted = brdMatch?.[1]?.trim() ?? null;
-      if (extracted) {
-        brd = cleanDocumentContent(extracted);
+      lastRawLength = (raw ?? "").length;
+      const extracted = extractBrdFromLlmResponse(raw ?? "");
+      if (extracted.ok) {
+        brd = cleanDocumentContent(extracted.content);
         break;
       }
+      lastFailure = extracted.failure;
       if (attempt < 2) {
-        console.warn(`[suggestBrdFromCodebaseDoc] Intento BRD ${attempt}/2: respuesta mal formada, reintentando...`);
+        console.warn(
+          `[suggestBrdFromCodebaseDoc] Intento BRD ${attempt}/2: ${extracted.failure} (raw ~${lastRawLength} chars), reintentando...`,
+        );
       }
     }
     if (!brd) {
       throw new BadRequestException(
-        "No se pudo generar el BRD. Reintenta o acorta el documento de partida.",
+        brdGenerationErrorMessage(lastFailure, {
+          dbgaTruncated: sourceTruncated,
+          rawLength: lastRawLength,
+        }),
       );
     }
 

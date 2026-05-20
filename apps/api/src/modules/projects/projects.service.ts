@@ -44,6 +44,12 @@ import {
 } from "@theforge/shared-types";
 import { UX_UI_GUIDE_PROMPT } from "../ai/prompts/ux-ui-guide-prompt.js";
 import { uxGuideLlmOptions } from "../ai/ux-guide-llm-context.js";
+import {
+  brdGenerationErrorMessage,
+  extractBrdFromLlmResponse,
+  type BrdExtractFailure,
+} from "../ai/utils/brd-extract.util.js";
+import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.util.js";
 
 import { flattenStageDeliverables, pickPrimaryStage } from "./stage-helpers.js";
 
@@ -1570,10 +1576,9 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
     if (!stage?.id) {
       throw new BadRequestException("No hay etapa para persistir BRD.");
     }
-    const dbgaSlice = effectiveDbga.slice(0, 120_000);
+    const { text: dbgaForPrompt, truncated: dbgaTruncated } = truncateSourceDocForBrdPrompt(effectiveDbga);
 
-    // Generar BRD
-    const brdPrompt =
+    const brdPromptBase =
       "Eres analista de negocio. A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente, " +
       "genera **solo el BRD** en español, en markdown.\n\n" +
       "El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»** que incluya:\n" +
@@ -1586,26 +1591,38 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
       "Responde **solo** con este formato exacto (delimitadores literales):\n" +
       "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n\n" +
       "--- DBGA ---\n\n" +
-      dbgaSlice;
+      dbgaForPrompt;
+
     let brd = "";
+    let lastFailure: BrdExtractFailure = "no_delimiter";
+    let lastRawLength = 0;
     for (let attempt = 1; attempt <= 2; attempt++) {
-      const raw = await this.ai.generateResponse(brdPrompt, [], {
+      const formatReminder =
+        attempt > 1
+          ? "\n\n**IMPORTANTE:** El intento anterior no siguió el formato. Responde ÚNICAMENTE con:\n<<<BRD>>>\n(markdown BRD completo)\n<<<END_BRD>>>\nSin texto antes ni después de los delimitadores."
+          : "";
+      const raw = await this.ai.generateResponse(brdPromptBase + formatReminder, [], {
         systemPrompt: DBGA_BRD_TOBE_SUGGEST_SYSTEM,
       });
-      const cleaned = (raw ?? "").replace(/```\w*\s*\n?/g, "").trim();
-      const match = cleaned.match(/<<<\s*BRD\s*>>>\s*([\s\S]*?)\s*<<<_?END_BRD_?>>>/i);
-      const extracted = match?.[1]?.trim() ?? null;
-      if (extracted) {
-        brd = cleanDocumentContent(extracted);
+      lastRawLength = (raw ?? "").length;
+      const extracted = extractBrdFromLlmResponse(raw ?? "");
+      if (extracted.ok) {
+        brd = cleanDocumentContent(extracted.content);
         break;
       }
+      lastFailure = extracted.failure;
       if (attempt < 2) {
-        console.warn(`[suggestBrdFromDbga] Intento BRD ${attempt}/2: respuesta mal formada, reintentando...`);
+        console.warn(
+          `[suggestBrdFromDbga] Intento BRD ${attempt}/2: ${extracted.failure} (raw ~${lastRawLength} chars), reintentando...`,
+        );
       }
     }
     if (!brd) {
       throw new BadRequestException(
-        "No se pudo generar el BRD. Reintenta o acorta el DBGA.",
+        brdGenerationErrorMessage(lastFailure, {
+          dbgaTruncated,
+          rawLength: lastRawLength,
+        }),
       );
     }
 
