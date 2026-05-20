@@ -315,6 +315,7 @@ export default function ChatContainer({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const prevStageForBannerRef = useRef<string | null>(null);
+  const welcomedTabRef = useRef<string | null>(null);
   const [stageSwitchBannerOpen, setStageSwitchBannerOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const multiStageChat = workshopStages.length > 1;
@@ -341,6 +342,10 @@ export default function ChatContainer({
     if (!welcomeTabs.includes(tab)) return;
     const count = (session.chatLog ?? []).filter((m: { tab?: string }) => (m.tab ?? "mdd") === tab).length;
     if (count > 0) return;
+    // Evitar bucle infinito: si ya intentamos welcome para este tab sin éxito (sin mensaje agregado),
+    // no reintentar. Ocurre cuando el backend decide no generar burbuja (ej. benchmark sin contenido).
+    if (welcomedTabRef.current === tab) return;
+    welcomedTabRef.current = tab;
     const t = window.setTimeout(() => {
       void fetchWelcome(projectId, tab);
     }, 120);
