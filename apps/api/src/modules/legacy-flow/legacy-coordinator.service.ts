@@ -1420,7 +1420,10 @@ export class LegacyCoordinatorService {
       await this.persistLegacyChangeState(projectId, gateStage.id, state).catch(() => {});
       await this.syncCurrentLegacyStageToGraph(projectId, gateStage.id).catch(() => {});
     }
-    await this.projects.update(projectId, { mddContent: cleaned });
+    await this.projects.update(projectId, {
+      mddContent: cleaned,
+      ...(gateStage?.id ? { stageId: gateStage.id } : {}),
+    });
     return { mddContent: cleaned };
   }
 
