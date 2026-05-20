@@ -12,6 +12,10 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 
 - **BUILD_CACHE_BUST**: 73 → 74
 
+### Fixed
+
+- **Blueprint pierde contenido al modificar por chat:** `mergeDocSectionOrUseFull()` tenía un fallback peligroso: si el LLM devolvía un fragmento ≥600 chars sin encabezado `## N.`, reemplazaba todo el documento. Ahora cualquier contenido sin encabezado numerado preserva el documento existente.
+
 ---
 
 ## [0.7.2] — 2026-05-21

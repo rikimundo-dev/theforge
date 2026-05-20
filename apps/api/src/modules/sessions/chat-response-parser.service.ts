@@ -92,9 +92,8 @@ export class ChatResponseParserService {
     // Detect heading level (## or ###)
     const headingMatch = cleaned.match(/^#{2,3}\s*(\d+)\.\s+/m);
     if (!headingMatch) {
-      // No numbered section header — if it's short, preserve existing
-      if (cleaned.length < 600) return current;
-      return cleaned;
+      // No numbered section header — not a Blueprint section, preserve existing
+      return current;
     }
 
     const headingPrefix = headingMatch[0].match(/^#{2,3}/)?.[0] ?? "##";
