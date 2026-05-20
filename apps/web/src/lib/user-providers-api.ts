@@ -56,3 +56,9 @@ export async function updateUserAISettings(
   await ensureOk(res, "No se pudieron actualizar los ajustes de IA");
   return res.json() as Promise<UserAISettings>;
 }
+
+export async function fetchProviderStatus(): Promise<{ usable: boolean }> {
+  const res = await api.get(`${BASE}/status`);
+  await ensureOk(res, "No se pudo comprobar el proveedor de IA");
+  return res.json() as Promise<{ usable: boolean }>;
+}

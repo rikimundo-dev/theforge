@@ -49,8 +49,49 @@ export interface UserProviderConfigSummary {
 
 export interface UserAISettings {
   activeProvider: ProviderId | null;
+  activeTenantInstanceId: string | null;
   embeddingProvider: ProviderId | null;
   embeddingsEnabled: boolean;
+}
+
+export interface ProviderInstanceSummary {
+  id: string;
+  providerType: ProviderId;
+  slug: string;
+  displayName: string;
+  chatModel: string;
+  chatModelFallbacks: string[];
+  embeddingModel: string | null;
+  embeddingDimension: number | null;
+  sttModel: string | null;
+  baseUrl: string | null;
+  extras: Record<string, unknown> | null;
+  enabledForUsers: boolean;
+  allowedChatModels: string[];
+  allowedEmbeddingModels: string[];
+  isTenantDefault: boolean;
+  createdByUserId?: string;
+  apiKeyHint?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UpsertProviderInstanceBody {
+  providerType: ProviderId;
+  slug: string;
+  displayName: string;
+  apiKey: string;
+  chatModel?: string;
+  chatModelFallbacks?: string[];
+  embeddingModel?: string | null;
+  embeddingDimension?: number | null;
+  sttModel?: string | null;
+  baseUrl?: string | null;
+  extras?: Record<string, unknown> | null;
+  enabledForUsers?: boolean;
+  allowedChatModels?: string[];
+  allowedEmbeddingModels?: string[];
+  isTenantDefault?: boolean;
 }
 
 export interface UpsertProviderConfigBody {
@@ -66,6 +107,7 @@ export interface UpsertProviderConfigBody {
 
 export interface UpdateAISettingsBody {
   activeProvider?: ProviderId;
+  activeTenantInstanceId?: string | null;
   embeddingProvider?: ProviderId | null;
   embeddingsEnabled?: boolean;
 }

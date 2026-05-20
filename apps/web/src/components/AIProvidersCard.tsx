@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Badge,
   Button,
@@ -10,12 +10,10 @@ import {
 } from "./ui";
 import {
   Bot,
-  Check,
   ChevronRight,
-  Eye,
-  EyeOff,
-  ExternalLink,
   Loader2,
+  Pencil,
+  Plus,
   Star,
   Trash2,
 } from "lucide-react";
@@ -32,84 +30,13 @@ import {
   fetchUserAISettings,
   fetchUserProviderConfigs,
   updateUserAISettings,
-  upsertProviderConfig,
 } from "@/lib/user-providers-api";
-
-interface ProviderFormState {
-  apiKey: string;
-  chatModel: string;
-  chatModelFallbacks: string;
-  embeddingModel: string;
-  sttModel: string;
-  baseUrl: string;
-  extras: Record<string, string>;
-}
-
-function emptyForm(catalog: ProviderCatalogEntry): ProviderFormState {
-  return {
-    apiKey: "",
-    chatModel: catalog.defaultChatModel,
-    chatModelFallbacks: "",
-    embeddingModel: catalog.defaultEmbeddingModel ?? "",
-    sttModel: catalog.defaultSttModel ?? "",
-    baseUrl: catalog.defaultBaseUrl,
-    extras: Object.fromEntries(
-      (catalog.extraFields ?? []).map((f) => [f.key, ""]),
-    ),
-  };
-}
-
-function formFromConfig(
-  catalog: ProviderCatalogEntry,
-  cfg: UserProviderConfigSummary,
-): ProviderFormState {
-  const extrasRaw = (cfg.extras ?? {}) as Record<string, unknown>;
-  const extras: Record<string, string> = Object.fromEntries(
-    (catalog.extraFields ?? []).map((f) => {
-      const v = extrasRaw[f.key];
-      if (typeof v === "string") return [f.key, v];
-      if (v != null && f.key === "headers") return [f.key, JSON.stringify(v)];
-      return [f.key, ""];
-    }),
-  );
-  return {
-    apiKey: "",
-    chatModel: cfg.chatModel || catalog.defaultChatModel,
-    chatModelFallbacks: cfg.chatModelFallbacks?.join(", ") ?? "",
-    embeddingModel: cfg.embeddingModel ?? catalog.defaultEmbeddingModel ?? "",
-    sttModel: cfg.sttModel ?? catalog.defaultSttModel ?? "",
-    baseUrl: cfg.baseUrl ?? catalog.defaultBaseUrl,
-    extras,
-  };
-}
-
-function parseFallbacks(raw: string): string[] {
-  return raw
-    .split(/[,;\n]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function buildExtrasPayload(
-  catalog: ProviderCatalogEntry,
-  extras: Record<string, string>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const field of catalog.extraFields ?? []) {
-    const raw = extras[field.key]?.trim() ?? "";
-    if (!raw) continue;
-    if (field.key === "headers") {
-      try {
-        out.headers = JSON.parse(raw) as unknown;
-      } catch {
-        out.headers = raw;
-      }
-    } else {
-      out[field.key] = raw;
-    }
-  }
-  return out;
-}
+import {
+  configFormFromUserConfig,
+  createEmptyUserProviderForm,
+  type UserProviderFormState,
+} from "@/utils/user-provider-form";
+import { UserProviderConfigModal } from "./UserProviderConfigModal";
 
 function Field({
   id,
@@ -119,7 +46,7 @@ function Field({
 }: {
   id: string;
   label: string;
-  children: ReactNode;
+  children: React.ReactNode;
   hint?: string;
 }) {
   return (
@@ -135,74 +62,36 @@ function Field({
   );
 }
 
-function ModelField({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-  placeholder,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options?: string[];
-  placeholder?: string;
-}) {
-  if (options?.length) {
-    return (
-      <Field id={id} label={label}>
-        <select
-          id={id}
-          className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-        >
-          {!options.includes(value) && value ? (
-            <option value={value}>{value}</option>
-          ) : null}
-          {options.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </Field>
-    );
-  }
-  return (
-    <Field id={id} label={label}>
-      <input
-        id={id}
-        className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] placeholder:text-[var(--foreground-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
-    </Field>
-  );
+interface AIProvidersCardProps {
+  /** Super_admin: esta tarjeta es BYOK personal, no instancias del equipo. */
+  personalMode?: boolean;
 }
 
-export function AIProvidersCard() {
+export function AIProvidersCard({ personalMode = false }: AIProvidersCardProps) {
   const [catalog, setCatalog] = useState<ProviderCatalogEntry[]>([]);
   const [configs, setConfigs] = useState<UserProviderConfigSummary[]>([]);
   const [settings, setSettings] = useState<UserAISettings | null>(null);
   const [activeTab, setActiveTab] = useState<ProviderId>("openrouter");
-  const [forms, setForms] = useState<Partial<Record<ProviderId, ProviderFormState>>>({});
+  const [forms, setForms] = useState<Partial<Record<ProviderId, UserProviderFormState>>>({});
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalProvider, setModalProvider] = useState<ProviderId>("openrouter");
+  const [modalAddMode, setModalAddMode] = useState(false);
 
   const configByProvider = useMemo(() => {
     const map = new Map<ProviderId, UserProviderConfigSummary>();
     for (const c of configs) map.set(c.provider, c);
     return map;
   }, [configs]);
+
+  const configuredIds = useMemo(
+    () => new Set(configs.map((c) => c.provider)),
+    [configs],
+  );
 
   const activeCatalog = catalog.find((c) => c.id === activeTab);
   const activeConfig = configByProvider.get(activeTab);
@@ -237,12 +126,12 @@ export function AIProvidersCard() {
       setSettings(st);
 
       const cfgMap = new Map(cfgs.map((c) => [c.provider, c]));
-      const nextForms: Partial<Record<ProviderId, ProviderFormState>> = {};
+      const nextForms: Partial<Record<ProviderId, UserProviderFormState>> = {};
       for (const entry of cat) {
         const existing = cfgMap.get(entry.id);
         nextForms[entry.id] = existing
-          ? formFromConfig(entry, existing)
-          : emptyForm(entry);
+          ? configFormFromUserConfig(entry, existing)
+          : createEmptyUserProviderForm(entry);
       }
       setForms(nextForms);
 
@@ -264,51 +153,25 @@ export function AIProvidersCard() {
     void loadAll();
   }, [loadAll]);
 
-  const form = forms[activeTab];
-  const setForm = (patch: Partial<ProviderFormState>) => {
-    setForms((prev) => ({
-      ...prev,
-      [activeTab]: { ...prev[activeTab]!, ...patch },
-    }));
-  };
+  function openAddModal() {
+    const firstFree =
+      catalog.find((c) => !configuredIds.has(c.id))?.id ?? catalog[0]?.id ?? "openrouter";
+    setModalProvider(firstFree);
+    setModalAddMode(true);
+    setModalOpen(true);
+  }
 
-  const handleSave = async () => {
-    if (!activeCatalog || !form) return;
-    if (!form.apiKey.trim()) {
-      setError("La clave API es obligatoria para guardar.");
-      return;
-    }
-    setSaving(true);
-    setError("");
-    setSuccess("");
-    try {
-      const saved = await upsertProviderConfig(activeTab, {
-        apiKey: form.apiKey.trim(),
-        chatModel: form.chatModel.trim() || activeCatalog.defaultChatModel,
-        chatModelFallbacks: parseFallbacks(form.chatModelFallbacks),
-        embeddingModel: activeCatalog.supportsEmbeddings
-          ? form.embeddingModel.trim() || activeCatalog.defaultEmbeddingModel
-          : null,
-        sttModel: activeCatalog.supportsStt
-          ? form.sttModel.trim() || activeCatalog.defaultSttModel
-          : null,
-        baseUrl: activeCatalog.baseUrlEditable ? form.baseUrl.trim() : null,
-        extras: buildExtrasPayload(activeCatalog, form.extras),
-      });
-      setConfigs((prev) => {
-        const rest = prev.filter((c) => c.provider !== activeTab);
-        return [...rest, saved].sort((a, b) =>
-          a.provider.localeCompare(b.provider),
-        );
-      });
-      setForm({ apiKey: "" });
-      setSuccess(`Proveedor «${activeCatalog.label}» guardado correctamente`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error al guardar");
-    } finally {
-      setSaving(false);
-    }
-  };
+  function openEditModal(provider: ProviderId) {
+    setModalProvider(provider);
+    setModalAddMode(false);
+    setActiveTab(provider);
+    setModalOpen(true);
+  }
+
+  const modalCatalogEntry = catalog.find((c) => c.id === modalProvider);
+  const modalForm =
+    forms[modalProvider] ??
+    (modalCatalogEntry ? createEmptyUserProviderForm(modalCatalogEntry) : undefined);
 
   const handleDelete = async () => {
     if (!activeCatalog) return;
@@ -327,7 +190,7 @@ export function AIProvidersCard() {
       setConfigs((prev) => prev.filter((c) => c.provider !== activeTab));
       setForms((prev) => ({
         ...prev,
-        [activeTab]: emptyForm(activeCatalog),
+        [activeTab]: createEmptyUserProviderForm(activeCatalog),
       }));
       const st = await fetchUserAISettings();
       setSettings(st);
@@ -342,7 +205,7 @@ export function AIProvidersCard() {
   const handleSetActive = async () => {
     if (!isConfigured) {
       setError(
-        "Guarda primero la clave API de este proveedor antes de marcarlo como activo.",
+        "Configura primero este proveedor antes de marcarlo como activo.",
       );
       return;
     }
@@ -401,351 +264,289 @@ export function AIProvidersCard() {
   }, [error, catalog]);
 
   return (
-    <Card variant="bordered">
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary)]/10">
-            <Bot className="h-5 w-5 text-[var(--primary)]" />
-          </div>
-          <div>
-            <CardTitle>Proveedores de IA</CardTitle>
-            <CardDescription>
-              Conecta tus claves API (BYOK) para chat, embeddings y transcripción.
-              Elige un proveedor activo para el taller.
-            </CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {loading ? (
-          <div className="flex items-center gap-2 py-4 text-sm text-[var(--foreground-muted)]">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Cargando proveedores…
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {success ? (
-              <div className="rounded-lg border border-[var(--primary)]/25 bg-[var(--primary)]/10 px-4 py-3 text-sm text-[var(--foreground)]">
-                {success}
-              </div>
-            ) : null}
-            {error ? (
-              <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)] space-y-2">
-                <p>{error}</p>
-                {errorCta ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="border-[var(--destructive)]/40"
-                    onClick={() => {
-                      setActiveTab(errorCta);
-                      setError("");
-                    }}
-                  >
-                    Ir a{" "}
-                    {catalog.find((c) => c.id === errorCta)?.label ?? errorCta}
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-3 space-y-3">
-              <p className="text-sm font-medium text-[var(--foreground)]">
-                Ajustes globales
-              </p>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-[var(--foreground-muted)]">Activo:</span>
-                {settings?.activeProvider ? (
-                  <Badge variant="default">
-                    {catalog.find((c) => c.id === settings.activeProvider)
-                      ?.label ?? settings.activeProvider}
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">Sin proveedor activo</Badge>
-                )}
-              </div>
-
-              {showEmbeddingProviderSelector ? (
-                <Field
-                  id="embedding-provider"
-                  label="Proveedor de embeddings"
-                  hint="Tu proveedor activo no expone embeddings; elige otro configurado."
-                >
-                  <select
-                    id="embedding-provider"
-                    disabled={settingsSaving}
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm"
-                    value={settings?.embeddingProvider ?? ""}
-                    onChange={(e) =>
-                      void handleEmbeddingProviderChange(
-                        e.target.value as ProviderId | "",
-                      )
-                    }
-                  >
-                    <option value="">— Seleccionar —</option>
-                    {embeddingCapableConfigured.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              ) : null}
-
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <span className="text-sm text-[var(--foreground)]">
-                  Habilitar embeddings en el grafo
-                </span>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={settings?.embeddingsEnabled ?? true}
-                  disabled={settingsSaving}
-                  onClick={() =>
-                    void handleEmbeddingsToggle(
-                      !(settings?.embeddingsEnabled ?? true),
-                    )
-                  }
-                  className={cn(
-                    "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors",
-                    settings?.embeddingsEnabled !== false
-                      ? "bg-[var(--primary)]"
-                      : "bg-[color-mix(in_oklch,var(--muted-foreground)_25%,var(--border))]",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-                      settings?.embeddingsEnabled !== false
-                        ? "translate-x-4"
-                        : "translate-x-0",
-                    )}
-                  />
-                </button>
-              </label>
+    <>
+      <Card variant="bordered">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--primary)]/10">
+              <Bot className="h-5 w-5 text-[var(--primary)]" />
             </div>
-
-            <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
-              {catalog.map((entry) => {
-                const configured = configByProvider.has(entry.id);
-                const isActive = settings?.activeProvider === entry.id;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    onClick={() => setActiveTab(entry.id)}
-                    className={cn(
-                      "shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors border",
-                      activeTab === entry.id
-                        ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
-                        : "border-transparent bg-[var(--muted)]/50 text-[var(--foreground-muted)] hover:text-[var(--foreground)]",
-                    )}
-                  >
-                    {entry.label}
-                    {configured ? (
-                      <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
-                    ) : null}
-                    {isActive ? (
-                      <Star className="ml-1 inline h-3 w-3 text-[var(--primary)]" />
-                    ) : null}
-                  </button>
-                );
-              })}
+            <div>
+              <CardTitle>{personalMode ? "BYOK personal" : "Proveedores de IA"}</CardTitle>
+              <CardDescription>
+                {personalMode
+                  ? "Una clave por tipo solo para tu usuario. Para el equipo usa «Proveedores del equipo» arriba."
+                  : "Conecta tus claves API (BYOK) para chat, embeddings y transcripción."}
+              </CardDescription>
             </div>
-
-            {activeCatalog && form ? (
-              <div className="space-y-4 border-t border-[var(--border)] pt-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={isConfigured ? "default" : "outline"}>
-                    {isConfigured ? "Configurado" : "No configurado"}
-                  </Badge>
-                  {isConfigured && activeConfig?.apiKeyHint ? (
-                    <span className="text-xs text-[var(--foreground-muted)] font-mono">
-                      Clave: {activeConfig.apiKeyHint}
-                    </span>
-                  ) : null}
-                  {activeCatalog.apiKeyHelpUrl ? (
-                    <a
-                      href={activeCatalog.apiKeyHelpUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-[var(--primary)] hover:underline"
-                    >
-                      Obtener clave API
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : null}
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            disabled={loading}
+            onClick={openAddModal}
+          >
+            <Plus className="mr-1 h-4 w-4" />
+            Agregar nuevo proveedor
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center gap-2 py-4 text-sm text-[var(--foreground-muted)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando proveedores…
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {success ? (
+                <div className="rounded-lg border border-[var(--primary)]/25 bg-[var(--primary)]/10 px-4 py-3 text-sm text-[var(--foreground)]">
+                  {success}
                 </div>
-
-                <Field id={`${activeTab}-api-key`} label="Clave API">
-                  <div className="relative">
-                    <input
-                      id={`${activeTab}-api-key`}
-                      type={apiKeyVisible ? "text" : "password"}
-                      autoComplete="off"
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 pr-10 text-sm"
-                      placeholder={
-                        isConfigured
-                          ? "Introduce la clave para actualizar"
-                          : "sk-… o clave del proveedor"
-                      }
-                      value={form.apiKey}
-                      onChange={(e) => setForm({ apiKey: e.target.value })}
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--foreground-muted)]"
-                      onClick={() => setApiKeyVisible((v) => !v)}
-                      tabIndex={-1}
-                    >
-                      {apiKeyVisible ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </Field>
-
-                <ModelField
-                  id={`${activeTab}-chat`}
-                  label="Modelo de chat"
-                  value={form.chatModel}
-                  onChange={(v) => setForm({ chatModel: v })}
-                  options={
-                    activeCatalog.chatModels?.length
-                      ? [
-                          activeCatalog.defaultChatModel,
-                          ...activeCatalog.chatModels,
-                        ].filter((v, i, a) => a.indexOf(v) === i)
-                      : undefined
-                  }
-                  placeholder={activeCatalog.defaultChatModel}
-                />
-
-                <Field
-                  id={`${activeTab}-fallbacks`}
-                  label="Modelos de respaldo (opcional)"
-                  hint="Separados por coma. Se usan si el modelo principal falla."
-                >
-                  <input
-                    id={`${activeTab}-fallbacks`}
-                    className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm"
-                    value={form.chatModelFallbacks}
-                    onChange={(e) =>
-                      setForm({ chatModelFallbacks: e.target.value })
-                    }
-                  />
-                </Field>
-
-                {activeCatalog.supportsEmbeddings ? (
-                  <ModelField
-                    id={`${activeTab}-emb`}
-                    label="Modelo de embeddings"
-                    value={form.embeddingModel}
-                    onChange={(v) => setForm({ embeddingModel: v })}
-                    options={activeCatalog.embeddingModels}
-                    placeholder={activeCatalog.defaultEmbeddingModel ?? ""}
-                  />
-                ) : null}
-
-                {activeCatalog.supportsStt ? (
-                  <ModelField
-                    id={`${activeTab}-stt`}
-                    label="Modelo de transcripción (STT)"
-                    value={form.sttModel}
-                    onChange={(v) => setForm({ sttModel: v })}
-                    placeholder={activeCatalog.defaultSttModel ?? "whisper-1"}
-                  />
-                ) : null}
-
-                {activeCatalog.baseUrlEditable ? (
-                  <Field
-                    id={`${activeTab}-base`}
-                    label="URL base"
-                    hint="Para Cloudflare se construye a partir del Account ID."
-                  >
-                    <input
-                      id={`${activeTab}-base`}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 font-mono text-xs"
-                      value={form.baseUrl}
-                      onChange={(e) => setForm({ baseUrl: e.target.value })}
-                    />
-                  </Field>
-                ) : null}
-
-                {(activeCatalog.extraFields ?? []).map((field) => (
-                  <Field
-                    key={field.key}
-                    id={`${activeTab}-extra-${field.key}`}
-                    label={field.label + (field.required ? " *" : "")}
-                    hint={field.helpText}
-                  >
-                    <input
-                      id={`${activeTab}-extra-${field.key}`}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm"
-                      placeholder={field.placeholder}
-                      value={form.extras[field.key] ?? ""}
-                      onChange={(e) =>
-                        setForm({
-                          extras: {
-                            ...form.extras,
-                            [field.key]: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </Field>
-                ))}
-
-                <div className="flex flex-wrap items-center gap-3 pt-1">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={() => void handleSave()}
-                    loading={saving}
-                    disabled={saving || !form.apiKey.trim()}
-                  >
-                    <Check className="h-4 w-4" />
-                    Guardar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void handleSetActive()}
-                    loading={settingsSaving}
-                    disabled={
-                      settingsSaving ||
-                      !isConfigured ||
-                      settings?.activeProvider === activeTab
-                    }
-                  >
-                    <Star className="h-4 w-4" />
-                    {settings?.activeProvider === activeTab
-                      ? "Proveedor activo"
-                      : "Marcar como activo"}
-                  </Button>
-                  {isConfigured ? (
+              ) : null}
+              {error ? (
+                <div className="rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)] space-y-2">
+                  <p>{error}</p>
+                  {errorCta ? (
                     <Button
-                      variant="ghost"
+                      type="button"
+                      variant="outline"
                       size="sm"
-                      className="text-[var(--destructive)]"
-                      onClick={() => void handleDelete()}
-                      loading={deleting}
-                      disabled={deleting}
+                      className="border-[var(--destructive)]/40"
+                      onClick={() => {
+                        setActiveTab(errorCta);
+                        setError("");
+                      }}
                     >
-                      <Trash2 className="h-4 w-4" />
-                      Eliminar
+                      Ir a{" "}
+                      {catalog.find((c) => c.id === errorCta)?.label ?? errorCta}
+                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   ) : null}
                 </div>
+              ) : null}
+
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-3 space-y-3">
+                <p className="text-sm font-medium text-[var(--foreground)]">
+                  Ajustes globales
+                </p>
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-[var(--foreground-muted)]">Activo:</span>
+                  {settings?.activeProvider ? (
+                    <Badge variant="default">
+                      {catalog.find((c) => c.id === settings.activeProvider)
+                        ?.label ?? settings.activeProvider}
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline">Sin proveedor activo</Badge>
+                  )}
+                </div>
+
+                {showEmbeddingProviderSelector ? (
+                  <Field
+                    id="embedding-provider"
+                    label="Proveedor de embeddings"
+                    hint="Tu proveedor activo no expone embeddings; elige otro configurado."
+                  >
+                    <select
+                      id="embedding-provider"
+                      disabled={settingsSaving}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--input)] px-3 py-2 text-sm"
+                      value={settings?.embeddingProvider ?? ""}
+                      onChange={(e) =>
+                        void handleEmbeddingProviderChange(
+                          e.target.value as ProviderId | "",
+                        )
+                      }
+                    >
+                      <option value="">— Seleccionar —</option>
+                      {embeddingCapableConfigured.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                ) : null}
+
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span className="text-sm text-[var(--foreground)]">
+                    Habilitar embeddings en el grafo
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={settings?.embeddingsEnabled ?? true}
+                    disabled={settingsSaving}
+                    onClick={() =>
+                      void handleEmbeddingsToggle(
+                        !(settings?.embeddingsEnabled ?? true),
+                      )
+                    }
+                    className={cn(
+                      "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors",
+                      settings?.embeddingsEnabled !== false
+                        ? "bg-[var(--primary)]"
+                        : "bg-[color-mix(in_oklch,var(--muted-foreground)_25%,var(--border))]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
+                        settings?.embeddingsEnabled !== false
+                          ? "translate-x-4"
+                          : "translate-x-0",
+                      )}
+                    />
+                  </button>
+                </label>
               </div>
-            ) : null}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+
+              <div className="flex gap-1 overflow-x-auto pb-1 -mx-1 px-1">
+                {catalog.map((entry) => {
+                  const configured = configByProvider.has(entry.id);
+                  const isActive = settings?.activeProvider === entry.id;
+                  return (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => setActiveTab(entry.id)}
+                      className={cn(
+                        "shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors border",
+                        activeTab === entry.id
+                          ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
+                          : "border-transparent bg-[var(--muted)]/50 text-[var(--foreground-muted)] hover:text-[var(--foreground)]",
+                      )}
+                    >
+                      {entry.label}
+                      {configured ? (
+                        <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                      ) : null}
+                      {isActive ? (
+                        <Star className="ml-1 inline h-3 w-3 text-[var(--primary)]" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {activeCatalog ? (
+                <div className="space-y-4 border-t border-[var(--border)] pt-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={isConfigured ? "default" : "outline"}>
+                      {isConfigured ? "Configurado" : "No configurado"}
+                    </Badge>
+                    {isConfigured && activeConfig?.apiKeyHint ? (
+                      <span className="text-xs text-[var(--foreground-muted)] font-mono">
+                        Clave: {activeConfig.apiKeyHint}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {isConfigured ? (
+                    <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="text-[var(--foreground-muted)]">Modelo de chat</dt>
+                        <dd className="font-mono text-xs">{activeConfig?.chatModel}</dd>
+                      </div>
+                      {activeConfig?.chatModelFallbacks?.length ? (
+                        <div>
+                          <dt className="text-[var(--foreground-muted)]">Respaldo</dt>
+                          <dd className="font-mono text-xs">
+                            {activeConfig.chatModelFallbacks.join(", ")}
+                          </dd>
+                        </div>
+                      ) : null}
+                      {activeConfig?.embeddingModel ? (
+                        <div>
+                          <dt className="text-[var(--foreground-muted)]">Embeddings</dt>
+                          <dd className="font-mono text-xs">{activeConfig.embeddingModel}</dd>
+                        </div>
+                      ) : null}
+                      {activeConfig?.sttModel ? (
+                        <div>
+                          <dt className="text-[var(--foreground-muted)]">STT</dt>
+                          <dd className="font-mono text-xs">{activeConfig.sttModel}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  ) : (
+                    <p className="text-sm text-[var(--foreground-muted)]">
+                      Aún no has configurado {activeCatalog.label}. Usa el botón para añadir la
+                      clave API y los modelos.
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      onClick={() => openEditModal(activeTab)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      {isConfigured ? "Editar configuración" : "Configurar proveedor"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleSetActive()}
+                      loading={settingsSaving}
+                      disabled={
+                        settingsSaving ||
+                        !isConfigured ||
+                        settings?.activeProvider === activeTab
+                      }
+                    >
+                      <Star className="h-4 w-4" />
+                      {settings?.activeProvider === activeTab
+                        ? "Proveedor activo"
+                        : "Marcar como activo"}
+                    </Button>
+                    {isConfigured ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-[var(--destructive)]"
+                        onClick={() => void handleDelete()}
+                        loading={deleting}
+                        disabled={deleting}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {modalForm ? (
+        <UserProviderConfigModal
+          open={modalOpen}
+          onOpenChange={setModalOpen}
+          catalog={catalog}
+          providerId={modalProvider}
+          onProviderIdChange={setModalProvider}
+          allowProviderPick={modalAddMode}
+          configuredProviderIds={configuredIds}
+          showMultiInstanceHint={personalMode}
+          initialForm={modalForm}
+          existingConfig={configByProvider.get(modalProvider) ?? null}
+          onSaved={async () => {
+            await loadAll();
+            setSuccess(
+              modalAddMode
+                ? "Proveedor guardado correctamente"
+                : "Configuración actualizada",
+            );
+          }}
+        />
+      ) : null}
+    </>
   );
 }
