@@ -16,19 +16,12 @@ import { CheckpointerService } from "./checkpoint/checkpointer.service.js";
 import { NodeCacheService } from "./checkpoint/node-cache.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
 import { stateToMarkdown, getAgentLabel } from "./state/state-to-markdown.js";
-import type { MddStructured } from "./state/mdd-structured.schema.js";
-import { mddStructuredToMarkdown } from "./render/mdd-structured-to-markdown.js";
 import {
   extractContextSectionBody,
   extractSections2To5Content,
-  hydrateStructuredFromDraft,
   logSection3Debug,
-  normalizeMddFormat,
-  replaceContextWhenOnlyMetadata,
   replaceSection1BodyFromAnyHeading,
   replaceSections2To5InDraft,
-  sanitizeContextKeyValueAndObject,
-  sanitizeContextSection,
 } from "./utils/mdd-sanitize.js";
 import { GraphMemoryService } from "./graph-memory/graph-memory.service.js";
 import { ProjectsService } from "../projects/projects.service.js";
@@ -37,7 +30,6 @@ import { TheForgeService } from "../theforge/theforge.service.js";
 import { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.service.js";
 import { EpisodicMemoryKind, type ComplexityLevel } from "@theforge/database";
 import type { ChatImagePart } from "@theforge/shared-types";
-import { injectMddDiagrams, suggestMddDiagrams } from "./utils/mdd-diagram-suggestions.js";
 import { markdownToMddStructured } from "./utils/mdd-markdown-to-structured.js";
 import { HumanMessage } from "@langchain/core/messages";
 import { createDbgaLLM } from "./llm/create-dbga-llm.js";
@@ -51,46 +43,11 @@ import { getMddArchitectTools } from "./tools/tool-registry.js";
 import { contextSynthesizerComplexityAppendix } from "./utils/mdd-complexity-rigor.js";
 import { formatDbgaStreamError } from "./utils/dbga-stream-error.util.js";
 import { resolveLangGraphRecursionLimit } from "./utils/langgraph-recursion.util.js";
+import { prepareMddForOutput } from "./utils/mdd-prepare-output.js";
 
 import type { EstimationComplexity, PrecisionBreakdown } from "./estimation/estimation.types.js";
 
 const LANGGRAPH_RECURSION_LIMIT = resolveLangGraphRecursionLimit();
-
-function hasStructuredContent(mdd: MddStructured | null | undefined): boolean {
-  if (!mdd || typeof mdd !== "object") return false;
-  const keys = Object.keys(mdd) as (keyof MddStructured)[];
-  return keys.some((k) => {
-    const v = mdd[k];
-    if (v === undefined || v === null) return false;
-    if (typeof v === "string") return v.trim().length > 0;
-    if (Array.isArray(v)) return v.length > 0;
-    return Object.keys(v as object).length > 0;
-  });
-}
-
-/**
- * Fuente del markdown a enviar. Se prefiere mddDraft cuando es sustancial para no reconstruir desde
- * mddStructured (que podría tener §3 desactualizado). Luego sanitize, normalize e inyección de diagramas.
- */
-function prepareMddForOutput(
-  input: { mddStructured?: MddStructured; mddDraft?: string } | string,
-): string {
-  let raw: string;
-  if (typeof input === "string") {
-    raw = input;
-  } else if (hasStructuredContent(input.mddStructured)) {
-    const hydrated = hydrateStructuredFromDraft(input.mddStructured, input.mddDraft ?? "");
-    raw = mddStructuredToMarkdown(hydrated);
-  } else if ((input.mddDraft ?? "").trim().length > 500) {
-    raw = (input.mddDraft ?? "").trim();
-  } else {
-    raw = (input.mddDraft ?? "").trim();
-  }
-  const sanitized =
-    replaceContextWhenOnlyMetadata(sanitizeContextKeyValueAndObject(sanitizeContextSection(raw)));
-  const normalized = normalizeMddFormat(sanitized);
-  return injectMddDiagrams(normalized, suggestMddDiagrams(normalized));
-}
 
 export type StreamProgressEvent =
   | { type: "progress"; agent: string; message: string }
@@ -106,7 +63,7 @@ export type StreamProgressEvent =
     precisionBreakdown?: PrecisionBreakdown;
     auditTrail?: string[];
   }
-  | { type: "error"; message: string; replanning?: boolean };
+  | { type: "error"; message: string; code?: string; replanning?: boolean };
 
 /** Eventos del flujo MDD con Manager; interrupt puede ser reply (conversación) o questions (entrevista). */
 export type StreamMddManagerEvent =
@@ -440,7 +397,7 @@ export class AiAnalysisService {
         ...(complexityProposal != null ? { complexityProposal } : {}),
       };
     } catch (err) {
-      yield { type: "error", message: formatDbgaStreamError(err) };
+      yield { type: "error", ...formatDbgaStreamError(err) };
     }
   }
 
@@ -859,10 +816,19 @@ export class AiAnalysisService {
         return;
       }
       this.estimationService.clearLiveDraft(projectId.trim(), estimationStageId);
-      const message = err instanceof Error ? err.message : "Error en el flujo MDD con Manager";
+      const formatted = formatDbgaStreamError(err);
+      const message = formatted.message;
       this.logger.error(`[MDD stream/manager] error: ${message}`, err instanceof Error ? err.stack : String(err));
       lastStepFailedByThread.set(threadId, { node: "unknown", error: message });
-      yield { type: "error", message: `${message} Reanuda con un mensaje (ej. "reintentar" o "omitir") y el Manager re-planificará.`, replanning: true };
+      if (formatted.code === "MODELS_UNAVAILABLE") {
+        yield { type: "error", message: formatted.message, code: formatted.code };
+        return;
+      }
+      yield {
+        type: "error",
+        message: `${message} Reanuda con un mensaje (ej. "reintentar" o "omitir") y el Manager re-planificará.`,
+        replanning: true,
+      };
     }
   }
 
@@ -954,22 +920,37 @@ export class AiAnalysisService {
     const pendingStepFailed = lastStepFailedByThread.get(threadId);
     if (pendingStepFailed) lastStepFailedByThread.delete(threadId);
 
+    const clientDraft =
+      mddContentFromClient?.trim() && mddContentFromClient.trim().length > 80
+        ? mddContentFromClient.trim()
+        : undefined;
+
     try {
-      // `resume` entrega el texto a interrupt(); el nodo reanudado (plan_approval, manager, ask_initial_topic) aplica
-      // su propio update a lastUserMessage. No inyectar lastUserMessage aquí: duplicaría el canal en el mismo paso
-      // (INVALID_CONCURRENT_GRAPH_UPDATE / LastValue).
-      // Si había un fallo de nodo, inyectamos lastStepFailed para que el Manager re-planifique.
-      // mddContentFromClient: evita revertir al checkpoint viejo; el front envía el documento actual (ej. con secret_key en mfa_methods).
+      // `resume` entrega el texto a interrupt(); el nodo reanudado aplica su propio update (p. ej. lastUserMessage).
+      // No inyectar lastUserMessage, projectId ni agentCtx en Command.update: duplican canales en el mismo paso.
+      // mddDraft sí puede ir en Command.update: el canal usa reduceMddDraft y fusiona escrituras concurrentes.
+      let skipClientDraft = false;
+      if (clientDraft) {
+        try {
+          const snapshot = await graph.getState(config);
+          const checkpointDraft = ((snapshot?.values as MDDState)?.mddDraft ?? "").trim();
+          skipClientDraft = checkpointDraft.length > 0 && checkpointDraft === clientDraft;
+        } catch {
+          /* usar clientDraft */
+        }
+      }
+      // agentCtx fields are reducePreferDefined — already set in the original stream checkpoint.
+      // Do NOT call updateState before the resume stream: in LangGraph 0.2.x it creates a new
+      // checkpoint snapshot that does not preserve the pending interrupt tasks, causing the
+      // resume Command to find no active interrupt and silently end with an empty audit trail.
+      // Instead, merge agentCtx into Command.update so LangGraph applies it atomically with the resume.
       const stream = await graph.stream(
         new Command({
           resume: resumeText,
           update: {
-            ...(pendingStepFailed ? { lastStepFailed: pendingStepFailed } : {}),
-            ...(mddContentFromClient?.trim() && mddContentFromClient.trim().length > 80
-              ? { mddDraft: mddContentFromClient.trim() }
-              : {}),
-            projectId: projectId?.trim(),
             ...agentCtx,
+            ...(pendingStepFailed ? { lastStepFailed: pendingStepFailed } : {}),
+            ...(clientDraft && !skipClientDraft ? { mddDraft: clientDraft } : {}),
           },
         }),
         {
@@ -1185,9 +1166,12 @@ export class AiAnalysisService {
         };
         return;
       }
-      const message = err instanceof Error ? err.message : "Error al reanudar el flujo MDD";
-      this.logger.error(`[MDD stream/resume] error: ${message}`, err instanceof Error ? err.stack : String(err));
-      yield { type: "error", message };
+      const formatted = formatDbgaStreamError(err);
+      this.logger.error(
+        `[MDD stream/resume] error: ${formatted.message}`,
+        err instanceof Error ? err.stack : String(err),
+      );
+      yield { type: "error", ...formatted };
     }
   }
 

@@ -14,6 +14,7 @@ import { getInternalDirectivesContext, extractInternalDirectives } from "../util
 import { softwareArchitectComplexityAppendix } from "../utils/mdd-complexity-rigor.js";
 import type { TheForgeService } from "../../theforge/theforge.service.js";
 import { getMddArchitectTheForgeTools } from "../tools/agent-theforge-tools.js";
+import { stripThinkingTags } from "../utils/mdd-security-parse.js";
 import { z } from "zod";
 
 /** Schema estructurado que algunos LLMs devuelven en lugar de mddDraft. */
@@ -667,6 +668,7 @@ export function createMddSoftwareArchitectNode(
         const response = await llm.invoke(messages);
         text = typeof response.content === "string" ? response.content : "";
       }
+      text = stripThinkingTags(text);
 
       if (!text.trim()) {
         LOG("LLM vacío, devolviendo borrador sin transformar");
@@ -862,6 +864,21 @@ export function createMddSoftwareArchitectNode(
       const modeloDatosParsed = section3Body ? parseModeloDatosFromSection3Markdown(section3Body) : null;
       const section4Body = extractContratosBody(mddDraft);
       const section5Body = extractLogicaEdgeCasesBody(mddDraft);
+      LOG("[DIAG §4] contratosBody len=%s isSubstantial=%s isPlaceholder=%s preview=%s",
+        section4Body?.length ?? 0,
+        isContratosSubstantial(section4Body),
+        isContratosPlaceholder(section4Body),
+        (section4Body ?? "").slice(0, 120).replace(/\n/g, " "),
+      );
+      LOG("[DIAG §5] logicaEdgeCasesBody len=%s preview=%s",
+        section5Body?.length ?? 0,
+        (section5Body ?? "").slice(0, 120).replace(/\n/g, " "),
+      );
+      LOG("[DIAG LLM] text len=%s strippedThinking=%s rawPrefix=%s",
+        text.length,
+        text !== (typeof text === "string" ? text : ""),
+        text.slice(0, 200).replace(/\n/g, " "),
+      );
       const slice: Partial<MDDStateType["mddStructured"]> = {};
       if (modeloDatosParsed?.sql) slice.modeloDatos = modeloDatosParsed;
       if (section4Body) slice.contratosApi = { summary: section4Body };

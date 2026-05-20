@@ -5,6 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service.js";
 import { AiAnalysisService } from "./ai-analysis.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
 import { parseChatImageAttachments } from "../ai/utils/chat-image-attachments.util.js";
+import { formatDbgaStreamError } from "./utils/dbga-stream-error.util.js";
 
 @Controller("ai-analysis")
 export class AiAnalysisController {
@@ -190,9 +191,9 @@ export class AiAnalysisController {
             yield JSON.stringify(event) + "\n";
           }
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : "Error interno del servidor";
-          console.error("[MDD stream] error:", errMsg);
-          yield JSON.stringify({ type: "error", message: errMsg }) + "\n";
+          const payload = formatDbgaStreamError(err);
+          console.error("[MDD stream] error:", payload.message);
+          yield JSON.stringify({ type: "error", ...payload }) + "\n";
         }
       })(),
     );
@@ -261,9 +262,9 @@ export class AiAnalysisController {
             yield JSON.stringify(event) + "\n";
           }
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : "Error interno del servidor";
-          console.error("[MDD stream/manager] error:", errMsg);
-          yield JSON.stringify({ type: "error", message: errMsg }) + "\n";
+          const payload = formatDbgaStreamError(err);
+          console.error("[MDD stream/manager] error:", payload.message);
+          yield JSON.stringify({ type: "error", ...payload }) + "\n";
         }
       })(),
     );
@@ -318,9 +319,9 @@ export class AiAnalysisController {
             yield JSON.stringify(event) + "\n";
           }
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : "Error interno del servidor";
-          console.error("[MDD stream/regenerate-section] error:", errMsg);
-          yield JSON.stringify({ type: "error", message: errMsg }) + "\n";
+          const payload = formatDbgaStreamError(err);
+          console.error("[MDD stream/regenerate-section] error:", payload.message);
+          yield JSON.stringify({ type: "error", ...payload }) + "\n";
         }
       })(),
     );
@@ -381,9 +382,9 @@ export class AiAnalysisController {
             yield JSON.stringify(event) + "\n";
           }
         } catch (err) {
-          const errMsg = err instanceof Error ? err.message : "Error interno del servidor";
-          console.error("[MDD stream/resume] error:", errMsg);
-          yield JSON.stringify({ type: "error", message: errMsg }) + "\n";
+          const payload = formatDbgaStreamError(err);
+          console.error("[MDD stream/resume] error:", payload.message);
+          yield JSON.stringify({ type: "error", ...payload }) + "\n";
         }
       })(),
     );

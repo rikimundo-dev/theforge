@@ -49,7 +49,10 @@ export function markdownToMddStructured(draft: string): MddStructured {
   const h1Match = trimmed.match(/^#\s+(.+?)(?:\n|$)/m);
   if (h1Match?.[1]) out.title = h1Match[1].trim();
 
-  const section1 = getSectionBody(trimmed, /##\s*1\.\s*Contexto\s+y\s+alcance|##\s*Contexto\s+y\s+alcance/i);
+  const section1 = getSectionBody(
+    trimmed,
+    /##\s*1\.\s*Contexto(?:\s+y\s+alcance)?|##\s*Contexto(?:\s+y\s+alcance)?/i,
+  );
   if (section1) out.contextoAlcance = section1;
 
   // Section 2: Arquitectura y Stack
@@ -69,14 +72,20 @@ export function markdownToMddStructured(draft: string): MddStructured {
     }
   }
 
-  const section3 = getSectionBody(trimmed, /##\s*3\.\s*Contratos\s+de\s+API|##\s*Contratos\s+de\s+API/i);
-  if (section3 && section3.length > 100) {
+  const sectionContratos = getSectionBody(
+    trimmed,
+    /##\s*(?:4\.\s*)?Contratos\s+de\s+API|##\s*3\.\s*Contratos\s+de\s+API/i,
+  );
+  if (sectionContratos && sectionContratos.length > 100) {
     const endpoints: Array<{ method: string; path: string; description?: string }> = [];
-    const h3Matches = section3.matchAll(/###\s+(GET|POST|PUT|DELETE|PATCH)\s+(\S+)/gi);
+    const h3Matches = sectionContratos.matchAll(/###\s+(GET|POST|PUT|DELETE|PATCH)\s+(\S+)/gi);
     for (const m of h3Matches) {
       endpoints.push({ method: m[1].toUpperCase(), path: m[2].trim(), description: "" });
     }
-    out.contratosApi = { summary: section3.slice(0, 2000), endpoints: endpoints.length ? endpoints : undefined };
+    out.contratosApi = {
+      summary: sectionContratos.slice(0, 2000),
+      endpoints: endpoints.length ? endpoints : undefined,
+    };
   }
 
   const section4 = getSectionBody(trimmed, /##\s*4\.\s*Arquitectura\s+Frontend|##\s*Arquitectura\s+Frontend/i);
@@ -89,7 +98,7 @@ export function markdownToMddStructured(draft: string): MddStructured {
   );
   if (sectionLogicaEdgeCases) out.logicaEdgeCases = sectionLogicaEdgeCases;
 
-  const sectionSeg = getSectionBody(trimmed, /##\s+Seguridad/i);
+  const sectionSeg = getSectionBody(trimmed, /##\s*(?:6\.\s+)?Seguridad/i);
   if (sectionSeg) {
     const items: Array<{ title: string; content: string[] }> = [];
     const h3s = sectionSeg.split(/(?=###\s+)/);
@@ -107,7 +116,10 @@ export function markdownToMddStructured(draft: string): MddStructured {
     out.seguridad = items;
   }
 
-  const sectionInt = getSectionBody(trimmed, /##\s+Integraci[oó]n/i);
+  const sectionInt = getSectionBody(
+    trimmed,
+    /##\s*(?:7\.\s+)?(?:Infraestructura|Integraci[oó]n)/i,
+  );
   if (sectionInt) {
     const subsections: Array<{ title: string; content: string[] }> = [];
     const h3s = sectionInt.split(/(?=###\s+)/);

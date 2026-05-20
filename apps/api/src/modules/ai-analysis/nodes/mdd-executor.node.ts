@@ -11,6 +11,12 @@ const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:Executor] ${m
 export function createMddExecutorNode() {
   return async (state: MDDStateType): Promise<Command> => {
     const plan = state.mddPlan;
+    LOG("[DIAG] plan steps=%s currentStep=%s executorControlled=%s nodes=%s",
+      plan?.length ?? 0,
+      state.mddPlanCurrentStep ?? "none",
+      state.executorControlled,
+      plan?.map((s) => s.node).join(",") ?? "none",
+    );
     if (!plan?.length) {
       LOG("sin plan, volver al manager");
       return new Command({

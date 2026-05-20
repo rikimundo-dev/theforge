@@ -86,7 +86,10 @@ function inferSectionsFromMessage(text: string): string[] {
     /\b(denue|inegi|directorio\s+estad[ií]stico|app\/api\/denue|consulta\/buscar)\b/i.test(t) ||
     /\b(base\s+de\s+datos|campo|columna|guardar(?:se)?\s+en|almacenar\s+en|jwt_token|refresh_token|token\s+en\s+bd)\b/i.test(t);
   if (needsModelOrApi) out.push("software_architect");
-  if (/\b(seguridad|mfa|2fa|autenticaci[oó]n|autorizaci[oó]n|rbac|§6|secci[oó]n\s*6)\b/i.test(t)) {
+  if (
+    /\b(seguridad|mfa|2fa|autenticaci[oó]n|autorizaci[oó]n|rbac|§6|secci[oó]n\s*6|paso\s*6)\b/i.test(t) ||
+    /\b(?:regenera|actualiza|rehacer).*(?:paso|secci[oó]n)\s*6\b/i.test(t)
+  ) {
     out.push("security");
   }
   if (/\b(infraestructura|docker|kubernetes|despliegue|§7|secci[oó]n\s*7)\b/i.test(t)) {
@@ -387,7 +390,27 @@ const SHORT_AGREEMENT_PATTERN =
 
 /** Confirmación de aprobación del plan (HITL 4.4): ejecutar el plan pendiente. */
 const PLAN_APPROVAL_CONFIRM_PATTERN =
-  /^(?:s[ií]|s[ií]\s*,\s*ejecuta|ejecuta(r)?\s*(el\s+)?plan|adelante|aprobado|ok|vale|procedamos?|adelante\s+con\s+el\s+plan)[\s.]*$/i;
+  /^(?:s[ií]|s[ií]\s*,\s*ejecuta|ejecuta(r)?\s*(el\s+)?plan|adelante|aprobado|ok|vale|procedamos?|adelante\s+con\s+el\s+plan|ejecutar)[\s.]*$/i;
+
+/** Petición explícita de regenerar una sección del MDD (p. ej. «regenera el paso 6»). */
+const REGENERATE_SECTION_N_PATTERN =
+  /\b(?:regenera(?:r)?|rehacer|actualiza(?:r)?|genera(?:r)?\s+de\s+nuevo)\s+(?:solo\s+)?(?:la\s+)?(?:secci[oó]n|paso)\s*([1-7])\b/i;
+
+function parseRegenerateSectionNumber(msg: string): number | null {
+  const m = (msg ?? "").trim().match(REGENERATE_SECTION_N_PATTERN);
+  if (!m) return null;
+  const n = parseInt(m[1]!, 10);
+  return n >= 1 && n <= 7 ? n : null;
+}
+
+/** Mapea número de sección MDD → agente del pipeline (§6 → security). */
+function agentsForMddSection(section: number): string[] {
+  if (section === 1) return ["clarifier"];
+  if (section >= 2 && section <= 5) return ["software_architect"];
+  if (section === 6) return ["security"];
+  if (section === 7) return ["integration"];
+  return [];
+}
 
 /** Usuario indica que ya no tiene más información o que trabaje con lo que hay → armar plan actual y mostrar para aprobar. */
 const WORK_WITH_WHAT_WE_HAVE_PATTERN =
@@ -483,7 +506,7 @@ export function createMddManagerNode(
     const pending = state.pendingPlanApproval;
     if (pending) {
       if (PLAN_APPROVAL_CONFIRM_PATTERN.test(userMessage)) {
-        LOG("plan aprobado por usuario, ejecutando goto=%s", pending.goto);
+        LOG("plan aprobado por usuario → Executor (paso a paso)");
         const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Plan aprobado: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
         const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Plan aprobado: ${userMessage}` : ""].filter(Boolean).join("\n\n");
         const directive = state.planUserIntent ?? getLastSubstantiveUserMessage(state);
@@ -494,23 +517,28 @@ export function createMddManagerNode(
         } else if (impact && !mergedDirective) {
           mergedDirective = `**Resumen de impacto (aprobado con el plan):**\n${impact}`;
         }
+        const { mddPlan, delegateTarget, sectionsToRun, previousMddDraftForMerge } = pending;
         return new Command({
           update: {
             userInputAccumulated: accumulatedWithRequest || state.userInputAccumulated,
             dbgaContent: dbgaWithRequest || state.dbgaContent,
             lastUserMessage: undefined,
-            requestQuestionsOnly: pending.delegateTarget === "clarifier_only",
+            requestQuestionsOnly: delegateTarget === "clarifier_only",
             lastStepFailed: undefined,
-            mddPlan: pending.mddPlan,
-            delegateTarget: pending.delegateTarget,
-            sectionsToRun: pending.sectionsToRun,
-            previousMddDraftForMerge: pending.previousMddDraftForMerge,
+            mddPlan,
+            delegateTarget,
+            sectionsToRun,
+            previousMddDraftForMerge,
             pendingPlanApproval: undefined,
             planUserIntent: undefined,
             impactSummary: undefined,
+            executorControlled: true,
+            mddPlanCurrentStep: undefined,
+            architectCriticFeedback: undefined,
+            architectCriticAttempts: undefined,
             ...(mergedDirective ? { acceptedProposalDirective: mergedDirective } : {}),
           },
-          goto: pending.goto,
+          goto: "executor",
         });
       }
       LOG("plan no aprobado, usuario respondió; re-entrando Manager sin plan pendiente");
@@ -525,6 +553,36 @@ export function createMddManagerNode(
     if (!userMessage.trim() && hasDraft) {
       LOG("vuelta del executor sin mensaje nuevo → END (evitar segundo plan/segunda ejecución)");
       return new Command({ goto: END });
+    }
+
+    const regenSection = parseRegenerateSectionNumber(userMessage);
+    if (hasDraft && regenSection !== null) {
+      const agents = expandSectionsToRun(agentsForMddSection(regenSection));
+      if (agents.length > 0) {
+        const planDirective =
+          [getPlanDirective(state), `Regenerar §${regenSection} del MDD según la petición del usuario.`]
+            .filter(Boolean)
+            .join("\n\n") || userMessage;
+        const sectionsToRun = agents;
+        const mddPlan = buildMddPlan("sections", sectionsToRun, getUserBrief(state), planDirective);
+        LOG("regenerar §%s solicitado → Executor sections=%s", regenSection, sectionsToRun.join(","));
+        return new Command({
+          update: {
+            lastUserMessage: undefined,
+            requestQuestionsOnly: false,
+            delegateTarget: "sections",
+            sectionsToRun,
+            mddPlan,
+            executorControlled: true,
+            mddPlanCurrentStep: undefined,
+            acceptedProposalDirective: planDirective,
+            pendingPlanApproval: undefined,
+            planUserIntent: undefined,
+            impactSummary: undefined,
+          },
+          goto: "executor",
+        });
+      }
     }
 
     // Comando "reformatea el documento": si hay mddStructured, re-renderizar; si no, normalizar mddDraft (sin LLM) y terminar.

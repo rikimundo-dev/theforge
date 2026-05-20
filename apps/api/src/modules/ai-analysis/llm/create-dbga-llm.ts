@@ -2,7 +2,7 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOpenAI } from "@langchain/openai";
-import { resolveLangChainChatTemperature } from "../../ai/config/llm-config.js";
+import { llmMaxTokens, resolveLangChainChatTemperature } from "../../ai/config/llm-config.js";
 import type { AIFactory } from "../../ai/ai.factory.js";
 import type { UserLLMRuntime } from "../../ai/providers/llm-runtime.types.js";
 import type { ProviderId } from "../../ai/providers/provider-catalog.js";
@@ -28,6 +28,7 @@ function buildChatOpenAI(runtime: UserLLMRuntime, model: string): ChatOpenAI {
   return new ChatOpenAI({
     model,
     temperature: resolveLangChainChatTemperature(),
+    maxTokens: llmMaxTokens(),
     timeout: LLM_TIMEOUT_MS,
     openAIApiKey: runtime.apiKey,
     configuration: { baseURL: runtime.baseURL },
@@ -42,7 +43,7 @@ function buildLangChainChat(runtime: UserLLMRuntime, model: string): BaseChatMod
         model,
         apiKey: runtime.apiKey,
         temperature,
-        maxTokens: undefined,
+        maxTokens: llmMaxTokens(),
         clientOptions: { timeout: LLM_TIMEOUT_MS },
       });
     case "gemini":

@@ -1,27 +1,34 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { ModelsUnavailableError } from "../../ai/config/llm-model-fallback.js";
 import { formatDbgaStreamError } from "./dbga-stream-error.util.js";
 
 describe("formatDbgaStreamError", () => {
   it("devuelve mensaje en español cuando el error menciona Recursion limit", () => {
-    const msg = formatDbgaStreamError(
+    const { message } = formatDbgaStreamError(
       new Error("Recursion limit of 100 reached"),
     );
-    assert.match(msg, /competidores directos/i);
-    assert.match(msg, /B2B/i);
-    assert.doesNotMatch(msg, /Recursion limit/i);
+    assert.match(message, /competidores directos/i);
+    assert.match(message, /B2B/i);
+    assert.doesNotMatch(message, /Recursion limit/i);
   });
 
   it("devuelve mensaje en español para GRAPH_RECURSION", () => {
-    const msg = formatDbgaStreamError(new Error("GRAPH_RECURSION_LIMIT"));
-    assert.match(msg, /competidores directos/i);
+    const { message } = formatDbgaStreamError(new Error("GRAPH_RECURSION_LIMIT"));
+    assert.match(message, /competidores directos/i);
+  });
+
+  it("incluye código MODELS_UNAVAILABLE para ModelsUnavailableError", () => {
+    const payload = formatDbgaStreamError(new ModelsUnavailableError());
+    assert.equal(payload.code, "MODELS_UNAVAILABLE");
+    assert.match(payload.message, /No hay un modelo disponible/i);
   });
 
   it("pasa el mensaje original para otros errores", () => {
     assert.equal(
-      formatDbgaStreamError(new Error("timeout de red")),
+      formatDbgaStreamError(new Error("timeout de red")).message,
       "timeout de red",
     );
-    assert.equal(formatDbgaStreamError("fallo genérico"), "Error en el análisis");
+    assert.equal(formatDbgaStreamError("fallo genérico").message, "Error en el análisis");
   });
 });

@@ -13,14 +13,17 @@ import {
   extractIdentifiedInfraFromText,
   fixIntegrationSectionBullets,
   getMddDraftSummary,
+  integracionToSection7Markdown,
   jsonSectionToMarkdown,
   logMddNodeOutput,
+  replaceSection6Or7InDraft,
   sanitizeManifestToMatchIdentifiedInfra,
   stripInstructionAndFeedbackBlocks,
   stripNotaPendienteHeadingInIntegrationSection,
 } from "../utils/mdd-sanitize.js";
 import { extractFirstJsonObject, parseJsonOrThrow } from "../utils/parse-json.js";
 import { getInternalDirectivesContext, extractInternalDirectives } from "../utils/mdd-mesh-topology.js";
+import { stripThinkingTags } from "../utils/mdd-security-parse.js";
 import { z } from "zod";
 
 /** Schema de salida estructurada: integracion con subsections y manifest opcional. */
@@ -235,7 +238,7 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
       const context = contextParts.join("\n");
       const prompt = `${INTEGRATION_ENGINEER_MDD_PROMPT}\n\n---\n${context}`;
       const response = await llm.invoke([new HumanMessage(prompt)]);
-      const text = typeof response.content === "string" ? response.content : "";
+      const text = stripThinkingTags(typeof response.content === "string" ? response.content : "");
       if (!text.trim()) {
         LOG("LLM vacío, usando fallback");
         const slice = {
@@ -255,8 +258,9 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
           }),
         };
         const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
-        logMddNodeOutput("Integration", state.mddDraft ?? "");
-        return { mddStructured: merged };
+        const fallbackDraft = replaceSection6Or7InDraft(state.mddDraft ?? "", 7, integracionToSection7Markdown(slice.integracion));
+        logMddNodeOutput("Integration", fallbackDraft);
+        return { mddStructured: merged, mddDraft: fallbackDraft };
       }
       const jsonStr = extractFirstJsonObject(text) ?? text.trim();
 
@@ -292,8 +296,8 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
         }
       }
 
-      // Log raw LLM response for debugging
-      LOG("raw text first 300 chars: %s", (text ?? "").slice(0, 300).replace(/\n/g, "\\n"));
+      LOG("[DIAG §7] LLM text len=%s rawPrefix=%s", text.length, text.slice(0, 300).replace(/\n/g, " "));
+      LOG("[DIAG §7] slice subsections=%s", Array.isArray(slice.integracion) ? slice.integracion.length : (slice.integracion as { subsections?: unknown[] })?.subsections?.length ?? 0);
 
       // Post-processing: si alguna subsección tiene content vacío, rellenar con hint
       ensureIntegrationContent(slice, state);
@@ -304,12 +308,16 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
       }
 
       const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
-      const mddDraft = state.mddDraft ?? "";
       const internalDirectives = extractInternalDirectives(text, "integration_engineer");
       const meshUpdate = internalDirectives.length > 0 ? { internalDirectives } : {};
 
+      const integracionForMd = Array.isArray(merged.integracion)
+        ? { subsections: merged.integracion }
+        : (merged.integracion ?? slice.integracion);
+      const section7Md = integracionToSection7Markdown(integracionForMd);
+      const mddDraft = replaceSection6Or7InDraft(state.mddDraft ?? "", 7, section7Md);
       const sum = getMddDraftSummary(mddDraft);
-      LOG("ok integracion §7 reemplazada mddDraftLen=%s section2=%s", sum.length, sum.section2);
+      LOG("ok integracion §7 en mddDraft len=%s section2=%s", sum.length, sum.section2);
       logMddNodeOutput("Integration", mddDraft);
       return { mddStructured: merged, mddDraft, ...meshUpdate };
     } catch (err) {

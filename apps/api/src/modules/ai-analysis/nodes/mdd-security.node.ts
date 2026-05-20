@@ -3,76 +3,61 @@ import { HumanMessage } from "@langchain/core/messages";
 import { SECURITY_ARCHITECT_MDD_PROMPT } from "../prompts/load-prompts.js";
 import type { MDDStateType } from "../state/index.js";
 import { mddSeguridadItemSchema } from "../state/mdd-structured.schema.js";
+import type { MddSeguridadItem } from "../state/mdd-structured.schema.js";
 import { mergeMddStructured } from "../utils/mdd-merge-structured.js";
+import {
+  isCorruptedSeguridadSlice,
+  isPlaceholderSeguridad,
+  parseSecurityLlmResponse,
+  seguridadItemsFromDraftSection6,
+  stripThinkingTags,
+} from "../utils/mdd-security-parse.js";
 import { getUserBrief } from "../utils/mdd-user-brief.js";
 import {
   getMddDraftSummary,
-  jsonSectionToMarkdown,
   logMddNodeOutput,
-  unbulletAndJoinForJson,
+  replaceSection6Or7InDraft,
+  seguridadItemsToSection6Markdown,
 } from "../utils/mdd-sanitize.js";
-import { extractFirstJsonObject, parseJsonOrThrow } from "../utils/parse-json.js";
-import { z } from "zod";
-
-/** Schema de salida estructurada: solo seguridad (array de { title, content }). */
-const securityStructuredSchema = z.object({
-  seguridad: z.array(mddSeguridadItemSchema),
-});
-
-/** Acepta string u objeto legacy; normaliza a string. */
-function sectionToStr(x: unknown): string {
-  if (typeof x === "string") return x;
-  if (x && typeof x === "object" && !Array.isArray(x)) {
-    const obj = x as Record<string, unknown>;
-    const key = ["content", "text", "section", "securitySection"].find((k) => typeof obj[k] === "string");
-    if (key) return String(obj[key]);
-  }
-  return typeof x === "object" ? JSON.stringify(x, null, 2) : String(x);
-}
-
-const legacySecurityOutputSchema = z.object({
-  securitySection: z
-    .union([z.string(), z.record(z.unknown()), z.array(z.unknown())])
-    .transform(sectionToStr)
-    .pipe(z.string()),
-});
 
 const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:Security] ${msg}`, ...args);
 
-/** Convierte markdown de sección Seguridad a un único ítem { title, content }. */
-function markdownToSeguridadItem(md: string): z.infer<typeof mddSeguridadItemSchema> {
-  const trimmed = md.replace(/^##\s*Seguridad\s*/i, "").trim();
-  const lines = trimmed.split(/\n/).map((l) => l.trim()).filter(Boolean);
-  const content: string[] = [];
-  for (const line of lines) {
-    if (line.startsWith("###")) content.push(line.replace(/^###\s*/, "").trim());
-    else if (line.startsWith("- ")) content.push(line.slice(2).trim());
-    else content.push(line);
+const PENDING_SEGURIDAD: MddSeguridadItem[] = [
+  mddSeguridadItemSchema.parse({ title: "Seguridad", content: ["(Pendiente de definir.)"] }),
+];
+
+/** Conserva §6 previa si el LLM devolvió basura o el parse falló. */
+function resolveSeguridadSlice(
+  state: MDDStateType,
+  llmItems: MddSeguridadItem[] | null,
+): MddSeguridadItem[] {
+  if (llmItems?.length && !isCorruptedSeguridadSlice(llmItems) && !isPlaceholderSeguridad(llmItems)) {
+    return llmItems;
   }
-  if (content.length === 0) content.push(trimmed || "(Pendiente de definir.)");
-  return mddSeguridadItemSchema.parse({ title: "Seguridad", content });
+
+  LOG("respuesta LLM inválida o corrupta; preservando §6 anterior si existe");
+  const prevStructured = state.mddStructured?.seguridad;
+  if (
+    prevStructured?.length &&
+    !isCorruptedSeguridadSlice(prevStructured) &&
+    !isPlaceholderSeguridad(prevStructured)
+  ) {
+    return prevStructured;
+  }
+
+  const fromDraft = seguridadItemsFromDraftSection6(state.mddDraft ?? "");
+  if (fromDraft?.length) return fromDraft;
+
+  return PENDING_SEGURIDAD;
 }
 
-/** Parsea markdown con ### títulos y viñetas - en array de { title, content[] }. */
-function markdownSeguridadToItems(md: string): z.infer<typeof mddSeguridadItemSchema>[] {
-  const withoutH2 = md.replace(/^##\s*Seguridad\s*/i, "").trim();
-  const blocks = withoutH2.split(/\n###\s+/);
-  const items: z.infer<typeof mddSeguridadItemSchema>[] = [];
-  for (const block of blocks) {
-    const trimmed = block.trim();
-    if (!trimmed) continue;
-    const lines = trimmed.split(/\n/).map((l) => l.trim()).filter(Boolean);
-    const title = lines[0] ?? "Seguridad";
-    const content: string[] = [];
-    for (let j = 1; j < lines.length; j++) {
-      const line = lines[j]!;
-      if (line.startsWith("- ")) content.push(line.slice(2).trim());
-      else if (line) content.push(line);
-    }
-    items.push(mddSeguridadItemSchema.parse({ title, content: content.length ? content : [trimmed] }));
+function buildMddDraftWithSection6(state: MDDStateType, seguridad: MddSeguridadItem[]): string {
+  const draft = state.mddDraft ?? "";
+  if (isPlaceholderSeguridad(seguridad) && seguridadItemsFromDraftSection6(draft)) {
+    return draft;
   }
-  if (items.length === 0) items.push(mddSeguridadItemSchema.parse({ title: "Seguridad", content: ["(Pendiente de definir.)"] }));
-  return items;
+  const section6Md = seguridadItemsToSection6Markdown(seguridad);
+  return replaceSection6Or7InDraft(draft, 6, section6Md);
 }
 
 /** Creates the MDD Security Architect node. Outputs structured seguridad; merge into mddStructured and derive mddDraft. */
@@ -118,60 +103,25 @@ export function createMddSecurityNode(llm: BaseChatModel) {
       const context = contextParts.filter(Boolean).join("\n");
       const prompt = `${SECURITY_ARCHITECT_MDD_PROMPT}\n\n---\n${context}`;
       const response = await llm.invoke([new HumanMessage(prompt)]);
-      const text = typeof response.content === "string" ? response.content : "";
-      if (!text.trim()) {
-        LOG("LLM vacío, usando fallback");
-        const slice = { seguridad: [mddSeguridadItemSchema.parse({ title: "Seguridad", content: ["(Pendiente de definir.)"] })] };
-        const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
-        logMddNodeOutput("Security", state.mddDraft ?? "");
-        return { mddStructured: merged };
-      }
-      const jsonStr = extractFirstJsonObject(text) ?? text.trim();
+      const text = stripThinkingTags(typeof response.content === "string" ? response.content : "");
 
-      let slice: { seguridad: z.infer<typeof mddSeguridadItemSchema>[] };
-      try {
-        const parsed = parseJsonOrThrow(jsonStr, securityStructuredSchema);
-        slice = { seguridad: parsed.seguridad };
-      } catch {
-        LOG("parse estructurado falló, fallback desde markdown");
-        let section = "";
-        try {
-          const legacy = parseJsonOrThrow(text, legacySecurityOutputSchema);
-          section = String(legacy.securitySection ?? "").trim();
-        } catch {
-          section = text.replace(/^```(?:markdown)?\s*|\s*```$/g, "").trim();
-        }
-        if (!section) {
-          section = "## Seguridad\n\n(Pendiente de definir.)";
-        } else if (!section.startsWith("##")) {
-          section = "## Seguridad\n\n" + section;
-        }
-        const trimmedSection = section.trim();
-        const looksLikeJson =
-          trimmedSection.startsWith("{") ||
-          (trimmedSection.includes('"6. Seguridad"') || trimmedSection.includes('"6.1'));
-        if (looksLikeJson) {
-          const jsonCandidate = trimmedSection.startsWith("{")
-            ? trimmedSection
-            : unbulletAndJoinForJson(trimmedSection);
-          const markdown = jsonSectionToMarkdown(jsonCandidate, "Seguridad");
-          if (markdown !== jsonCandidate) {
-            slice = { seguridad: markdownSeguridadToItems(markdown) };
-          } else {
-            const item = markdownToSeguridadItem(section);
-            slice = { seguridad: [item] };
-          }
-        } else {
-          const item = markdownToSeguridadItem(section);
-          slice = { seguridad: [item] };
-        }
-      }
+      LOG("[DIAG §6] LLM text len=%s rawPrefix=%s", text.length, text.slice(0, 200).replace(/\n/g, " "));
+      const llmItems = text.trim() ? parseSecurityLlmResponse(text) : null;
+      if (!text.trim()) LOG("[DIAG §6] LLM vacío, usando fallback");
+      LOG("[DIAG §6] llmItems=%s isCorrupted=%s isPlaceholder=%s",
+        llmItems?.length ?? "null",
+        llmItems ? isCorruptedSeguridadSlice(llmItems) : "n/a",
+        llmItems ? isPlaceholderSeguridad(llmItems) : "n/a",
+      );
 
+      const seguridad = resolveSeguridadSlice(state, llmItems);
+      const slice = { seguridad };
       const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
-      const sum = getMddDraftSummary(state.mddDraft ?? "");
-      LOG("ok seguridad §6 actualizada en mddStructured mddDraftLen=%s section2=%s", sum.length, sum.section2);
-      logMddNodeOutput("Security", state.mddDraft ?? "");
-      return { mddStructured: merged };
+      const mddDraft = buildMddDraftWithSection6(state, merged.seguridad ?? seguridad);
+      const sum = getMddDraftSummary(mddDraft);
+      LOG("ok seguridad §6 actualizada mddDraftLen=%s section2=%s", sum.length, sum.section2);
+      logMddNodeOutput("Security", mddDraft);
+      return { mddStructured: merged, mddDraft };
     } catch (err) {
       LOG("error: %s", err instanceof Error ? err.message : String(err));
       throw err;
