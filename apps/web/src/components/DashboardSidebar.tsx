@@ -178,7 +178,7 @@ export function DashboardSidebar({
   onBeforeNavigateToProjects,
 }: DashboardSidebarProps) {
   const rail = collapsed;
-  /** Drawer navigation on viewports below sm; desktop sidebar unchanged from sm. */
+  /** Drawer navigation below lg; fixed sidebar column from lg. */
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const projectSearchInputRef = useRef<HTMLInputElement | null>(null);
   /** Expanded/collapsed list under the workshop project name (header toggles this). */
@@ -211,7 +211,7 @@ export function DashboardSidebar({
 
   useEffect(() => {
     if (typeof globalThis.matchMedia !== "function") return;
-    const mq = globalThis.matchMedia("(min-width: 640px)");
+    const mq = globalThis.matchMedia("(min-width: 1024px)");
     function onChange() {
       if (mq.matches) setMobileNavOpen(false);
     }
@@ -335,9 +335,9 @@ export function DashboardSidebar({
   }, [closeMobileNav, onExitWorkshop]);
 
   return (
-    <div className="relative flex w-full shrink-0 flex-col sm:h-full sm:min-h-0 sm:w-auto sm:shrink-0">
+    <div className="relative flex w-full shrink-0 flex-col lg:z-40 lg:h-full lg:min-h-0 lg:w-auto lg:shrink-0">
       <header
-        className="sticky top-0 z-40 flex w-full items-center justify-between gap-2 border-b border-[color-mix(in_oklch,var(--sidebar-border)_90%,var(--sidebar))] bg-[var(--sidebar)] px-3 py-2.5 text-[var(--sidebar-foreground)] sm:hidden"
+        className="sticky top-0 z-40 flex w-full items-center justify-between gap-2 border-b border-[color-mix(in_oklch,var(--sidebar-border)_90%,var(--sidebar))] bg-[var(--sidebar)] px-3 py-2.5 text-[var(--sidebar-foreground)] lg:hidden"
         style={{ paddingTop: "max(0.625rem, env(safe-area-inset-top))" }}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -378,7 +378,7 @@ export function DashboardSidebar({
         <button
           type="button"
           aria-label="Cerrar menú"
-          className="fixed inset-0 z-30 bg-[color-mix(in_oklch,var(--background)_40%,black)] sm:hidden"
+          className="fixed inset-0 z-30 bg-[color-mix(in_oklch,var(--background)_40%,black)] lg:hidden"
           onClick={closeMobileNav}
         />
       ) : null}
@@ -386,17 +386,20 @@ export function DashboardSidebar({
       <TooltipProvider delayDuration={280}>
     <aside
       className={cn(
-        "flex w-full shrink-0 flex-col border-[var(--sidebar-border)] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] sm:border-b-0 sm:border-r sm:min-h-0 sm:self-stretch sm:sticky sm:top-0 sm:transition-[width] sm:duration-200 sm:ease-out",
+        "flex w-full shrink-0 flex-col border-[var(--sidebar-border)] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] lg:border-b-0 lg:border-r lg:min-h-0 lg:self-stretch lg:sticky lg:top-0 lg:transition-[width] lg:duration-200 lg:ease-out",
         // Mobile: slide-over drawer; desktop: unchanged width and sticky column.
-        "max-sm:absolute max-sm:left-0 max-sm:top-0 max-sm:z-50 max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:w-[min(19rem,92vw)] max-sm:overflow-y-auto max-sm:overscroll-y-contain max-sm:border-r max-sm:shadow-2xl max-sm:transition-transform max-sm:duration-200 max-sm:ease-out max-sm:[-webkit-overflow-scrolling:touch]",
+        "max-lg:absolute max-lg:left-0 max-lg:top-0 max-lg:z-50 max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-[min(19rem,92vw)] max-lg:overflow-y-auto max-lg:overscroll-y-contain max-lg:border-r max-lg:shadow-2xl max-lg:transition-transform max-lg:duration-200 max-lg:ease-out max-lg:[-webkit-overflow-scrolling:touch]",
         mobileNavOpen
-          ? "max-sm:translate-x-0 max-sm:pointer-events-auto"
-          : "max-sm:-translate-x-full max-sm:pointer-events-none",
-        !inWorkshop && "sm:h-full sm:max-h-[100dvh] sm:min-h-0",
+          ? "max-lg:translate-x-0 max-lg:pointer-events-auto"
+          : "max-lg:-translate-x-full max-lg:pointer-events-none",
+        !inWorkshop && "lg:h-full lg:max-h-[100dvh] lg:min-h-0",
         inWorkshop &&
-          "min-h-0 overflow-hidden sm:h-full sm:max-h-[min(100dvh,100svh)] sm:min-h-0",
+          cn(
+            "min-h-0 lg:h-full lg:max-h-[min(100dvh,100svh)] lg:min-h-0",
+            rail ? "overflow-hidden lg:overflow-visible" : "overflow-hidden",
+          ),
         // Expanded: 16rem / 256px (common nav width); rail stays 4rem.
-        rail ? "sm:w-16 sm:min-w-[4rem]" : "sm:w-64 sm:min-w-64",
+        rail ? "lg:w-16 lg:min-w-[4rem]" : "lg:w-64 lg:min-w-64",
       )}
       aria-label="Navegación principal"
     >
@@ -405,26 +408,26 @@ export function DashboardSidebar({
           "flex flex-col min-h-0",
           inWorkshop
             ? "min-h-0 flex-1 gap-4 overflow-hidden"
-            : "min-h-0 gap-4 sm:flex-1 sm:overflow-hidden",
-          rail ? "p-3 sm:px-2 sm:py-3" : "px-3 py-3 sm:px-3 sm:py-3",
+            : "min-h-0 gap-4 lg:flex-1 lg:overflow-hidden",
+          rail ? "p-3 lg:px-2 lg:py-3" : "px-3 py-3 lg:px-3 lg:py-3",
         )}
       >
         <div
           className={cn(
-            "flex w-full gap-2 max-sm:hidden",
-            rail ? "sm:flex-col sm:items-center sm:gap-2.5" : "items-center justify-between",
+            "flex w-full gap-2 max-lg:hidden",
+            rail ? "lg:flex-col lg:items-center lg:gap-2.5" : "items-center justify-between",
           )}
         >
           <div
             className={cn(
               "flex min-w-0 items-center gap-2.5",
-              rail ? "sm:flex-none sm:justify-center" : "flex-1",
+              rail ? "lg:flex-none lg:justify-center" : "flex-1",
             )}
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--sidebar-foreground)_7%,var(--sidebar))] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_10%,transparent)]">
               <Flame className="h-5 w-5 text-[var(--primary)]" aria-hidden />
             </div>
-            <div className={cn("min-w-0", rail && "sm:hidden")}>
+            <div className={cn("min-w-0", rail && "lg:hidden")}>
               <p className="truncate text-base font-semibold tracking-tight text-[var(--sidebar-foreground)]">
                 TheForge
               </p>
@@ -438,8 +441,8 @@ export function DashboardSidebar({
               title={rail ? "Expandir barra lateral" : "Contraer barra lateral"}
               aria-expanded={!rail}
               className={cn(
-                "hidden shrink-0 flex items-center justify-center rounded-[var(--radius-md)] border border-[color-mix(in_oklch,var(--sidebar-border)_70%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] p-2 text-[var(--sidebar-foreground)] shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)] active:scale-[0.97] sm:flex",
-                rail && "sm:size-10 sm:shrink-0 sm:p-0",
+                "hidden shrink-0 flex items-center justify-center rounded-[var(--radius-md)] border border-[color-mix(in_oklch,var(--sidebar-border)_70%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] p-2 text-[var(--sidebar-foreground)] shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)] active:scale-[0.97] lg:flex",
+                rail && "lg:size-10 lg:shrink-0 lg:p-0",
               )}
             >
               <ChevronLeft className={cn("h-5 w-5", rail && "hidden")} aria-hidden />
@@ -449,7 +452,7 @@ export function DashboardSidebar({
         </div>
 
         {!inWorkshop ? (
-          <div className={cn("relative", rail && "sm:hidden")}>
+          <div className={cn("relative", rail && "lg:hidden")}>
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]"
               aria-hidden
@@ -466,7 +469,7 @@ export function DashboardSidebar({
           </div>
         ) : null}
 
-        <div className={cn("relative hidden", rail && "sm:block", inWorkshop && "sm:hidden")}>
+        <div className={cn("relative hidden", rail && "lg:block", inWorkshop && "lg:hidden")}>
           <CollapsedRailHint rail={rail} label="Buscar proyectos — expandir barra lateral">
             <button
               type="button"
@@ -490,7 +493,7 @@ export function DashboardSidebar({
           <p
             className={cn(
               "px-2 text-[11px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]",
-              rail && "sm:hidden",
+              rail && "lg:hidden",
             )}
           >
             {inWorkshop ? "Taller" : "Menú"}
@@ -505,11 +508,11 @@ export function DashboardSidebar({
                   title="Volver al panel de proyectos"
                   className={cn(
                     "flex w-full shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
-                    rail && "sm:justify-center sm:px-0",
+                    rail && "lg:justify-center lg:px-0",
                   )}
                 >
                   <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className={cn("truncate", rail && "sm:hidden")}>Panel de proyectos</span>
+                  <span className={cn("truncate", rail && "lg:hidden")}>Panel de proyectos</span>
                 </button>
               </CollapsedRailHint>
 
@@ -524,7 +527,7 @@ export function DashboardSidebar({
                     className={cn(
                       "flex shrink-0 items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2",
                       "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]",
-                      "sm:justify-center sm:px-0",
+                      "lg:justify-center lg:px-0",
                     )}
                     title={undefined}
                   >
@@ -571,7 +574,7 @@ export function DashboardSidebar({
                   <p
                     className={cn(
                       "mb-1.5 shrink-0 px-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]",
-                      rail && "sm:hidden",
+                      rail && "lg:hidden",
                     )}
                   >
                     Pasos del flujo
@@ -601,7 +604,7 @@ export function DashboardSidebar({
                                 key={item.id}
                                 className={cn(
                                   "relative",
-                                  !rail && "pl-5 sm:pl-6",
+                                  !rail && "pl-5 lg:pl-6",
                                   rail && "flex justify-center py-0.5",
                                 )}
                               >
@@ -697,11 +700,11 @@ export function DashboardSidebar({
                 title="Proyectos"
                 className={cn(
                   "flex w-full items-center gap-3 rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] px-3 py-2.5 text-left text-sm font-medium text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))]",
-                  rail && "sm:justify-center sm:px-0",
+                  rail && "lg:justify-center lg:px-0",
                 )}
               >
                 <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
-                <span className={cn(rail && "sm:hidden")}>Proyectos</span>
+                <span className={cn(rail && "lg:hidden")}>Proyectos</span>
               </button>
             </CollapsedRailHint>
           )}
@@ -711,7 +714,7 @@ export function DashboardSidebar({
       <div
         className={cn(
           "mt-auto shrink-0 border-t border-[color-mix(in_oklch,var(--sidebar-border)_75%,var(--sidebar))] p-2",
-          rail && "sm:px-1.5",
+          rail && "lg:relative lg:z-[1] lg:px-1.5",
         )}
       >
         <ThemeModeToggle compact={rail} />
@@ -724,7 +727,7 @@ export function DashboardSidebar({
             }
             className={cn(
               "flex cursor-pointer list-none items-center gap-3 rounded-[var(--radius-lg)] px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden hover:bg-[var(--sidebar-accent)]",
-              rail && "sm:flex-col sm:justify-center sm:gap-1 sm:px-0",
+              rail && "lg:flex-col lg:justify-center lg:gap-1 lg:px-0",
             )}
           >
             {rail ? (
@@ -756,7 +759,7 @@ export function DashboardSidebar({
                 {getUserInitials(user)}
               </div>
             )}
-            <div className={cn("min-w-0 flex-1 text-left", rail && "sm:hidden")}>
+            <div className={cn("min-w-0 flex-1 text-left", rail && "lg:hidden")}>
               <p className="truncate text-sm font-medium text-[var(--sidebar-foreground)]">
                 {getDisplayName(user)}
               </p>
@@ -765,12 +768,19 @@ export function DashboardSidebar({
             <ChevronDown
               className={cn(
                 "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180",
-                rail && "sm:hidden",
+                rail && "lg:hidden",
               )}
               aria-hidden
             />
           </summary>
-          <div className="absolute bottom-full left-2 right-2 z-[var(--z-popover)] mb-1 min-w-[10rem] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--popover)] py-1 text-[var(--popover-foreground)] shadow-lg">
+          <div
+            className={cn(
+              "absolute z-[var(--z-popover)] min-w-[10.5rem] overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--popover)] py-1 text-[var(--popover-foreground)] shadow-lg",
+              rail
+                ? "bottom-0 left-full right-auto mb-0 ml-2 max-lg:bottom-full max-lg:left-2 max-lg:right-2 max-lg:mb-1 max-lg:ml-0"
+                : "bottom-full left-2 right-2 mb-1",
+            )}
+          >
             <button
               type="button"
               className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-[var(--popover-foreground)] hover:bg-[var(--muted)]"

@@ -21,6 +21,7 @@ import {
   ListOrdered,
   ListTodo,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   HelpCircle,
   Layers,
@@ -36,6 +37,18 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  WORKSHOP_DOC_TOOLBAR_ICON_BTN,
+  WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER,
+  WORKSHOP_PANEL_ACTION_DANGER,
+  WORKSHOP_PANEL_ACTION_PRIMARY,
+  WORKSHOP_PANEL_ACTION_SECONDARY,
+} from "../constants/workshopDocToolbar";
+import {
+  WORKSHOP_HEADER_CTL,
+  WORKSHOP_HEADER_CTL_HOVER,
+  WORKSHOP_HEADER_ICON_BTN,
+} from "../constants/workshopHeaderToolbar";
 import type { CodebaseDocResponseMode } from "@theforge/shared-types";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import { apiFetch, API_BASE } from "../utils/apiClient";
@@ -76,32 +89,8 @@ import {
   LEGACY_MDD_STEPS,
 } from "../constants/legacy-workshop-loading-steps";
 
-/** Stage selector + “Nueva etapa” only (primary controls with a light frame). */
-const WORKSHOP_HEADER_CTL =
-  "h-11 min-h-[44px] sm:h-9 sm:min-h-0 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_78%,var(--muted))] text-sm font-medium text-[var(--foreground)] shadow-sm transition-[background-color,border-color,color] touch-manipulation";
-
-const WORKSHOP_HEADER_CTL_HOVER =
-  "hover:bg-[color-mix(in_oklch,var(--muted)_52%,var(--card))] hover:border-[color-mix(in_oklch,var(--border)_88%,var(--foreground))]";
-
-/** Workshop header: framed square icon controls (Nueva etapa, ZIP, Hermes, Ayuda). */
-const WORKSHOP_HEADER_ICON_BTN = cn(
-  WORKSHOP_HEADER_CTL,
-  WORKSHOP_HEADER_CTL_HOVER,
-  "inline-flex w-11 shrink-0 items-center justify-center p-0 sm:w-9",
-);
-
 const WORKSHOP_MDD_ACTION_PRIMARY =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:cursor-not-allowed disabled:opacity-50";
-
-/** Preview/source toggle and flow-order: same outline chip as `Button variant="outline"` (needs `border` width, not only color). */
-const WORKSHOP_DOC_TOOLBAR_ICON_BTN =
-  "rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_65%,var(--muted))] text-[var(--foreground)] shadow-sm hover:border-[var(--border-hover)] hover:bg-[color-mix(in_oklch,var(--muted)_45%,var(--card))] hover:text-[var(--primary)] focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]";
-
-/** Same chrome as `Button size="icon"` + `WORKSHOP_DOC_TOOLBAR_ICON_BTN` for native `<button>` triggers. */
-const WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER = cn(
-  "inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:pointer-events-none disabled:opacity-50",
-  WORKSHOP_DOC_TOOLBAR_ICON_BTN,
-);
 
 /** Desktop workshop: chat column width (px). Al soltar el resize por debajo del mínimo, el panel se colapsa al rail. */
 const LG_CHAT_PANEL_WIDTH_MIN_PX = 260;
@@ -160,8 +149,8 @@ function workshopDocSourceTogglePresentation(
 ): { Icon: LucideIcon; tooltip: string } {
   if (centralPanel === "ux-ui-guide") {
     if (activeViewMode === "preview") return { Icon: Pencil, tooltip: "Ver markdown" };
-    if (activeViewMode === "design") return { Icon: Palette, tooltip: "Ver preview diseño" };
-    return { Icon: FileText, tooltip: "Ver preview visual" };
+    if (activeViewMode === "design") return { Icon: Palette, tooltip: "Ver UI Kit y tokens" };
+    return { Icon: FileText, tooltip: "Ver documento DESIGN.md" };
   }
   if (activeViewMode === "preview") return { Icon: Pencil, tooltip: "Editar" };
   return { Icon: FileText, tooltip: "Ver previsualización" };
@@ -182,11 +171,11 @@ function WorkshopDocToolbarHint({
       ? "Complejidad baja: Spec → H.U. → Tasks (MDD / Blueprint / API ocultos). Paso 0 opcional."
       : tier === "MEDIUM"
         ? _isLegacyProject
-          ? "Complejidad media (legacy): MDD Inicial opcional (Ariadne); MDD de cambio + Spec → API → Guía UX/UI → Tasks."
-          : "Complejidad media (producto nuevo): sin MDD en barra — insumo Paso 0 / Spec. Entregables: Spec → API → Guía UX/UI → Tasks."
+          ? "Complejidad media (legacy): MDD Inicial opcional (Ariadne); MDD de cambio + Spec → API → Design System → Tasks."
+          : "Complejidad media (producto nuevo): sin MDD en barra — insumo Paso 0 / Spec. Entregables: Spec → API → Design System → Tasks."
         : _isLegacyProject
           ? "Legacy: MDD Inicial opcional (Ariadne → doc. de partida); luego Modificación + MDD de cambio y entregables. Cada etapa del taller = una modificación con doc actualizada vía Ariadne."
-          : "Orden: Paso 0 → BRD → To-Be → MDD → Spec → Arq. → Casos → H.U. → Blueprint → Guía UX/UI → API → Flujos → Tasks → Infra";
+          : "Orden: Paso 0 → BRD → To-Be → MDD → Spec → Arq. → Casos → H.U. → Blueprint → Design System → API → Flujos → Tasks → Infra";
 
   const summaryLine =
     tier === "LOW"
@@ -194,7 +183,7 @@ function WorkshopDocToolbarHint({
       : tier === "MEDIUM"
         ? _isLegacyProject
           ? "Complejidad media (legacy): doc. de partida opcional con Ariadne; luego MDD de cambio y entregables (Spec → API → UX/UI → Tasks)."
-          : "Complejidad media (producto nuevo): insumo Paso 0 / Spec; entregables Spec → API → Guía UX/UI → Tasks (sin MDD en barra hasta avanzar el flujo)."
+          : "Complejidad media (producto nuevo): insumo Paso 0 / Spec; entregables Spec → API → Design System → Tasks (sin MDD en barra hasta avanzar el flujo)."
         : _isLegacyProject
           ? "Complejidad alta (legacy): Ariadne para doc. de partida, Modificación por etapa y documentación actualizada con el taller."
           : "Complejidad alta (producto nuevo): recorre Paso 0, BRD, To-Be, MDD y entregables hasta Infra en el orden sugerido.";
@@ -603,13 +592,13 @@ export default function WorkshopView({
       setUxGenerating(false);
       setUxGenProgress(null);
       const msg = e instanceof Error ? e.message : String(e);
-      setError(`Error al generar guía UX/UI: ${msg}`);
+      setError(`Error al generar design system: ${msg}`);
       console.error("Error generating UX guide:", e);
     }
   }, [projectId, project, effectiveMddTrimmed, blueprintContent, specContent, setUxUiGuideContent, persistUxUiGuideContent, setError]);
 
   /** Repara/regenera el YAML frontmatter de la guía UX/UI usando el MDD como contexto vía API.
-   * Llama al endpoint que genera YAML desde el MDD independientemente del body markdown. */
+   * Si falla la API, hace reparación local (útil con contenido pegado sin frontmatter). */
   const repairUxGuide = useCallback(async () => {
     const current = uxUiGuideContent ?? "";
     if (!projectId || !current.trim()) return;
@@ -1542,11 +1531,12 @@ export default function WorkshopView({
                   "overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] sm:overflow-visible sm:pb-0",
                 )}
               >
-                <Layers
-                  className="hidden h-4 w-4 shrink-0 text-[var(--foreground-subtle)] sm:block"
-                  strokeWidth={2}
+                <span
+                  className={cn(WORKSHOP_HEADER_ICON_BTN, "hidden sm:inline-flex pointer-events-none text-[var(--foreground-subtle)]")}
                   aria-hidden
-                />
+                >
+                  <Layers className="h-4 w-4 shrink-0" strokeWidth={2} />
+                </span>
                 <label htmlFor="workshop-stage-select" className="sr-only">
                   Vista en vivo: etapa del Workshop (MDD y semáforo)
                 </label>
@@ -1894,7 +1884,7 @@ export default function WorkshopView({
         >
           <div
             className={cn(
-              "relative min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] flex flex-col lg:shrink-0",
+              "relative min-h-0 min-w-0 overflow-hidden flex flex-col border-r border-[var(--border)] lg:shrink-0",
               mobileWorkshopColumn === "chat" ? "flex-1" : "lg:h-full lg:min-h-0",
               !lgChatPanelResizing &&
                 "lg:transition-[width] lg:duration-300 lg:ease-out motion-reduce:lg:transition-none",
@@ -1938,7 +1928,7 @@ export default function WorkshopView({
             {!lgWorkshopChatCollapsed ? (
               <div
                 className={cn(
-                  "pointer-events-auto hidden lg:block absolute inset-y-0 right-0 z-30 w-3 shrink-0 cursor-col-resize touch-none select-none",
+                  "pointer-events-auto absolute inset-y-0 z-30 hidden w-2 -right-1 cursor-col-resize touch-none select-none lg:block",
                   "hover:bg-[color-mix(in_oklch,var(--primary)_16%,transparent)] active:bg-[color-mix(in_oklch,var(--primary)_22%,transparent)]",
                 )}
                 style={{ cursor: "col-resize" }}
@@ -2110,6 +2100,42 @@ export default function WorkshopView({
                     </TooltipContent>
                   </Tooltip>
                 )}
+                {centralPanel === "benchmark" &&
+                  (() => {
+                    const activeBenchmarkViewMode =
+                      benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode;
+                    const { Icon: BenchmarkToggleIcon, tooltip: benchmarkToggleTooltip } =
+                      workshopDocSourceTogglePresentation("mdd", activeBenchmarkViewMode);
+                    return (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className={WORKSHOP_DOC_TOOLBAR_ICON_BTN}
+                            aria-label={benchmarkToggleTooltip}
+                            onClick={() => {
+                              if (benchmarkPhaseTab === "fase0") {
+                                setBenchmarkViewMode((m) => (m === "preview" ? "source" : "preview"));
+                              } else {
+                                setPhase0SummaryViewMode((m) => (m === "preview" ? "source" : "preview"));
+                              }
+                            }}
+                          >
+                            <BenchmarkToggleIcon
+                              className="h-4 w-4 shrink-0 text-[var(--primary)]"
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" align="end" className="max-w-[14rem]">
+                          {benchmarkToggleTooltip}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })()}
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -2284,7 +2310,7 @@ export default function WorkshopView({
                         onClick={repairUxGuide}
                         disabled={uxGenerating || loading}
                         className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
-                        aria-label="Reparar YAML frontmatter de la guía UX/UI desde el contenido existente"
+                        aria-label="Reparar YAML frontmatter de la design system desde el contenido existente"
                       >
                         <Wrench className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
                       </button>
@@ -2302,7 +2328,7 @@ export default function WorkshopView({
                         onClick={generateUxGuideSequential}
                         disabled={uxGenerating || loading || !effectiveMddTrimmed || !blueprintContent?.trim()}
                         className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
-                        aria-label={uxGenProgress ?? "Regenerar guía UX/UI desde MDD y Blueprint"}
+                        aria-label={uxGenProgress ?? "Regenerar design system desde MDD y Blueprint"}
                       >
                         {uxGenerating ? (
                           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[var(--primary)]" strokeWidth={2} aria-hidden />
@@ -2312,7 +2338,7 @@ export default function WorkshopView({
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
-                      {uxGenProgress ?? "Regenerar guía UX/UI desde MDD y Blueprint"}
+                      {uxGenProgress ?? "Regenerar design system desde MDD y Blueprint"}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -2769,7 +2795,7 @@ export default function WorkshopView({
                         <span>Generando Deep Research… Suele tardar 1–2 minutos; no cierres la página.</span>
                       </div>
                     )}
-                    <div className="shrink-0 flex items-center gap-2 mb-3 flex-wrap">
+                    <div className="shrink-0 flex flex-wrap items-center gap-2 mb-3">
                       <button
                         type="button"
                         onClick={async () => {
@@ -2777,13 +2803,13 @@ export default function WorkshopView({
                           setCentralPanel("brd");
                         }}
                         disabled={loading && loadingReason === "brd-from-dbga"}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={WORKSHOP_PANEL_ACTION_PRIMARY}
                         title="Generar BRD desde el Benchmark (DBGA); luego revisa y aprueba en el tab BRD"
                       >
                         {loading && loadingReason === "brd-from-dbga" ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                         ) : (
-                          <Play className="w-4 h-4" />
+                          <Play className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                         )}
                         Generar BRD con agentes
                       </button>
@@ -2792,64 +2818,27 @@ export default function WorkshopView({
                         onClick={() => {
                           setCentralPanel("brd");
                         }}
-                        className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm"
+                        className={WORKSHOP_PANEL_ACTION_SECONDARY}
                         title="Ir a BRD y editar manualmente o usar el chat"
                       >
+                        <ArrowRight className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                         Ir a BRD (editar)
                       </button>
                       {dbgaContent != null && dbgaContent !== "" && (
                         <button
                           type="button"
                           onClick={() => projectId && clearDbgaContent(projectId)}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] hover:bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] text-sm"
+                          className={WORKSHOP_PANEL_ACTION_DANGER}
                           title="Borrar el contenido de Fase 0 (podrás generar uno nuevo después)"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                           Borrar Fase 0
                         </button>
                       )}
                     </div>
 
-                    {/* Generar Deep Research — siempre visible en Fase 0 */}
-                    <div className="shrink-0 flex items-center gap-2 mb-3">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await phase0DeepResearch(projectId, {
-                            userIdea: lastBenchmarkIdea.trim() || undefined,
-                            includeBenchmark: true,
-                          });
-                          setBenchmarkPhaseTab("benchmark");
-                        }}
-                        disabled={loading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)] text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        title="Generar Benchmark & Deep Research desde la Fase 0; luego ve a la pestaña Benchmark para revisarlo"
-                      >
-                        {loading && loadingReason === "phase0-deep-research" ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Rocket className="w-4 h-4" />
-                        )}
-                        {loading && loadingReason === "phase0-deep-research" ? "Generando…" : "Generar Benchmark"}
-                      </button>
-                      <span className="text-[var(--foreground-subtle)] text-xs">(puede tardar 1–2 min)</span>
-                    </div>
-
                     <div className="flex-1 flex flex-col min-h-0 border-t border-[var(--border)] pt-4">
                         <h3 className="shrink-0 text-sm font-medium text-[var(--muted-foreground)] mb-2">Análisis (DBGA) — Fase 0</h3>
-                        <div className="shrink-0 flex items-center justify-end gap-2 mb-2 flex-wrap">
-                          <button
-                            type="button"
-                            onClick={() => setBenchmarkViewMode((m) => (m === "preview" ? "source" : "preview"))}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm"
-                          >
-                            {benchmarkViewMode === "preview" ? (
-                              <><Pencil className="w-4 h-4" /> Editar</>
-                            ) : (
-                              <><FileText className="w-4 h-4" /> Ver previsualización</>
-                            )}
-                          </button>
-                        </div>
                         <div className="flex-1 flex flex-col min-h-0">
                           {benchmarkViewMode === "preview" && dbgaContent != null && dbgaContent !== "" ? (
                             <div className="flex-1 min-h-[200px] overflow-auto">
@@ -2870,31 +2859,50 @@ export default function WorkshopView({
                   </>
                 ) : (
                   <>
-                      <div className="flex-1 flex flex-col min-h-0">
-                        <div className="shrink-0 flex items-center justify-end gap-2 mb-3 flex-wrap">
+                      {loading && loadingReason === "phase0-deep-research" && (
+                        <div className="shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] px-4 py-2 mb-3 text-sm text-[color-mix(in_oklch,var(--primary)_65%,var(--foreground))] flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                          <span>Generando Deep Research… Suele tardar 1–2 minutos; no cierres la página.</span>
+                        </div>
+                      )}
+                      {phase0SummaryViewMode === "preview" ? (
+                        <div className="shrink-0 flex items-center gap-2 mb-3">
                           <button
                             type="button"
-                            onClick={() => setPhase0SummaryViewMode((m) => (m === "preview" ? "source" : "preview"))}
-                            className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--muted)_62%,var(--card))] text-sm"
+                            onClick={async () => {
+                              await phase0DeepResearch(projectId, {
+                                userIdea: lastBenchmarkIdea.trim() || undefined,
+                                includeBenchmark: true,
+                              });
+                            }}
+                            disabled={loading}
+                            className={WORKSHOP_PANEL_ACTION_PRIMARY}
+                            title="Generar Benchmark & Deep Research desde el análisis de Fase 0"
                           >
-                            {phase0SummaryViewMode === "preview" ? (
-                              <><Pencil className="w-4 h-4" /> Editar</>
+                            {loading && loadingReason === "phase0-deep-research" ? (
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
                             ) : (
-                              <><FileText className="w-4 h-4" /> Ver previsualización</>
+                              <Rocket className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                             )}
+                            {loading && loadingReason === "phase0-deep-research" ? "Generando…" : "Generar Benchmark"}
                           </button>
-                          {phase0SummaryContent != null && phase0SummaryContent !== "" && (
+                          <span className="text-[var(--foreground-subtle)] text-xs">(puede tardar 1–2 min)</span>
+                        </div>
+                      ) : null}
+                      <div className="flex-1 flex flex-col min-h-0">
+                        {phase0SummaryContent != null && phase0SummaryContent !== "" ? (
+                          <div className="shrink-0 flex items-center justify-end gap-2 mb-3 flex-wrap">
                             <button
                               type="button"
                               onClick={() => projectId && clearPhase0SummaryContent(projectId)}
-                              className="flex items-center gap-1.5 px-2 py-1 rounded text-[var(--muted-foreground)] hover:text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] hover:bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] text-sm"
+                              className={WORKSHOP_PANEL_ACTION_DANGER}
                               title="Borrar el resumen Benchmark (podrás generar uno nuevo desde Fase 0)"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                               Borrar benchmark
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        ) : null}
                         <div className="flex-1 flex flex-col min-h-0">
                           {phase0SummaryViewMode === "preview" && phase0SummaryContent != null && phase0SummaryContent !== "" ? (
                             <div className="flex-1 min-h-[200px] overflow-auto">
@@ -2905,7 +2913,8 @@ export default function WorkshopView({
                               <div className="text-center">
                                 <Globe className="w-8 h-8 mx-auto mb-2 text-[var(--muted-foreground)] opacity-40" />
                                 <p className="text-sm text-[var(--muted-foreground)]">
-                                  Aún no hay Benchmark. Ve a la pestaña <strong>Fase 0</strong>, completa el análisis y presiona <strong>Generar Benchmark</strong>.
+                                  Aún no hay Benchmark. Completa el análisis en <strong>Fase 0</strong> y presiona{" "}
+                                  <strong>Generar Benchmark</strong> arriba en esta pestaña.
                                 </p>
                               </div>
                             </div>
@@ -3165,7 +3174,7 @@ export default function WorkshopView({
                 canGenerate={!!(effectiveMddTrimmed && blueprintContent?.trim())}
                 isLoading={loading}
                 isGenerating={uxGenerating}
-                placeholder="# Guía UX/UI\n\nConversa con la IA sobre marca, estilos, prioridades y componentes; el contenido se irá generando aquí."
+                placeholder="# Design System\n\nConversa con la IA sobre marca, estilos, prioridades y componentes; el contenido se irá generando aquí."
                 onBlur={handleUxUiGuideBlur}
               />
               </ErrorBoundary>
@@ -3403,24 +3412,30 @@ export default function WorkshopView({
         {isLgLayout ? (
           <div
             ref={lgMetricsFlyoutRef}
-            className="absolute right-0 top-1/2 z-[35] -translate-y-1/2 overflow-visible"
-            onMouseEnter={() => setLgMetricsFlyoutOpen(true)}
-            onMouseLeave={() => setLgMetricsFlyoutOpen(false)}
+            className="pointer-events-none absolute right-0 top-1/2 z-[35] -translate-y-1/2"
           >
-            {/* Clip shows 2rem when closed (left = ceja). Do not translate the row when closed — positive translate-x moves the ceja out of the narrow clip. Animate max-width only; inner width is fixed so layout stays stable. */}
+            {/* Clip shows 2rem when closed (pleca only). Open on pleca hover; stay open over pleca + panel; close on leave. */}
             <div
               className={cn(
-                "overflow-hidden min-h-0 min-w-0 shrink-0 self-stretch max-h-[min(calc(100dvh-2.5rem),90dvh)]",
+                "pointer-events-auto overflow-hidden min-h-0 min-w-0 shrink-0 self-stretch max-h-[min(calc(100dvh-2.5rem),90dvh)]",
                 "transition-[max-width] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] will-change-[max-width]",
                 lgMetricsFlyoutOpen
                   ? "max-w-[calc(2rem+min(40rem,calc(100vw-3rem)))]"
                   : "max-w-[2rem]",
               )}
+              onMouseLeave={() => setLgMetricsFlyoutOpen(false)}
             >
-              <div className="flex w-max max-h-[min(calc(100dvh-2.5rem),90dvh)] flex-row items-stretch gap-0">
+              <div
+                className={cn(
+                  "flex max-h-[min(calc(100dvh-2.5rem),90dvh)] flex-row items-stretch gap-0",
+                  lgMetricsFlyoutOpen && "w-max",
+                )}
+              >
                 <div className="flex shrink-0 flex-col justify-center py-2">
                   <button
                     type="button"
+                    onMouseEnter={() => setLgMetricsFlyoutOpen(true)}
+                    onFocus={() => setLgMetricsFlyoutOpen(true)}
                     className={cn(
                       "group/pull-tab relative z-[2] flex w-[2rem] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 px-1 py-2",
                       "rounded-l-xl rounded-r-none border border-[var(--border)] border-r-0 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
@@ -3454,11 +3469,11 @@ export default function WorkshopView({
                   role="dialog"
                   aria-label="Semáforo, conformidad y estimación"
                   aria-hidden={!lgMetricsFlyoutOpen}
+                  hidden={!lgMetricsFlyoutOpen}
                   className={cn(
                     "flex min-h-0 min-w-[17.5rem] w-[min(40rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-xl",
                     "border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
                     "shadow-[var(--shadow-lg)] ring-0 dark:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.45)] dark:ring-1 dark:ring-[color-mix(in_oklch,var(--foreground)_8%,transparent)]",
-                    !lgMetricsFlyoutOpen && "pointer-events-none",
                   )}
                 >
                   <div className="flex min-h-0 max-h-full w-full min-w-0 flex-1 flex-col overflow-y-auto overscroll-contain p-3 sm:p-3.5 [scrollbar-gutter:stable]">
@@ -3503,6 +3518,14 @@ export default function WorkshopView({
             centralPanel,
             activeDocViewMode,
           );
+          const showBenchmarkToggle = centralPanel === "benchmark";
+          const benchmarkToolbarViewMode =
+            benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode;
+          const benchmarkTogglePresentation = workshopDocSourceTogglePresentation(
+            "mdd",
+            benchmarkToolbarViewMode,
+          );
+          const BenchmarkFabToggleIcon = benchmarkTogglePresentation.Icon;
           const showDocToggle =
             centralPanel !== "benchmark" &&
             centralPanel !== "tasks" &&
@@ -3530,7 +3553,7 @@ export default function WorkshopView({
 
           /** Mobile: doc toggle + flow order only on Docs tab; hidden on Chat and Estado. */
           const showDocOrFlowFabStack =
-            mobileWorkshopColumn === "workspace" && (showDocToggle || showFlowOrder);
+            mobileWorkshopColumn === "workspace" && (showDocToggle || showFlowOrder || showBenchmarkToggle);
 
           return (
             <>
@@ -3582,6 +3605,24 @@ export default function WorkshopView({
                       onClick={() => toggleDocViewMode(centralPanel)}
                     >
                       <DocToggleIcon className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+                    </button>
+                  ) : null}
+
+                  {showBenchmarkToggle ? (
+                    <button
+                      type="button"
+                      className={cn(fabVisual, "pointer-events-auto")}
+                      title={benchmarkTogglePresentation.tooltip}
+                      aria-label={benchmarkTogglePresentation.tooltip}
+                      onClick={() => {
+                        if (benchmarkPhaseTab === "fase0") {
+                          setBenchmarkViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        } else {
+                          setPhase0SummaryViewMode((m) => (m === "preview" ? "source" : "preview"));
+                        }
+                      }}
+                    >
+                      <BenchmarkFabToggleIcon className="h-5 w-5" strokeWidth={2.5} aria-hidden />
                     </button>
                   ) : null}
                 </div>

@@ -92,6 +92,13 @@ interface TheForgeRepository {
 
 const SIDEBAR_COLLAPSED_KEY = "theforge-sidebar-collapsed";
 
+const PANEL_FLOW_STEPS = [
+  "Entrevista proactiva",
+  "MDD",
+  "Semáforo",
+  "Estimación",
+] as const;
+
 function readSidebarCollapsed(): boolean {
   try {
     return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
@@ -578,7 +585,7 @@ export default function App() {
       </Dialog>
 
       {workshopProject ? (
-        <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] sm:flex-row">
+        <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] lg:flex-row">
           <DashboardSidebar
             projectSearchQuery={projectSearchQuery}
             onProjectSearchChange={setProjectSearchQuery}
@@ -608,7 +615,7 @@ export default function App() {
           </div>
         </div>
       ) : (
-        <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] sm:flex-row">
+        <div className="flex h-[100dvh] max-h-[100dvh] min-h-0 min-w-0 w-full flex-col overflow-hidden bg-[var(--background)] text-[var(--foreground)] lg:flex-row">
           <DashboardSidebar
             projectSearchQuery={projectSearchQuery}
             onProjectSearchChange={setProjectSearchQuery}
@@ -622,21 +629,32 @@ export default function App() {
             onBeforeNavigateToProjects={() => setUsersViewOpen(false)}
           />
 
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         {usersViewOpen && isAdmin ? (
           <UsersView />
         ) : (
         <div className="mx-auto w-full max-w-[min(100%,88rem)] space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-        <header className="flex flex-row items-center justify-between gap-3 border-b border-[var(--border)] pb-4 sm:items-end sm:pb-5">
-          <div className="min-w-0">
+        <header className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
+          <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--foreground-subtle)]">
               Panel
             </p>
-            <p className="mt-1 hidden text-sm text-[var(--foreground-muted)] sm:mt-1 sm:block sm:text-base">
-              Entrevista proactiva → MDD → Semáforo → Estimación
-            </p>
+            <nav aria-label="Flujo del panel" className="mt-1.5">
+              <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-[var(--foreground-muted)] sm:text-sm">
+                {PANEL_FLOW_STEPS.map((step, index) => (
+                  <li key={step} className="flex items-center gap-1.5">
+                    {index > 0 ? (
+                      <span className="shrink-0 text-[var(--foreground-subtle)]" aria-hidden>
+                        →
+                      </span>
+                    ) : null}
+                    <span className="whitespace-nowrap">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </nav>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5 sm:flex-row sm:gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <Button
               type="button"
               size="icon"
@@ -683,18 +701,18 @@ export default function App() {
         </header>
 
         <Card id="dashboard-projects">
-          <CardHeader className="space-y-4 sm:flex sm:flex-row sm:items-start sm:justify-between sm:space-y-0 sm:gap-4">
-            <div className="min-w-0 flex-1">
+          <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+            <div className="min-w-0 w-full lg:max-w-xl lg:flex-1">
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <FolderOpen className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden />
                 Proyectos
               </CardTitle>
-              <p className="mt-1.5 text-sm text-[var(--foreground-muted)]">
+              <p className="mt-1.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
                 Carpetas estilo Drive: pulsa una carpeta para abrir el taller. Si eres administrador, marca las casillas y usa la barra inferior para borrar en lote.
               </p>
             </div>
             <div
-              className="flex flex-wrap gap-2"
+              className="flex w-full shrink-0 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] lg:w-auto lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden"
               role="tablist"
               aria-label="Filtrar proyectos por tipo"
             >
@@ -703,7 +721,7 @@ export default function App() {
                 role="tab"
                 aria-selected={projectTypeFilter === "all"}
                 onClick={() => setProjectTypeFilter("all")}
-                className={`touch-manipulation rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
+                className={`shrink-0 touch-manipulation whitespace-nowrap rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
                   projectTypeFilter === "all"
                     ? "border-[var(--primary)] bg-[var(--primary)]/18 text-[var(--primary)]"
                     : "border-[var(--border)] bg-transparent text-[var(--foreground-muted)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
@@ -716,7 +734,7 @@ export default function App() {
                 role="tab"
                 aria-selected={projectTypeFilter === "NEW"}
                 onClick={() => setProjectTypeFilter("NEW")}
-                className={`touch-manipulation rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
+                className={`shrink-0 touch-manipulation whitespace-nowrap rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
                   projectTypeFilter === "NEW"
                     ? "border-emerald-500 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
                     : "border-[var(--border)] bg-transparent text-[var(--foreground-muted)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"
@@ -730,7 +748,7 @@ export default function App() {
                 role="tab"
                 aria-selected={projectTypeFilter === "LEGACY"}
                 onClick={() => setProjectTypeFilter("LEGACY")}
-                className={`touch-manipulation rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
+                className={`shrink-0 touch-manipulation whitespace-nowrap rounded-full border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] sm:min-h-9 sm:py-1.5 ${
                   projectTypeFilter === "LEGACY"
                     ? "border-amber-500 bg-amber-500/20 text-amber-800 dark:text-amber-300"
                     : "border-[var(--border)] bg-transparent text-[var(--foreground-muted)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"

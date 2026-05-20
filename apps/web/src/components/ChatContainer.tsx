@@ -23,6 +23,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "../components/ui";
 import { AiGenerationChatBubble, AiGenerativeDots } from "./AiGenerationLoader";
 
@@ -51,7 +55,7 @@ const ACTIVE_TAB_LABELS: Record<ActiveTab, string> = {
   spec: "Spec",
   brd: "BRD (etapa)",
   mdd: "MDD",
-  "ux-ui-guide": "Guía UX/UI",
+  "ux-ui-guide": "Design System",
   blueprint: "Blueprint",
   tasks: "Tasks",
   "api-contracts": "Contratos de API",
@@ -73,7 +77,7 @@ const CHAT_COMPOSER_PLACEHOLDER: Record<ActiveTab, string> = {
   spec: "Mensaje sobre el Spec…",
   brd: "Mensaje sobre el BRD…",
   mdd: "Mensaje o /sección…",
-  "ux-ui-guide": "Marca, UI o prioridades…",
+  "ux-ui-guide": "Marca, tokens o componentes…",
   blueprint: "Mensaje sobre el Blueprint…",
   tasks: "Mensaje sobre Tasks…",
   "api-contracts": "Ajustes a contratos API…",
@@ -711,34 +715,54 @@ export default function ChatContainer({
                   ) : null}
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                {onRevaluate && projectId ? (
-                  <button
-                    type="button"
-                    onClick={() => void onRevaluate()}
-                    disabled={loading || revaluateBusy}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_12%,var(--card))] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_45%,var(--background))] disabled:pointer-events-none disabled:opacity-40"
-                    title="Re-Valorar: re-infiere complejidad desde tus documentos y abre la entrevista HITL (Paso 0 o legacy con MDD)."
-                    aria-label="Re-Valorar complejidad y abrir entrevista HITL"
-                  >
-                    {revaluateBusy ? (
-                      <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                    ) : (
-                      <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
-                    )}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setShowClearConfirm(true)}
-                  disabled={loading || messages.length === 0}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] hover:text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_45%,var(--background))] disabled:pointer-events-none disabled:opacity-40"
-                  title="Borrar historial de la conversación (el MDD no se modifica)."
-                  aria-label="Borrar historial de la conversación"
-                >
-                  <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
-                </button>
-              </div>
+              <TooltipProvider delayDuration={280}>
+                <div className="flex shrink-0 items-center gap-1">
+                  {onRevaluate && projectId ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex">
+                          <button
+                            type="button"
+                            onClick={() => void onRevaluate()}
+                            disabled={loading || revaluateBusy}
+                            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_12%,var(--card))] hover:text-[var(--primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_45%,var(--background))] disabled:pointer-events-none disabled:opacity-40"
+                            aria-label="Re-Valorar complejidad"
+                          >
+                          {revaluateBusy ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                          ) : (
+                            <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                          )}
+                          </button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" align="end" className="max-w-[11rem]">
+                        Re-infiere complejidad y abre la entrevista.
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex">
+                        <button
+                          type="button"
+                          onClick={() => setShowClearConfirm(true)}
+                          disabled={loading || messages.length === 0}
+                          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] hover:text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_45%,var(--background))] disabled:pointer-events-none disabled:opacity-40"
+                          aria-label="Borrar historial del chat"
+                        >
+                          <Trash2 className="h-4 w-4 shrink-0" aria-hidden />
+                        </button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[11rem]">
+                      {messages.length === 0
+                        ? "Sin mensajes"
+                        : "Borrar historial del chat (el MDD no cambia)."}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
             </div>
           </header>
           {multiStageChat && stageSwitchBannerOpen && (

@@ -154,8 +154,8 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
   if (visible("ux-ui-guide")) {
     items.push({
       id: "ux-ui-guide",
-      label: "Guía UX/UI",
-      title: "Guía UX/UI (DESIGN.md)",
+      label: "Design System",
+      title: "Design System (DESIGN.md)",
       Icon: Palette,
       content: ctx.uxUiGuideContent,
     });

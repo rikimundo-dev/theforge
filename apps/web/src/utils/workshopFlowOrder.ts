@@ -36,8 +36,8 @@ export const HIGH_GREENFIELD_FLOW_STEPS = [
     description: "Blueprint técnico alineado al modelo de datos y servicios del MDD.",
   },
   {
-    label: "Guía UX/UI",
-    description: "Guía visual y tokens para una UI coherente con el diseño acordado.",
+    label: "Design System",
+    description: "Tokens de diseño y UI Kit de ejemplo para una interfaz coherente.",
   },
   {
     label: "API",

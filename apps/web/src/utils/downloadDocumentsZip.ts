@@ -31,7 +31,7 @@ export async function downloadDocumentsZip(
     ["phase0-deep-research.md", documents.phase0SummaryContent ?? ""],
     ["spec.md", documents.specContent ?? ""],
     ["mdd.md", documents.mddContent ?? ""],
-    ["ux-ui-guide.md", documents.uxUiGuideContent ?? ""],
+    ["design-system.md", documents.uxUiGuideContent ?? ""],
     ["blueprint.md", documents.blueprintContent ?? ""],
     ["api-contracts.md", documents.apiContractsContent ?? ""],
     ["logic-flows.md", documents.logicFlowsContent ?? ""],

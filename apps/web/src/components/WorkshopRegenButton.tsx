@@ -1,5 +1,6 @@
 import { Loader2, RefreshCw } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui";
+import { Button, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui";
+import { WORKSHOP_DOC_TOOLBAR_ICON_BTN } from "@/constants/workshopDocToolbar";
 
 interface WorkshopRegenButtonProps {
   onClick: () => void;
@@ -9,7 +10,7 @@ interface WorkshopRegenButtonProps {
   tooltip?: string;
 }
 
-/** Botón de recarga/regeneración para la toolbar de documentos del Workshop. */
+/** Regenerate action for the workshop document toolbar (same chrome as preview / print). */
 export function WorkshopRegenButton({
   onClick,
   disabled = false,
@@ -20,11 +21,13 @@ export function WorkshopRegenButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="icon"
           onClick={onClick}
-          disabled={disabled}
-          className="inline-flex items-center justify-center rounded-md h-8 w-8 p-0 text-sm font-medium text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)] disabled:pointer-events-none disabled:opacity-40 transition-colors"
+          disabled={disabled || loading}
+          className={WORKSHOP_DOC_TOOLBAR_ICON_BTN}
           aria-label={ariaLabel}
         >
           {loading ? (
@@ -32,7 +35,7 @@ export function WorkshopRegenButton({
           ) : (
             <RefreshCw className="h-4 w-4 shrink-0 text-[var(--primary)]" strokeWidth={2} aria-hidden />
           )}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
         {tooltip ?? ariaLabel}

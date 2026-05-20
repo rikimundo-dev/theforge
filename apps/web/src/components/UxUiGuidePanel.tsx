@@ -22,7 +22,7 @@ interface UxUiGuidePanelProps {
 }
 
 /**
- * Panel Guía UX/UI — 3 modos: preview (MddViewer), design (DesignMdPreview), source (textarea + YAML repair).
+ * Panel Design System — 3 modos: preview (MddViewer), design (DesignMdPreview + UI Kit), source (textarea + YAML repair).
  */
 export function UxUiGuidePanel({
   content,
@@ -41,21 +41,21 @@ export function UxUiGuidePanel({
 
   if (isEmpty && (viewMode === "preview" || viewMode === "design")) {
     return (
-        <DocEmptyState
-          icon={Palette}
-          title="Guía UX/UI"
-          description="Colores, tipografía, espaciado, componentes y documentación; se apoya en el MDD y el Blueprint."
-          onGenerate={onGenerate}
-          loading={isGenerating || isLoading}
-          hasMdd={canGenerate}
-        />
+      <DocEmptyState
+        icon={Palette}
+        title="Design System"
+        description="Tokens de diseño (colores, tipografía, espaciado) y un UI Kit de ejemplo con hasta 10 componentes. Se genera desde el MDD y el Blueprint."
+        onGenerate={onGenerate}
+        loading={isGenerating || isLoading}
+        hasMdd={canGenerate}
+      />
     );
   }
 
   return (
     <>
       {viewMode === "design" ? (
-        <div key="design-view" className="min-h-0 flex-1 overflow-auto">
+        <div key="design-view" className="flex min-h-0 flex-1 flex-col overflow-auto">
           <DesignMdPreview content={content ?? ""} />
         </div>
       ) : viewMode === "preview" ? (
@@ -69,16 +69,19 @@ export function UxUiGuidePanel({
             value={content ?? ""}
             onChange={(e) => onContentChange(e.target.value || null)}
             onBlur={onBlur}
-            placeholder={placeholder ?? "# Guía UX/UI\n\nConversa con la IA sobre marca, estilos, prioridades y componentes..."}
-            className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+            placeholder={
+              placeholder ??
+              "# Design System\n\nMarca, colores, tipografía, componentes y tokens para el producto..."
+            }
+            className="min-h-0 w-full flex-1 resize-none rounded-lg border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] p-4 font-mono text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-transparent focus:ring-2 focus:ring-[var(--primary)]"
             spellCheck={false}
           />
         </div>
       )}
       {isEmpty && viewMode === "source" && (
-        <div className="shrink-0 mt-4 flex min-h-[200px] w-full justify-center sm:justify-end">
+        <div className="mt-4 flex min-h-[200px] w-full shrink-0 justify-center sm:justify-end">
           {isGenerating || isLoading ? (
-            <AiDocumentBuildingPlaceholder documentTitle="Guía UX/UI" />
+            <AiDocumentBuildingPlaceholder documentTitle="Design System" />
           ) : (
             <Button
               type="button"
@@ -89,7 +92,7 @@ export function UxUiGuidePanel({
               disabled={isGenerating || isLoading || !canGenerate}
             >
               <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden />
-              Generar Guía UX/UI desde MDD
+              Generar Design System desde MDD
             </Button>
           )}
         </div>

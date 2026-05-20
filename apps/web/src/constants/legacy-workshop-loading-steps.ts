@@ -30,7 +30,7 @@ export const LEGACY_DELIVERABLES_STEPS = [
   "Agente SPEC…",
   "Agente arquitectura…",
   "Agente casos de uso e historias…",
-  "Agente blueprint y guía UX/UI…",
+  "Agente blueprint y design system…",
   "Agente contratos API, flujos e infra…",
   "Agente tasks…",
 ];
