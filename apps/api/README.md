@@ -18,5 +18,6 @@ Env: `DATABASE_URL` y claves en `.env.example` (OpenRouter). **Auth multi-usuari
 
 - **ENTRYPOINT** `docker-entrypoint.sh`: (1) espera TCP a Postgres vía `scripts/wait-for-postgres.cjs`, (2) `prisma migrate deploy` desde `packages/database`, (3) arranca Nest (`main.js`).
 - En la UI de Dokploy (o cualquier plataforma), **no** sustituir el comando de arranque por `node dist/main.js` solo: se saltarían las migraciones. Usar la imagen tal cual o un comando que invoque el mismo entrypoint.
+- **BYOK / cifrado:** obligatorias `TOKEN_MASTER_KEYS` + `TOKEN_ACTIVE_KEY_VERSION`. Rotación de clave maestra: `cd /app && npm run rotate-master-key` en la terminal del contenedor (o desde el monorepo con `DATABASE_URL` de prod). Guía: [README raíz § Cifrado de tokens BYOK](../../README.md#cifrado-de-tokens-byok-claves-maestras).
 - Opcional: `WAIT_FOR_POSTGRES_ATTEMPTS` (default 90), `WAIT_FOR_POSTGRES_DELAY_MS` (default 1000).
 - **P3009** (`stage_sdd_deliverables`): el entrypoint intenta `migrate resolve --rolled-back` automáticamente antes de `deploy`. Otra migración atascada: `PRISMA_RESOLVE_ROLLED_BACK` o [packages/database/README.md](../../packages/database/README.md).

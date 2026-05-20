@@ -60,9 +60,13 @@ EMBEDDING_DIM=1536
 
 ## Rotación de clave maestra
 
-```bash
-npx tsx scripts/rotate-master-key.ts
-```
+1. Generar nueva versión: `openssl rand -base64 32`.
+2. Añadir al JSON **sin quitar** versiones usadas en BD (p. ej. `{"1":"...","2":"..."}`).
+3. `TOKEN_ACTIVE_KEY_VERSION=2` (o la versión nueva) y redeploy.
+4. `npm run rotate-master-key` (migran `user_provider_configs` y `provider_instances`).
+5. Tras verificar la UI, opcionalmente quitar versiones obsoletas del env.
+
+Guía detallada (escenarios, coexistencia v2+v3, Dokploy): [README.md](./README.md#cifrado-de-tokens-byok-claves-maestras).
 
 ## Cloudflare Workers AI (`cloudflare`)
 

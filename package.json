@@ -18,9 +18,11 @@
     "lint": "turbo run lint",
     "db:generate": "turbo run db:generate --filter=@theforge/database",
     "db:push": "turbo run db:push --filter=@theforge/database",
-    "db:migrate": "turbo run db:migrate --filter=@theforge/database"
+    "db:migrate": "turbo run db:migrate --filter=@theforge/database",
+    "rotate-master-key": "tsx scripts/rotate-master-key.ts"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "turbo": "^2.3.0"
   },
   "engines": {

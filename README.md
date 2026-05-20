@@ -83,7 +83,118 @@ docker compose up --build
 - **Volumen:** `theforge_db_data`
 - **Conexión interna:** `postgresql://theforge:theforge@localhost:5432/theforge`
 
-> Variables obligatorias en producción: `JWT_SECRET`, `DATABASE_URL`, `OPENROUTER_API_KEY`, `SMTP_HOST/USER/PASS` y `CORS_ORIGINS`. Todo lo demás tiene defaults funcionales. Ver referencia completa en [`.env.example`](./.env.example).
+> Variables obligatorias en producción: `JWT_SECRET`, `DATABASE_URL`, `TOKEN_MASTER_KEYS`, `TOKEN_ACTIVE_KEY_VERSION`, `SMTP_HOST/USER/PASS` y `CORS_ORIGINS`. Las API keys de proveedores IA las guardan los usuarios en la UI (BYOK), no en el servidor. Ver referencia completa en [`.env.example`](./.env.example).
+
+---
+
+## Cifrado de tokens BYOK (claves maestras)
+
+TheForge cifra en servidor las **API keys** que los usuarios guardan en Ajustes (BYOK personal) y las que define un `super_admin` en **instancias tenant** (`ProviderInstance`). Eso **no** es el JWT de sesión ni el `mcpSecret`.
+
+| Variable | Rol |
+|----------|-----|
+| `TOKEN_MASTER_KEYS` | JSON `{ "1": "<base64>", "2": "..." }` — mapa versión → clave AES-256 (32 bytes en base64) |
+| `TOKEN_ACTIVE_KEY_VERSION` | Versión usada al **cifrar tokens nuevos** (debe existir en el JSON) |
+| `tokenKeyVersion` (en BD) | Versión con la que se **cifró cada fila** (`user_provider_configs`, `provider_instances`) |
+
+Al **descifrar**, el API usa la versión guardada en la fila. Al **cifrar** (guardar o actualizar una clave en la UI), usa `TOKEN_ACTIVE_KEY_VERSION`. Varias versiones pueden coexistir en el mismo entorno.
+
+Implementación: `apps/api/src/modules/crypto/` (AES-256-GCM). Más contexto BYOK: [`multi_provider_spec.md`](./multi_provider_spec.md).
+
+### Generar una clave nueva
+
+```bash
+openssl rand -base64 32
+```
+
+La salida es una entrada del JSON (p. ej. versión `"1"` en el primer despliegue).
+
+**Primera instalación** (sin filas cifradas en BD):
+
+```env
+TOKEN_MASTER_KEYS={"1":"<salida-de-openssl>"}
+TOKEN_ACTIVE_KEY_VERSION=1
+```
+
+En Dokploy: Environment del servicio **theforge-api** → una línea JSON → redeploy.
+
+### Escenarios al cambiar claves
+
+| Escenario | Qué poner en env | Efecto en tokens ya guardados |
+|-----------|------------------|-------------------------------|
+| **1. Primera vez** | Solo `"1"`, activa `1` | N/A |
+| **2. Rotación correcta** | `"1"` vieja + `"2"` nueva, activa `2`, luego `npm run rotate-master-key` | Siguen OK con v1 hasta migrar; tras el script todo en v2 |
+| **3. Coexistencia v2 + v3** | `"2"` y `"3"` en JSON, activa `3` | v2 sigue descifrando; nuevos guardados en v3; migración opcional con el script |
+| **4. Solo subir versión activa** | Activas `3` pero no existe `"3"` en JSON | **Nuevos** fallan al cifrar; viejos OK si su versión sigue en el JSON |
+| **5. Reemplazar valor de la misma versión** | Mismo `"1"`, otro base64 | **Irrrecuperables** — hay que re-ingresar API keys en la UI |
+| **6. Quitar una versión del JSON** | Borras `"2"` sin migrar | Filas con `tokenKeyVersion=2` fallan al usar el proveedor |
+| **7. `TOKEN_MASTER_KEYS` vacío** | — | El API **no arranca** |
+
+```text
+                    ¿Hay datos cifrados en BD?
+                              │
+              ┌───────────────┴───────────────┐
+              NO                              SÍ
+              │                               │
+         Definir v1                      ¿Qué quieres?
+         y arrancar                           │
+                    ┌─────────────────────────┼─────────────────────────┐
+                    │                         │                         │
+              Añadir vN nueva            Cambiar valor              Borrar vN
+              + rotate-master-key          de "N" en env              del env
+                    │                         │                         │
+              Recomendado                 IRRECUPERABLE              Falla descifrado
+              en producción               (re-ingresar keys)         en filas vN
+```
+
+### Rotación recomendada (ej. v1 → v2)
+
+1. Genera clave v2: `openssl rand -base64 32`.
+2. En Dokploy / `.env`, **mantén** la clave `"1"` actual y añade `"2"`:
+
+   ```env
+   TOKEN_MASTER_KEYS={"1":"<clave-actual>","2":"<clave-nueva>"}
+   TOKEN_ACTIVE_KEY_VERSION=2
+   ```
+
+3. Redeploy del API.
+4. Migra la base de datos (misma `DATABASE_URL` que usa prod):
+
+   ```bash
+   export DATABASE_URL="postgresql://..."
+   export TOKEN_MASTER_KEYS='{"1":"...","2":"..."}'
+   export TOKEN_ACTIVE_KEY_VERSION=2
+   npm run rotate-master-key
+   ```
+
+   Salida esperada: líneas por tabla y `total rotated=N`.
+
+5. Prueba un proveedor BYOK / instancia tenant en la UI.
+6. Opcional: cuando todo esté en v2, quita `"1"` del JSON y redeploy.
+
+### Ejecutar la rotación
+
+| Dónde | Comando |
+|-------|---------|
+| Monorepo (local o CI) | `npm run rotate-master-key` (requiere `npm install` y `npm run db:generate`) |
+| Contenedor API (Dokploy) | Terminal web del servicio **theforge-api** → `cd /app && npm run rotate-master-key` |
+
+El contenedor ya incluye `scripts/rotate-master-key.ts` y hereda `DATABASE_URL`, `TOKEN_MASTER_KEYS` y `TOKEN_ACTIVE_KEY_VERSION` del entorno de Dokploy. **No sustituyas** el entrypoint del API por `node dist/main.js` solo (ver [`apps/api/README.md`](./apps/api/README.md)).
+
+**Sin SSH al VPS:** usa la terminal web de Dokploy en el contenedor del API, o ejecuta el script desde tu máquina si `DATABASE_URL` apunta a Postgres (túnel o puerto expuesto temporalmente con firewall).
+
+**Importante:** el script debe ver en `TOKEN_MASTER_KEYS` **todas** las versiones que existen en BD (p. ej. si hay filas en v2 y activas v3, el JSON necesita `"2"` y `"3"`).
+
+### Preguntas frecuentes
+
+**¿Tokens en v2 y activa v3 siguen funcionando?**  
+Sí, si `"2"` sigue en `TOKEN_MASTER_KEYS`. Solo los **nuevos** guardados usan v3.
+
+**¿Puedo tener v1, v2 y v3 a la vez en env?**  
+Sí. Quita una versión solo cuando ninguna fila la use o tras migrar con `rotate-master-key`.
+
+**¿Qué tablas migra el script?**  
+`user_provider_configs` y `provider_instances`.
 
 ---
 
@@ -118,6 +229,18 @@ docker compose up --build
 </details>
 
 <details>
+<summary><b>BYOK — TOKEN_MASTER_KEYS y rotación</b></summary>
+
+| Variable | Default | Qué hace |
+|---|---|---|
+| `TOKEN_MASTER_KEYS` | — | **Obligatorio.** JSON versión → clave 32 bytes base64 |
+| `TOKEN_ACTIVE_KEY_VERSION` | `1` | Versión al cifrar tokens nuevos |
+
+Guía completa: sección [Cifrado de tokens BYOK](#cifrado-de-tokens-byok-claves-maestras). Rotación: `npm run rotate-master-key`.
+
+</details>
+
+<details>
 <summary><b>MCP AriadneSpecs, Cache, FalkorDB, Deliverables y más</b></summary>
 
 Ver referencia completa en [`.env.example`](./.env.example).
@@ -132,6 +255,7 @@ Ver referencia completa en [`.env.example`](./.env.example).
 - [docs/JSDOC.md](./docs/JSDOC.md) — Convenciones de documentación
 - [Índice de arquitectura](./docs/notebooklm/THEFORGE-INDEX.md)
 - [Blueprint](./blueprint.md) · [MDD](./mdd.md)
+- [Multi-proveedor BYOK](./multi_provider_spec.md) · [Rotación de claves](#cifrado-de-tokens-byok-claves-maestras)
 
 ---
 

@@ -8,7 +8,7 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 
 - **Arquitectura multi-proveedor BYOK + tenant:** Cada usuario resuelve runtime IA con prioridad **instancia tenant** (`ProviderInstance`) y respaldo **BYOK personal** (`UserProviderConfig`). Sin fallback a claves LLM en variables de entorno (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, etc.). Documentación: `multi_provider_spec.md`.
 - **Rol `super_admin`:** CRUD de instancias tenant, promoción de otros super admins, bypass de whitelist de modelos en instancias. Primer usuario (`POST /auth/register-first-admin`) → `super_admin`. Migración: usuario más antiguo por `createdAt` si no existía ningún `super_admin`.
-- **Cifrado de tokens BYOK:** Módulo `crypto/` con `TOKEN_MASTER_KEYS` y `TOKEN_ACTIVE_KEY_VERSION`. Script `scripts/rotate-master-key.ts` para rotación de clave maestra.
+- **Cifrado de tokens BYOK:** Módulo `crypto/` con `TOKEN_MASTER_KEYS` y `TOKEN_ACTIVE_KEY_VERSION`. Script `scripts/rotate-master-key.ts` y `npm run rotate-master-key` (incluye `provider_instances`). Guía en README § Cifrado de tokens BYOK; script empaquetado en imagen API.
 - **Catálogo de proveedores:** `provider-catalog.ts` — OpenRouter, OpenAI, Anthropic, Gemini, **Cloudflare Workers AI** y **Groq** (chat, embeddings y/o STT según capacidades del proveedor).
 - **`AIFactory` + adaptadores OpenAI-compatible:** Resolución tenant-first vía `UserProvidersService.resolveRuntime`; jobs BullMQ propagan `userId` con `runWithRequestUserAsync`.
 - **API tenant:** `GET/POST/PUT/DELETE /provider-instances` (super_admin), `GET /provider-instances/enabled` (usuarios con instancias habilitadas).

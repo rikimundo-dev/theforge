@@ -2,6 +2,32 @@
 
 Scripts de utilidad para el monorepo.
 
+## rotate-master-key
+
+Re-cifra API keys BYOK almacenadas hacia `TOKEN_ACTIVE_KEY_VERSION`.
+
+**Tablas:** `user_provider_configs`, `provider_instances`.
+
+**Requisitos de entorno:**
+
+- `DATABASE_URL` — PostgreSQL (misma BD que el API en prod)
+- `TOKEN_MASTER_KEYS` — JSON con **todas** las versiones presentes en BD (p. ej. `{"1":"...","2":"..."}`)
+- `TOKEN_ACTIVE_KEY_VERSION` — versión destino (debe existir en el JSON)
+
+**Uso:**
+
+```bash
+npm run rotate-master-key
+```
+
+**Dokploy (sin SSH):** Terminal web del contenedor `theforge-api`:
+
+```bash
+cd /app && npm run rotate-master-key
+```
+
+Documentación completa: [README.md § Cifrado de tokens BYOK](../README.md#cifrado-de-tokens-byok-claves-maestras).
+
 ## ensure-postgres.js
 
 Asegura que Colima (runtime de contenedores) y el contenedor Docker `theforge-db` (Postgres) estén en ejecución:
