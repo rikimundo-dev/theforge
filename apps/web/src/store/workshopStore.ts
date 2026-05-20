@@ -100,43 +100,44 @@ const cleanDoc = (text: string | null) => {
   let c = text.trim();
   if (!c) return null;
 
-  // Encontrar el primer # para quitar preámbulos, sin regex lookbehind
-  // IMPORTANTE: Si hay bloque YAML (---\\n...\\n---), buscar # solo después de ese bloque
-  // para no cortar el frontmatter
-  const yamlBlockEnd = c.startsWith("---") ? c.indexOf("\\n---", 3) : -1;
-  const searchStart = yamlBlockEnd !== -1 ? yamlBlockEnd + 5 : 0; // +5 = \\n + --- + \\n
-  const firstHashIndex = c.indexOf("#", searchStart);
+  // Si empieza con --- (YAML frontmatter), preservarlo completo -- no cortar preambulos
+  if (c.startsWith("---")) {
+    // Saltar la limpieza de preamble para contenido con YAML (ej. Guia UX/UI)
+    // Solo quitar fences ``` y retornar
+    return cleanFences(c);
+  }
+
+  // Encontrar el primer # para quitar preambulos, sin regex lookbehind
+  const firstHashIndex = c.indexOf("#");
   if (firstHashIndex !== -1) {
-    if (c.startsWith("#", searchStart)) {
-      // ok, empieza ahí (o después del YAML)
+    if (c.startsWith("#")) {
+      // ok, empieza ahi
     } else {
-      const newlineHashIndex = c.indexOf("\\n#", searchStart);
+      const newlineHashIndex = c.indexOf("\n#");
       if (newlineHashIndex !== -1) {
         c = c.slice(newlineHashIndex + 1).trim();
       }
     }
   }
 
+  return cleanFences(c);
+};
+
+function cleanFences(c: string): string | null {
   // Quitar fences de markdown ```
-  // REPLACE manual con slices para evitar Regex
   if (c.startsWith("```")) {
     const firstNewline = c.indexOf("\n");
     if (firstNewline !== -1) {
-      // Intentar quitar la etiqueta de lenguaje (```python\n -> ...)
       c = c.slice(firstNewline + 1).trim();
     } else {
-      // Solo hay ```...? Raro, pero lo quitamos
       c = c.slice(3).trim();
     }
   }
-
-  // Quitar ``` al final
   if (c.endsWith("```")) {
     c = c.slice(0, -3).trim();
   }
-
   return c || null;
-};
+}
 
 /**
  * Helper para persist*Content: aplica retry, offline queue y setea error en el store.
@@ -231,7 +232,6 @@ export interface PrecisionBreakdown {
 /** Breakdown de completitud por documento (0-100). Coincide con backend PlanningDocumentFields. */
 export interface DocumentCompleteness {
   brdContent: number;
-  toBeManualContent: number;
   asIsManualContent: number;
   specContent: number;
   architectureContent: number;
@@ -554,7 +554,10 @@ interface WorkshopState {
   /** Tab del mensaje en streaming (para filtrar por tab) */
   streamingTab: string | null;
   /** Progreso de agentes DBGA (Benchmark): qué agente trabaja y qué hace */
-  agentProgress: Array<{ agent: string; message: string }>;
+  agentProgress: Array<{ agent: string; message: string; step?: string; status?: string }>;
+  /** Conteo de docs completados en cascada (para botón) */
+  cascadeCompleted: number;
+  cascadeTotal: number;
   /** Métricas en vivo (Semáforo + estimación) desde GET /ai-analysis/estimation */
   liveMetrics: LiveMetricsResult | null;
   /** ThreadId del flujo Manager (MDD); cuando está definido, el siguiente mensaje en tab MDD va a resume */
@@ -768,7 +771,9 @@ const initialState = {
   streamingUserImages: null as ChatImagePart[] | null,
   streamingContent: null as string | null,
   streamingTab: null as string | null,
-  agentProgress: [] as Array<{ agent: string; message: string }>,
+  agentProgress: [] as Array<{ agent: string; message: string; step?: string; status?: string }>,
+  cascadeCompleted: 0,
+  cascadeTotal: 0,
   liveMetrics: null as LiveMetricsResult | null,
   managerThreadId: null as string | null,
   mddReviewing: false,
@@ -1700,15 +1705,16 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   mddContent: packed?.mddContent ?? get().mddContent,
                   workshopStages: nextStages && nextStages.length > 0 ? nextStages : get().workshopStages,
                   uxUiGuideContent: freshUx,
-                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null),
+                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null) ?? get().dbgaContent,
                   specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
-                  architectureContent: cleanDoc(proj?.architectureContent ?? null),
-                  useCasesContent: cleanDoc(proj?.useCasesContent ?? null),
-                  userStoriesContent: cleanDoc(proj?.userStoriesContent ?? null),
-                  blueprintContent: cleanDoc(proj?.blueprintContent ?? null),
-                  apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null),
-                  logicFlowsContent: cleanDoc(proj?.logicFlowsContent ?? null),
-                  infraContent: cleanDoc(proj?.infraContent ?? null),
+                  architectureContent: cleanDoc(proj?.architectureContent ?? null) ?? get().architectureContent,
+                  useCasesContent: cleanDoc(proj?.useCasesContent ?? null) ?? get().useCasesContent,
+                  userStoriesContent: cleanDoc(proj?.userStoriesContent ?? null) ?? get().userStoriesContent,
+                  blueprintContent: cleanDoc(proj?.blueprintContent ?? null) ?? get().blueprintContent,
+                  apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null) ?? get().apiContractsContent,
+                  logicFlowsContent: cleanDoc(proj?.logicFlowsContent ?? null) ?? get().logicFlowsContent,
+                  tasksContent: cleanDoc(proj?.tasksContent ?? null) ?? get().tasksContent,
+                  infraContent: cleanDoc(proj?.infraContent ?? null) ?? get().infraContent,
                   streamingUserMessage: null,
                   streamingUserImages: null,
                   streamingContent: null,
@@ -1762,16 +1768,16 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   mddContent: packed?.mddContent ?? get().mddContent,
                   workshopStages: nextStagesB && nextStagesB.length > 0 ? nextStagesB : get().workshopStages,
                   uxUiGuideContent: freshUx,
-                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null),
-                  specContent: cleanDoc(proj?.specContent ?? null),
-                  blueprintContent: cleanDoc(proj?.blueprintContent ?? null),
-                  apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null),
-                  logicFlowsContent: cleanDoc(proj?.logicFlowsContent ?? null),
-                  tasksContent: cleanDoc(proj?.tasksContent ?? null),
-                  architectureContent: cleanDoc(proj?.architectureContent ?? null),
-                  useCasesContent: cleanDoc(proj?.useCasesContent ?? null),
-                  userStoriesContent: cleanDoc(proj?.userStoriesContent ?? null),
-                  infraContent: cleanDoc(proj?.infraContent ?? null),
+                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null) ?? get().dbgaContent,
+                  specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
+                  blueprintContent: cleanDoc(proj?.blueprintContent ?? null) ?? get().blueprintContent,
+                  apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null) ?? get().apiContractsContent,
+                  logicFlowsContent: cleanDoc(proj?.logicFlowsContent ?? null) ?? get().logicFlowsContent,
+                  tasksContent: cleanDoc(proj?.tasksContent ?? null) ?? get().tasksContent,
+                  architectureContent: cleanDoc(proj?.architectureContent ?? null) ?? get().architectureContent,
+                  useCasesContent: cleanDoc(proj?.useCasesContent ?? null) ?? get().useCasesContent,
+                  userStoriesContent: cleanDoc(proj?.userStoriesContent ?? null) ?? get().userStoriesContent,
+                  infraContent: cleanDoc(proj?.infraContent ?? null) ?? get().infraContent,
                   streamingUserMessage: null,
                   streamingUserImages: null,
                   streamingContent: null,
@@ -2023,7 +2029,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   generateDeliverablesCascade: async (projectId) => {
     if (!projectId?.trim()) return null;
     const pid = projectId.trim();
-    set({ loading: true, loadingReason: "deliverables-cascade", error: null, agentProgress: [] });
+    set({ loading: true, loadingReason: "deliverables-cascade", error: null, agentProgress: [], cascadeCompleted: 0, cascadeTotal: 0 });
     try {
       const r = await apiFetch(`${API_BASE}/projects/${pid}/generate-deliverables`, { method: "POST" });
       if (!r.ok) {
@@ -2033,6 +2039,26 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const data = (await r.json()) as { queued?: boolean; jobId?: string; streamPath?: string };
       if (data.queued === true && typeof data.jobId === "string") {
         const deadline = Date.now() + 45 * 60 * 1000;
+
+        // Inicializar agentProgress con los 11 docs en "Generando…"
+        const allStepLabels = [
+          "MDD Canonical", "Blueprint", "Spec", "Arquitectura",
+          "Casos de Uso", "Historias de Usuario", "Guía UX/UI",
+          "Contratos API", "Flujos de Lógica", "Tareas", "Infraestructura",
+        ];
+        set({
+          agentProgress: allStepLabels.map((label) => ({
+            agent: "Entregables",
+            message: `⚪ ${label} — Generando…`,
+            step: label,
+            status: "generando",
+          })),
+          cascadeTotal: allStepLabels.length,
+          cascadeCompleted: 0,
+        });
+
+        const completedSteps = new Set<string>();
+        let lastActiveStep: string | null = null;
         while (Date.now() < deadline) {
           await new Promise((resolve) => setTimeout(resolve, 1200));
           const st = await apiFetch(`${API_BASE}/projects/${pid}/deliverables-jobs/${data.jobId}`);
@@ -2041,30 +2067,53 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             throw new Error((err as { message?: string }).message ?? "Error al consultar cola de entregables");
           }
           const j = (await st.json()) as {
-            state: string;
+            status: string;
             progress?: { step?: string; index?: number; total?: number };
             failedReason?: string;
           };
-          if (j.state === "failed") {
+          if (j.status === "failed") {
             throw new Error(j.failedReason ?? "Cascada de entregables fallida");
           }
-          if (j.state === "completed") break;
+          if (j.status === "completed") break;
           const prog = j.progress;
-          if (prog && typeof prog.index === "number" && typeof prog.total === "number") {
-            set({
-              agentProgress: [
-                {
-                  agent: "Entregables",
-                  message: `${String(prog.step ?? "paso")} (${prog.index + 1}/${prog.total})`,
-                },
-              ],
-            });
-            // Refrescar el proyecto para que los documentos generados aparezcan sin recargar
-            if (prog.index > 0) {
-              get().fetchProject(pid).catch(() => {});
+if (prog && prog.step && prog.step !== "done") {
+            if (!completedSteps.has(prog.step)) {
+              completedSteps.add(prog.step);
+              set((s) => ({
+                agentProgress: s.agentProgress.map((item) =>
+                  item.step === prog.step
+                    ? { ...item, message: `✅ ${prog.step} — Terminado`, status: "terminado" }
+                    : item,
+                ),
+                cascadeCompleted: completedSteps.size,
+              }));
+            }
+            // Marcar el paso activo actual si es diferente al último completado
+            if (prog.step !== lastActiveStep) {
+              lastActiveStep = prog.step;
+              if (!completedSteps.has(prog.step)) {
+                set((s) => ({
+                  agentProgress: s.agentProgress.map((item) =>
+                    item.step === prog.step
+                      ? { ...item, message: `⚡ ${prog.step} — Generando…`, status: "generando" }
+                      : item,
+                  ),
+                }));
+              }
             }
           }
         }
+        // Si quedaron pendientes, marcarlos como terminados
+        set((s) => ({
+          agentProgress: s.agentProgress.map((item) =>
+            item.status === "generando"
+              ? { ...item, message: `✅ ${item.step} — Terminado`, status: "terminado" }
+              : item,
+          ),
+          cascadeCompleted: allStepLabels.length,
+        }));
+        // Esperar un momento para que el chat vea el estado final
+        await new Promise((resolve) => setTimeout(resolve, 4000));
         set({ agentProgress: [] });
         const projQueued = await get().fetchProject(pid);
         await get().fetchEstimation(pid).catch(() => {});
@@ -2437,6 +2486,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   clearDbgaContent: async (projectId) => {
     if (!projectId?.trim()) return;
     try {
+      void apiFetch(
+        `${API_BASE}/ai-analysis/dbga/checkpoint?projectId=${encodeURIComponent(projectId.trim())}`,
+        { method: "DELETE" },
+      ).catch(() => { });
       const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

@@ -1,9 +1,4 @@
 import OpenAI from "openai";
-import {
-  RateLimitError,
-  InternalServerError,
-  APIConnectionError,
-} from "openai/error";
 import type {
   LLMProvider,
   ChatMessage,
@@ -14,93 +9,11 @@ import {
   resolveEmbeddingsBackend,
   resolveOpenRouterEmbeddingApiKey,
   resolvePrimaryChatRuntime,
-  resolveVisionModel,
+  resolveChatModelChain,
+  resolveVisionModelChain,
   type OpenRouterRuntime,
 } from "../config/llm-config.js";
-
-/** Máximo de reintentos para fallos transitorios (429, 5xx, EHOSTUNREACH, etc.). */
-const MAX_RETRIES = 3;
-/** Backoff base en ms — 2s, 4s, 8s. */
-const BASE_DELAY_MS = 2_000;
-
-/**
- * Determina si un error es recuperable (transitorio).
- */
-function isRetryableError(err: unknown): boolean {
-  if (err instanceof RateLimitError) return true; // HTTP 429
-  if (err instanceof InternalServerError) return true; // HTTP 5xx
-  if (err instanceof APIConnectionError) return true; // EHOSTUNREACH, ECONNRESET, ENOTFOUND, etc.
-  // Fallback: errores genéricos de red en Node.js
-  if (err instanceof Error) {
-    const msg = err.message.toLowerCase();
-    if (
-      msg.includes("ehostunreach") ||
-      msg.includes("econnreset") ||
-      msg.includes("econnrefused") ||
-      msg.includes("enotfound") ||
-      msg.includes("etimedout") ||
-      msg.includes("socket hang up") ||
-      msg.includes("network") ||
-      msg.includes("429") ||
-      msg.includes("500") ||
-      msg.includes("502") ||
-      msg.includes("503")
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Extrae `Retry-After` (segundos) del header si existe.
- */
-function retryAfterSeconds(err: unknown): number | undefined {
-  if (err instanceof RateLimitError && typeof (err as any).headers?.get === "function") {
-    const raw = (err as any).headers.get("retry-after") as string | null;
-    if (raw) {
-      const n = parseInt(raw, 10);
-      if (Number.isFinite(n) && n > 0) return Math.min(n, 30); // cap at 30s
-    }
-  }
-  return undefined;
-}
-
-/**
- * Jitter: random entre 0.5x y 1.5x de baseDelay^attempt.
- */
-function backoffDelay(attempt: number, retryAfter?: number): number {
-  if (retryAfter != null) return retryAfter * 1000;
-  const base = BASE_DELAY_MS * Math.pow(2, attempt); // 2s, 4s, 8s
-  const jitter = 0.5 + Math.random(); // 0.5–1.5
-  return Math.round(base * jitter);
-}
-
-/**
- * Wrapper que reintenta `fn` hasta MAX_RETRIES veces si el error es transitorio.
- */
-async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
-  let lastErr: unknown;
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err;
-      if (!isRetryableError(err) || attempt === MAX_RETRIES) {
-        console.error(`[OpenRouterAdapter] ${label} — error no recuperable o agotados reintentos:`, err);
-        throw err;
-      }
-      const after = retryAfterSeconds(err);
-      const delayMs = backoffDelay(attempt, after);
-      console.warn(
-        `[OpenRouterAdapter] ${label} — intento ${attempt + 1}/${MAX_RETRIES} falló, reintentando en ${Math.round(delayMs / 1000)}s:`,
-        err instanceof Error ? err.message : String(err),
-      );
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-  throw lastErr; // never reached, but TS needs it
-}
+import { runWithModelFallback } from "../config/llm-model-fallback.js";
 
 function buildOpenAiUserMessage(
   text: string,
@@ -163,14 +76,14 @@ export class OpenRouterAdapter implements LLMProvider {
   private readonly chatClient: OpenAI;
   /** Cliente embeddings: misma base URL; clave puede ser OPENROUTER_EMBEDDING_API_KEY. */
   private readonly embeddingClient: OpenAI;
-  private readonly model: string;
-  private readonly visionModel: string;
+  private readonly chatModels: string[];
+  private readonly visionModels: string[];
   private readonly embeddingModel: string;
 
   constructor() {
     const runtime = resolvePrimaryChatRuntime() as OpenRouterRuntime;
-    this.model = runtime.chatModel;
-    this.visionModel = resolveVisionModel();
+    this.chatModels = resolveChatModelChain();
+    this.visionModels = resolveVisionModelChain();
     this.embeddingModel = runtime.embeddingModel;
     const headers = openRouterDefaultHeaders();
     this.chatClient = new OpenAI({
@@ -192,39 +105,44 @@ export class OpenRouterAdapter implements LLMProvider {
     options?: GenerateResponseOptions,
   ): Promise<string> {
     const hasImages = options?.userMessageImages != null && options.userMessageImages.length > 0;
-    const activeModel = hasImages ? this.visionModel : this.model;
-    return withRetry(async () => {
-      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-      if (options?.systemPrompt) {
-        messages.push({ role: "system", content: options.systemPrompt });
-      }
-      messages.push(
-        ...historyToOpenAiMessages(history),
-        buildOpenAiUserMessage(prompt, options?.userMessageImages),
-      );
+    const models = hasImages ? this.visionModels : this.chatModels;
 
-      const ts = () => new Date().toISOString();
-      console.log(`[OpenRouterAdapter] ${ts()} → Request enviado:`, {
-        messagesCount: messages.length,
-        model: activeModel,
-        hasImages,
-      });
-      const completion = await this.chatClient.chat.completions.create({
-        model: activeModel,
-        messages,
-        max_tokens: options?.maxTokensOverride ?? llmMaxTokens(),
-      });
+    return runWithModelFallback({
+      models,
+      label: "OpenRouterAdapter.generateResponse",
+      run: async (activeModel) => {
+        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+        if (options?.systemPrompt) {
+          messages.push({ role: "system", content: options.systemPrompt });
+        }
+        messages.push(
+          ...historyToOpenAiMessages(history),
+          buildOpenAiUserMessage(prompt, options?.userMessageImages),
+        );
 
-      const content = completion.choices[0]?.message?.content ?? "";
-      const choice = completion.choices[0];
-      console.log(`[OpenRouterAdapter] ${ts()} ← Response recibida:`, {
-        contentLength: content.length,
-        preview: content.slice(0, 200) + (content.length > 200 ? "…" : ""),
-        finishReason: choice?.finish_reason,
-        usage: completion.usage,
-      });
-      return content;
-    }, "generateResponse");
+        const ts = () => new Date().toISOString();
+        console.log(`[OpenRouterAdapter] ${ts()} → Request enviado:`, {
+          messagesCount: messages.length,
+          model: activeModel,
+          hasImages,
+        });
+        const completion = await this.chatClient.chat.completions.create({
+          model: activeModel,
+          messages,
+          max_tokens: options?.maxTokensOverride ?? llmMaxTokens(),
+        });
+
+        const content = completion.choices[0]?.message?.content ?? "";
+        const choice = completion.choices[0];
+        console.log(`[OpenRouterAdapter] ${ts()} ← Response recibida:`, {
+          contentLength: content.length,
+          preview: content.slice(0, 200) + (content.length > 200 ? "…" : ""),
+          finishReason: choice?.finish_reason,
+          usage: completion.usage,
+        });
+        return content;
+      },
+    });
   }
 
   async generateResponseStream(
@@ -233,28 +151,30 @@ export class OpenRouterAdapter implements LLMProvider {
     options?: GenerateResponseOptions,
   ): Promise<AsyncIterable<string>> {
     const hasImages = options?.userMessageImages != null && options.userMessageImages.length > 0;
-    const activeModel = hasImages ? this.visionModel : this.model;
+    const models = hasImages ? this.visionModels : this.chatModels;
 
-    // El retry se hace al crear el stream (antes de que llegue el primer chunk).
-    // Si el stream se corta a medio camino no se reintenta — la capa superior
-    // (LangGraph / session) debe manejar eso con checkpointing.
-    const stream = await withRetry(async () => {
-      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
-      if (options?.systemPrompt) {
-        messages.push({ role: "system", content: options.systemPrompt });
-      }
-      messages.push(
-        ...historyToOpenAiMessages(history),
-        buildOpenAiUserMessage(prompt, options?.userMessageImages),
-      );
+    // El retry y el fallback de modelo ocurren al crear el stream (antes del primer chunk).
+    const stream = await runWithModelFallback({
+      models,
+      label: "OpenRouterAdapter.generateResponseStream",
+      run: async (activeModel) => {
+        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+        if (options?.systemPrompt) {
+          messages.push({ role: "system", content: options.systemPrompt });
+        }
+        messages.push(
+          ...historyToOpenAiMessages(history),
+          buildOpenAiUserMessage(prompt, options?.userMessageImages),
+        );
 
-      return this.chatClient.chat.completions.create({
-        model: activeModel,
-        messages,
-        max_tokens: llmMaxTokens(),
-        stream: true,
-      });
-    }, "generateResponseStream");
+        return this.chatClient.chat.completions.create({
+          model: activeModel,
+          messages,
+          max_tokens: llmMaxTokens(),
+          stream: true,
+        });
+      },
+    });
 
     return {
       async *[Symbol.asyncIterator]() {
@@ -266,8 +186,6 @@ export class OpenRouterAdapter implements LLMProvider {
             }
           }
         } catch (err) {
-          // Si el stream se corta a medio camino, loggeamos y propagamos.
-          // La capa superior (LangGraph / sesiones) debe decidir si reintenta o no.
           console.error("[OpenRouterAdapter] generateResponseStream error durante streaming:", err);
           throw err;
         }
@@ -277,17 +195,22 @@ export class OpenRouterAdapter implements LLMProvider {
 
   async parseChecklist(text: string): Promise<ChecklistResult> {
     try {
-      const response = await this.chatClient.chat.completions.create({
-        model: this.model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "Parse the following text and return a JSON object with keys: complete (boolean), items (array of {key, present, value?}).",
-          },
-          { role: "user", content: text },
-        ],
-        response_format: { type: "json_object" },
+      const response = await runWithModelFallback({
+        models: this.chatModels,
+        label: "OpenRouterAdapter.parseChecklist",
+        run: (model) =>
+          this.chatClient.chat.completions.create({
+            model,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "Parse the following text and return a JSON object with keys: complete (boolean), items (array of {key, present, value?}).",
+              },
+              { role: "user", content: text },
+            ],
+            response_format: { type: "json_object" },
+          }),
       });
 
       const raw = response.choices[0]?.message?.content ?? "{}";

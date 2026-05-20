@@ -20,10 +20,10 @@ export const mddSeguridadItemSchema = z.object({
 });
 export type MddSeguridadItem = z.infer<typeof mddSeguridadItemSchema>;
 
-/** Subsección de Integración: título + párrafo o viñetas. */
+/** Subsección de Integración: título + array de viñetas (obligatorio, como seguridad). */
 export const mddIntegracionSubsectionSchema = z.object({
   title: z.string(),
-  content: z.union([z.string(), z.array(z.string())]),
+  content: z.array(z.string()),
 });
 export type MddIntegracionSubsection = z.infer<typeof mddIntegracionSubsectionSchema>;
 

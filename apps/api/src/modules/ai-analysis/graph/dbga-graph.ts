@@ -7,6 +7,7 @@ import { createCriticNode } from "../nodes/critic.node.js";
 import { createSynthesisNode } from "../nodes/synthesis.node.js";
 import { getScoutTools, getAuditorTools } from "../tools/tool-registry.js";
 import { createDbgaLLM } from "../llm/create-dbga-llm.js";
+import { routeDbgaAfterCritic } from "./dbga-critic-routing.js";
 
 /**
  * Builds and compiles the DBGA StateGraph.
@@ -25,9 +26,8 @@ export function createDbgaGraph(checkpointer?: BaseCheckpointSaver | null) {
   const criticNode = createCriticNode(llm);
   const synthesisNode = createSynthesisNode(llm);
 
-  /** After Critic: re-research (scout) or continue to Synthesis. */
   function routeCritic(state: DBGAStateType): string {
-    return state.criticDecision === "scout" ? "scout" : "synthesis";
+    return routeDbgaAfterCritic(state);
   }
 
   const builder = new StateGraph(DBGAStateAnnotation)

@@ -9,6 +9,7 @@ import { createMddFormatterNode } from "../nodes/mdd-formatter.node.js";
 import { createMddDiagramInjectorNode } from "../nodes/mdd-diagram-injector.node.js";
 import { createMddSecurityNode } from "../nodes/mdd-security.node.js";
 import { createMddIntegrationNode } from "../nodes/mdd-integration.node.js";
+import { createMddLlmFormatterNode } from "../nodes/mdd-llm-formatter.node.js";
 import { createMddAuditorNode } from "../nodes/mdd-auditor.node.js";
 import { createMddManagerNode, type MddManagerToolDeps } from "../nodes/mdd-manager.node.js";
 import { createMddPlanApprovalNode } from "../nodes/mdd-plan-approval.node.js";
@@ -22,12 +23,52 @@ import { createDbgaLLM } from "../llm/create-dbga-llm.js";
 import { getMddAuditorTools, getMddArchitectTools } from "../tools/tool-registry.js";
 import type { TheForgeService } from "../../theforge/theforge.service.js";
 import { MDDStateAnnotation, type MDDStateType } from "../state/index.js";
+import type { NodeCacheService } from "../checkpoint/node-cache.service.js";
+import {
+  clarifierInput,
+  softwareArchitectInput,
+  securityInput,
+  integrationInput,
+  llmFormatterInput,
+  crossConsistencyInput,
+} from "../checkpoint/node-input-hash.js";
 
 const MAX_MDD_ITERATIONS = 2;
+
+// ---------------------------------------------------------------------------
+// Cache wrapper — wraps an LLM node function so it checks the in-memory
+// cache before executing.  On a cache hit the LLM call is skipped entirely.
+// ---------------------------------------------------------------------------
+
+type NodeFn = (state: MDDStateType) => Promise<Partial<MDDStateType>>;
+type InputHashFn = (state: MDDStateType) => Record<string, unknown>;
+
+function wrapCache(
+  cache: NodeCacheService | null,
+  nodeName: string,
+  getInput: InputHashFn,
+  nodeFn: NodeFn,
+): NodeFn {
+  if (!cache) return nodeFn;
+  return async (state: MDDStateType): Promise<Partial<MDDStateType>> => {
+    const projectId = state.projectId;
+    const key = cache.key(nodeName, projectId, getInput(state));
+    const cached = cache.get(key);
+    if (cached !== undefined) {
+      console.log(`[MDD:Cache] HIT ${nodeName} (key=${key})`);
+      return cached;
+    }
+    const result = await nodeFn(state);
+    cache.set(key, result);
+    return result;
+  };
+}
 
 /** Opciones al compilar el grafo MDD (p. ej. TheForge MCP para herramientas del Arquitecto en legacy). */
 export type MddGraphCompileOptions = {
   theforge?: TheForgeService | null;
+  /** Cache por nodo para evitar re-ejecutar LLM si el input no cambió. */
+  nodeCache?: NodeCacheService | null;
 };
 
 /**
@@ -37,15 +78,25 @@ export type MddGraphCompileOptions = {
  */
 export function createMddGraph(graphMemory: GraphMemoryService, options?: MddGraphCompileOptions) {
   const llm = createDbgaLLM();
-  const clarifierNode = createMddClarifierNode(llm);
-  const softwareArchitectNode = createMddSoftwareArchitectNode(llm, getMddArchitectTools(), {
-    theforge: options?.theforge ?? null,
-  });
+  const nodeCache = options?.nodeCache ?? null;
+
+  // ---- Node functions (wrapped with cache where profitable) ----
+
+  const clarifierNode = wrapCache(nodeCache, "clarifier", clarifierInput, createMddClarifierNode(llm));
+  const softwareArchitectNode = wrapCache(
+    nodeCache,
+    "software_architect",
+    softwareArchitectInput,
+    createMddSoftwareArchitectNode(llm, getMddArchitectTools(), {
+      theforge: options?.theforge ?? null,
+    }),
+  );
   const formatterNode = createMddFormatterNode();
-  const securityNode = createMddSecurityNode(llm);
-  const integrationNode = createMddIntegrationNode(llm);
+  const securityNode = wrapCache(nodeCache, "security", securityInput, createMddSecurityNode(llm));
+  const integrationNode = wrapCache(nodeCache, "integration", integrationInput, createMddIntegrationNode(llm));
   const diagramInjectorNode = createMddDiagramInjectorNode();
-  const consistencyNode = createMddCrossConsistencyNode(llm);
+  const consistencyNode = wrapCache(nodeCache, "cross_consistency", crossConsistencyInput, createMddCrossConsistencyNode(llm));
+  const llmFormatterNode = wrapCache(nodeCache, "llm_formatter", llmFormatterInput, createMddLlmFormatterNode(llm));
   const auditorNode = createMddAuditorNode(llm, getMddAuditorTools(), null);
   const graphPopulatorNode = createMddGraphPopulatorNode(llm, graphMemory);
 
@@ -63,6 +114,7 @@ export function createMddGraph(graphMemory: GraphMemoryService, options?: MddGra
     .addNode("security", securityNode)
     .addNode("integration", integrationNode)
     .addNode("format_after_redactor", formatterNode)
+    .addNode("llm_formatter", llmFormatterNode)
     .addNode("cross_consistency_checker", consistencyNode)
     .addNode("diagram_injector", diagramInjectorNode)
     .addNode("auditor", auditorNode)
@@ -70,11 +122,17 @@ export function createMddGraph(graphMemory: GraphMemoryService, options?: MddGra
     .addEdge(START, "clarifier")
     .addEdge("clarifier", "software_architect")
     .addEdge("software_architect", "format_after_architect")
+    // Security → Integration secuencial: ambos escriben a mddStructured (LastValue reducer)
     .addEdge("format_after_architect", "security")
     .addEdge("security", "integration")
     .addEdge("integration", "format_after_redactor")
-    .addEdge("format_after_redactor", "cross_consistency_checker")
-    .addEdge("cross_consistency_checker", "diagram_injector")
+    .addEdge("format_after_redactor", "llm_formatter")
+    // [PARALELO] CrossConsistency: solo produce internalDirectives (read-only mddDraft)
+    // DiagramInjector inyecta diagramas en mddDraft (code-only, <3s).
+    // Auditor usa shortcut code-only (99% casos). Corren en paralelo sin conflicto.
+    .addEdge("llm_formatter", "cross_consistency_checker")
+    .addEdge("llm_formatter", "diagram_injector")
+    .addEdge("cross_consistency_checker", "auditor")
     .addEdge("diagram_injector", "auditor")
     .addConditionalEdges("auditor", routeAuditor, {
       clarifier: "clarifier",
@@ -100,19 +158,26 @@ export function createMddGraphWithManager(
   compileOptions?: MddGraphCompileOptions,
 ) {
   const llm = createDbgaLLM();
+  const nodeCache = compileOptions?.nodeCache ?? null;
   const managerNode = createMddManagerNode(llm, graphMemory, precisionCalculator, managerToolDeps ?? null);
   const askInitialTopicNode = createMddAskInitialTopicNode();
-  const clarifierNode = createMddClarifierNode(llm);
+  const clarifierNode = wrapCache(nodeCache, "clarifier", clarifierInput, createMddClarifierNode(llm));
   const theForgeForArchitect = compileOptions?.theforge ?? managerToolDeps?.theforge ?? null;
-  const softwareArchitectNode = createMddSoftwareArchitectNode(llm, getMddArchitectTools(), {
-    theforge: theForgeForArchitect,
-  });
+  const softwareArchitectNode = wrapCache(
+    nodeCache,
+    "software_architect",
+    softwareArchitectInput,
+    createMddSoftwareArchitectNode(llm, getMddArchitectTools(), {
+      theforge: theForgeForArchitect,
+    }),
+  );
   const architectCriticNode = createMddArchitectCriticNode(llm);
   const formatterNode = createMddFormatterNode();
-  const securityNode = createMddSecurityNode(llm);
-  const integrationNode = createMddIntegrationNode(llm);
+  const securityNode = wrapCache(nodeCache, "security", securityInput, createMddSecurityNode(llm));
+  const integrationNode = wrapCache(nodeCache, "integration", integrationInput, createMddIntegrationNode(llm));
+  const llmFormatterNode = wrapCache(nodeCache, "llm_formatter", llmFormatterInput, createMddLlmFormatterNode(llm));
   const diagramInjectorNode = createMddDiagramInjectorNode();
-  const consistencyNode = createMddCrossConsistencyNode(llm);
+  const consistencyNode = wrapCache(nodeCache, "cross_consistency", crossConsistencyInput, createMddCrossConsistencyNode(llm));
   const auditorNode = createMddAuditorNode(llm, getMddAuditorTools(), precisionCalculator ?? null);
   const blackboardNode = createMddBlackboardNode(llm);
   const graphPopulatorNode = createMddGraphPopulatorNode(llm, graphMemory);
@@ -170,7 +235,7 @@ export function createMddGraphWithManager(
   }
   function routeAfterFormatRedactor(state: MDDStateType): string {
     if (state.executorControlled === true) return "executor";
-    return nextInSections(state, "format_after_redactor") ?? "cross_consistency_checker";
+    return nextInSections(state, "format_after_redactor") ?? "llm_formatter";
   }
   function routeAfterConsistency(state: MDDStateType): string {
     if (state.executorControlled === true) return "executor";
@@ -213,6 +278,7 @@ export function createMddGraphWithManager(
     "format_after_architect",
     "security",
     "integration",
+    "llm_formatter",
     "cross_consistency_checker",
     "graph_populator",
     "blackboard",
@@ -250,6 +316,7 @@ export function createMddGraphWithManager(
     .addNode("security", securityNode)
     .addNode("integration", integrationNode)
     .addNode("format_after_redactor", formatterNode)
+    .addNode("llm_formatter", llmFormatterNode)
     .addNode("cross_consistency_checker", consistencyNode)
     .addNode("diagram_injector", diagramInjectorNode)
     .addNode("auditor", auditorNode)
@@ -302,6 +369,7 @@ export function createMddGraphWithManager(
       executor: "executor",
     })
     .addConditionalEdges("integration", routeAfterIntegration, {
+      llm_formatter: "llm_formatter",
       format_after_redactor: "format_after_redactor",
       cross_consistency_checker: "cross_consistency_checker",
       diagram_injector: "diagram_injector",
@@ -310,12 +378,14 @@ export function createMddGraphWithManager(
       executor: "executor",
     })
     .addConditionalEdges("format_after_redactor", routeAfterFormatRedactor, {
+      llm_formatter: "llm_formatter",
       cross_consistency_checker: "cross_consistency_checker",
       diagram_injector: "diagram_injector",
       auditor: "auditor",
       manager: "manager",
       executor: "executor",
     })
+    .addEdge("llm_formatter", "cross_consistency_checker")
     .addConditionalEdges("cross_consistency_checker", routeAfterConsistency, {
       diagram_injector: "diagram_injector",
       auditor: "auditor",

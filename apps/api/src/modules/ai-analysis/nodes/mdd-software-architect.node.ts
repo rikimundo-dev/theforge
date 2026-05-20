@@ -426,6 +426,31 @@ function extractSection6SeguridadBody(draft: string): string | null {
   return body.length > 30 && !/^\s*\(?\s*Pendiente\s*\)?\s*$/i.test(body) ? body : null;
 }
 
+/** Extrae el cuerpo de ## 7. Infraestructura del draft (hasta fin de documento). */
+function extractSection7InfraestructuraBody(draft: string): string | null {
+  const m = draft.match(/\n##\s+(?:7\.\s+)?Infraestructura\b[^\n]*\n+([\s\S]*?)(?=\n##\s+|\z)/i);
+  if (!m?.[1]) return null;
+  const body = m[1].trim();
+  return body.length > 30 && !/^\s*\(?\s*Pendiente\s*\)?\s*$/i.test(body) ? body : null;
+}
+
+/** Reemplaza el cuerpo de una sección en el draft. Busca el heading y reemplaza hasta el siguiente ## o fin. */
+function replaceSectionBody(draft: string, headingPattern: RegExp, newBody: string): string {
+  const match = draft.match(headingPattern);
+  if (!match || match.index == null) return draft;
+  const startAfterHeading = match.index + match[0].length;
+  const rest = draft.slice(startAfterHeading);
+  const nextH2 = rest.search(/\n##\s+/);
+  const bodyEnd = nextH2 !== -1 ? startAfterHeading + nextH2 : draft.length;
+  return draft.slice(0, startAfterHeading) + "\n\n" + newBody.trim() + "\n" + draft.slice(bodyEnd);
+}
+
+/** Regex para detectar si §6 o §7 tienen solo placeholder (Pendiente, TBD, etc.). */
+function isPlaceholderSection(body: string | null): boolean {
+  if (!body || body.length < 30) return true;
+  return /^\s*\(?\s*(Pendiente|TBD|\[Placeholder|\/\/ TODO)/i.test(body);
+}
+
 function buildArchitectToolsByName(tools: StructuredToolInterface[]): Record<string, StructuredToolInterface> {
   const byName: Record<string, StructuredToolInterface> = {};
   for (const t of tools) byName[t.name] = t;
@@ -814,6 +839,19 @@ export function createMddSoftwareArchitectNode(
       mddDraft = replaceContextWhenOnlyMetadata(mddDraft);
       mddDraft = ensureContratosSection(mddDraft);
       mddDraft = normalizeMddFormat(mddDraft);
+      // Preservar §6 y §7 del borrador entrante si el LLM los reemplazó con placeholders
+      const incomingSection6 = extractSection6SeguridadBody(draftTrimmed);
+      const currentSection6 = extractSection6SeguridadBody(mddDraft);
+      if (incomingSection6 && isPlaceholderSection(currentSection6)) {
+        mddDraft = replaceSectionBody(mddDraft, /##\s+(?:6\.\s+)?Seguridad\b[^\n]*/i, `## 6. Seguridad\n\n${incomingSection6}`);
+        LOG("preservada sección 6 entrante (el Arquitecto puso placeholder)");
+      }
+      const incomingSection7 = extractSection7InfraestructuraBody(draftTrimmed);
+      const currentSection7 = extractSection7InfraestructuraBody(mddDraft);
+      if (incomingSection7 && isPlaceholderSection(currentSection7)) {
+        mddDraft = replaceSectionBody(mddDraft, /##\s+(?:7\.\s+)?Infraestructura\b[^\n]*/i, `## 7. Infraestructura\n\n${incomingSection7}`);
+        LOG("preservada sección 7 entrante (el Arquitecto puso placeholder)");
+      }
       const sum = getMddDraftSummary(mddDraft);
       LOG("ok mddDraftLen=%s section2=%s", sum.length, sum.section2);
       logMddNodeOutput("SoftwareArchitect", mddDraft);

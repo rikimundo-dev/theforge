@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { PreferencesService } from "../ai/preferences.service.js";
@@ -13,6 +13,7 @@ import {
   composeBrdPreamble,
 } from "./utils/brd-tobe-gate.util.js";
 import { CheckpointerService } from "./checkpoint/checkpointer.service.js";
+import { NodeCacheService } from "./checkpoint/node-cache.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
 import { stateToMarkdown, getAgentLabel } from "./state/state-to-markdown.js";
 import type { MddStructured } from "./state/mdd-structured.schema.js";
@@ -46,18 +47,10 @@ import { createMddSecurityNode } from "./nodes/mdd-security.node.js";
 import { createMddSoftwareArchitectNode } from "./nodes/mdd-software-architect.node.js";
 import { getMddArchitectTools } from "./tools/tool-registry.js";
 import { contextSynthesizerComplexityAppendix } from "./utils/mdd-complexity-rigor.js";
+import { formatDbgaStreamError } from "./utils/dbga-stream-error.util.js";
+import { resolveLangGraphRecursionLimit } from "./utils/langgraph-recursion.util.js";
 
 import type { EstimationComplexity, PrecisionBreakdown } from "./estimation/estimation.types.js";
-
-/** LangGraph default recursion limit is 25; MDD con Manager puede superarlo. Override: `LANGGRAPH_RECURSION_LIMIT` (10–500). */
-function resolveLangGraphRecursionLimit(): number {
-  const raw = process.env.LANGGRAPH_RECURSION_LIMIT?.trim();
-  if (raw) {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n >= 10 && n <= 500) return Math.floor(n);
-  }
-  return 25;
-}
 
 const LANGGRAPH_RECURSION_LIMIT = resolveLangGraphRecursionLimit();
 
@@ -83,11 +76,11 @@ function prepareMddForOutput(
   let raw: string;
   if (typeof input === "string") {
     raw = input;
-  } else if ((input.mddDraft ?? "").trim().length > 500) {
-    raw = (input.mddDraft ?? "").trim();
   } else if (hasStructuredContent(input.mddStructured)) {
     const hydrated = hydrateStructuredFromDraft(input.mddStructured, input.mddDraft ?? "");
     raw = mddStructuredToMarkdown(hydrated);
+  } else if ((input.mddDraft ?? "").trim().length > 500) {
+    raw = (input.mddDraft ?? "").trim();
   } else {
     raw = (input.mddDraft ?? "").trim();
   }
@@ -168,6 +161,7 @@ function estimationOpts(
 @Injectable()
 export class AiAnalysisService {
   private readonly logger = new Logger(AiAnalysisService.name);
+  private readonly createDbgaGraphFn: typeof createDbgaGraph;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -175,12 +169,16 @@ export class AiAnalysisService {
     private readonly preferences: PreferencesService,
     private readonly estimationService: EstimationService,
     private readonly graphMemory: GraphMemoryService,
+    private readonly nodeCacheService: NodeCacheService,
     private readonly projects: ProjectsService,
     private readonly theforge: TheForgeService,
     private readonly agentSupervisor: AgentSupervisorService,
     private readonly ai: AiService,
     private readonly discovery: DiscoveryService,
-  ) { }
+    @Optional() createDbgaGraphFn?: typeof createDbgaGraph,
+  ) {
+    this.createDbgaGraphFn = createDbgaGraphFn ?? createDbgaGraph;
+  }
 
   /** Contexto agéntico (legacy, Relic, memoria episódica) para el estado MDD. */
   private async buildMddAgentContext(
@@ -264,7 +262,7 @@ export class AiAnalysisService {
    */
   async startAnalysis(idea: string, projectId?: string): Promise<DBGAState> {
     const checkpointer = await this.checkpointerService.getCheckpointer();
-    const graph = createDbgaGraph(checkpointer ?? undefined);
+    const graph = this.createDbgaGraphFn(checkpointer ?? undefined);
 
     let threadId: string;
     if (projectId?.trim()) {
@@ -298,7 +296,10 @@ export class AiAnalysisService {
     const config = checkpointer
       ? { configurable: { thread_id: threadId } as Record<string, string> }
       : undefined;
-    const finalState = await graph.invoke(initialState, config);
+    const finalState = await graph.invoke(initialState, {
+      ...config,
+      recursionLimit: LANGGRAPH_RECURSION_LIMIT,
+    });
     return finalState as DBGAState;
   }
 
@@ -311,10 +312,11 @@ export class AiAnalysisService {
     projectId?: string,
   ): AsyncGenerator<StreamProgressEvent> {
     const checkpointer = await this.checkpointerService.getCheckpointer();
-    const graph = createDbgaGraph(checkpointer ?? undefined);
+    const graph = this.createDbgaGraphFn(checkpointer ?? undefined);
 
     let threadId: string;
     if (projectId?.trim()) {
+      await this.clearMddCheckpoint(projectId.trim(), "");
       const row = await this.prisma.agentStateCheckpoint.upsert({
         where: {
           projectId_mddStageId: { projectId: projectId.trim(), mddStageId: "" },
@@ -359,6 +361,7 @@ export class AiAnalysisService {
     try {
       const stream = await graph.stream(initialState, {
         ...config,
+        recursionLimit: LANGGRAPH_RECURSION_LIMIT,
         streamMode: "values",
       });
 
@@ -420,8 +423,7 @@ export class AiAnalysisService {
         ...(complexityProposal != null ? { complexityProposal } : {}),
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Error en el análisis";
-      yield { type: "error", message };
+      yield { type: "error", message: formatDbgaStreamError(err) };
     }
   }
 
@@ -456,7 +458,7 @@ export class AiAnalysisService {
         }
       }
     }
-    const graph = createMddGraph(this.graphMemory, { theforge: this.theforge });
+    const graph = createMddGraph(this.graphMemory, { theforge: this.theforge, nodeCache: this.nodeCacheService });
     const agentCtx = projectId?.trim() ? await this.buildMddAgentContext(projectId.trim(), stageId) : {};
     let dbgaEffective =
       dbgaContent.trim() ||
@@ -591,7 +593,7 @@ export class AiAnalysisService {
       projects: this.projects,
       theforge: this.theforge,
       ai: this.ai,
-    });
+    }, { nodeCache: this.nodeCacheService });
     const agentCtx = await this.buildMddAgentContext(projectId, stageIdFromClient);
     const existingMdd = (initialMddDraft ?? "").trim();
     const rawInitial = (initialMessage ?? "").trim();
@@ -756,31 +758,7 @@ export class AiAnalysisService {
         mddDraft: rawMarkdown,
       });
       logSection3Debug("final (stream/manager done)", markdown);
-      // AUTO-FIX §6: si la IA saltó §6, forzar generación con el nodo de seguridad
-      if (!/^##\s+(?:\d+\.\s*)?Seguridad\b/im.test(markdown)) {
-        this.logger.log("[MDD auto-fix §6] §6 falta — ejecutando nodo de seguridad...");
-        try {
-          const llm = createDbgaLLM();
-          const securityNode = createMddSecurityNode(llm);
-          const state = {
-            ...defaultMDDState,
-            mddDraft: markdown,
-            clarifiedScope: lastState?.clarifiedScope ?? "",
-            acceptedProposalDirective: lastState?.acceptedProposalDirective,
-            auditorFeedback: lastState?.auditorFeedback,
-            projectId: lastState?.projectId,
-            dbgaContent: lastState?.dbgaContent ?? "",
-          };
-          const result = await securityNode(state as MDDStateType);
-          const fixedDraft = (result.mddDraft ?? markdown).trim();
-          if (fixedDraft.length > markdown.length) {
-            markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: fixedDraft });
-            this.logger.log(`[MDD auto-fix §6] §6 insertada. markdownLen: ${markdown.length}`);
-          }
-        } catch (err) {
-          this.logger.warn(`[MDD auto-fix §6] error: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
+      
       if (projectId?.trim()) {
         this.estimationService.clearLiveDraft(projectId.trim(), estimationStageId);
         this.clearMddCheckpoint(projectId.trim(), mddStageKey).catch(() => { });
@@ -905,7 +883,7 @@ export class AiAnalysisService {
       projects: this.projects,
       theforge: this.theforge,
       ai: this.ai,
-    });
+    }, { nodeCache: this.nodeCacheService });
     const agentCtx = await this.buildMddAgentContext(projectId, preferredStageForCtx);
     if (agentCtx.mddComplexity != null) {
       this.estimationService.cacheProjectComplexity(projectId.trim(), estimationStage ?? null, agentCtx.mddComplexity);
@@ -1091,31 +1069,7 @@ export class AiAnalysisService {
           mddDraft: raw,
         });
         logSection3Debug("final (stream/resume done)", markdown);
-        // AUTO-FIX §6: si la IA saltó §6, forzar generación con el nodo de seguridad
-        if (!/^##\s+(?:\d+\.\s*)?Seguridad\b/im.test(markdown)) {
-          this.logger.log("[MDD auto-fix §6] §6 falta — ejecutando nodo de seguridad...");
-          try {
-            const llm = createDbgaLLM();
-            const securityNode = createMddSecurityNode(llm);
-            const state = {
-              ...defaultMDDState,
-              mddDraft: markdown,
-              clarifiedScope: lastState?.clarifiedScope ?? "",
-              acceptedProposalDirective: lastState?.acceptedProposalDirective,
-              auditorFeedback: lastState?.auditorFeedback,
-              projectId: lastState?.projectId,
-              dbgaContent: lastState?.dbgaContent ?? "",
-            };
-            const result = await securityNode(state as MDDStateType);
-            const fixedDraft = (result.mddDraft ?? markdown).trim();
-            if (fixedDraft.length > markdown.length) {
-              markdown = prepareMddForOutput({ mddStructured: result.mddStructured, mddDraft: fixedDraft });
-              this.logger.log(`[MDD auto-fix §6] §6 insertada. markdownLen: ${markdown.length}`);
-            }
-          } catch (err) {
-            this.logger.warn(`[MDD auto-fix §6] error: ${err instanceof Error ? err.message : String(err)}`);
-          }
-        }
+        
         if (projectId?.trim()) {
           this.estimationService.clearLiveDraft(projectId.trim(), estimationStage);
           this.clearMddCheckpoint(projectId.trim(), cp.mddStageId).catch(() => { });

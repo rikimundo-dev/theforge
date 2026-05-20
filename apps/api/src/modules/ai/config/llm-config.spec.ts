@@ -2,10 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getLlmProvidersSnapshot,
+  hasChatModelFallback,
+  isChatFallbackOn429Enabled,
   normalizeLlmProviderId,
+  resolveChatModelChain,
   resolveEmbeddingsBackend,
   resolveOpenRouterEmbeddingApiKey,
   resolveLangChainChatTemperature,
+  resolveVisionModelChain,
 } from "./llm-config.js";
 
 test("resolveLangChainChatTemperature — openrouter 0.5", () => {
@@ -49,6 +53,116 @@ test("resolveEmbeddingsBackend — none", () => {
     if (prev === undefined) delete process.env.LLM_EMBEDDINGS_PROVIDER;
     else process.env.LLM_EMBEDDINGS_PROVIDER = prev;
   }
+});
+
+function withEnv(
+  vars: Record<string, string | undefined>,
+  fn: () => void,
+): void {
+  const prev: Record<string, string | undefined> = {};
+  for (const key of Object.keys(vars)) {
+    prev[key] = process.env[key];
+    const v = vars[key];
+    if (v === undefined) delete process.env[key];
+    else process.env[key] = v;
+  }
+  try {
+    fn();
+  } finally {
+    for (const key of Object.keys(vars)) {
+      const v = prev[key];
+      if (v === undefined) delete process.env[key];
+      else process.env[key] = v;
+    }
+  }
+}
+
+test("resolveChatModelChain — sin fallbacks solo primary", () => {
+  withEnv(
+    {
+      OPENROUTER_CHAT_MODEL: "primary/model",
+      OPENROUTER_CHAT_MODEL_FALLBACK: undefined,
+      OPENROUTER_CHAT_MODEL_FALLBACKS: undefined,
+    },
+    () => {
+      assert.deepEqual(resolveChatModelChain(), ["primary/model"]);
+      assert.equal(hasChatModelFallback(), false);
+    },
+  );
+});
+
+test("resolveChatModelChain — FALLBACKS tiene prioridad y dedupe", () => {
+  withEnv(
+    {
+      OPENROUTER_CHAT_MODEL: "primary/model",
+      OPENROUTER_CHAT_MODEL_FALLBACK: "ignored/single",
+      OPENROUTER_CHAT_MODEL_FALLBACKS: "fb/a, fb/b, primary/model",
+    },
+    () => {
+      assert.deepEqual(resolveChatModelChain(), ["primary/model", "fb/a", "fb/b"]);
+      assert.equal(hasChatModelFallback(), true);
+    },
+  );
+});
+
+test("resolveChatModelChain — FALLBACK único", () => {
+  withEnv(
+    {
+      OPENROUTER_CHAT_MODEL: "primary/model",
+      OPENROUTER_CHAT_MODEL_FALLBACK: "fb/one",
+      OPENROUTER_CHAT_MODEL_FALLBACKS: undefined,
+    },
+    () => {
+      assert.deepEqual(resolveChatModelChain(), ["primary/model", "fb/one"]);
+    },
+  );
+});
+
+test("isChatFallbackOn429Enabled — solo con fallbacks y no desactivado", () => {
+  withEnv(
+    {
+      OPENROUTER_CHAT_MODEL: "p",
+      OPENROUTER_CHAT_MODEL_FALLBACKS: undefined,
+      OPENROUTER_CHAT_MODEL_FALLBACK: undefined,
+      OPENROUTER_CHAT_FALLBACK_ON_429: undefined,
+    },
+    () => {
+      assert.equal(isChatFallbackOn429Enabled(), false);
+    },
+  );
+  withEnv(
+    {
+      OPENROUTER_CHAT_MODEL: "p",
+      OPENROUTER_CHAT_MODEL_FALLBACK: "fb",
+      OPENROUTER_CHAT_FALLBACK_ON_429: undefined,
+    },
+    () => {
+      assert.equal(isChatFallbackOn429Enabled(), true);
+    },
+  );
+  withEnv(
+    {
+      OPENROUTER_CHAT_MODEL: "p",
+      OPENROUTER_CHAT_MODEL_FALLBACK: "fb",
+      OPENROUTER_CHAT_FALLBACK_ON_429: "0",
+    },
+    () => {
+      assert.equal(isChatFallbackOn429Enabled(), false);
+    },
+  );
+});
+
+test("resolveVisionModelChain — VISION_MODEL_FALLBACK", () => {
+  withEnv(
+    {
+      VISION_MODEL: "vision/primary",
+      VISION_MODEL_FALLBACK: "vision/fb",
+      OPENROUTER_CHAT_MODEL_FALLBACK: undefined,
+    },
+    () => {
+      assert.deepEqual(resolveVisionModelChain(), ["vision/primary", "vision/fb"]);
+    },
+  );
 });
 
 test("resolveOpenRouterEmbeddingApiKey — con AI_API_KEY", () => {

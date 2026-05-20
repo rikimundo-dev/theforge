@@ -175,9 +175,7 @@ function structuredToJson2mdNodes(mdd: MddStructured): Json2mdNode[] {
       for (const sub of subsections) {
         nodes.push({ h3: sub.title });
         nodes.push({ p: "" });
-        if (typeof sub.content === "string") {
-          nodes.push({ p: sub.content.trim() });
-        } else if (Array.isArray(sub.content) && sub.content.length) {
+        if (Array.isArray(sub.content) && sub.content.length) {
           nodes.push({ ul: sub.content });
         }
         nodes.push({ p: "" });

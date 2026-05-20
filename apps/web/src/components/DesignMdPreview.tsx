@@ -48,14 +48,29 @@ function parseDesignMdContent(content: string): DesignTokens | null {
         colors[name] = hex;
       }
     }
-    // Markdown table pattern: | Rol | ... | #HEX | ... |
-    const tableRowRe = /\|\s*\*{0,2}([\w\s\-áéíóúñÑ/]+?)\*{0,2}\s*\|[^|]*\|\s*`?(?:#([A-Fa-f0-9]{6}))`?\s*\|/gm;
-    let trm: RegExpExecArray | null;
-    while ((trm = tableRowRe.exec(colorsSection)) !== null) {
-      const name = trm[1]!.replace(/\*\*/g, '').toLowerCase().trim().replace(/\s+/g, '-');
-      const hex = `#${trm[2]!.toUpperCase()}`;
-      if (name && !Object.values(colors).includes(hex)) {
-        colors[name] = hex;
+    // Markdown table patterns
+    // Pattern A: | Name | Middle | #HEX | ... | (hex in col 3)
+    const tableReHexCol3 = /\|\s*\*{0,2}([\w\s\-áéíóúñÑ/]+?)\*{0,2}\s*\|[^|]*\|\s*`?(?:#([A-Fa-f0-9]{6}))`?\s*\|/gm;
+    for (const re of [tableReHexCol3]) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(colorsSection)) !== null) {
+        const name = m[1]!.replace(/\*\*/g, '').toLowerCase().trim().replace(/\s+/g, '-');
+        const hex = `#${m[2]!.toUpperCase()}`;
+        if (name && !Object.values(colors).includes(hex)) {
+          colors[name] = hex;
+        }
+      }
+    }
+    // Pattern B: | Name | #HEX | ... | (hex in col 2 — common in UX/UI guide)
+    const tableReHexCol2 = /\|\s*\*{0,2}([\w\s\-áéíóúñÑ/]+?)\*{0,2}\s*\|\s*`?(?:#([A-Fa-f0-9]{6}))`?\s*\|[^|]*\|/gm;
+    {
+      let m: RegExpExecArray | null;
+      while ((m = tableReHexCol2.exec(colorsSection)) !== null) {
+        const name = m[1]!.replace(/\*\*/g, '').toLowerCase().trim().replace(/\s+/g, '-');
+        const hex = `#${m[2]!.toUpperCase()}`;
+        if (name && !Object.values(colors).includes(hex)) {
+          colors[name] = hex;
+        }
       }
     }
     if (Object.keys(colors).length > 0) tokens.colors = colors;
@@ -262,8 +277,8 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
       const kv = t.match(/^([\w-]+):\s*["']?(.+?)["']?\s*$/);
       if (kv) {
         const k = kv[1]!;
-        const v = kv[2]!.replace(/["']/g, "");
-        const typoKeys = Object.keys(tokens.typography);
+        const v = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
+        const typoKeys = tokens.typography ? Object.keys(tokens.typography) : [];
         if (typoKeys.length > 0) {
           const lastKey = typoKeys[typoKeys.length - 1]!;
           if (!tokens.typography[lastKey]) tokens.typography[lastKey] = {};
@@ -284,7 +299,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
       const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
       if (kv) {
         const k = kv[1]!;
-        const v = kv[2]!.replace(/["']/g, "");
+        const v = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
         const compKeys = tokens.components ? Object.keys(tokens.components) : [];
         if (compKeys.length > 0) {
           const lastKey: string = compKeys[compKeys.length - 1]!;
@@ -315,7 +330,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
       const kv = t.match(/^(\S+):\s*["']?(.+?)["']?\s*$/);
       if (kv) {
         const k = kv[1]!;
-        let v = kv[2]!.replace(/["']/g, "");
+        let v = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
         if (/^\d+(\.\d+)?$/.test(v)) v = `${v}px`;
         const s = tokens as Record<string, Record<string, string>>;
         if (!s[currentSection]) s[currentSection] = {};
@@ -327,7 +342,7 @@ function parseYamlFrontMatter(content: string): { frontMatter: DesignTokens | nu
     if (!currentSection) {
       const kv = t.match(/^(\w+):\s*["']?(.+?)["']?\s*$/);
       if (kv && kv[1] && ["name", "description", "version"].includes(kv[1])) {
-        (tokens as Record<string, string>)[kv[1]] = kv[2]!.replace(/["']/g, "");
+        (tokens as Record<string, string>)[kv[1]] = kv[2]!.replace(/["']/g, "").replace(/\s+#.*$/, "");
       }
     }
   }
@@ -473,9 +488,44 @@ export function fillDesignMdDefaults(tokens: DesignTokens | null): DesignTokens 
 
 export function DesignMdPreview({ content }: { content: string }) {
   const frontMatter = useMemo(() => {
-    const yaml = parseYamlFrontMatter(content).frontMatter;
-    if (yaml && (yaml.colors || yaml.typography || yaml.components)) return fillDesignMdDefaults(yaml);
-    return fillDesignMdDefaults(parseDesignMdContent(content));
+    const { frontMatter: yaml } = parseYamlFrontMatter(content);
+    const bodyTokens = parseDesignMdContent(content);
+
+    // Merge: YAML frontmatter takes precedence, body markdown fills gaps
+    // (e.g. PrimaryHover, Surface, SurfaceHover, Accent defined in body tables)
+    if (yaml && (yaml.colors || yaml.typography || yaml.components)) {
+      // Merge body tokens into YAML — each section independently
+      // (YAML may have typography but no colors, or vice versa)
+      if (bodyTokens?.colors) {
+        if (yaml.colors) {
+          for (const [k, v] of Object.entries(bodyTokens.colors)) {
+            if (!(k in yaml.colors)) yaml.colors[k] = v;
+          }
+        } else {
+          yaml.colors = { ...bodyTokens.colors };
+        }
+      }
+      if (bodyTokens?.typography) {
+        if (yaml.typography) {
+          for (const [k, v] of Object.entries(bodyTokens.typography)) {
+            if (!(k in yaml.typography)) yaml.typography[k] = v;
+          }
+        } else {
+          yaml.typography = { ...bodyTokens.typography };
+        }
+      }
+      if (bodyTokens?.components) {
+        if (yaml.components) {
+          for (const [k, v] of Object.entries(bodyTokens.components)) {
+            if (!(k in yaml.components)) yaml.components[k] = v;
+          }
+        } else {
+          yaml.components = { ...bodyTokens.components };
+        }
+      }
+      return fillDesignMdDefaults(yaml);
+    }
+    return fillDesignMdDefaults(bodyTokens);
   }, [content]);
 
 
@@ -513,9 +563,41 @@ export function DesignMdPreview({ content }: { content: string }) {
 }
 
 export function extractDesignMdFrontMatter(content: string): DesignTokens | null {
-  const yaml = parseYamlFrontMatter(content).frontMatter;
-  if (yaml && (yaml.colors || yaml.typography || yaml.components)) return yaml;
-  return parseDesignMdContent(content);
+  const { frontMatter: yaml } = parseYamlFrontMatter(content);
+  const bodyTokens = parseDesignMdContent(content);
+
+  if (yaml && (yaml.colors || yaml.typography || yaml.components)) {
+    // Merge body tokens into YAML — each section independently
+    if (bodyTokens?.colors) {
+      if (yaml.colors) {
+        for (const [k, v] of Object.entries(bodyTokens.colors)) {
+          if (!(k in yaml.colors)) yaml.colors[k] = v;
+        }
+      } else {
+        yaml.colors = { ...bodyTokens.colors };
+      }
+    }
+    if (bodyTokens?.typography) {
+      if (yaml.typography) {
+        for (const [k, v] of Object.entries(bodyTokens.typography)) {
+          if (!(k in yaml.typography)) yaml.typography[k] = v;
+        }
+      } else {
+        yaml.typography = { ...bodyTokens.typography };
+      }
+    }
+    if (bodyTokens?.components) {
+      if (yaml.components) {
+        for (const [k, v] of Object.entries(bodyTokens.components)) {
+          if (!(k in yaml.components)) yaml.components[k] = v;
+        }
+      } else {
+        yaml.components = { ...bodyTokens.components };
+      }
+    }
+    return yaml;
+  }
+  return bodyTokens;
 }
 
 /**
@@ -574,11 +656,14 @@ export function tokensToYamlFrontMatter(tokens: DesignTokens): string {
  */
 export function replaceYamlFrontMatter(content: string, projectName?: string): string {
   const { body } = parseYamlFrontMatter(content);
-  const tokens = extractDesignMdFrontMatter(content);
-  if (!tokens) return content;
+  let tokens = extractDesignMdFrontMatter(content);
+  if (!tokens) {
+    // Sin YAML ni tokens detectables — crear defaults desde el nombre del proyecto
+    tokens = { name: projectName } as DesignTokens;
+  }
   const filled = fillDesignMdDefaults(tokens);
   if (!filled) return content;
-  if (projectName) filled.name = filled.name || projectName;
+  if (projectName && !filled.name) filled.name = projectName;
   const yamlStr = tokensToYamlFrontMatter(filled);
   return yamlStr + "\n\n" + body;
 }

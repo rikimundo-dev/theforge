@@ -73,7 +73,6 @@ export class AiService {
   private static readonly ACTIVE_TAB_LABELS: Record<string, string> = {
     spec: "Spec (SDD: what/why)",
     brd: "BRD (etapa)",
-    "to-be": "Manual To-Be (etapa)",
     mdd: "MDD",
     architecture: "Arquitectura del sistema",
     "use-cases": "Casos de Uso",
@@ -154,7 +153,6 @@ export class AiService {
           mdd: "MDD",
           spec: "SPEC",
           brd: "BRD",
-          "to-be": "TOBE",
           architecture: "ARCH",
           "use-cases": "USECASES",
           "user-stories": "STORIES",
@@ -169,7 +167,7 @@ export class AiService {
           systemPrompt += `\n\n**Instrucción DE delimitador (OBLIGATORIO):** Cuando generes o actualices el documento de ${label} (completo o solo una sección), DEBES escribir el contenido y TERMINAR con la línea exacta \`---FIN_${tag}---\`. Lo que vaya después se mostrará como mensaje en el chat. Sin ese delimitador, el sistema NO persiste ningún cambio y el usuario no ve nada en el panel del documento.`;
           if (at === "mdd") {
             systemPrompt +=
-              "\n\n**Cuando el usuario indique que falta algo en el documento** (ej. \"X no está mencionado\", \"el cotizador también se involucra\", \"falta Y\"), **debes** devolver el MDD o la sección correspondiente actualizada con ese contenido incorporado, terminando con `---FIN_MDD---`. **Siempre incluye un mensaje breve en el chat después de `---FIN_MDD---`** resumiendo el cambio (ej. \"Actualizada la sección 7 con Dokploy en lugar de AWS.\"). Ese mensaje de chat es lo único que verá el usuario.";
+              "\n\n**\u26a0\ufe0f REGLA ABSOLUTA \u2014 MDD:** Cada vez que el usuario pida **agregar, cambiar, modificar, actualizar, corregir o eliminar** algo del MDD (ej. \"agrega X\", \"cambia Y por Z\", \"falta W\", \"actualiza la secci\u00f3n N\"), **DEBES** devolver el **MDD COMPLETO ACTUALIZADO** (conservando TODO el contenido existente m\u00e1s los cambios) terminando con `---FIN_MDD---`. **NUNCA** respondas solo con un mensaje como \"MDD actualizado\" o \"Hecho\" \u2014 si lo haces, el sistema NO persiste ning\u00fan cambio y el usuario cree que se aplic\u00f3 cuando no es as\u00ed. Siempre incluye un mensaje breve resumiendo el cambio DESPU\u00c9S de `---FIN_MDD---`.";
           }
           if (at === "spec") {
             systemPrompt +=
@@ -179,9 +177,13 @@ export class AiService {
             systemPrompt +=
               "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
           }
-          if (at === "to-be") {
+          if (at === "blueprint") {
             systemPrompt +=
-              "\n\n**Para persistir el Manual To-Be debes usar \`---FIN_TOBE---\`.** Si decides hacer cambios al To-Be, DEBES devolver el **markdown completo** actualizado terminando con \`---FIN_TOBE---\`. Decirlo en el chat sin el delimitador no persiste nada.";
+              "\n\n**OBLIGATORIO - Blueprint:** Cuando el usuario pida **agregar, modificar o eliminar** algo del Blueprint, **debes** devolver el **Blueprint completo actualizado** (conservando TODO el contenido existente) terminando con `---FIN_BLUEPRINT---`. Si solo envías una sección, el sistema la **fusiona** automáticamente con el contenido actual. Nunca respondas solo con un mensaje tipo \"El Blueprint ha sido actualizado\" — el sistema solo persiste cuando encuentra el contenido del documento seguido de `---FIN_BLUEPRINT---`.";
+          }
+          if (at === "ux-ui-guide") {
+            systemPrompt +=
+              "\n\n**OBLIGATORIO - Guía UX/UI:** Cuando el usuario pida **agregar, modificar o regenerar** la Guía UX/UI, **debes** devolver la **Guía UX/UI completa actualizada** (conservando TODO el contenido existente) terminando con `---FIN_UX_UI---`. Si solo envías un fragmento sin el documento completo, el sistema ignora el cambio y el usuario no ve nada. **Siempre incluye la guía COMPLETA antes del delimitador.**";
           }
         }
       }
@@ -227,12 +229,6 @@ export class AiService {
           systemPrompt +=
             "\n\n[BRD actual de la etapa del Workshop. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_BRD---.]\n---\n" +
             options.currentBrdContent.trim().slice(0, 8000) +
-            "\n---";
-        }
-        if (options?.activeTab?.trim() === "to-be" && options?.currentToBeManualContent?.trim()) {
-          systemPrompt +=
-            "\n\n[Manual To-Be actual de la etapa. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_TOBE---.]\n---\n" +
-            options.currentToBeManualContent.trim().slice(0, 8000) +
             "\n---";
         }
         if (options?.learningHistory?.trim()) {
@@ -317,7 +313,6 @@ export class AiService {
         mdd: "MDD",
         spec: "SPEC",
         brd: "BRD",
-        "to-be": "TOBE",
         architecture: "ARCH",
         "use-cases": "USECASES",
         "user-stories": "STORIES",
@@ -332,7 +327,7 @@ export class AiService {
         systemPrompt += `\n\nSi decides generar o actualizar el documento de ${label} (completo o solo una sección), escribe el contenido y TERMINA con la línea exacta \`---FIN_${tag}---\`. Lo que vaya después se mostrará como mensaje en el chat. Así el sistema aplicará los cambios al documento del proyecto.`;
         if (at === "mdd") {
             systemPrompt +=
-              "\n\n**Cuando el usuario indique que falta algo en el documento** (ej. \"X no está mencionado\", \"el cotizador también se involucra\", \"falta Y\"), **debes** devolver el MDD o la sección correspondiente actualizada con ese contenido incorporado, terminando con `---FIN_MDD---`. **Siempre incluye un mensaje breve en el chat después de `---FIN_MDD---`** resumiendo el cambio (ej. \"Actualizada la sección 7 con Dokploy en lugar de AWS.\"). Ese mensaje de chat es lo único que verá el usuario.";
+              "\n\n**\u26a0\ufe0f REGLA ABSOLUTA \u2014 MDD:** Cada vez que el usuario pida **agregar, cambiar, modificar, actualizar, corregir o eliminar** algo del MDD (ej. \"agrega X\", \"cambia Y por Z\", \"falta W\", \"actualiza la secci\u00f3n N\"), **DEBES** devolver el **MDD COMPLETO ACTUALIZADO** (conservando TODO el contenido existente m\u00e1s los cambios) terminando con `---FIN_MDD---`. **NUNCA** respondas solo con un mensaje como \"MDD actualizado\" o \"Hecho\" \u2014 si lo haces, el sistema NO persiste ning\u00fan cambio y el usuario cree que se aplic\u00f3 cuando no es as\u00ed. Siempre incluye un mensaje breve resumiendo el cambio DESPU\u00c9S de `---FIN_MDD---`.";
           }
         if (at === "spec") {
           systemPrompt +=
@@ -342,11 +337,11 @@ export class AiService {
           systemPrompt +=
             "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
         }
-        if (at === "to-be") {
-          systemPrompt +=
-            "\n\n**Para persistir el Manual To-Be debes usar \`---FIN_TOBE---\`.** Si decides hacer cambios al To-Be, DEBES devolver el **markdown completo** actualizado terminando con \`---FIN_TOBE---\`. Decirlo en el chat sin el delimitador no persiste nada.";
+          if (at === "blueprint") {
+            systemPrompt +=
+              "\n\n**OBLIGATORIO - Blueprint:** Cuando el usuario pida **agregar, modificar o eliminar** algo del Blueprint, **debes** devolver el **Blueprint completo actualizado** (conservando TODO el contenido existente) terminando con `---FIN_BLUEPRINT---`. Si solo envías una sección, el sistema la **fusiona** automáticamente con el contenido actual. Nunca respondas solo con un mensaje tipo \"El Blueprint ha sido actualizado\" — el sistema solo persiste cuando encuentra el contenido del documento seguido de `---FIN_BLUEPRINT---`.";
+          }
         }
-      }
     }
     if (!options?.welcomeBrief) {
       if (options?.currentDbgaContent?.trim()) {
@@ -390,12 +385,6 @@ export class AiService {
         systemPrompt +=
           "\n\n[BRD actual de la etapa del Workshop. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_BRD---.]\n---\n" +
           options.currentBrdContent.trim().slice(0, 8000) +
-          "\n---";
-      }
-      if (options?.activeTab?.trim() === "to-be" && options?.currentToBeManualContent?.trim()) {
-        systemPrompt +=
-          "\n\n[Manual To-Be actual de la etapa. Al actualizar, conserva lo acordado y fusiona cambios; termina con ---FIN_TOBE---.]\n---\n" +
-          options.currentToBeManualContent.trim().slice(0, 8000) +
           "\n---";
       }
       if (options?.activeTab?.trim() === "architecture" && (options as any).currentArchitectureContent?.trim()) {
@@ -637,7 +626,7 @@ export class AiService {
 
   async generateApiContracts(mddContent: string, blueprintContent?: string | null, gapsFeedback?: string | null, brdContent?: string | null, options?: LegacyGenerateOptions): Promise<string> {
     const mdd = mddContent?.trim() ?? "";
-    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 8000);
+    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 16000);
     const brd = (brdContent?.trim() ?? "").slice(0, 8000);
     const constitutionNote =
       "El siguiente documento es la **Constitución del proyecto** (MDD). Tu salida debe adherirse a él en todo momento.\n\n";

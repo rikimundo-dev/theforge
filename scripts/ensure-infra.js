@@ -35,21 +35,22 @@ function run(cmd, options = {}) {
   });
 }
 
-function isDockerAvailable() {
+function dockerDaemonReady() {
   const info = run('docker info');
   return info.status === 0;
 }
 
-function ensureColima() {
-  if (isDockerAvailable()) {
-    console.log('[ensure-infra] Docker disponible; omitiendo Colima.');
+function ensureContainerRuntime() {
+  if (dockerDaemonReady()) {
+    console.log('[ensure-infra] Docker disponible.');
     return 0;
   }
 
-  const which = run('command -v colima');
-  if (which.status !== 0 || !which.stdout?.trim()) {
+  const colimaCheck = run('command -v colima');
+  if (colimaCheck.status !== 0) {
     console.error(
-      '[ensure-infra] Docker no está disponible y Colima no está instalado. Inicia Docker Desktop o instala Colima.',
+      '[ensure-infra] Docker no responde y Colima no está instalado.',
+      'Abre Docker Desktop o instala Colima: brew install colima',
     );
     return 1;
   }
@@ -109,8 +110,8 @@ function ensureContainer(name, runArgs) {
 }
 
 function main() {
-  const colimaOk = ensureColima();
-  if (colimaOk !== 0) return colimaOk;
+  const runtimeOk = ensureContainerRuntime();
+  if (runtimeOk !== 0) return runtimeOk;
 
   const pgOk = ensureContainer(POSTGRES_NAME, POSTGRES_RUN_ARGS);
   if (pgOk !== 0) return pgOk;

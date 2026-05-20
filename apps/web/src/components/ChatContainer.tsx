@@ -113,6 +113,21 @@ function getRegenerateSectionFromSlashCommand(msg: string): number | null {
   return cmd?.section ?? null;
 }
 
+/**
+ * Detecta lenguaje natural tipo "regenera sección 2", "regenerar la seccion 6",
+ * "regenera la 3", "regenera seccion 4", etc.
+ */
+function detectNaturalRegenerateSection(msg: string): number | null {
+  const t = msg.trim().toLowerCase();
+  // Patrones: regenera/regenerar [la] sección/seccion [número]
+  const match = t.match(
+    /^regenera(?:r)?\s+(?:la\s+)?secci[oó]n\s+(\d)$/i,
+  );
+  if (!match) return null;
+  const section = parseInt(match[1]!, 10);
+  return section >= 1 && section <= 7 ? section : null;
+}
+
 const ACCEPT_IMG = /^image\/(png|jpeg|jpg|gif|webp)$/i;
 
 /** Single bordered “AI bar”: attach + textarea + send share one surface (Claude/ChatGPT-style unified chrome). */
@@ -268,7 +283,11 @@ export default function ChatContainer({
   const pendingPlanApproval = useWorkshopStore((s) => s.pendingPlanApproval);
   const isBenchmarkStreaming = activeTab === "benchmark" && loading && loadingReason === "benchmark";
   const isMddStreaming = loading && loadingReason === "mdd";
-  const showAgentProgress = isBenchmarkStreaming || isMddStreaming;
+  const showAgentProgress =
+    isBenchmarkStreaming ||
+    isMddStreaming ||
+    loadingReason === "deliverables-cascade" ||
+    loadingReason === "legacy-deliverables";
   /** Generación larga en segundo plano (mismo criterio que el panel central en WorkshopView). */
   const isLegacyLongRun =
     loading &&
@@ -296,6 +315,7 @@ export default function ChatContainer({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement | null>(null);
   const prevStageForBannerRef = useRef<string | null>(null);
+  const welcomedTabRef = useRef<string | null>(null);
   const [stageSwitchBannerOpen, setStageSwitchBannerOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const multiStageChat = workshopStages.length > 1;
@@ -322,6 +342,10 @@ export default function ChatContainer({
     if (!welcomeTabs.includes(tab)) return;
     const count = (session.chatLog ?? []).filter((m: { tab?: string }) => (m.tab ?? "mdd") === tab).length;
     if (count > 0) return;
+    // Evitar bucle infinito: si ya intentamos welcome para este tab sin éxito (sin mensaje agregado),
+    // no reintentar. Ocurre cuando el backend decide no generar burbuja (ej. benchmark sin contenido).
+    if (welcomedTabRef.current === tab) return;
+    welcomedTabRef.current = tab;
     const t = window.setTimeout(() => {
       void fetchWelcome(projectId, tab);
     }, 120);
@@ -503,7 +527,9 @@ export default function ChatContainer({
       setInputValue("");
       return;
     }
-    const section = activeTab === "mdd" ? getRegenerateSectionFromSlashCommand(msg) : null;
+    const section = activeTab === "mdd"
+      ? (getRegenerateSectionFromSlashCommand(msg) ?? detectNaturalRegenerateSection(msg))
+      : null;
     const imageParts = pendingFiles.length ? await readFilesAsChatParts(pendingFiles) : [];
     setPendingFiles([]);
     setInputValue("");

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Post, Query, Res } from "@nestjs/common";
 import { Response } from "express";
 import { Readable } from "node:stream";
 import { PrismaService } from "../../prisma/prisma.service.js";
@@ -69,6 +69,20 @@ export class AiAnalysisController {
     }
     const sid = typeof body?.stageId === "string" ? body.stageId.trim() || undefined : undefined;
     this.estimationService.clearLiveDraft(id, sid);
+    return { ok: true };
+  }
+
+  /**
+   * Borra el checkpoint LangGraph del hilo DBGA (mddStageId vacío) para el proyecto.
+   * Usar al limpiar el benchmark en el taller para no reanudar un grafo antiguo.
+   */
+  @Delete("dbga/checkpoint")
+  async clearDbgaCheckpoint(@Query("projectId") projectId: string) {
+    const id = typeof projectId === "string" ? projectId.trim() : "";
+    if (!id) {
+      throw new BadRequestException("projectId is required");
+    }
+    await this.aiAnalysis.clearMddCheckpoint(id, "");
     return { ok: true };
   }
 

@@ -31,9 +31,9 @@ export interface WorkshopDocNavBuildContext {
   isLegacyProject: boolean;
   effectiveComplexityForTabs: "LOW" | "MEDIUM" | "HIGH";
   activeLegacyState: { description?: string; codebaseDoc?: string } | null | undefined;
+  activeWorkshopStage: { brdContent?: string | null } | null | undefined;
   phase0SummaryContent: string | null | undefined;
   dbgaContent: string | null | undefined;
-  activeWorkshopStage: { brdContent?: string | null; toBeManualContent?: string | null } | null | undefined;
   mddContent: string | null | undefined;
   specContent: string | null | undefined;
   architectureContent: string | null | undefined;

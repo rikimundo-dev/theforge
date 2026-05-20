@@ -142,3 +142,61 @@ export function applyMddDiagramSuggestions(mddDraft: string): string {
   const suggestions = suggestMddDiagrams(mddDraft);
   return injectMddDiagrams(mddDraft, suggestions);
 }
+
+/**
+ * Tool para Software Architect: importar tablas SQL de otro proyecto (cross-project table reference).
+ * Se inyecta como tool del SA vía getMddArchitectTools() en mdd-graph.ts.
+ */
+export function createGetProjectTablesTool() {
+  const baseUrl = process.env.THEFORGE_API_URL ?? "http://theforge-api:3000";
+  return tool(
+    async ({ projectId, tableNames }: { projectId: string; tableNames?: string[] }) => {
+      const url = `${baseUrl}/projects/${encodeURIComponent(projectId)}`;
+      let mddContent = "";
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+        if (res.ok) {
+          const data = (await res.json()) as Record<string, unknown>;
+          mddContent = (data.mddContent as string ?? "").trim();
+        }
+      } catch {
+        // fallback
+      }
+      if (!mddContent) {
+        return `No se pudo obtener el MDD del proyecto ${projectId} o no tiene contenido.`;
+      }
+      const section3Match = mddContent.match(/##\s+(?:3\.\s+)?Modelo\s+(?:de\s+)?Datos[^#]*(?:CREATE\s+TABLE[\s\S]*?)(?=\n##\s+(?:4|5|6|7)\.|\n##\s+(?:Seguridad|Infraestructura|Contratos|Lógica)|\z)/i);
+      const sqlBlock = section3Match?.[0] ?? "";
+      if (!sqlBlock.trim()) {
+        return `El proyecto ${projectId} tiene MDD pero no se encontraron tablas SQL en §3.`;
+      }
+      const tableRegex = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(([\s\S]*?)\);/gi;
+      const tables: { name: string; sql: string }[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = tableRegex.exec(sqlBlock)) !== null) {
+        tables.push({ name: m[1]!, sql: m[0]! });
+      }
+      if (tables.length === 0) {
+        return `No se encontraron CREATE TABLE en §3 del proyecto ${projectId}.`;
+      }
+      let filtered = tables;
+      if (Array.isArray(tableNames) && tableNames.length > 0) {
+        const filterSet = new Set(tableNames.map(n => n.toLowerCase()));
+        filtered = tables.filter(t => filterSet.has(t.name.toLowerCase()));
+        if (filtered.length === 0) {
+          return `El proyecto ${projectId} tiene ${tables.length} tabla(s) (${tables.map(t => t.name).join(", ")}), pero ninguna coincide con: ${tableNames.join(", ")}.`;
+        }
+      }
+      const header = `Tablas de proyecto de referencia (${projectId}):${filtered.length < tables.length ? ` ${filtered.length}/${tables.length} filtradas` : ` ${tables.length} tabla(s)`}`;
+      return `${header}\n\n\`\`\`sql\n${filtered.map(t => t.sql).join("\n\n")}\n\`\`\``;
+    },
+    {
+      name: "get_project_tables",
+      description: "Importa definiciones de tablas SQL de otro proyecto en TheForge (cross-project). Útil cuando un proyecto nuevo necesita tablas compartidas de un proyecto existente. Parámetros: projectId (requerido) y opcional tableNames (array de strings) para filtrar solo tablas específicas. El SA debe integrarlas en §3 (Modelo de Datos) del proyecto nuevo.",
+      schema: z.object({
+        projectId: z.string().describe("ID del proyecto de referencia"),
+        tableNames: z.array(z.string()).optional().describe("Lista opcional de nombres de tablas (ej. ['usuarios', 'pagos']). Si se omite, importa todas."),
+      }),
+    }
+  );
+}

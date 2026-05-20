@@ -136,7 +136,40 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
 - **Coherencia con §6 Seguridad e interpretación de endpoints:** Si el borrador ya contiene **## 6. Seguridad** con contenido (no solo "Pendiente"), **debes interpretarla** y aplicar en §4: (1) **Descubre endpoints:** Lee §6 y detecta **cada endpoint o capacidad de API** que mencione o implique (ej. "endpoint JWKS" o "JSON Web Key Set" → documenta en §4 `GET /auth/jwks` o `GET /.well-known/jwks.json` con response tipo `{ "keys": [...] }`; "endpoint para refresh_token" → `POST /auth/refresh`; MFA/TOTP → endpoints de verificación que §6 implique). Cierra gaps: si §6 dice que "se implementará" algo, ese algo debe aparecer en §4 con método, ruta y request/response. (2) No documentes en request/response campos que §6 indique que no deben persistirse. La aplicación es genérica: interpreta §6 para derivar todos los contratos de API que la seguridad exige.
 - PROHIBIDO "Pendiente: definir endpoints…". Escribe tabla resumen + endpoints con request/response en bloques de código json (tres backticks + json).
 - **Título exacto:** `## 4. Contratos de API`. Subsecciones `### MÉTODO /ruta`.
-- **Tabla resumen (formato obligatorio):** Debe ser una **tabla Markdown válida**. Primera línea: encabezados con pipes, ej. `| Método | Ruta | Descripción | Auth |`. Segunda línea: separador, ej. `|--------|------|-------------|------|`. Luego una fila por endpoint con pipes, ej. `| POST | /users/register | Register a new user | No |`. **PROHIBIDO** usar viñetas (asterisco o guion) para las filas de la tabla; solo filas con pipes para que el renderizado sea correcto.
+- **Tabla resumen:** Tabla Markdown estandar con `|` pipes. El pipeline normaliza automaticamente el padding, lineas en blanco tras separador y alignment. PROHIBIDO usar viñetas en vez de pipes.
+- **NO Swagger/OpenAPI ni esquemas de documentacion automatizada:** No generes objetos OpenAPI, ni `openapi: 3.0.0`, ni `paths:`, ni `components/schemas`. La seccion 4 debe ser markdown legible por humanos.
+- **Ejemplo concreto del formato esperado en §4 (no copies este ejemplo, es solo referencia visual):**
+  ```
+  | Método | Ruta                | Descripción                     | Auth |
+  |--------|---------------------|---------------------------------|------|
+  | POST   | /api/auth/register  | Registrar nuevo usuario         | No   |
+  | POST   | /api/auth/login     | Iniciar sesión                  | No   |
+  | GET    | /api/users/profile  | Obtener perfil del usuario      | JWT  |
+
+  ### POST /api/auth/register
+
+  Registra un nuevo usuario en el sistema.
+
+  **Request body:**
+  ```json
+  {
+    "email": "string",
+    "password": "string",
+    "name": "string"
+  }
+  ```
+
+  **Response 201:**
+  ```json
+  {
+    "id": "uuid",
+    "email": "string",
+    "name": "string",
+    "createdAt": "timestamp"
+  }
+  ```
+  ```
+  Observa que es markdown puro, sin `paths:`, sin `openapi:`, sin `components:`.
 - **Reglas mínimas:**
   - **Endpoints de Salud:** Incluye **obligatoriamente** un endpoint `/health` o `/status` para que Backstage (u orquestadores) monitoreen el servicio.
   - **Documentación de Payloads:** Cada objeto JSON (request/response) debe tener sus **tipos de datos** definidos (string, uuid, boolean, etc.).
@@ -149,9 +182,9 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
   - **Flujos Maestros:** Diagrama (Mermaid o viñetas) el flujo de **Error Global** y el flujo de **Middleware de Seguridad** que heredarán todos los demás servicios.
   - **Manejo de Excepciones:** Define cómo responde el sistema cuando la base de datos **no está disponible** (timeout, reintentos, mensaje al cliente).
 
-### 6 y 7 (placeholders)
+### 6 y 7 (preservar del borrador)
 
-- Dejar `## 6. Seguridad` y `## 7. Infraestructura` con texto tipo "(Pendiente: Arquitecto de Seguridad)", "(Pendiente: Ingeniero de Integración)".
+- **NO reemplaces ## 6. Seguridad ni ## 7. Infraestructura.** Si el borrador de entrada tiene contenido sustancial en esas secciones (más que "(Pendiente)"), **cópialas exactamente como están**. No las modifiques, no les pongas placeholders. Solo si el borrador tiene placeholders vacíos, déjalos así.
 
 ---
 
@@ -160,10 +193,11 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
 Antes de devolver el documento, haz una pasada de **auto-chequeo** (reflexión):
 
 1. **ACCIÓN REQUERIDA / requisitos del usuario / §6 Seguridad:** ¿He aplicado la ACCIÓN REQUERIDA o los requisitos del usuario en §3 y §4? ¿He **interpretado** **## 6. Seguridad** (si tiene contenido) para derivar todos los endpoints que menciona o implica (JWKS, refresh_token, MFA, etc.) y los he documentado en §4? Si §6 dice "se implementará un endpoint X", ¿está X en §4 con método, ruta y request/response? Si §6 indica "no persistir X": ¿lo eliminé de §3 y evité documentarlo en §4 donde implique persistencia?
-2. **Congruencia §3 ↔ §4:** cada campo en request/response de §4 tiene columna o relación en §3.
+2. **Sin Swagger/OpenAPI:** ¿La sección 4 NO contiene `openapi:`, `paths:`, `components:`, `schemas:` ni ningún formato de spec automatizado? ¿Es markdown puro con tabla de pipes y endpoints como `### MÉTODO /ruta`?
 3. **Sin 4.x en §2:** en la sección 2 no aparece ningún título tipo 4.1, 4.2 o "## 4. Arquitectura Frontend".
 4. **Siete secciones:** el documento tiene exactamente ## 1 a ## 7 en ese orden.
 5. **Sin placeholders en 2–5:** no hay "Pendiente", "TBD" ni "se definirá más adelante" en tus secciones.
+6. **Congruencia §3 ↔ §4:** cada campo en request/response de §4 tiene columna o relación en §3.
 
 Si algo falla en el punto 1, corrige §3 y §4 antes de entregar. Este self-check es un patrón de arquitectura de prompts (Reflection) para asegurar que la directiva del usuario quede reflejada.
 

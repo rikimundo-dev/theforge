@@ -362,7 +362,8 @@ export default function WorkshopView({
   const loading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
   const cascadeRunning = loading && (loadingReason === "deliverables-cascade" || loadingReason === "legacy-deliverables");
-  const cascadeProgress = useWorkshopStore((s) => s.agentProgress);
+  const cascadeCompleted = useWorkshopStore((s) => s.cascadeCompleted);
+  const cascadeTotal = useWorkshopStore((s) => s.cascadeTotal);
   const error = useWorkshopStore((s) => s.error);
   const setError = useWorkshopStore((s) => s.setError);
   const launchHermes = useWorkshopStore((s) => s.launchHermes);
@@ -516,6 +517,7 @@ export default function WorkshopView({
       let buffer = "";
       let result = "";
       let streamError: string | null = null;
+      let doneUxUiGuideContent: string | null = null;
       if (!reader) throw new Error("No reader");
       while (true) {
         const { done, value } = await reader.read();
@@ -536,6 +538,12 @@ export default function WorkshopView({
             const data = JSON.parse(dataStr) as Record<string, unknown>;
             if (eventType === "error" && data.error) {
               streamError = String(data.error);
+            } else if (eventType === "done") {
+              // The "done" event carries the actual document content
+              const uxVal = (data as Record<string, unknown>).uxUiGuideContent;
+              if (typeof uxVal === "string" && uxVal.trim().length > 0) {
+                doneUxUiGuideContent = uxVal;
+              }
             } else if (data.content) {
               result += data.content;
             }
@@ -547,27 +555,47 @@ export default function WorkshopView({
         throw new Error(streamError);
       }
 
-      const trimmed = result.trim();
-      // Strip any wrapping ```yaml or ```markdown fences the orchestrator might add
-      const cleaned = trimmed
-        .replace(/^```(?:yaml|markdown)\s*\n?/i, "")
-        .replace(/\n?```\s*$/i, "")
-        .trim();
-
-      if (!cleaned || !cleaned.startsWith("---")) {
-        // If the orchestrator didn't return YAML front matter, generate it
-        // from the markdown body (extract tokens, fill defaults, prepend YAML)
-        try {
-          const finalContent = replaceYamlFrontMatter(cleaned || result, projectName);
-          setUxUiGuideContent(finalContent);
-          await persistUxUiGuideContent(finalContent);
-        } catch {
-          setUxUiGuideContent(cleaned || result);
-          await persistUxUiGuideContent(cleaned || result);
+      // Prefer the document content from the "done" event (which the backend
+      // extracts before the ---FIN_UX_UI--- delimiter). The chunk events only
+      // carry the chat message after the delimiter.
+      if (doneUxUiGuideContent) {
+        // Apply replaceYamlFrontMatter in case the backend returned markdown
+        // without YAML frontmatter
+        if (!doneUxUiGuideContent.startsWith("---")) {
+          try {
+            const fixed = replaceYamlFrontMatter(doneUxUiGuideContent, projectName);
+            setUxUiGuideContent(fixed);
+            await persistUxUiGuideContent(fixed);
+          } catch {
+            setUxUiGuideContent(doneUxUiGuideContent);
+            await persistUxUiGuideContent(doneUxUiGuideContent);
+          }
+        } else {
+          setUxUiGuideContent(doneUxUiGuideContent);
+          await persistUxUiGuideContent(doneUxUiGuideContent);
         }
       } else {
-        setUxUiGuideContent(cleaned);
-        await persistUxUiGuideContent(cleaned);
+        const trimmed = result.trim();
+        let cleaned = trimmed
+          .replace(/^```(?:yaml|markdown)\s*\n?/i, "")
+          .replace(/\n?```\s*$/i, "")
+          .trim();
+        // Strip ---FIN_UX_UI--- delimiter and chat message
+        cleaned = cleaned.replace(/\n?-{1,}FIN_UX_UI-{1,}[\s\S]*$/i, "").trim();
+
+        if (!cleaned || !cleaned.startsWith("---")) {
+          try {
+            const finalContent = replaceYamlFrontMatter(cleaned || result, projectName);
+            setUxUiGuideContent(finalContent);
+            await persistUxUiGuideContent(finalContent);
+          } catch {
+            setUxUiGuideContent(cleaned || result);
+            await persistUxUiGuideContent(cleaned || result);
+          }
+        } else {
+          setUxUiGuideContent(cleaned);
+          await persistUxUiGuideContent(cleaned);
+        }
       }
       setUxGenerating(false);
       setUxGenProgress(null);
@@ -580,18 +608,46 @@ export default function WorkshopView({
     }
   }, [projectId, project, effectiveMddTrimmed, blueprintContent, specContent, setUxUiGuideContent, persistUxUiGuideContent, setError]);
 
-  /** Repara el YAML frontmatter de la design system desde el markdown existente.
-   * Útil cuando el contenido fue generado por una IA externa o copiado manualmente
-   * y no tiene el YAML frontmatter que DesignMdPreview necesita para el preview visual. */
-  const repairUxGuide = useCallback(() => {
+  /** Repara/regenera el YAML frontmatter de la guía UX/UI usando el MDD como contexto vía API.
+   * Si falla la API, hace reparación local (útil con contenido pegado sin frontmatter). */
+  const repairUxGuide = useCallback(async () => {
     const current = uxUiGuideContent ?? "";
-    if (!current.trim()) return;
-    const repaired = replaceYamlFrontMatter(current, projectName);
-    if (repaired !== current) {
-      setUxUiGuideContent(repaired);
-      persistUxUiGuideContent(repaired);
+    if (!projectId || !current.trim()) return;
+    setUxGenerating(true);
+    setUxGenProgress("Reparando YAML frontmatter…");
+    try {
+      const { apiFetch, API_BASE } = await import("../utils/apiClient");
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/repair-ux-ui-guide`, {
+        method: "POST",
+      });
+      if (!r.ok) throw new Error(`Error: ${r.status}`);
+      const yamlStr: string = await r.text();
+      if (!yamlStr.startsWith("---")) {
+        console.warn("[repairUxGuide] Response is not YAML frontmatter, falling back to local repair");
+        const repaired = replaceYamlFrontMatter(current, projectName);
+        if (repaired !== current) {
+          await persistUxUiGuideContent(repaired);
+        }
+        return;
+      }
+      // Strip existing YAML from the current content, keep the body
+      const bodyMatch = current.match(/^---[\s\S]*?\n---\n?\n?([\s\S]*)$/);
+      const body = bodyMatch?.[1]?.trim() ?? current.trim();
+      const newContent = yamlStr + "\n\n" + body;
+      // Let persistField handle the local state update (single re-render)
+      await persistUxUiGuideContent(newContent);
+    } catch (e) {
+      console.error("[repairUxGuide] API call failed, falling back to local repair:", e);
+      // Fallback: local regex-based repair
+      const repaired = replaceYamlFrontMatter(current, projectName);
+      if (repaired !== current) {
+        await persistUxUiGuideContent(repaired);
+      }
+    } finally {
+      setUxGenerating(false);
+      setUxGenProgress(null);
     }
-  }, [uxUiGuideContent, projectName, setUxUiGuideContent, persistUxUiGuideContent]);
+  }, [projectId, uxUiGuideContent, projectName, persistUxUiGuideContent, setUxGenerating, setUxGenProgress]);
 
   const persistArchitectureContent = useWorkshopStore((s) => s.persistArchitectureContent);
   const persistUseCasesContent = useWorkshopStore((s) => s.persistUseCasesContent);
@@ -670,7 +726,6 @@ export default function WorkshopView({
     | "mdd-inicial"
     | "spec"
     | "brd"
-    | "to-be"
     | "mdd"
     | "ux-ui-guide"
     | "blueprint"
@@ -681,8 +736,8 @@ export default function WorkshopView({
     | "use-cases"
     | "user-stories"
     | "infra"
-    | "adrs"
-    | "aem";
+    | "aem"
+    | "adrs";
   const centralPanel = useWorkshopStore((s) => s.workshopActiveDocPanel) as DocPanel;
   const setCentralPanel = useWorkshopStore((s) => s.setWorkshopActiveDocPanel);
   /** Por debajo de `lg`: una columna con control de Chat / Documentos / Semáforo. */
@@ -1952,7 +2007,7 @@ export default function WorkshopView({
                     </TooltipContent>
                   </Tooltip>
                 ) : null}
-                {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd", "to-be"] as const).includes(
+                {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd"] as const).includes(
                   centralPanel as any,
                 ) && (
                     (centralPanel === "spec" ||
@@ -1968,9 +2023,8 @@ export default function WorkshopView({
                       (centralPanel === "logic-flows" && logicFlowsContent) ||
                       (centralPanel === "infra" && infraContent) ||
                       (centralPanel === "mdd-inicial" && (activeLegacyState?.codebaseDoc || mddInicialLocalContent)) ||
-                      (centralPanel === "brd" && !!activeStageId) ||
-                      (centralPanel === "to-be" && !!activeStageId)) &&
-                    centralPanel !== "tasks" && (() => {
+                      (centralPanel === "brd" && !!activeStageId)) &&
+                     centralPanel !== "tasks" && (() => {
                       const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
                         mddViewMode,
                         mddInicialViewMode,
@@ -2216,7 +2270,7 @@ export default function WorkshopView({
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
-                      Reparar YAML frontmatter — genera el YAML estructurado desde el markdown existente
+                      Reparar YAML frontmatter — regenera tokens de diseño desde el MDD
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -2928,8 +2982,8 @@ export default function WorkshopView({
                               <Layers className="h-4 w-4 shrink-0" aria-hidden />
                             )}
                             {cascadeRunning
-                              ? cascadeProgress.length > 0
-                                ? `Generando ${cascadeProgress[0]?.message ?? "documentos…"}`
+                              ? cascadeCompleted > 0
+                                ? `Generando documentos (${cascadeCompleted}/${cascadeTotal})`
                                 : "Generando documentos…"
                               : "Generar todos los documentos"}
                           </button>
@@ -3039,6 +3093,7 @@ export default function WorkshopView({
             {centralPanel === "ux-ui-guide" && (
               <ErrorBoundary>
               <UxUiGuidePanel
+                key={uxUiGuideContent ? "populated" : "empty"}
                 content={uxUiGuideContent}
                 onContentChange={(v) => setUxUiGuideContent(v)}
                 onSave={() => {

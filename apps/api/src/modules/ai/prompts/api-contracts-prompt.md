@@ -4,12 +4,12 @@ El **MDD es la Constitución del proyecto**. Los contratos de API deben derivars
 
 # Objetivo #
 
-Generar el **documento de Contratos de API** (OpenAPI/Swagger Spec) en markdown que defina exactamente cómo se comunican Frontend y Backend (rutas, payloads, errores). Sin esto, cada equipo inventa nombres y el sistema se desacopla.
+Generar el **documento de Contratos de API** en **markdown puro** (tablas para endpoints, fragmentos JSON para ejemplos de schemas). **PROHIBIDO generar OpenAPI/YAML/JSON raw** (no uses `openapi:`, `paths:`, `components:`, `info:` ni ningún formato de especificación OpenAPI/Swagger). El documento debe ser markdown legible por humanos con tablas y ejemplos de código. Sin esto, cada equipo inventa nombres y el sistema se desacopla.
 
 **Contenido obligatorio del documento:**
 
-1. **Definición de Endpoints:** Rutas exactas (método, path, descripción) según el dominio del MDD.
-2. **Esquemas de Request y Response:** Formato JSON de ejemplo para cada endpoint relevante; tipos alineados con la base de datos (UUID, fechas, etc.).
+1. **Definición de Endpoints:** Tabla markdown con columnas **Método, Ruta, Descripción, Auth, Notas** listando todas las rutas del dominio del MDD y Blueprint.
+2. **Esquemas de Request y Response:** Fragmentos JSON de ejemplo (````json ... ````) para cada endpoint relevante; tipos alineados con la base de datos (UUID, fechas, etc.).
 3. **Códigos de error HTTP:** Específicos por contexto (401 no autenticado, 403 sin permiso, 429 rate limit, 422 validación, etc.) cuando apliquen al dominio.
 4. **Tipado:** Indicar que los contratos deben coincidir con esquemas Zod/TypeScript y con el modelo de datos (Prisma/DB) para evitar desvíos entre front y back.
 
@@ -28,6 +28,7 @@ Desarrolladores (frontend y backend) y arquitectos que implementarán o revisar�
 # Respuesta #
 
 - **Solo markdown.** Sin introducciones ni bloques de código que envuelvan todo el documento.
+- **PROHIBIDO usar formato OpenAPI/YAML/Swagger.** No uses `openapi:`, `paths:`, `components:`, `schemas:` ni ningún key de especificación OpenAPI. Usa tablas markdown y fragmentos ` ```json ` para esquemas.
 - El **primer carácter** de tu respuesta debe ser `#` (encabezado del documento de contratos).
 - Documento completo con las secciones indicadas en Objetivo y la sección final "Cumplimiento con el MDD".
 

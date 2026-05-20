@@ -1,9 +1,11 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatOpenAI } from "@langchain/openai";
 import {
+  hasChatModelFallback,
   resolveLangChainChatTemperature,
   resolvePrimaryChatRuntime,
 } from "../../ai/config/llm-config.js";
+import { OpenRouterFallbackChatModel } from "./openrouter-fallback-chat-model.js";
 
 /**
  * Factory for DBGA graph: mismo runtime que el adapter principal (OpenRouter).
@@ -14,15 +16,21 @@ import {
 );
 const LOG_TIMEOUT = () => console.log(`[createDbgaLLM] timeout=${LLM_TIMEOUT_MS}ms`);
 
-export function createDbgaLLM(): BaseChatModel {
+function buildChatOpenAI(model: string): ChatOpenAI {
   const r = resolvePrimaryChatRuntime();
-  const temperature = resolveLangChainChatTemperature(r);
-  LOG_TIMEOUT();
   return new ChatOpenAI({
-    model: r.chatModel,
-    temperature,
+    model,
+    temperature: resolveLangChainChatTemperature(r),
     timeout: LLM_TIMEOUT_MS,
     openAIApiKey: r.apiKey,
     configuration: { baseURL: r.baseURL },
   });
+}
+
+export function createDbgaLLM(): BaseChatModel {
+  LOG_TIMEOUT();
+  if (!hasChatModelFallback()) {
+    return buildChatOpenAI(resolvePrimaryChatRuntime().chatModel);
+  }
+  return new OpenRouterFallbackChatModel(buildChatOpenAI);
 }

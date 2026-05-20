@@ -7,7 +7,7 @@ function loadApiContractsPrompt(): string {
   try {
     return readFileSync(PROMPT_PATH, "utf-8").trim();
   } catch {
-    return `Genera el documento de Contratos de API (OpenAPI/Swagger) en markdown: endpoints, request/response JSON, códigos HTTP, tipado Zod/TypeScript. Basado en el MDD y Blueprint proporcionados. Solo markdown, primer carácter #.`;
+    return `Genera el documento de Contratos de API en markdown puro (tablas para endpoints con columnas Método, Ruta, Descripción, Auth, Notas). PROHIBIDO OpenAPI/YAML/Swagger. Basado en el MDD y Blueprint proporcionados. Solo markdown, primer carácter #.`;
   }
 }
 

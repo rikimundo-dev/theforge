@@ -130,7 +130,6 @@ export class SessionsService {
       currentBlueprintContent?: string;
       currentSpecContent?: string;
       currentBrdContent?: string;
-      currentToBeManualContent?: string;
       activeTab?: string;
       /** Override system prompt (ej. modo legacy con TheForge). */
       systemPrompt?: string;
@@ -191,7 +190,6 @@ export class SessionsService {
         currentBlueprintContent: options?.currentBlueprintContent,
         currentSpecContent: options?.currentSpecContent,
         currentBrdContent: options?.currentBrdContent,
-        currentToBeManualContent: options?.currentToBeManualContent,
         activeTab: options?.activeTab,
         learningHistory: learningHistory || undefined,
         systemPrompt: options?.systemPrompt,
@@ -220,7 +218,6 @@ export class SessionsService {
     let dbgaSplit = this.parser.splitDbgaAndChat(safeResponse);
     let specSplit = this.parser.splitDocAndChat(safeResponse, "SPEC");
     let brdSplit = this.parser.splitDocAndChat(safeResponse, "BRD");
-    const tobeSplit = this.parser.splitDocAndChat(safeResponse, "TOBE");
     let blueSplit = this.parser.splitDocAndChat(safeResponse, "BLUEPRINT");
     let apiSplit = this.parser.splitDocAndChat(safeResponse, "API");
     let flowsSplit = this.parser.splitDocAndChat(safeResponse, "FLOWS");
@@ -235,7 +232,6 @@ export class SessionsService {
     let hasDbga = dbgaSplit !== null;
     let hasSpec = specSplit !== null;
     let hasBrd = brdSplit !== null;
-    const hasTobe = tobeSplit !== null;
     let hasBlue = blueSplit !== null;
     let hasApi = apiSplit !== null;
     let hasFlows = flowsSplit !== null;
@@ -254,7 +250,6 @@ export class SessionsService {
     else if (hasDbga) rawChat = dbgaSplit!.chatPart;
     else if (hasSpec) rawChat = specSplit!.chatPart;
     else if (hasBrd) rawChat = brdSplit!.chatPart;
-    else if (hasTobe) rawChat = tobeSplit!.chatPart;
     else if (hasBlue) rawChat = blueSplit!.chatPart;
     else if (hasApi) rawChat = apiSplit!.chatPart;
     else if (hasFlows) rawChat = flowsSplit!.chatPart;
@@ -393,12 +388,11 @@ export class SessionsService {
     return {
       session: updatedSession,
       mddContent: finalMdd && finalMdd.length > 0 ? finalMdd : undefined,
-      uxUiGuideContent: uxDocPart ? this.parser.cleanDocumentContent(uxDocPart) : undefined,
+      uxUiGuideContent: hasUx ? this.parser.mergeUxUiGuideSectionOrUseFull(options?.currentUxUiGuideContent, this.parser.cleanDocumentContent(uxDocPart!)) : undefined,
       dbgaContent: dbgaDocPart ? this.parser.cleanDocumentContent(dbgaDocPart) : undefined,
       specContent: hasSpec ? this.parser.cleanDocumentContent(specSplit!.docPart) : undefined,
       brdContent: hasBrd ? this.parser.cleanDocumentContent(brdSplit!.docPart) : undefined,
-      toBeManualContent: hasTobe ? this.parser.cleanDocumentContent(tobeSplit!.docPart) : undefined,
-      blueprintContent: hasBlue ? this.parser.cleanDocumentContent(blueSplit!.docPart) : undefined,
+      blueprintContent: hasBlue ? this.parser.mergeDocSectionOrUseFull(options?.currentBlueprintContent, this.parser.cleanDocumentContent(blueSplit!.docPart)) : undefined,
       apiContractsContent: hasApi ? this.parser.cleanDocumentContent(apiSplit!.docPart) : undefined,
       logicFlowsContent: hasFlows ? this.parser.cleanDocumentContent(flowsSplit!.docPart) : undefined,
       tasksContent: hasTasks ? this.parser.cleanDocumentContent(tasksSplit!.docPart) : undefined,
@@ -422,7 +416,6 @@ export class SessionsService {
       currentBlueprintContent?: string;
       currentSpecContent?: string;
       currentBrdContent?: string;
-      currentToBeManualContent?: string;
       currentArchitectureContent?: string;
       currentUseCasesContent?: string;
       currentUserStoriesContent?: string;
@@ -495,7 +488,6 @@ export class SessionsService {
         currentBlueprintContent: options?.currentBlueprintContent,
         currentSpecContent: options?.currentSpecContent,
         currentBrdContent: options?.currentBrdContent,
-        currentToBeManualContent: options?.currentToBeManualContent,
         activeTab: options?.activeTab,
         learningHistory: learningHistory || undefined,
         systemPrompt: options?.systemPrompt,
@@ -509,7 +501,7 @@ export class SessionsService {
       throw err;
     }
 
-    const DOC_DELIMITER_RE = /-{1,}\s*FIN_(?:MDD|UX_UI|DBGA|SPEC|BRD|TOBE|BLUEPRINT|API|FLOWS|TASKS|INFRA|ARCH|USECASES|STORIES)\s*-{1,}/i;
+    const DOC_DELIMITER_RE = /-{1,}\s*FIN_(?:MDD|UX_UI|DBGA|SPEC|BRD|BLUEPRINT|API|FLOWS|TASKS|INFRA|ARCH|USECASES|STORIES)\s*-{1,}/i;
     let buffer = "";
     let documentChunksDone = false;
     for await (const chunk of stream) {
@@ -544,7 +536,6 @@ export class SessionsService {
     let dbgaSplit = this.parser.splitDbgaAndChat(safeResponse);
     let specSplit = this.parser.splitDocAndChat(safeResponse, "SPEC");
     let brdSplit = this.parser.splitDocAndChat(safeResponse, "BRD");
-    const tobeSplit = this.parser.splitDocAndChat(safeResponse, "TOBE");
     let blueSplit = this.parser.splitDocAndChat(safeResponse, "BLUEPRINT");
     let apiSplit = this.parser.splitDocAndChat(safeResponse, "API");
     let flowsSplit = this.parser.splitDocAndChat(safeResponse, "FLOWS");
@@ -559,7 +550,6 @@ export class SessionsService {
     let hasDbga = dbgaSplit !== null;
     let hasSpec = specSplit !== null;
     let hasBrd = brdSplit !== null;
-    const hasTobe = tobeSplit !== null;
     let hasBlue = blueSplit !== null;
     let hasApi = apiSplit !== null;
     let hasFlows = flowsSplit !== null;
@@ -578,7 +568,6 @@ export class SessionsService {
     else if (hasDbga) rawChat = dbgaSplit!.chatPart;
     else if (hasSpec) rawChat = specSplit!.chatPart;
     else if (hasBrd) rawChat = brdSplit!.chatPart;
-    else if (hasTobe) rawChat = tobeSplit!.chatPart;
     else if (hasBlue) rawChat = blueSplit!.chatPart;
     else if (hasApi) rawChat = apiSplit!.chatPart;
     else if (hasFlows) rawChat = flowsSplit!.chatPart;
@@ -692,12 +681,11 @@ export class SessionsService {
       type: "done",
       session: updatedSession,
       mddContent: finalMdd && finalMdd.length > 0 ? finalMdd : undefined,
-      uxUiGuideContent: uxDocPart ? this.parser.cleanDocumentContent(uxDocPart) : undefined,
+      uxUiGuideContent: hasUx ? this.parser.mergeUxUiGuideSectionOrUseFull(options?.currentUxUiGuideContent, this.parser.cleanDocumentContent(uxDocPart!)) : undefined,
       dbgaContent: dbgaDocPart ? this.parser.cleanDocumentContent(dbgaDocPart) : undefined,
       specContent: hasSpec ? this.parser.cleanDocumentContent(specSplit!.docPart) : undefined,
       brdContent: hasBrd ? this.parser.cleanDocumentContent(brdSplit!.docPart) : undefined,
-      toBeManualContent: hasTobe ? this.parser.cleanDocumentContent(tobeSplit!.docPart) : undefined,
-      blueprintContent: hasBlue ? this.parser.cleanDocumentContent(blueSplit!.docPart) : undefined,
+      blueprintContent: hasBlue ? this.parser.mergeDocSectionOrUseFull(options?.currentBlueprintContent, this.parser.cleanDocumentContent(blueSplit!.docPart)) : undefined,
       apiContractsContent: hasApi ? this.parser.cleanDocumentContent(apiSplit!.docPart) : undefined,
       logicFlowsContent: hasFlows ? this.parser.cleanDocumentContent(flowsSplit!.docPart) : undefined,
       tasksContent: hasTasks ? this.parser.cleanDocumentContent(tasksSplit!.docPart) : undefined,
@@ -745,16 +733,7 @@ export class SessionsService {
     if (activeTabNorm === "brd") {
       return `Hola${p}. En esta pestaña trabajamos el **BRD de la etapa**: problema, objetivos, alcance, riesgos (markdown en el panel + **Guardar** / **Aprobar BRD**).${tail}`;
     }
-    if (activeTabNorm === "to-be") {
-      return `Hola${p}. En **Manual To-Be** describes cómo debe **comportarse** el producto o el cambio (flujos, reglas, pantallas). El panel tiene **Guardar** / **Aprobar To-Be**; aquí refinamos por chat.${tail}`;
-    }
-    if (activeTabNorm === "ux-ui-guide") {
-      return `Hola${p}. Trabajaremos la **Guía UX/UI** (estilo, tokens, accesibilidad, etc.).${tail}`;
-    }
-    if (activeTabNorm === "benchmark") {
-      return `Hola${p}. En **Paso 0** refinamos el benchmark y las brechas.${tail}`;
-    }
-    return `Hola${p}. Continuamos cuando quieras con el documento activo.${tail}`;
+    return `Hola${p}.${tail}`;
   }
 
   /**
@@ -770,8 +749,6 @@ export class SessionsService {
       uxUiGuideContent?: string | null;
       /** BRD de la etapa (tab brd). */
       brdContent?: string | null;
-      /** Manual To-Be de la etapa (tab to-be). */
-      toBeManualContent?: string | null;
       chatLog?: ChatMessage[];
       activeTab?: string;
       stageId?: string;
@@ -787,12 +764,10 @@ export class SessionsService {
     const dbgaContent = (context.dbgaContent ?? "").trim();
     const uxUiGuideContent = (context.uxUiGuideContent ?? "").trim();
     const brdStageContent = (context.brdContent ?? "").trim();
-    const toBeStageContent = (context.toBeManualContent ?? "").trim();
     const activeTab = (context.activeTab ?? "mdd").trim().toLowerCase();
     const isBenchmarkTab = activeTab === "benchmark";
     const isUxUiGuideTab = activeTab === "ux-ui-guide";
     const isBrdTab = activeTab === "brd";
-    const isToBeTab = activeTab === "to-be";
 
     const activeTabHint = context.activeTab?.trim()
       ? ` El usuario tiene abierto el tab "${context.activeTab}": adapta tu mensaje EXCLUSIVAMENTE a ese documento (Paso 0 = Benchmark & Gap Analysis; MDD = Master Design Document; etc.).`
@@ -881,35 +856,6 @@ Saluda y propón construir el BRD a partir del benchmark (objetivos, alcance, ex
 Proyecto: ${context.projectName ?? "Sin nombre"}${activeTabHint}
 
 Saluda y lanza 1–2 preguntas clave para iniciar el BRD (problema de negocio, usuarios, éxito medible). Responde en un solo mensaje.`;
-    } else if (isToBeTab) {
-      syntheticPrompt =
-        chatLogForTab.length > 0
-          ? `El usuario está en el tab **Manual To-Be** (etapa). Ya hay conversación en este tab.
-Proyecto: ${context.projectName ?? "Sin nombre"}${activeTabHint}
-
-Historial de chat de este tab (últimos mensajes):
-${chatLogForTab.slice(-10).map((m) => `[${m.role}]: ${m.content.slice(0, 200)}${m.content.length > 200 ? "…" : ""}`).join("\n")}
-
-Retoma el hilo: saluda brevemente y propón la siguiente pregunta o mejora al To-Be. Si actualizas el documento, termina el markdown con \`---FIN_TOBE---\` y un mensaje breve después. Responde en un solo mensaje.`
-          : toBeStageContent.length > 0
-            ? `El usuario está en el tab **Manual To-Be**. Hay borrador guardado pero no hay mensajes en el chat de este tab.
-Proyecto: ${context.projectName ?? "Sin nombre"}${activeTabHint}
-
-Manual To-Be actual (fragmento):
----
-${toBeStageContent.slice(0, 3500)}${toBeStageContent.length > 3500 ? "\n…" : ""}
----
-
-Saluda y pregunta si quiere detallar flujos, reglas o casos borde. Responde en un solo mensaje.`
-            : brdStageContent.length > 0 || dbgaContent.length > 0
-              ? `El usuario está en el tab **Manual To-Be**. Aún no hay To-Be; usa el BRD de la etapa y/o el benchmark como contexto.
-Proyecto: ${context.projectName ?? "Sin nombre"}${activeTabHint}
-${brdStageContent.length > 0 ? `\nBRD (fragmento):\n---\n${brdStageContent.slice(0, 2500)}${brdStageContent.length > 2500 ? "\n…" : ""}\n---\n` : ""}${dbgaContent.length > 0 ? `\nBenchmark (fragmento):\n---\n${dbgaContent.slice(0, 2500)}${dbgaContent.length > 2500 ? "\n…" : ""}\n---\n` : ""}
-Saluda y propón redactar el Manual To-Be alineado a ese contexto. Si entregas borrador, termina con \`---FIN_TOBE---\`. Responde en un solo mensaje.`
-              : `El usuario está en el tab **Manual To-Be**. No hay To-Be ni BRD/benchmark en contexto.
-Proyecto: ${context.projectName ?? "Sin nombre"}${activeTabHint}
-
-Saluda y pregunta qué comportamiento deseado o reglas de negocio deben quedar documentados primero. Responde en un solo mensaje.`;
     } else {
       const hasContent = chatLogForTab.length > 0 || mddContent.length > 0;
       syntheticPrompt = hasContent
@@ -941,21 +887,13 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
 
     /** Guía meta para que el primer mensaje (welcome) no sea genérico ante “¿cómo se llena?” u omisión del usuario. */
     const brdWelcomeExtras = `
-[Instrucciones adicionales para tu respuesta única:]
-- Incluye una **mini-guía** (3–5 frases): qué es el BRD de etapa en The Forge, bloques típicos en markdown (problema, objetivos/KPIs, alcance, actores, riesgos), que el **panel** es editable con **Guardar** / **Aprobar BRD**, y que **aquí** refináis por chat.
-- Si el usuario pregunta explícitamente cómo rellenarlo, sé **concreto**; no pidas “área o proceso genérico” si ya hay **Benchmark** o **BRD** en el contexto de este prompt: **ancla** en ese texto.
-- Solo si entregas un **borrador BRD completo** nuevo desde el chat, termina el markdown con la línea exacta \`---FIN_BRD---\`. Si solo orientas o conversas, **sin** delimitador.`;
-
-    const toBeWelcomeExtras = `
-[Instrucciones adicionales para tu respuesta única:]
-- Incluye una **mini-guía** (3–5 frases): el **Manual To-Be** describe el comportamiento y reglas **deseadas** (flujos, if/then, pantallas, estados vacío/carga/error); el **BRD** fija problema y alcance de negocio; el **MDD** es el diseño técnico. El usuario edita en el **panel** (**Guardar** / **Aprobar To-Be**) y aquí itera contigo.
-- Si pregunta cómo rellenarlo, sé **concreto**; si hay **BRD** o **Benchmark** arriba, úsalos para proponer **un primer flujo o sección** a documentar, no preguntas genéricas desconectadas.
-- Solo si entregas un **borrador To-Be completo** nuevo desde el chat, termina el markdown con \`---FIN_TOBE---\`. Si solo orientas o conversas, **sin** delimitador.`;
+|[Instrucciones adicionales para tu respuesta única:]
+|- Incluye una **mini-guía** (3–5 frases): qué es el BRD de etapa en The Forge, bloques típicos en markdown (problema, objetivos/KPIs, alcance, actores, riesgos), que el **panel** es editable con **Guardar** / **Aprobar BRD**, y que **aquí** refináis por chat.
+|- Si el usuario pregunta explícitamente cómo rellenarlo, sé **concreto**; no pidas “área o proceso genérico” si ya hay **Benchmark** o **BRD** en el contexto de este prompt: **ancla** en ese texto.
+|- Solo si entregas un **borrador BRD completo** nuevo desde el chat, termina el markdown con la línea exacta \`---FIN_BRD---\`. Si solo orientas o conversas, **sin** delimitador.`;
 
     if (isBrdTab) {
       syntheticPrompt += brdWelcomeExtras;
-    } else if (isToBeTab) {
-      syntheticPrompt += toBeWelcomeExtras;
     }
 
     const activeTabForLlm = context.activeTab?.trim() || undefined;

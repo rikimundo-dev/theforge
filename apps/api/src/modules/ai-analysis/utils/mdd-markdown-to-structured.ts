@@ -52,6 +52,13 @@ export function markdownToMddStructured(draft: string): MddStructured {
   const section1 = getSectionBody(trimmed, /##\s*1\.\s*Contexto\s+y\s+alcance|##\s*Contexto\s+y\s+alcance/i);
   if (section1) out.contextoAlcance = section1;
 
+  // Section 2: Arquitectura y Stack
+  const sectionArquitecturaStack = getSectionBody(
+    trimmed,
+    /##\s*2\.\s*Arquitectura\s+y\s+Stack|##\s*Arquitectura\s+y\s+Stack|##\s*2\.\s*Arquitectura\s+y\s+stack/i,
+  );
+  if (sectionArquitecturaStack) out.arquitecturaStack = sectionArquitecturaStack;
+
   const sectionModeloDatos = getSectionBody(trimmed, /##\s*3\.\s*Modelo\s+(?:de\s+)?datos|##\s*2\.\s*Modelo\s+(?:de\s+)?datos|##\s*Modelo\s+de\s+datos/i);
   if (sectionModeloDatos) {
     const sql = extractSql(sectionModeloDatos);
@@ -69,11 +76,18 @@ export function markdownToMddStructured(draft: string): MddStructured {
     for (const m of h3Matches) {
       endpoints.push({ method: m[1].toUpperCase(), path: m[2].trim(), description: "" });
     }
-    if (endpoints.length) out.contratosApi = { summary: section3.slice(0, 500), endpoints };
+    out.contratosApi = { summary: section3.slice(0, 2000), endpoints: endpoints.length ? endpoints : undefined };
   }
 
   const section4 = getSectionBody(trimmed, /##\s*4\.\s*Arquitectura\s+Frontend|##\s*Arquitectura\s+Frontend/i);
   if (section4) out.arquitecturaFrontend = section4;
+
+  // Section 5: Lógica y Edge Cases
+  const sectionLogicaEdgeCases = getSectionBody(
+    trimmed,
+    /##\s*5\.\s*L[oó]gica\s+y\s+Edge\s+Cases|##\s*L[oó]gica\s+y\s+Edge\s+Cases|##\s*5\.\s*L[oó]gica\s+y\s+Casos\s+extremos/i,
+  );
+  if (sectionLogicaEdgeCases) out.logicaEdgeCases = sectionLogicaEdgeCases;
 
   const sectionSeg = getSectionBody(trimmed, /##\s+Seguridad/i);
   if (sectionSeg) {
@@ -95,13 +109,18 @@ export function markdownToMddStructured(draft: string): MddStructured {
 
   const sectionInt = getSectionBody(trimmed, /##\s+Integraci[oó]n/i);
   if (sectionInt) {
-    const subsections: Array<{ title: string; content: string | string[] }> = [];
+    const subsections: Array<{ title: string; content: string[] }> = [];
     const h3s = sectionInt.split(/(?=###\s+)/);
     for (const block of h3s) {
       const titleMatch = block.match(/^###\s+(.+?)(?:\n|$)/m);
       const title = titleMatch?.[1]?.trim() ?? "Integración";
-      const content = block.replace(/^###\s+[^\n]+\n?/m, "").trim();
-      if (title || content) subsections.push(mddIntegracionSubsectionSchema.parse({ title, content: content || "(Pendiente)" }));
+      const contentArr = block
+        .replace(/^###\s+[^\n]+\n?/m, "")
+        .split(/\n/)
+        .map((l) => l.replace(/^\s*[-*]\s+/, "").trim())
+        .filter(Boolean);
+      const content = contentArr.length ? contentArr : ["(Pendiente)"];
+      if (title) subsections.push(mddIntegracionSubsectionSchema.parse({ title, content }));
     }
     if (subsections.length) out.integracion = mddIntegracionWithManifestSchema.parse({ subsections });
   }

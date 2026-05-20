@@ -8,7 +8,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "test": "nest build && find dist -name '*.spec.js' -exec node --test {} +",
+    "test": "node --import tsx --test 'src/**/*.spec.ts'",
     "test:mcp-alignment": "nest build && node --test dist/apps/api/src/modules/theforge/theforge-mcp-tools-alignment.spec.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\""
   },
@@ -57,6 +57,7 @@
     "@types/nodemailer": "^7.0.11",
     "@types/passport-jwt": "^4.0.1",
     "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.3"
   }
 }

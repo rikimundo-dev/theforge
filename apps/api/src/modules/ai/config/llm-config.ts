@@ -31,7 +31,57 @@ export interface OpenRouterRuntime {
   apiKey: string;
   baseURL: string;
   chatModel: string;
+  /** Modelos de respaldo (sin el primario); vacío si no hay fallback configurado. */
+  chatModelFallbacks: string[];
   embeddingModel: string;
+}
+
+function dedupeModelsInOrder(models: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of models) {
+    if (!m || seen.has(m)) continue;
+    seen.add(m);
+    out.push(m);
+  }
+  return out;
+}
+
+function parseConfiguredChatFallbacks(): string[] {
+  const listRaw = process.env.OPENROUTER_CHAT_MODEL_FALLBACKS?.trim();
+  if (listRaw) {
+    return listRaw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  const single = process.env.OPENROUTER_CHAT_MODEL_FALLBACK?.trim();
+  if (single) return [single];
+  return [];
+}
+
+/**
+ * Cadena de chat: [primary, ...fallbacks] sin duplicados. Sin fallbacks en env → solo primary.
+ */
+export function resolveChatModelChain(): string[] {
+  const primary = process.env.OPENROUTER_CHAT_MODEL?.trim() || OPENROUTER_DEFAULT_CHAT_MODEL;
+  const configured = parseConfiguredChatFallbacks();
+  if (configured.length === 0) return [primary];
+  return dedupeModelsInOrder([primary, ...configured]);
+}
+
+export function hasChatModelFallback(): boolean {
+  return resolveChatModelChain().length > 1;
+}
+
+/**
+ * 429 → siguiente modelo solo si hay fallbacks y no está desactivado (`OPENROUTER_CHAT_FALLBACK_ON_429=0`).
+ */
+export function isChatFallbackOn429Enabled(): boolean {
+  if (!hasChatModelFallback()) return false;
+  const raw = process.env.OPENROUTER_CHAT_FALLBACK_ON_429?.trim().toLowerCase();
+  if (raw === "0" || raw === "false" || raw === "off" || raw === "no") return false;
+  return true;
 }
 
 export type PrimaryChatRuntime = OpenRouterRuntime;
@@ -45,10 +95,12 @@ export function resolvePrimaryChatRuntime(): OpenRouterRuntime {
     throw new Error("OPENROUTER_API_KEY (or AI_API_KEY / OPENAI_API_KEY) is required");
   }
   const baseURL = process.env.OPENROUTER_BASE_URL?.trim() || OPENROUTER_DEFAULT_BASE;
-  const chatModel = process.env.OPENROUTER_CHAT_MODEL?.trim() || OPENROUTER_DEFAULT_CHAT_MODEL;
+  const chain = resolveChatModelChain();
+  const chatModel = chain[0]!;
+  const chatModelFallbacks = chain.slice(1);
   const embeddingModel =
     process.env.OPENROUTER_EMBEDDING_MODEL?.trim() || OPENROUTER_DEFAULT_EMBEDDING_MODEL;
-  return { providerId: "openrouter", apiKey, baseURL, chatModel, embeddingModel };
+  return { providerId: "openrouter", apiKey, baseURL, chatModel, chatModelFallbacks, embeddingModel };
 }
 
 /**
@@ -60,6 +112,24 @@ export function resolveVisionModel(): string {
     process.env.OPENROUTER_CHAT_MODEL?.trim() ??
     OPENROUTER_DEFAULT_VISION_MODEL
   );
+}
+
+/**
+ * Cadena visión: primary + `VISION_MODEL_FALLBACK` o, si no hay, fallbacks de chat cuando existan.
+ */
+export function resolveVisionModelChain(): string[] {
+  const primary = resolveVisionModel();
+  const visionFallback = process.env.VISION_MODEL_FALLBACK?.trim();
+  if (visionFallback) {
+    return dedupeModelsInOrder([primary, visionFallback]);
+  }
+  if (hasChatModelFallback()) {
+    const chatFallbacks = resolveChatModelChain().slice(1);
+    if (chatFallbacks.length > 0) {
+      return dedupeModelsInOrder([primary, ...chatFallbacks]);
+    }
+  }
+  return [primary];
 }
 
 /**

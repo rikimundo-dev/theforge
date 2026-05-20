@@ -21,6 +21,16 @@
       "types": "./dist/mdd-pipeline-limits.d.ts",
       "import": "./dist/mdd-pipeline-limits.js",
       "require": "./dist/mdd-pipeline-limits.js"
+    },
+    "./markdown-table": {
+      "types": "./dist/markdown-table.d.ts",
+      "import": "./dist/markdown-table.js",
+      "require": "./dist/markdown-table.js"
+    },
+    "./mermaid": {
+      "types": "./dist/mermaid.d.ts",
+      "import": "./dist/mermaid.js",
+      "require": "./dist/mermaid.js"
     }
   },
   "scripts": {

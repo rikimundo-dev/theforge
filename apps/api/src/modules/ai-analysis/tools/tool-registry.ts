@@ -4,6 +4,7 @@ import { createScrapeUrlTool } from "./scrape-cheerio.tool.js";
 import {
   createValidateMddStructureTool,
   createSuggestMddDiagramsTool,
+  createGetProjectTablesTool,
 } from "./mdd-tools.js";
 import {
   createValidateSqlTool,
@@ -53,7 +54,7 @@ export function getMddAuditorTools(): StructuredToolInterface[] {
  * directamente en markdown, que es más confiable con modelos actuales.
  */
 export function getMddArchitectTools(): StructuredToolInterface[] {
-  return [];
+  return [createGetProjectTablesTool()];
 }
 
 /**

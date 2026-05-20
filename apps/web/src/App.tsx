@@ -67,6 +67,7 @@ interface Project {
   visibility?: "PRIVATE" | "SHARED";
   theforgeProjectId?: string | null;
   createdAt: string;
+  isFavorite?: boolean;
 }
 
 interface TheForgeProjectRoot {
@@ -185,6 +186,21 @@ export default function App() {
       setProjects(data as Project[]);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const handleToggleFavorite = useCallback(async (id: string) => {
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${id}/favorite`, {
+        method: "POST",
+      });
+      if (!r.ok) return;
+      const result = (await r.json()) as { favorited: boolean };
+      setProjects((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, isFavorite: result.favorited } : p)),
+      );
+    } catch {
+      // silencioso
     }
   }, []);
 
@@ -775,18 +791,20 @@ export default function App() {
               >
                 {displayedProjects.map((p) => (
                   <li key={p.id} className="min-h-0">
-                    <ProjectFolderTile
-                      id={p.id}
-                      name={p.name}
-                      status={p.status}
-                      precisionScore={p.precisionScore}
-                      projectType={p.projectType}
-                      visibility={p.visibility}
-                      selected={selectedProjectIds.includes(p.id)}
-                      selectable={isAdmin}
-                      onOpen={() => setWorkshopProject(p)}
-                      onToggleSelect={() => handleToggleProjectSelect(p.id)}
-                    />
+<ProjectFolderTile
+    id={p.id}
+    name={p.name}
+    status={p.status}
+    precisionScore={p.precisionScore}
+    projectType={p.projectType}
+    visibility={p.visibility}
+    selected={selectedProjectIds.includes(p.id)}
+    selectable={isAdmin}
+    isFavorite={p.isFavorite}
+    onToggleFavorite={handleToggleFavorite}
+    onOpen={() => setWorkshopProject(p)}
+    onToggleSelect={() => handleToggleProjectSelect(p.id)}
+/>
                   </li>
                 ))}
               </ul>

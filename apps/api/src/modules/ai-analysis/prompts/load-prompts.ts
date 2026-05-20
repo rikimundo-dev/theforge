@@ -128,3 +128,9 @@ export const MDD_CONSTITUTION_SKELETON_MARKDOWN = loadPrompt(
   "mdd-constitution-skeleton.md",
   "# Master Design Document — constitución (YAGNI)\n\nVer repositorio: prompts/mdd/mdd-constitution-skeleton.md",
 );
+
+export const MDD_LLM_FORMATTER_PROMPT = loadPrompt(
+  "mdd",
+  "mdd-formatter-prompt.md",
+  "Eres el Formateador del MDD. Recibes JSON estructurado y generas markdown limpio. Sin JSON keys en la salida.",
+);

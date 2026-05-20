@@ -1,18 +1,26 @@
-# Build stage — context = packages/mcp-server
+# Build stage — context = repo root (necesario para resolver @theforge/shared-types workspace)
 FROM node:20-alpine AS builder
 
-ARG BUILD_CACHE_BUST
+ARG BUILD_CACHE_BUST=73
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 WORKDIR /app
 
-# Copy only what we need
-COPY package.json tsconfig.json ./
-COPY src ./src
+# Copy workspace manifests
+COPY package.json turbo.json .npmrc ./
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/config/package.json packages/config/
+COPY packages/mcp-server/package.json packages/mcp-server/
 
-# Install deps and build
 RUN npm install
-RUN npx tsc
+
+# Copy all source code
+COPY packages/shared-types packages/shared-types
+COPY packages/config packages/config
+COPY packages/mcp-server packages/mcp-server
+
+# Build: compila shared-types y config primero, luego mcp-server
+RUN npx turbo run build --filter=@theforge/config --filter=@theforge/shared-types --filter=@theforge/mcp-server
 
 # Production stage
 FROM node:20-alpine AS runner
@@ -22,9 +30,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
+# Root package.json para que npm workspaces resuelva @theforge/*
 COPY --from=builder /app/package.json ./
+# node_modules raíz (npm workspaces hoists todo aquí, NO dentro de packages/*/)
+COPY --from=builder /app/node_modules ./node_modules
+# shared-types compilado (lo necesita @theforge/shared-types vía workspace symlink)
+COPY --from=builder /app/packages/shared-types/package.json ./packages/shared-types/
+COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
+
+# mcp-server compilado
+COPY --from=builder /app/packages/mcp-server/dist ./dist
+COPY --from=builder /app/packages/mcp-server/package.json ./
 
 EXPOSE 3100
 

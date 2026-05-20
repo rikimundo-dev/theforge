@@ -17,6 +17,9 @@ import {
   checkBlueprintSpanishQuality,
   checkBlueprintSelfContained,
   checkBlueprintTableFormat,
+  checkApiVsMdd,
+  checkLogicFlowsVsMdd,
+  checkInfraVsMdd,
   extractEntities,
   extractSection,
 } from "../engine/conformance.service.js";
@@ -262,7 +265,37 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       orderBy: { createdAt: "desc" },
       include: { stages: { orderBy: { ordinal: "asc" }, include: { estimation: true } } },
     });
-    return rows.map((p) => toApiProject(p));
+    const favoriteProjectIds = await this.getUserFavoriteIds(userId);
+    return rows.map((p) => ({
+      ...toApiProject(p),
+      isFavorite: favoriteProjectIds.has(p.id),
+    }));
+  }
+
+  async getUserFavoriteIds(userId?: string): Promise<Set<string>> {
+    const uid = userId ?? getRequestUserId();
+    const favs = await this.prisma.favoriteProject.findMany({
+      where: { userId: uid },
+      select: { projectId: true },
+    });
+    return new Set(favs.map((f) => f.projectId));
+  }
+
+  async toggleFavorite(projectId: string) {
+    const userId = getRequestUserId();
+    // Verificar acceso al proyecto (todos los proyectos visibles para el usuario)
+    await this.assertProjectAccess(projectId);
+    const existing = await this.prisma.favoriteProject.findUnique({
+      where: { userId_projectId: { userId, projectId } },
+    });
+    if (existing) {
+      await this.prisma.favoriteProject.delete({ where: { id: existing.id } });
+      return { favorited: false };
+    }
+    await this.prisma.favoriteProject.create({
+      data: { userId, projectId },
+    });
+    return { favorited: true };
   }
 
   async findOne(id: string) {
@@ -272,10 +305,17 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       where: { id },
       include: { sessions: true },
     });
-    return toApiProject({
-      ...project,
-      sessions: withSessions?.sessions ?? [],
+    const userId = getRequestUserId();
+    const fav = await this.prisma.favoriteProject.findUnique({
+      where: { userId_projectId: { userId, projectId: id } },
     });
+    return {
+      ...toApiProject({
+        ...project,
+        sessions: withSessions?.sessions ?? [],
+      }),
+      isFavorite: fav !== null,
+    };
   }
 
   async update(id: string, data: UpdateProjectDto) {
@@ -769,18 +809,148 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       currentBlueprintContent: bp || undefined,
       ...uxGuideLlmOptions(project),
     });
-    const clean = (raw ?? "").replace(/\n---FIN_UX_UI---.*/s, "").trim();
-    return this.update(projectId, { uxUiGuideContent: cleanDocumentContent(clean) });
+    const clean = (raw ?? "").replace(/\n?-{1,}FIN_UX_UI-{1,}[\s\S]*$/i, "").trim();
+    if (!clean) {
+      // LLM no generó contenido de documento (solo chat) — no persistas nada
+      this.logger.warn(`[generateUxUiGuide] LLM returned empty content for project ${projectId}`);
+      return project;
+    }
+    // Si el LLM no generó YAML frontmatter, agregar uno por defecto
+    let finalContent = cleanDocumentContent(clean);
+    if (!finalContent.startsWith("---")) {
+      const name = project.name ?? projectId;
+      finalContent = `---
+name: ${JSON.stringify(name)}
+---
+\n\n${finalContent}`;
+    }
+    return this.update(projectId, { uxUiGuideContent: finalContent });
   }
 
-  private async ensureBlueprintForApi(projectId: string): Promise<void> {
-    const project = await this.assertProjectAccess(projectId).catch(() => null);
-    if (!project) return;
-    if ((project.blueprintContent ?? "").trim().length > 48) return;
-    await this.generateBlueprint(projectId);
+  /**
+   * Repara/regenera solo el YAML frontmatter de la Guía UX/UI usando el MDD como contexto.
+   * NO regenera el cuerpo markdown — solo los tokens de diseño (colors, typography, etc.).
+   * Útil cuando el LLM generó el markdown pero sin YAML, o el YAML está incompleto.
+   */
+  async repairUxUiGuideYaml(projectId: string): Promise<string> {
+    const project = await this.assertProjectAccess(projectId);
+    const mdd = this.constitutionMarkdown(project);
+    const bp = (project.blueprintContent ?? "").trim();
+    const spec = (project.specContent ?? "").trim();
+    const name = project.name || projectId;
+
+    const repairPrompt =
+      `Eres un diseñador UX/UI experto. Genera ÚNICAMENTE el YAML frontmatter del archivo DESIGN.md ` +
+      `para el proyecto "${name}", basándote en el contexto del MDD, Blueprint y Spec que recibes.\n\n` +
+      `IMPORTANTE: Responde ÚNICAMENTE con el bloque YAML entre --- y ---. NO incluyas secciones markdown, ` +
+      `ni texto explicativo, ni bloques \`\`\` alrededor.\n\n` +
+      `El YAML debe tener esta estructura:\n` +
+      `---\n` +
+      `version: alpha\n` +
+      `name: "${name}"\n` +
+      `description: "Frase corta que capture la personalidad visual del proyecto"\n` +
+      `colors:\n` +
+      `  primary: "#<Hex>"\n` +
+      `  secondary: "#<Hex>"\n` +
+      `  tertiary: "#<Hex>"\n` +
+      `  neutral: "#<Hex>"\n` +
+      `  foreground: "#<Hex>"\n` +
+      `  background: "#<Hex>"\n` +
+      `  muted: "#<Hex>"\n` +
+      `  border: "#<Hex>"\n` +
+      `  danger: "#<Hex>"\n` +
+      `  success: "#<Hex>"\n` +
+      `  warning: "#<Hex>"\n` +
+      `  info: "#<Hex>"\n` +
+      `typography:\n` +
+      `  font-sans: ["Inter", "system-ui", "sans-serif"]\n` +
+      `  h1: { fontFamily: "...", fontSize: 32px, fontWeight: 700, lineHeight: 40px, letterSpacing: "-0.02em" }\n` +
+      `  h2: { similar }\n` +
+      `  h3: { similar }\n` +
+      `  body-md: { fontFamily: "...", fontSize: 16px, fontWeight: 400, lineHeight: 24px }\n` +
+      `  body-sm: { similar }\n` +
+      `  label-sm: { similar }\n` +
+      `rounded:\n` +
+      `  none: 0px\n` +
+      `  sm: 6px\n` +
+      `  md: 12px\n` +
+      `  lg: 20px\n` +
+      `  xl: 28px\n` +
+      `  full: 9999px\n` +
+      `spacing:\n` +
+      `  xxs: 2px\n` +
+      `  xs: 4px\n` +
+      `  sm: 8px\n` +
+      `  md: 16px\n` +
+      `  lg: 24px\n` +
+      `  xl: 32px\n` +
+      `  2xl: 48px\n` +
+      `  3xl: 64px\n` +
+      `elevation:\n` +
+      `  card: { boxShadow: "..." }\n` +
+      `  dropdown: { boxShadow: "..." }\n` +
+      `  modal: { boxShadow: "..." }\n` +
+      `  sticky: { boxShadow: "..." }\n` +
+      `components:\n` +
+      `  button-primary: { backgroundColor, textColor, rounded, padding, typography }\n` +
+      `  button-secondary: { ... }\n` +
+      `  button-ghost: { ... }\n` +
+      `  button-danger: { ... }\n` +
+      `  card: { ... }\n` +
+      `  badge: { ... }\n` +
+      `  input: { ... }\n` +
+      `  modal: { ... }\n` +
+      `  toast: { ... }\n` +
+      `  skeleton: { ... }\n` +
+      `---\n\n` +
+      `Contexto del proyecto:\n` +
+      `${mdd ? `## MDD\n${mdd.slice(0, 6000)}` : ""}\n\n` +
+      `${bp ? `## Blueprint\n${bp.slice(0, 4000)}` : ""}\n\n` +
+      `${spec ? `## Spec\n${spec.slice(0, 3000)}` : ""}\n\n` +
+      `NO incluyas secciones markdown, solo el bloque YAML.`;
+
+    const raw = await this.ai.generateResponse(repairPrompt, [], {
+      systemPrompt: UX_UI_GUIDE_PROMPT,
+      activeTab: "ux-ui-guide",
+      currentMddContent: mdd,
+      currentBlueprintContent: bp || undefined,
+      ...uxGuideLlmOptions(project),
+    });
+
+    const trimmed = (raw ?? "").trim();
+    // Extract YAML block (between --- markers)
+    const yamlMatch = trimmed.match(/^---\n([\s\S]*?)\n---/);
+    if (!yamlMatch) {
+      // Maybe the LLM returned just the YAML without --- markers, or with extra text
+      // Try to find any YAML-like structure
+      if (trimmed.startsWith("---")) {
+        // Already a frontmatter block, extract it
+        const endIdx = trimmed.indexOf("---", 3);
+        if (endIdx !== -1) {
+          return trimmed.slice(0, endIdx + 3);
+        }
+        return trimmed;
+      }
+      this.logger.warn(`[repairUxUiGuideYaml] No YAML block found in LLM response for ${projectId}`);
+      // Return minimal default YAML
+      return `---
+name: ${JSON.stringify(name)}
+---`;
+    }
+
+    return `---\n${yamlMatch[1]!.trim()}\n---`;
   }
 
-  private async runDeliverableStep(kind: DeliverableKind, projectId: string): Promise<void> {
+  /**
+   * [UNIFIED] Genera cualquier documento del pipeline. Usado tanto por la cascada
+   * (generateDeliverablesCascade) como por los endpoints individuales (controller.queueOrSync).
+   */
+  async generateDocument(
+    kind: DeliverableKind,
+    projectId: string,
+    options?: { gapsFeedback?: string | null },
+  ): Promise<void> {
+    const gaps = options?.gapsFeedback ?? undefined;
     switch (kind) {
       case "mdd_canonical":
         return;
@@ -794,14 +964,14 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         await this.generateUseCases(projectId);
         return;
       case "blueprint":
-        await this.generateBlueprint(projectId);
+        await this.generateBlueprint(projectId, gaps);
         return;
       case "api_contracts":
         await this.ensureBlueprintForApi(projectId);
-        await this.generateApiContracts(projectId);
+        await this.generateApiContracts(projectId, gaps);
         return;
       case "logic_flows":
-        await this.generateLogicFlows(projectId);
+        await this.generateLogicFlows(projectId, gaps);
         return;
       case "ux_ui_guide":
         await this.generateUxUiGuide(projectId);
@@ -813,13 +983,24 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         await this.generateTasks(projectId);
         return;
       case "infra":
-        await this.generateInfra(projectId);
+        await this.generateInfra(projectId, gaps);
         return;
       default: {
         const _exhaustive: never = kind;
         return _exhaustive;
       }
     }
+  }
+
+  private async ensureBlueprintForApi(projectId: string): Promise<void> {
+    const project = await this.assertProjectAccess(projectId).catch(() => null);
+    if (!project) return;
+    if ((project.blueprintContent ?? "").trim().length > 48) return;
+    await this.generateBlueprint(projectId);
+  }
+
+  private async runDeliverableStep(kind: DeliverableKind, projectId: string, options?: { gapsFeedback?: string | null }): Promise<void> {
+    return this.generateDocument(kind, projectId, options);
   }
 
   /**
@@ -842,20 +1023,80 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     const c = project.complexity ?? ComplexityLevel.HIGH;
     const deliverablesToRun = DELIVERABLES_BY_COMPLEXITY[c];
     const total = deliverablesToRun.length;
-    let index = 0;
     const errors: { step: string; error: string }[] = [];
+
+    // Map de nombres legibles para la UI
+    const stepLabel: Record<string, string> = {
+      mdd_canonical: "MDD Canonical",
+      blueprint: "Blueprint",
+      spec: "Spec",
+      architecture: "Arquitectura",
+      use_cases: "Casos de Uso",
+      user_stories: "Historias de Usuario",
+      ux_ui_guide: "Guía UX/UI",
+      api_contracts: "Contratos API",
+      logic_flows: "Flujos de Lógica",
+      tasks: "Tareas",
+      infra: "Infraestructura",
+    };
+
+    // [PARALELO] Todos los documentos son generaciones LLM independientes.
+    // No comparten estado ni LangGraph — cada uno se guarda directo a DB.
+    // Promise.allSettled asegura que si un paso falla, los demás continúan.
+    // Usamos contador atómico (no array index) para progreso real.
+// Recolectamos gaps de conformance existentes para pasarlos a cada generador.
+    const projectFresh = await this.findOne(projectId);
+    const mddContent = this.constitutionMarkdown(project);
+    const gapsMap = new Map<string, string | null>();
     for (const step of deliverablesToRun) {
-      try {
-        await this.runDeliverableStep(step, projectId);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : "Error desconocido";
-        this.logger.warn(`[Cascade] Paso ${step} saltado: ${message}. Continuando con el siguiente.`);
-        errors.push({ step, error: message });
+      const stepKey = step as string;
+      if (stepKey === "blueprint") {
+        const bp = projectFresh?.blueprintContent ?? "";
+        if (bp.trim().length > 80) {
+          const entityCheck = checkBlueprintDataModelVsMdd(mddContent, bp);
+          const sectionCheck = checkBlueprintSectionHeaders(bp);
+          const selfCheck = checkBlueprintSelfContained(bp);
+          const allGaps = entityCheck.gaps.concat(sectionCheck.gaps, selfCheck.gaps);
+          if (allGaps.length > 0) gapsMap.set("blueprint", allGaps.join("\n"));
+        }
+      } else if (stepKey === "api_contracts") {
+        const api = projectFresh?.apiContractsContent ?? "";
+        if (api.trim().length > 80) {
+          const apiCheck = checkApiVsMdd(mddContent, api);
+          const apiGaps = [...apiCheck.missingInApi, ...apiCheck.extraInApi];
+          if (apiGaps.length > 0) gapsMap.set("api_contracts", apiGaps.join("\n"));
+        }
+      } else if (stepKey === "logic_flows") {
+        const lf = projectFresh?.logicFlowsContent ?? "";
+        if (lf.trim().length > 80) {
+          const lfCheck = checkLogicFlowsVsMdd(mddContent, lf);
+          if (lfCheck.gaps.length > 0) gapsMap.set("logic_flows", lfCheck.gaps.join("\n"));
+        }
+      } else if (stepKey === "infra") {
+        const infra = projectFresh?.infraContent ?? "";
+        if (infra.trim().length > 80) {
+          const infraCheck = checkInfraVsMdd(mddContent, infra);
+          if (infraCheck.gaps.length > 0) gapsMap.set("infra", infraCheck.gaps.join("\n"));
+        }
       }
-      // Reportar progreso DESPUÉS de que el paso se completó, no antes
-      onProgress?.({ step, index, total });
-      index += 1;
     }
+    let completedCount = 0;
+    const stepList = [...deliverablesToRun];
+    await Promise.allSettled(
+      stepList.map(async (step) => {
+        try {
+          const stepGaps = gapsMap.get(step) ?? undefined;
+          await this.runDeliverableStep(step, projectId, stepGaps ? { gapsFeedback: stepGaps } : undefined);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : "Error desconocido";
+          this.logger.warn(`[Cascade] Paso ${step} saltado: ${message}.`);
+          errors.push({ step, error: message });
+        }
+        completedCount++;
+        const label = stepLabel[step] ?? step;
+        onProgress?.({ step: label as DeliverableKind, index: completedCount - 1, total });
+      }),
+    );
     // Señal de finalización: reportar un paso "done" para que el frontend sepa que terminó
     onProgress?.({ step: "done" as DeliverableKind, index: total, total });
     if (errors.length > 0) {

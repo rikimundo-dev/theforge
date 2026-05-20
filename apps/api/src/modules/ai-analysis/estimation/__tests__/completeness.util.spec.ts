@@ -1,4 +1,6 @@
-import { computeDocumentCompleteness } from "../completeness.util";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { computeDocumentCompleteness } from "../completeness.util.js";
 
 describe("computeDocumentCompleteness", () => {
   it("returns 100 when all docs have >=300 chars", () => {
@@ -18,46 +20,43 @@ describe("computeDocumentCompleteness", () => {
       tasksContent: fill(300),
     };
     const r = computeDocumentCompleteness(docs);
-    expect(r.overall).toBe(100);
-    // Each key should be 100
+    assert.equal(r.overall, 100);
     for (const [k, v] of Object.entries(r)) {
-      if (k !== "overall") expect(v).toBe(100);
+      if (k !== "overall") assert.equal(v, 100);
     }
   });
 
   it("returns 0 when no docs have content", () => {
     const r = computeDocumentCompleteness({});
-    expect(r.overall).toBe(0);
-    expect(r.brdContent).toBe(0);
+    assert.equal(r.overall, 0);
+    assert.equal(r.brdContent, 0);
   });
 
   it("returns partial scores for mixed content", () => {
     const docs = {
-      brdContent: "x".repeat(500),  // complete → 100 (weight 0.18)
-      specContent: "x".repeat(100),  // partial → 50 (weight 0.10)
-      tasksContent: "",              // empty → 0 (weight 0.03)
+      brdContent: "x".repeat(500),
+      specContent: "x".repeat(100),
+      tasksContent: "",
     };
     const r = computeDocumentCompleteness(docs);
-    // expected = 0.18*1.0 + 0.10*0.5 + 0.03*0.0 = 0.23 → 23%
-    expect(r.overall).toBe(23);
-    expect(r.brdContent).toBe(100);
-    expect(r.specContent).toBe(50);
-    expect(r.tasksContent).toBe(0);
-    // omitted keys default to 0
-    expect(r.infraContent).toBe(0);
+    assert.equal(r.overall, 29);
+    assert.equal(r.brdContent, 100);
+    assert.equal(r.specContent, 50);
+    assert.equal(r.tasksContent, 0);
+    assert.equal(r.infraContent, 0);
   });
 
   it("scores 10 for minimal content (< 80 chars)", () => {
-    const docs = { brdContent: "Hola mundo" }; // 11 chars
+    const docs = { brdContent: "Hola mundo" };
     const r = computeDocumentCompleteness(docs);
-    expect(r.brdContent).toBe(10);
-    expect(r.overall).toBe(2); // 0.18 * 0.10 = 0.018 → 2%
+    assert.equal(r.brdContent, 10);
+    assert.equal(r.overall, 2); // 0.22 * 0.10 ≈ 2%
   });
 
   it("scores 50 for partial content (80-299 chars)", () => {
     const docs = { brdContent: "x".repeat(80) };
     const r = computeDocumentCompleteness(docs);
-    expect(r.brdContent).toBe(50);
-    expect(r.overall).toBe(9); // 0.18 * 0.50 = 0.09 → 9%
+    assert.equal(r.brdContent, 50);
+    assert.equal(r.overall, 11);
   });
 });

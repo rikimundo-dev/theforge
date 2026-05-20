@@ -1,28 +1,30 @@
-import { computeCrossDocumentConsistency, extractConcepts } from "../consistency.util";
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { computeCrossDocumentConsistency, extractConcepts } from "../consistency.util.js";
 
 describe("extractConcepts", () => {
   it("extracts H2 titles", () => {
     const s = extractConcepts("## Módulo de Pagos\n## Facturación Electrónica");
-    expect(s.has("módulo de pagos")).toBe(true);
-    expect(s.has("facturación electrónica")).toBe(true);
+    assert.equal(s.has("módulo de pagos"), true);
+    assert.equal(s.has("facturación electrónica"), true);
   });
 
   it("extracts bold phrases", () => {
     const s = extractConcepts("El sistema **generará facturas** automáticamente.");
-    expect(s.has("generará facturas")).toBe(true);
+    assert.equal(s.has("generará facturas"), true);
   });
 
   it("returns empty for no concepts", () => {
     const s = extractConcepts("Esto es un texto corto.");
-    expect(s.size).toBe(0);
+    assert.equal(s.size, 0);
   });
 });
 
 describe("computeCrossDocumentConsistency", () => {
   it("returns score 50 when no source or target docs", () => {
     const r = computeCrossDocumentConsistency({});
-    expect(r.score).toBe(50);
-    expect(r.gaps).toHaveLength(0);
+    assert.equal(r.score, 50);
+    assert.equal(r.gaps.length, 0);
   });
 
   it("detects covered concept between BRD and Architecture", () => {
@@ -31,9 +33,7 @@ describe("computeCrossDocumentConsistency", () => {
       architectureContent: "## Pagos\nLa arquitectura soporta pagos con tarjeta y Paypal.\n",
     };
     const r = computeCrossDocumentConsistency(docs);
-    // "módulo de pagos" should be covered in architecture content (pagos appears)
-    // "pagos con tarjeta" should be covered
-    expect(r.score).toBeGreaterThanOrEqual(50);
+    assert.ok(r.score >= 50);
   });
 
   it("detects missing concept gap", () => {
@@ -42,9 +42,8 @@ describe("computeCrossDocumentConsistency", () => {
       architectureContent: "## Gestión de Usuarios\nSolo maneja registro y login.\n",
     };
     const r = computeCrossDocumentConsistency(docs);
-    // "facturación" and "facturas" not in architecture → gaps
-    expect(r.gaps.length).toBeGreaterThan(0);
-    expect(r.score).toBeLessThan(50);
+    assert.ok(r.gaps.length > 0);
+    assert.ok(r.score < 50);
   });
 
   it("returns 100 when all concepts are covered across all targets", () => {
@@ -55,17 +54,15 @@ describe("computeCrossDocumentConsistency", () => {
       logicFlowsContent: "Flujo de registro y flujo de pago recurrente.\n",
     };
     const r = computeCrossDocumentConsistency(docs);
-    expect(r.score).toBeGreaterThanOrEqual(80);
+    assert.ok(r.score >= 80);
   });
 
   it("handles empty or partial doc sets gracefully", () => {
     const docs = {
       brdContent: "## Solo BRD\n**Sin nada técnico** que no esté.\n",
-      // No target docs
     };
     const r = computeCrossDocumentConsistency(docs);
-    // No targets → neutral 50
-    expect(r.score).toBe(50);
-    expect(r.gaps).toHaveLength(0);
+    assert.equal(r.score, 50);
+    assert.equal(r.gaps.length, 0);
   });
 });

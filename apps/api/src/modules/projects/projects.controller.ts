@@ -204,6 +204,11 @@ export class ProjectsController {
     return this.queueOrSync(id, "tasks", {}, queue);
   }
 
+  @Post(":id/repair-ux-ui-guide")
+  repairUxUiGuide(@Param("id") id: string) {
+    return this.projects.repairUxUiGuideYaml(id);
+  }
+
   @Post(":id/generate-architecture")
   generateArchitecture(
     @Param("id") id: string,
@@ -299,6 +304,16 @@ export class ProjectsController {
       throw new ForbiddenException("Solo administradores pueden borrar proyectos");
     }
     return this.projects.remove(id);
+  }
+
+  @Get("favorites")
+  listFavorites() {
+    return this.projects.getUserFavoriteIds().then((s) => Array.from(s));
+  }
+
+  @Post(":id/favorite")
+  toggleFavorite(@Param("id") id: string) {
+    return this.projects.toggleFavorite(id);
   }
 
   /**
