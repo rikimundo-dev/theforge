@@ -613,6 +613,8 @@ export default function WorkshopView({
   const repairUxGuide = useCallback(async () => {
     const current = uxUiGuideContent ?? "";
     if (!projectId || !current.trim()) return;
+    setUxGenerating(true);
+    setUxGenProgress("Reparando YAML frontmatter…");
     try {
       const { apiFetch, API_BASE } = await import("../utils/apiClient");
       const r = await apiFetch(`${API_BASE}/projects/${projectId}/repair-ux-ui-guide`, {
@@ -624,8 +626,7 @@ export default function WorkshopView({
         console.warn("[repairUxGuide] Response is not YAML frontmatter, falling back to local repair");
         const repaired = replaceYamlFrontMatter(current, projectName);
         if (repaired !== current) {
-          setUxUiGuideContent(repaired);
-          persistUxUiGuideContent(repaired);
+          await persistUxUiGuideContent(repaired);
         }
         return;
       }
@@ -633,18 +634,20 @@ export default function WorkshopView({
       const bodyMatch = current.match(/^---[\s\S]*?\n---\n?\n?([\s\S]*)$/);
       const body = bodyMatch?.[1]?.trim() ?? current.trim();
       const newContent = yamlStr + "\n\n" + body;
-      setUxUiGuideContent(newContent);
-      persistUxUiGuideContent(newContent);
+      // Let persistField handle the local state update (single re-render)
+      await persistUxUiGuideContent(newContent);
     } catch (e) {
       console.error("[repairUxGuide] API call failed, falling back to local repair:", e);
       // Fallback: local regex-based repair
       const repaired = replaceYamlFrontMatter(current, projectName);
       if (repaired !== current) {
-        setUxUiGuideContent(repaired);
-        persistUxUiGuideContent(repaired);
+        await persistUxUiGuideContent(repaired);
       }
+    } finally {
+      setUxGenerating(false);
+      setUxGenProgress(null);
     }
-  }, [projectId, uxUiGuideContent, projectName, setUxUiGuideContent, persistUxUiGuideContent]);
+  }, [projectId, uxUiGuideContent, projectName, persistUxUiGuideContent, setUxGenerating, setUxGenProgress]);
 
   const persistArchitectureContent = useWorkshopStore((s) => s.persistArchitectureContent);
   const persistUseCasesContent = useWorkshopStore((s) => s.persistUseCasesContent);

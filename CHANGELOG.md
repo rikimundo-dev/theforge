@@ -2,6 +2,19 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.7.2] — 2026-05-21
+
+### Fixed
+
+- **Botón Reparar YAML en Guía UX/UI no mostraba loading:** `repairUxGuide` no establecía `uxGenerating`, por lo que no había spinner ni progreso visible. Ahora usa el mismo patrón que `generateUxGuideSequential`.
+- **React error #310 al reparar YAML:** `repairUxGuide` llamaba `setUxUiGuideContent()` + `persistUxUiGuideContent()` causando doble re-render y colapso de hooks. Se eliminó la llamada directa al store — `persistUxUiGuideContent` maneja todo el estado en un solo re-render vía `persistField`.
+
+### Changed
+
+- **N/A**
+
+---
+
 ## [0.7.1] — 2026-05-21
 
 ### Fixed
