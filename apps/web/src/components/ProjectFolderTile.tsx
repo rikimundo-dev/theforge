@@ -1,7 +1,7 @@
 /**
  * @fileoverview Folder tile with layered pocket, document peek on hover, and compact metadata.
  */
-import { Check, GitBranch, Sparkles } from "lucide-react";
+import { Check, GitBranch, Heart, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type ProjectFolderStatus = "ROJO" | "AMARILLO" | "VERDE";
@@ -15,8 +15,10 @@ export interface ProjectFolderTileProps {
   visibility?: "PRIVATE" | "SHARED";
   selected: boolean;
   selectable: boolean;
+  isFavorite?: boolean;
   onOpen: () => void;
   onToggleSelect: () => void;
+  onToggleFavorite?: (id: string) => void;
 }
 
 const statusDotClass: Record<ProjectFolderStatus, string> = {
@@ -101,8 +103,10 @@ export function ProjectFolderTile({
   visibility,
   selected,
   selectable,
+  isFavorite,
   onOpen,
   onToggleSelect,
+  onToggleFavorite,
 }: ProjectFolderTileProps) {
   const typeIsNew = (projectType ?? "NEW") === "NEW";
   const isShared = visibility === "SHARED";
@@ -153,6 +157,26 @@ export function ProjectFolderTile({
           </label>
         </div>
       ) : null}
+
+      {/* Heart — favoritos */}
+      {onToggleFavorite && (
+        <div
+          className="absolute right-2 top-2 z-30"
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); onToggleFavorite(id); }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <Heart
+            className={cn(
+              "h-5 w-5 cursor-pointer transition-all duration-150",
+              isFavorite
+                ? "scale-100 text-red-500"
+                : "scale-100 text-[var(--foreground-muted)] hover:scale-110 hover:text-red-400",
+            )}
+            fill={isFavorite ? "currentColor" : "none"}
+            strokeWidth={isFavorite ? 2 : 1.5}
+          />
+        </div>
+      )}
 
       <button
         type="button"
