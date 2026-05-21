@@ -7,6 +7,7 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 ### Added
 
 - **Enriquecimiento semántico UI/UX en MDD:** Nueva sección `## UI/UX Design Intent` añadida automáticamente al final del MDD. Clasifica cada entidad del modelo de datos (`CREATE TABLE` de §3) como `WorkflowProcess`, `DataRegistry` o `Configuration`; infiere lifecycle states con colores sugeridos; asigna `component_type` semántico (KanbanBoard, DataTable, PropertyGrid, etc.) y mapea props del modelo a props del componente. Implementado en `utils/mdd-enrich-uiux-intent.ts`; integrado en `prepareMddForOutput()` (chokepoint único de salida MDD). No altera contenido previo.
+- **Sección 8: UI Design System & Component Mapping en Blueprint:** Nueva sección anexada automáticamente al final del Blueprint. Clasifica las entidades del MDD §3 (`WorkflowProcess`, `DataRegistry`, `Configuration`), asigna componentes recomendados (KanbanBoard, DataTable, PropertyGrid), y especifica reglas de renderizado (prioridad de componente, estándar de formularios React Hook Form + Zod, responsive MobileStackView, validación de contrato previa). Implementado en `engine/blueprint-enrich-ui-system.ts`; integrado en `generateBlueprint()`. No altera secciones previas del Blueprint.
 
 ### Changed
 
