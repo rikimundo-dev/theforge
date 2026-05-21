@@ -28,14 +28,6 @@ Auth multi-usuario con OTP por email + JWT. Cada `User` tiene su propio `mcpSecr
 - **`GET /users/:id/mcp-secret`** — ver `mcpSecret` de cualquier usuario.
 - **`POST /users/:id/mcp-secret/regenerate`** — rotar `mcpSecret` de cualquier usuario.
 
-## Arranque: promover admins por email (`BOOTSTRAP_ADMIN_EMAILS`)
-
-Opcional. Lista separada por comas de emails que deben tener `role = admin` en la tabla `User`. En **cada arranque** del API se ejecuta un `updateMany` idempotente (solo filas que ya existen). Útil en el primer deploy multi-usuario o para recuperar acceso sin otro admin.
-
-- Definir en el entorno del servicio API (ej. Dokploy): `BOOTSTRAP_ADMIN_EMAILS=uno@dominio.com,dos@dominio.com`
-- El usuario debe **existir** en `User` (p. ej. ya hizo login/OTP antes); si aún no existe, el arranque loguea advertencia y en el próximo deploy (cuando ya exista) aplicará el rol.
-- El JWT del cliente sigue llevando el rol viejo hasta **nueva sesión** (cerrar sesión y OTP de nuevo).
-
 ## SMTP
 
 Variables: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_SECURE=1` solo si TLS directo, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (puede ser solo nombre visible; si no incluye `@`, se usa `SMTP_USER`). En producción son obligatorias para `requestOtp` salvo `OTP_DEV_EXPOSE_CODE=1`.
