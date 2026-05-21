@@ -20,6 +20,7 @@ import {
   normalizeProviderExtras,
   resolveConfigBaseUrl,
 } from "./provider-config.helpers.js";
+import { UserProvidersService } from "./user-providers.service.js";
 
 export interface UpsertProviderInstanceDto {
   providerType: string;
@@ -94,6 +95,7 @@ export class ProviderInstancesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenCrypto: TokenCryptoService,
+    private readonly userProviders: UserProvidersService,
   ) {}
 
   private assertCanManageInstances(role: string) {
@@ -113,11 +115,16 @@ export class ProviderInstancesService {
     }
   }
 
-  /** super_admin: todas; admin: solo las propias. */
+  /** super_admin: todas; admin: propias + instancias visibles para el equipo. */
   async listForManagement(actorUserId = getRequestUserId(), role = getRequestUserRole()) {
     this.assertCanManageInstances(role);
+    const where = isSuperAdmin(role)
+      ? undefined
+      : {
+          OR: [{ createdByUserId: actorUserId }, { enabledForUsers: true }],
+        };
     const rows = await this.prisma.providerInstance.findMany({
-      where: isSuperAdmin(role) ? undefined : { createdByUserId: actorUserId },
+      where,
       orderBy: [{ providerType: "asc" }, { slug: "asc" }],
     });
     return rows.map((r) =>
@@ -290,6 +297,12 @@ export class ProviderInstancesService {
     }
 
     const models = buildModelFields(providerType, dto);
+    if (isProviderId(providerType)) {
+      await this.userProviders.validateUserMayUseChatModels(actorUserId, providerType, [
+        models.chatModel,
+        ...models.chatModelFallbacks,
+      ]);
+    }
     const extras = normalizeProviderExtras(providerType, dto.extras ?? (existing?.extras as Record<string, unknown>));
     const baseUrl = resolveConfigBaseUrl(providerType, dto.baseUrl ?? existing?.baseUrl, extras);
 
