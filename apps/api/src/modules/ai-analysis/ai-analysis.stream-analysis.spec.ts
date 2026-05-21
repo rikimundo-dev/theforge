@@ -43,6 +43,21 @@ function createServiceWithMockGraph(): AiAnalysisService {
 }
 
 describe("AiAnalysisService.streamAnalysis", () => {
+  it("yields error INSUFFICIENT_IDEA sin invocar el grafo para saludos", async () => {
+    const service = createServiceWithMockGraph();
+    const events: Array<{ type: string; message?: string; code?: string }> = [];
+    await runWithRequestUserAsync("test-user", async () => {
+      for await (const event of service.streamAnalysis("Hola")) {
+        events.push(event);
+      }
+    });
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "error");
+    assert.equal(events[0].code, "INSUFFICIENT_IDEA");
+    assert.match(events[0].message ?? "", /Benchmark/i);
+  });
+
   it("yields error cuando createDbgaGraph falla antes de graph.stream", async () => {
     const service = createServiceWithMockGraph();
     (service as unknown as { createDbgaGraphFn: () => Promise<never> }).createDbgaGraphFn =

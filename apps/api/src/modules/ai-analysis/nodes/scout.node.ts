@@ -7,6 +7,7 @@ import {
   type DBGAStateType,
 } from "../state/index.js";
 import { z } from "zod";
+import { parseJsonOrThrow } from "../utils/parse-json.js";
 
 const scoutOutputSchema = z.object({
   domainClassification: z.string().optional(),
@@ -14,12 +15,6 @@ const scoutOutputSchema = z.object({
 });
 
 const MAX_TOOL_LOOPS = 5;
-
-function parseJsonOrThrow<T>(text: string, schema: z.ZodType<T>): T {
-  const stripped = text.replace(/^```json?\s*|\s*```$/g, "").trim();
-  const parsed = JSON.parse(stripped) as unknown;
-  return schema.parse(parsed);
-}
 
 function buildToolsByName(tools: StructuredToolInterface[]): Record<string, StructuredToolInterface> {
   const byName: Record<string, StructuredToolInterface> = {};
@@ -83,8 +78,14 @@ export function createScoutNode(
     if (!lastContent.trim()) {
       return { competitors: [], status: "researching" };
     }
-    const parsed = parseJsonOrThrow(lastContent, scoutOutputSchema);
-    const competitors = parsed.competitors.slice(0, 5);
+    let competitors: z.infer<typeof scoutOutputSchema>["competitors"] = [];
+    try {
+      const parsed = parseJsonOrThrow(lastContent, scoutOutputSchema);
+      competitors = parsed.competitors.slice(0, 5);
+    } catch {
+      // El modelo a veces responde en prosa (p. ej. saludo); no abortar todo el stream DBGA.
+      competitors = [];
+    }
     return {
       competitors,
       status: "researching",

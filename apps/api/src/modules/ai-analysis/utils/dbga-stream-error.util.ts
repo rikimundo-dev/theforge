@@ -19,6 +19,8 @@ export function formatDbgaStreamError(err: unknown): DbgaStreamErrorPayload {
   const isJsonParse =
     /unexpected non-whitespace character after json/i.test(raw) ||
     /no se encontró json válido/i.test(raw) ||
+    /is not valid json/i.test(raw) ||
+    /unexpected token/i.test(raw) ||
     (/json/i.test(raw) && /parse|syntax/i.test(raw));
   if (isRecursionLimit) {
     return { message: RECURSION_LIMIT_USER_MESSAGE };

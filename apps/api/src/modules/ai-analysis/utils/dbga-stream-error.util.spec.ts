@@ -38,4 +38,12 @@ describe("formatDbgaStreamError", () => {
     );
     assert.match(message, /formato inesperado/i);
   });
+
+  it("traduce SyntaxError con token inesperado (saludo del modelo)", () => {
+    const { message } = formatDbgaStreamError(
+      new SyntaxError('Unexpected token \'¡\', "¡Hola! 👋\\n"... is not valid JSON'),
+    );
+    assert.match(message, /formato inesperado/i);
+    assert.doesNotMatch(message, /Unexpected token/i);
+  });
 });
