@@ -47,6 +47,8 @@ model UserAISettings {
   /// Proveedor BYOK para embeddings cuando el activo no los expone (p. ej. anthropic).
   embeddingProvider      String?
   embeddingsEnabled      Boolean  @default(true)
+  /// Modelos de chat extra permitidos para este usuario (super_admin; unión con la instancia tenant).
+  allowedChatModels      String[] @default([])
   updatedAt              DateTime @updatedAt
 }
 

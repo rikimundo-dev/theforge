@@ -16,7 +16,8 @@ import { Public } from "../../common/decorators/public.decorator.js";
 import { AuthService } from "./auth.service.js";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard.js";
 import { getRequestUserId, getRequestUserRole } from "../../common/request-user.store.js";
-import { requireAdmin } from "../../common/guards/role.helpers.js";
+import { requireAdmin, requireSuperAdmin } from "../../common/guards/role.helpers.js";
+import { UserProvidersService } from "../user-providers/user-providers.service.js";
 
 const requestOtpSchema = z.object({
   email: z.string().email(),
@@ -152,12 +153,15 @@ export class AuthController {
 @Controller("users")
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly userProviders: UserProvidersService,
+  ) {}
 
   @Get()
   listUsers() {
     requireAdmin();
-    return this.auth.listUsers();
+    return this.auth.listUsers(getRequestUserRole());
   }
 
   @Patch(":id/role")
@@ -193,5 +197,23 @@ export class UsersController {
   regenerateMcpSecret(@Param("id") id: string) {
     requireAdmin();
     return this.auth.regenerateUserMcpSecretAdmin(id);
+  }
+
+  @Get(":id/allowed-chat-models")
+  getAllowedChatModels(@Param("id") id: string) {
+    requireSuperAdmin();
+    return this.userProviders.getUserChatModelGrants(id);
+  }
+
+  @Patch(":id/allowed-chat-models")
+  updateAllowedChatModels(
+    @Param("id") id: string,
+    @Body() body: { allowedChatModels?: string },
+  ) {
+    requireSuperAdmin();
+    if (body.allowedChatModels === undefined) {
+      throw new BadRequestException("allowedChatModels requerido");
+    }
+    return this.userProviders.updateUserAllowedChatModels(id, body.allowedChatModels);
   }
 }

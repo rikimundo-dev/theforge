@@ -14,6 +14,8 @@ import { JwtService } from "@nestjs/jwt";
 import { randomInt, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { PrismaService } from "../../prisma/prisma.service.js";
+import { isSuperAdmin } from "../../common/roles.js";
+import { UserProvidersService } from "../user-providers/user-providers.service.js";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_MS = 60 * 1000;
@@ -57,6 +59,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly userProviders: UserProvidersService,
   ) {}
 
   private smtpConfig():
@@ -587,20 +590,63 @@ export class AuthService {
     };
   }
 
-  /** Listar todos los usuarios (admin-only). */
-  async listUsers() {
+  /** Listar todos los usuarios (admin-only). super_admin recibe grants de modelos. */
+  async listUsers(actorRole: string) {
     const users = await this.prisma.user.findMany({
       orderBy: { createdAt: "asc" },
-      select: { id: true, email: true, role: true, name: true, mcpSecret: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        name: true,
+        mcpSecret: true,
+        createdAt: true,
+        ...(isSuperAdmin(actorRole)
+          ? {
+              aiSettings: {
+                select: {
+                  allowedChatModels: true,
+                  activeTenantInstanceId: true,
+                },
+              },
+            }
+          : {}),
+      },
     });
-    return users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      role: u.role,
-      name: u.name,
-      hasMcpSecret: !!u.mcpSecret,
-      createdAt: u.createdAt,
-    }));
+    const mapped = users.map((u) => {
+      const base = {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        name: u.name,
+        hasMcpSecret: !!u.mcpSecret,
+        createdAt: u.createdAt,
+      };
+      if (!isSuperAdmin(actorRole)) return base;
+      const settings = (u as {
+        aiSettings?: {
+          allowedChatModels: string[];
+          activeTenantInstanceId: string | null;
+        } | null;
+      }).aiSettings;
+      return {
+        ...base,
+        allowedChatModels: settings?.allowedChatModels ?? [],
+      };
+    });
+    if (!isSuperAdmin(actorRole)) return mapped;
+
+    const assignableChatModels = await this.userProviders.buildGlobalGrantAssignableChatModels();
+    const enriched = await Promise.all(
+      mapped.map(async (row) => {
+        const grants = await this.userProviders.getUserChatModelGrants(row.id);
+        return {
+          ...row,
+          allowedChatModels: grants.allowedChatModels,
+        };
+      }),
+    );
+    return { users: enriched, assignableChatModels };
   }
 
   /** Obtener mcpSecret de cualquier usuario (admin-only). Genera uno si falta. */

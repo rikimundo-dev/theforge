@@ -1,6 +1,7 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage } from "@langchain/core/messages";
 import { CRITIC_PROMPT } from "../prompts/load-prompts.js";
+import { parseJsonOrThrow } from "../utils/parse-json.js";
 import { criticDecisionSchema, type DBGAStateType } from "../state/index.js";
 import { z } from "zod";
 
@@ -21,8 +22,7 @@ export function createCriticNode(llm: BaseChatModel) {
     const prompt = `${CRITIC_PROMPT}\n\n---\n${context}`;
     const response = await llm.invoke([new HumanMessage(prompt)]);
     const text = typeof response.content === "string" ? response.content : "";
-    const stripped = text.replace(/^```json?\s*|\s*```$/g, "").trim();
-    const parsed = criticOutputSchema.parse(JSON.parse(stripped) as unknown);
+    const parsed = parseJsonOrThrow(text, criticOutputSchema);
     return {
       criticDecision: parsed.criticDecision,
       refinedQuery: parsed.refinedQuery ?? undefined,

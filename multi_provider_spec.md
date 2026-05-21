@@ -7,7 +7,7 @@ Cada usuario puede usar **instancias de proveedor a nivel tenant** (credenciales
 | Rol | Capacidades |
 |-----|-------------|
 | `super_admin` | CRUD de `ProviderInstance`, promover otros a `super_admin`, bypass de whitelist de modelos en instancias tenant |
-| `admin` | Gestión de usuarios, uso de instancias tenant habilitadas |
+| `admin` | Gestión de usuarios, uso de instancias tenant habilitadas; modelos extra asignados por `super_admin` en vista Usuarios |
 | `developer` | Uso de instancias tenant + BYOK personal |
 
 - Primer usuario (`POST /auth/register-first-admin`): `super_admin`.
@@ -32,8 +32,9 @@ Cada usuario puede usar **instancias de proveedor a nivel tenant** (credenciales
 1. Si hay instancia tenant `enabledForUsers` y el usuario tiene `activeTenantInstanceId` (o default del tenant) → runtime con credenciales de la instancia.
 2. Si no → BYOK personal (`UserProviderConfig` + `activeProvider`).
 3. Jobs BullMQ: mismo criterio con `job.data.userId` vía `runWithRequestUserAsync`.
-4. Modelos nuevos en catálogo: deshabilitados para no–super-admin hasta añadirlos a `allowedChatModels` / `allowedEmbeddingModels` de la instancia (lista vacía = solo modelos del catálogo publicados).
-5. Embeddings: instancia tenant si soporta; si no, `embeddingProvider` personal (p. ej. anthropic activo + openai para vectores).
+4. Modelos nuevos en catálogo: deshabilitados para no–super_admin hasta añadirlos a `allowedChatModels` de la instancia o a `UserAISettings.allowedChatModels` del usuario (vista Usuarios, separados por comas; deben estar en el pool de la instancia tenant activa).
+5. Lista vacía en instancia = solo modelos del catálogo publicados; grants por usuario se unen a la whitelist efectiva en runtime.
+6. Embeddings: instancia tenant si soporta; si no, `embeddingProvider` personal (p. ej. anthropic activo + openai para vectores).
 
 ## Flujo BYOK personal (respaldo)
 
@@ -57,6 +58,7 @@ EMBEDDING_DIM=1536
 - `20260519120000_user_provider_byok` — tablas base BYOK
 - `20260519130000_user_provider_stt_embeddings` — `embeddingProvider`, `chatModelFallbacks`, `embeddingDimension`, `sttModel`
 - `20260519140000_super_admin_provider_instances` — `ProviderInstance`, `activeTenantInstanceId`, rol `super_admin`, migración de `UserProviderConfig` → instancias legacy
+- `20260520120000_user_allowed_chat_models` — `UserAISettings.allowedChatModels` (grants por usuario desde vista Usuarios)
 
 ## Rotación de clave maestra
 

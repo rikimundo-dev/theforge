@@ -16,7 +16,18 @@ export function formatDbgaStreamError(err: unknown): DbgaStreamErrorPayload {
   const raw = err instanceof Error ? err.message : "Error en el análisis";
   const isRecursionLimit =
     /recursion limit/i.test(raw) || /GRAPH_RECURSION/i.test(raw);
-  return {
-    message: isRecursionLimit ? RECURSION_LIMIT_USER_MESSAGE : raw,
-  };
+  const isJsonParse =
+    /unexpected non-whitespace character after json/i.test(raw) ||
+    /no se encontró json válido/i.test(raw) ||
+    (/json/i.test(raw) && /parse|syntax/i.test(raw));
+  if (isRecursionLimit) {
+    return { message: RECURSION_LIMIT_USER_MESSAGE };
+  }
+  if (isJsonParse) {
+    return {
+      message:
+        "El modelo devolvió una respuesta con formato inesperado. Vuelve a intentar o prueba otro proveedor o modelo en Ajustes.",
+    };
+  }
+  return { message: raw };
 }

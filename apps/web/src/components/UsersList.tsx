@@ -22,6 +22,12 @@ interface UserRow {
   name: string | null;
   hasMcpSecret: boolean;
   createdAt: string;
+  allowedChatModels?: string[];
+}
+
+interface UsersListPayload {
+  users: UserRow[];
+  assignableChatModels: string[];
 }
 
 interface SecretState {
@@ -46,6 +52,27 @@ const EMPTY_SECRET: SecretState = {
   error: null,
 };
 
+function formatRoleLabel(role: UserRow["role"]): string {
+  switch (role) {
+    case "super_admin":
+      return "Super admin";
+    case "admin":
+      return "Admin";
+    case "developer":
+      return "Developer";
+  }
+}
+
+function canEditUserRole(
+  viewerIsSuperAdmin: boolean,
+  targetRole: UserRow["role"],
+  isSelf: boolean,
+): boolean {
+  if (isSelf) return false;
+  if (targetRole === "super_admin" && !viewerIsSuperAdmin) return false;
+  return true;
+}
+
 async function copyToClipboard(text: string): Promise<void> {
   try {
     await navigator.clipboard.writeText(text);
@@ -59,8 +86,21 @@ async function copyToClipboard(text: string): Promise<void> {
   }
 }
 
+function parseUsersResponse(
+  raw: UserRow[] | UsersListPayload,
+): { users: UserRow[]; assignableChatModels: string[] } {
+  if (Array.isArray(raw)) {
+    return { users: raw, assignableChatModels: [] };
+  }
+  return {
+    users: raw.users ?? [],
+    assignableChatModels: raw.assignableChatModels ?? [],
+  };
+}
+
 export function UsersList() {
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [assignableChatModels, setAssignableChatModels] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState("");
@@ -71,6 +111,9 @@ export function UsersList() {
   const [roleActionError, setRoleActionError] = useState<string | null>(null);
   const [openSecretFor, setOpenSecretFor] = useState<string | null>(null);
   const [secrets, setSecrets] = useState<Record<string, SecretState>>({});
+  const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
+  const [savingModelsFor, setSavingModelsFor] = useState<string | null>(null);
+  const [modelsActionError, setModelsActionError] = useState<string | null>(null);
 
   const me = getStoredUser();
   const myId = me?.id ?? "";
@@ -88,17 +131,63 @@ export function UsersList() {
     try {
       const r = await apiFetch(`${API_BASE}/users`);
       if (r.ok) {
-        const data = (await r.json()) as UserRow[];
-        setUsers(data);
+        const raw = (await r.json()) as UserRow[] | UsersListPayload;
+        const { users: list, assignableChatModels: pool } = parseUsersResponse(raw);
+        setUsers(list);
+        setAssignableChatModels(pool);
+        if (isSuperAdmin) {
+          const modelDraft: Record<string, string> = {};
+          for (const u of list) {
+            modelDraft[u.id] = (u.allowedChatModels ?? []).join(", ");
+          }
+          setModelDrafts(modelDraft);
+        }
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isSuperAdmin]);
 
   useEffect(() => {
-    loadUsers();
+    void loadUsers();
   }, [loadUsers]);
+
+  const handleSaveAllowedModels = async (userId: string) => {
+    setSavingModelsFor(userId);
+    setModelsActionError(null);
+    try {
+      const r = await apiFetch(`${API_BASE}/users/${userId}/allowed-chat-models`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowedChatModels: modelDrafts[userId] ?? "" }),
+      });
+      if (!r.ok) {
+        const data = (await r.json().catch(() => ({}))) as { message?: string | string[] };
+        const msg = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+        throw new Error(msg ?? "No se pudieron guardar los modelos");
+      }
+      const data = (await r.json()) as {
+        allowedChatModels: string[];
+        assignableChatModels?: string[];
+      };
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId ? { ...u, allowedChatModels: data.allowedChatModels } : u,
+        ),
+      );
+      setModelDrafts((prev) => ({
+        ...prev,
+        [userId]: data.allowedChatModels.join(", "),
+      }));
+      if (data.assignableChatModels?.length) {
+        setAssignableChatModels(data.assignableChatModels);
+      }
+    } catch (e) {
+      setModelsActionError(e instanceof Error ? e.message : "Error al guardar modelos");
+    } finally {
+      setSavingModelsFor(null);
+    }
+  };
 
   const handleRoleChange = async (
     userId: string,
@@ -298,6 +387,11 @@ export function UsersList() {
           {roleActionError}
         </p>
       )}
+      {modelsActionError && (
+        <p className="text-sm text-[var(--destructive)] rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-3 py-2">
+          {modelsActionError}
+        </p>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 py-4 text-[var(--foreground-muted)]">
@@ -329,13 +423,9 @@ export function UsersList() {
                       className="text-sm rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-1 font-medium capitalize text-[var(--foreground)]"
                       title="Tu rol solo puede cambiarlo otro administrador"
                     >
-                      {u.role === "super_admin"
-                        ? "Super admin"
-                        : u.role === "admin"
-                          ? "Admin"
-                          : "Developer"}
+                      {formatRoleLabel(u.role)}
                     </span>
-                  ) : (
+                  ) : canEditUserRole(isSuperAdmin, u.role, isSelf) ? (
                     <select
                       value={u.role}
                       onChange={(e) =>
@@ -350,6 +440,10 @@ export function UsersList() {
                       <option value="admin">Admin</option>
                       <option value="developer">Developer</option>
                     </select>
+                  ) : (
+                    <span className="text-sm rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-1 font-medium text-[var(--foreground)]">
+                      {formatRoleLabel(u.role)}
+                    </span>
                   )}
                   <button
                     onClick={() => toggleSecret(u.id)}
@@ -382,6 +476,49 @@ export function UsersList() {
                   )}
                 </div>
               </div>
+
+              {isSuperAdmin && u.role !== "super_admin" ? (
+                <div className="border-t border-[var(--border)] px-3 py-3 space-y-2 bg-[var(--muted)]/20">
+                  <label
+                    htmlFor={`models-${u.id}`}
+                    className="block text-xs font-medium text-[var(--foreground)]"
+                  >
+                    Modelos de chat permitidos (compartidos)
+                  </label>
+                  <p className="text-[11px] text-[var(--foreground-muted)]">
+                    Separa con comas. Puedes escribir cualquier identificador de modelo; el usuario
+                    solo podrá usar los que guardes aquí (debe coincidir con el modelo del
+                    proveedor activo en Ajustes).
+                  </p>
+                  <Input
+                    id={`models-${u.id}`}
+                    value={modelDrafts[u.id] ?? ""}
+                    onChange={(e) =>
+                      setModelDrafts((prev) => ({ ...prev, [u.id]: e.target.value }))
+                    }
+                    placeholder="minimax/minimax-m2.5, openai/gpt-4o-mini"
+                    disabled={savingModelsFor === u.id}
+                    className="text-xs font-mono"
+                  />
+                  {assignableChatModels.length > 0 ? (
+                    <details className="text-[10px] text-[var(--foreground-muted)]">
+                      <summary className="cursor-pointer select-none">
+                        Sugerencias del sistema ({assignableChatModels.length}, opcional)
+                      </summary>
+                      <p className="mt-1 break-words">{assignableChatModels.join(", ")}</p>
+                    </details>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={savingModelsFor === u.id}
+                    onClick={() => void handleSaveAllowedModels(u.id)}
+                  >
+                    {savingModelsFor === u.id ? "Guardando…" : "Guardar modelos"}
+                  </Button>
+                </div>
+              ) : null}
 
               {isOpen && (
                 <div className="border-t border-[var(--border)] p-3 space-y-3 bg-[var(--muted)]/30">

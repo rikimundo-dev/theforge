@@ -181,13 +181,14 @@ function normalizeMermaidFirstLineKeywords(content: string): string {
 const MERMAID_DIAGRAM_START =
   /^\s*(erDiagram(?:\s+|\n|$)|flowchart\s+(?:TD|TB|LR|RL|BT)\b|graph\s+(?:TD|TB|LR|RL|BT)\b|sequenceDiagram(?:\s+|\n|$)|stateDiagram(?:-v2)?(?:\s+|\n|$)|classDiagram(?:\s+|\n|$)|pie(?:\s+|\n|$)|gantt(?:\s+|\n|$)|journey(?:\s+|\n|$)|gitGraph(?:\s+|\n|$)|mindmap(?:\s+|\n|$)|timeline(?:\s+|\n|$)|blockDiagram(?:\s+|\n|$)|quadrantChart(?:\s+|\n|$)|xychart(?:\s+|\n|$)|requirementDiagram(?:\s+|\n|$))/i;
 
-/** True si el contenido parece un diagrama Mermaid (empieza por un tipo válido o tiene clase language-mermaid). */
-function looksLikeMermaidBlock(source: string, className?: string): boolean {
+/**
+ * True solo si el contenido es sintaxis Mermaid reconocible.
+ * `language-mermaid` por sí solo no basta: el LLM a veces envuelve BRD/MDD en ```mermaid por error.
+ */
+function looksLikeMermaidBlock(source: string, _className?: string): boolean {
   const trimmed = source.trim();
   if (!trimmed) return false;
-  const hasMermaidLang =
-    typeof className === "string" && className.toLowerCase().includes("language-mermaid");
-  return hasMermaidLang || MERMAID_DIAGRAM_START.test(trimmed);
+  return MERMAID_DIAGRAM_START.test(trimmed);
 }
 
 /** Theme tokens so preview text stays readable in light mode (avoids zinc-300 on pale backgrounds). */

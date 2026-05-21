@@ -1,20 +1,28 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@theforge/database";
 import type { ProviderInstance } from "@theforge/database";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { TokenCryptoService } from "../crypto/token-crypto.service.js";
 import {
   PROVIDER_CATALOG,
-  isChatModelWhitelisted,
+  catalogChatModels,
+  globalGrantAssignableChatModels,
+  isChatModelAllowedForTenantUser,
   isEmbeddingModelWhitelisted,
   isProviderId,
   listProviderCatalog,
+  parseChatModelList,
   resolveEmbeddingDimensionForModel,
   type ProviderId,
 } from "../ai/providers/provider-catalog.js";
+import { isSuperAdmin } from "../../common/roles.js";
 import type { UserLLMRuntime } from "../ai/providers/llm-runtime.types.js";
 import { getRequestUserId } from "../../common/request-user.store.js";
-import { isSuperAdmin } from "../../common/roles.js";
 import {
   buildModelFields,
   maskApiKeyHint,
@@ -59,10 +67,125 @@ export class UserProvidersService {
       activeTenantInstanceId: row?.activeTenantInstanceId ?? null,
       embeddingProvider: row?.embeddingProvider ?? null,
       embeddingsEnabled: row?.embeddingsEnabled ?? true,
+      allowedChatModels: row?.allowedChatModels ?? [],
     };
   }
 
+  /** Catálogo + modelos/fallbacks de proveedores visibles para el equipo. */
+  async buildGlobalGrantAssignableChatModels(): Promise<string[]> {
+    const teamRows = await this.prisma.providerInstance.findMany({
+      where: { enabledForUsers: true },
+      select: {
+        providerType: true,
+        chatModel: true,
+        chatModelFallbacks: true,
+        allowedChatModels: true,
+      },
+    });
+    return globalGrantAssignableChatModels(teamRows);
+  }
+
+  /** super_admin: grants de modelos por usuario (vista de usuarios). */
+  async getUserChatModelGrants(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, email: true, role: true },
+    });
+    if (!user) throw new NotFoundException("Usuario no encontrado");
+    const settings = await this.prisma.userAISettings.findUnique({ where: { userId: targetUserId } });
+    return {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      allowedChatModels: settings?.allowedChatModels ?? [],
+      assignableChatModels: await this.buildGlobalGrantAssignableChatModels(),
+    };
+  }
+
+  /** super_admin: modelos permitidos para un admin/dev (sin cambiar su proveedor activo). */
+  async updateUserAllowedChatModels(targetUserId: string, modelsRaw: string) {
+    const target = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { role: true },
+    });
+    if (!target) throw new NotFoundException("Usuario no encontrado");
+    if (target.role === "super_admin") {
+      throw new BadRequestException("No se asignan grants de modelos a otro super_admin");
+    }
+
+    const models = parseChatModelList(modelsRaw);
+    for (const model of models) {
+      if (model.length < 2 || model.length > 256) {
+        throw new BadRequestException(
+          `Nombre de modelo no válido: «${model}». Usa entre 2 y 256 caracteres.`,
+        );
+      }
+    }
+
+    const existing = await this.prisma.userAISettings.findUnique({ where: { userId: targetUserId } });
+    const row = await this.prisma.userAISettings.upsert({
+      where: { userId: targetUserId },
+      create: {
+        userId: targetUserId,
+        activeProvider: existing?.activeProvider ?? "openrouter",
+        activeTenantInstanceId: existing?.activeTenantInstanceId ?? undefined,
+        allowedChatModels: models,
+      },
+      update: { allowedChatModels: models },
+    });
+    return {
+      userId: targetUserId,
+      allowedChatModels: row.allowedChatModels,
+    };
+  }
+
+  /** Admin: solo modelos que el super_admin compartió o los del catálogo del proveedor. */
+  async validateUserMayUseChatModels(
+    userId: string,
+    provider: ProviderId,
+    modelIds: string[],
+  ): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (!user || isSuperAdmin(user.role)) return;
+
+    const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
+    const grants = settings?.allowedChatModels ?? [];
+    const toCheck = modelIds.filter((m) => m.trim().length > 0);
+
+    if (grants.length > 0) {
+      const invalid = toCheck.filter((m) => !grants.includes(m));
+      if (invalid.length > 0) {
+        throw new BadRequestException(
+          `Modelo no autorizado: ${invalid.join(", ")}. El super_admin te permitió: ${grants.join(", ")}`,
+        );
+      }
+      return;
+    }
+
+    const catalog = catalogChatModels(provider);
+    const invalid = toCheck.filter((m) => !catalog.includes(m));
+    if (invalid.length > 0) {
+      throw new BadRequestException(
+        `Modelo no válido para «${provider}»: ${invalid.join(", ")}. Usa un modelo del catálogo o pide al super_admin que te habilite modelos.`,
+      );
+    }
+  }
+
   async updateSettings(dto: UpdateAISettingsDto, userId = getRequestUserId()) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    if (user?.role === "developer") {
+      if (dto.activeTenantInstanceId !== undefined || dto.activeProvider !== undefined) {
+        throw new ForbiddenException(
+          "Los developers usan el proveedor predeterminado configurado por el super_admin",
+        );
+      }
+    }
     if (dto.activeTenantInstanceId !== undefined && dto.activeTenantInstanceId !== null) {
       const inst = await this.prisma.providerInstance.findFirst({
         where: {
@@ -162,6 +285,10 @@ export class UserProvidersService {
       throw new BadRequestException("La clave API es obligatoria");
     }
     const models = buildModelFields(provider, dto);
+    await this.validateUserMayUseChatModels(userId, provider, [
+      models.chatModel,
+      ...models.chatModelFallbacks,
+    ]);
     const extras = normalizeProviderExtras(provider, dto.extras);
     const baseUrl = resolveConfigBaseUrl(provider, dto.baseUrl, extras);
     const { ciphertext, keyVersion } = this.tokenCrypto.encrypt(key);
@@ -270,7 +397,7 @@ export class UserProvidersService {
     if (tenant && isProviderId(tenant.providerType)) {
       const tenantProvider = tenant.providerType;
       const catalog = PROVIDER_CATALOG[tenantProvider];
-      const bypass = await this.userBypassesWhitelist(userId);
+      const bypass = await this.userBypassesModelPolicy(userId);
       const embModel = tenant.embeddingModel ?? catalog.defaultEmbeddingModel;
       if (
         catalog.supportsEmbeddings &&
@@ -321,12 +448,14 @@ export class UserProvidersService {
     return { ...runtime, sttModel };
   }
 
-  private async userBypassesWhitelist(userId: string): Promise<boolean> {
+  /** super_admin y admin: eligen proveedor activo sin restricción por grants de Usuarios. */
+  private async userBypassesModelPolicy(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true },
     });
-    return isSuperAdmin(user?.role ?? "developer");
+    const role = user?.role ?? "developer";
+    return role === "super_admin" || role === "admin";
   }
 
   private instanceAccessibleByUser(userId: string): Prisma.ProviderInstanceWhereInput {
@@ -338,7 +467,14 @@ export class UserProvidersService {
     };
   }
 
-  private async resolveTenantInstanceForUser(userId: string): Promise<ProviderInstance | null> {
+  /**
+   * Proveedor activo del usuario:
+   * 1) Instancia marcada como «Activa» (activeTenantInstanceId).
+   * 2) Si no hay selección, la del equipo con isTenantDefault.
+   * 3) Si no hay default, la primera visible del equipo.
+   * Las instancias personales solo aplican si el usuario las eligió en el paso 1.
+   */
+  async resolveEffectiveTenantInstanceForUser(userId: string): Promise<ProviderInstance | null> {
     const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
     const access = this.instanceAccessibleByUser(userId);
     if (settings?.activeTenantInstanceId) {
@@ -347,14 +483,18 @@ export class UserProvidersService {
       });
       if (chosen) return chosen;
     }
-    const personal = await this.prisma.providerInstance.findFirst({
-      where: { createdByUserId: userId, enabledForUsers: false },
-      orderBy: { updatedAt: "desc" },
-    });
-    if (personal) return personal;
-    return this.prisma.providerInstance.findFirst({
+    const tenantDefault = await this.prisma.providerInstance.findFirst({
       where: { enabledForUsers: true, isTenantDefault: true },
     });
+    if (tenantDefault) return tenantDefault;
+    return this.prisma.providerInstance.findFirst({
+      where: { enabledForUsers: true },
+      orderBy: { displayName: "asc" },
+    });
+  }
+
+  private async resolveTenantInstanceForUser(userId: string): Promise<ProviderInstance | null> {
+    return this.resolveEffectiveTenantInstanceForUser(userId);
   }
 
   private async runtimeFromTenantInstance(
@@ -366,20 +506,27 @@ export class UserProvidersService {
       throw new BadRequestException("Instancia tenant con tipo de proveedor no válido");
     }
     const provider = instance.providerType;
-    const bypass = await this.userBypassesWhitelist(userId);
+    const bypass = await this.userBypassesModelPolicy(userId);
     const catalog = PROVIDER_CATALOG[provider];
     const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
+    const userGrants = settings?.allowedChatModels ?? [];
+    const chatModel = instance.chatModel;
 
     if (
-      !isChatModelWhitelisted(
+      !isChatModelAllowedForTenantUser(
+        chatModel,
+        userGrants,
         provider,
-        instance.chatModel,
         instance.allowedChatModels,
         bypass,
       )
     ) {
+      const hint =
+        userGrants.length > 0
+          ? `Modelos permitidos para ti: ${userGrants.join(", ")}. Activa un proveedor cuyo modelo esté en esa lista.`
+          : `Pide al super_admin modelos en Usuarios o revisa el proveedor «${instance.displayName}».`;
       throw new BadRequestException(
-        `El modelo de chat «${instance.chatModel}» no está permitido en la instancia tenant «${instance.displayName}»`,
+        `El modelo «${chatModel}» del proveedor activo «${instance.displayName}» no está autorizado. ${hint}`,
       );
     }
 
@@ -409,17 +556,22 @@ export class UserProvidersService {
           ? legacyFallbacks.filter((m): m is string => typeof m === "string" && m.length > 0)
           : [];
 
-    for (const fallbackModel of chatModelFallbacks) {
+    const effectiveFallbacks =
+      userGrants.length > 0
+        ? chatModelFallbacks.filter((m) => userGrants.includes(m))
+        : chatModelFallbacks;
+    for (const fallbackModel of effectiveFallbacks) {
       if (
-        !isChatModelWhitelisted(
-          provider,
+        !isChatModelAllowedForTenantUser(
           fallbackModel,
+          userGrants,
+          provider,
           instance.allowedChatModels,
           bypass,
         )
       ) {
         throw new BadRequestException(
-          `El modelo de respaldo «${fallbackModel}» no está permitido en la instancia tenant «${instance.displayName}»`,
+          `El modelo de respaldo «${fallbackModel}» no está autorizado.`,
         );
       }
     }
@@ -428,8 +580,8 @@ export class UserProvidersService {
       providerId: provider,
       apiKey,
       baseURL: resolveRuntimeBaseUrl(provider, instance.baseUrl, extras),
-      chatModel: instance.chatModel,
-      chatModelFallbacks,
+      chatModel,
+      chatModelFallbacks: effectiveFallbacks,
       embeddingModel,
       embeddingDimension: resolveEmbeddingDimensionForModel(
         provider,
@@ -439,7 +591,7 @@ export class UserProvidersService {
       embeddingsEnabled: settings?.embeddingsEnabled ?? true,
       sttModel: instance.sttModel ?? catalog.defaultSttModel,
       visionModel:
-        (typeof extras.visionModel === "string" && extras.visionModel.trim()) || instance.chatModel,
+        (typeof extras.visionModel === "string" && extras.visionModel.trim()) || chatModel,
       extras,
     };
   }

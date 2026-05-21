@@ -30,6 +30,7 @@ export function ProviderInstancesCard() {
   const user = getStoredUser();
   const role = user?.role;
   const isSuperAdmin = role === "super_admin";
+  const isDeveloper = role === "developer";
   const canManage = canManageInstances(role);
 
   const [instances, setInstances] = useState<ProviderInstanceSummary[]>([]);
@@ -48,21 +49,14 @@ export function ProviderInstancesCard() {
     setError("");
     try {
       const settingsPromise = fetchUserAISettings();
-      if (canManage) {
-        const [list, settings] = await Promise.all([
-          fetchAllProviderInstances(),
-          settingsPromise,
-        ]);
-        setInstances(list);
-        setUserSettings(settings);
-      } else {
-        const [list, settings] = await Promise.all([
-          fetchEnabledProviderInstances(),
-          settingsPromise,
-        ]);
-        setInstances(list);
-        setUserSettings(settings);
-      }
+      // Admin y super_admin: GET /provider-instances (equipo + propias).
+      // Developer: GET /provider-instances/enabled (solo las que puede usar).
+      const fetchInstances = canManage
+        ? fetchAllProviderInstances
+        : fetchEnabledProviderInstances;
+      const [list, settings] = await Promise.all([fetchInstances(), settingsPromise]);
+      setInstances(list);
+      setUserSettings(settings);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar instancias");
     } finally {
@@ -133,9 +127,17 @@ export function ProviderInstancesCard() {
 
   const description = canManage
     ? isSuperAdmin
-      ? "Crea instancias para el equipo (visibles con el interruptor) o personales. Los administradores solo ven las suyas."
-      : "Tus instancias personales: solo tú las usas. El super_admin gestiona las del equipo."
-    : "Elige la instancia de proveedor que usarás en el taller.";
+      ? "Crea proveedores para el equipo (visibles con el interruptor) o personales. Los administradores ven los del equipo y pueden crear los suyos."
+      : "Proveedores del equipo (solo lectura) y los personales que crees. Marca cualquiera como Activa (Usar); el default del equipo solo aplica si no eliges ninguno."
+    : isDeveloper
+      ? "Usas el proveedor predeterminado del equipo configurado por el super_admin. No puedes cambiarlo aquí."
+      : "Marca uno como Activa (Usar). Si no eliges ninguno, se usa el predeterminado del equipo.";
+
+  function canMutateInstance(inst: ProviderInstanceSummary) {
+    if (!canManage) return false;
+    if (isSuperAdmin) return true;
+    return inst.createdByUserId === user?.id;
+  }
 
   return (
     <>
@@ -248,21 +250,25 @@ export function ProviderInstancesCard() {
                     </div>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-1">
-                    <Button
-                      type="button"
-                      variant={isActive ? "default" : "outline"}
-                      size="sm"
-                      disabled={isActive || activatingId === inst.id}
-                      onClick={() => void handleSetActive(inst)}
-                    >
-                      {activatingId === inst.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Star className="h-4 w-4" />
-                      )}
-                      {isActive ? "Activa" : "Usar"}
-                    </Button>
-                    {canManage ? (
+                    {!isDeveloper ? (
+                      <Button
+                        type="button"
+                        variant={isActive ? "default" : "outline"}
+                        size="sm"
+                        disabled={isActive || activatingId === inst.id}
+                        onClick={() => void handleSetActive(inst)}
+                      >
+                        {activatingId === inst.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Star className="h-4 w-4" />
+                        )}
+                        {isActive ? "Activa" : "Usar"}
+                      </Button>
+                    ) : isActive ? (
+                      <Badge className="text-xs">Predeterminado</Badge>
+                    ) : null}
+                    {canMutateInstance(inst) ? (
                       <>
                         <Button
                           type="button"

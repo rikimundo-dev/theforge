@@ -31,4 +31,11 @@ describe("formatDbgaStreamError", () => {
     );
     assert.equal(formatDbgaStreamError("fallo genérico").message, "Error en el análisis");
   });
+
+  it("traduce errores de parseo JSON del LLM", () => {
+    const { message } = formatDbgaStreamError(
+      new SyntaxError("Unexpected non-whitespace character after JSON at position 105"),
+    );
+    assert.match(message, /formato inesperado/i);
+  });
 });

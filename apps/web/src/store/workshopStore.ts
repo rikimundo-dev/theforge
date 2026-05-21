@@ -6,11 +6,19 @@ import {
   parseErrorMessageFromResponse,
 } from "../utils/httpError";
 import { isModelsUnavailableStreamError } from "../utils/llm-stream-error";
+import { parseNdjsonLine } from "../utils/ndjson";
 
 /**
  * Convierte mensajes de error de fetch del navegador (Safari "Load failed", Chrome "Failed to fetch")
  * a mensajes amigables en español.
  */
+async function throwStreamHttpError(res: Response, fallback: string): Promise<never> {
+  const { message, code } = await parseApiErrorPayloadFromResponse(res, fallback);
+  const err = new Error(message) as Error & { code?: string };
+  if (code) err.code = code;
+  throw err;
+}
+
 function friendlyFetchError(e: unknown): string {
   if (e instanceof Error) {
     const msg = e.message;
@@ -1229,22 +1237,21 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
             for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed) continue;
+              for (const event of parseNdjsonLine(line)) {
               try {
-                const event = JSON.parse(trimmed) as { type: string; agent?: string; markdown?: string; message?: string; precision?: number; status?: string; precisionBreakdown?: PrecisionBreakdown };
-                if (event.type === "progress" && event.agent != null && event.message != null) {
-                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: event.agent!, message: event.message! }] }));
-                } else if (event.type === "done" && event.markdown != null && event.markdown.trim().length > 80) {
-                  set({ mddContent: event.markdown });
+                const ev = event as { type: string; agent?: string; markdown?: string; message?: string; precision?: number; status?: string; precisionBreakdown?: PrecisionBreakdown };
+                if (ev.type === "progress" && ev.agent != null && ev.message != null) {
+                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
+                } else if (ev.type === "done" && ev.markdown != null && ev.markdown.trim().length > 80) {
+                  set({ mddContent: ev.markdown });
                   const { persistMddContent, fetchProject, fetchEstimation, fetchConformance } = get();
-                  await persistMddContent(event.markdown, { force: true });
+                  await persistMddContent(ev.markdown, { force: true });
                   await fetchProject(projectId);
                   fetchEstimation(projectId).catch(() => { });
                   fetchConformance(projectId).catch(() => { });
                   const current = get();
                   set({
-                    project: current.project ? { ...current.project, mddContent: event.markdown } : null,
+                    project: current.project ? { ...current.project, mddContent: ev.markdown } : null,
                     loading: false,
                     loadingReason: null,
                     agentProgress: [],
@@ -1267,18 +1274,18 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     set({ session: sess });
                   }
                   return;
-                } else if (event.type === "blocked" && event.message) {
+                } else if (ev.type === "blocked" && ev.message) {
                   set({
-                    error: String(event.message),
+                    error: String(ev.message),
                     loading: false,
                     loadingReason: null,
                     agentProgress: [],
                     evaluatorCritique: null,
                   });
                   return;
-                } else if (event.type === "error" && event.message) {
+                } else if (ev.type === "error" && ev.message) {
                   set({
-                    ...streamErrorPatch(event as { message: string; code?: string }),
+                    ...streamErrorPatch(ev as { message: string; code?: string }),
                     loading: false,
                     loadingReason: null,
                     agentProgress: [],
@@ -1288,6 +1295,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 }
               } catch {
                 // ignore parse
+              }
               }
             }
           }
@@ -1391,8 +1399,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             body: JSON.stringify(body),
           });
           if (!r.ok) {
-            const err = await r.json().catch(() => ({}));
-            throw new Error(err.message ?? "Error en el flujo MDD");
+            await throwStreamHttpError(r, "Error en el flujo MDD");
           }
           const reader = r.body?.getReader();
           const decoder = new TextDecoder();
@@ -1405,10 +1412,9 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
               const lines = buffer.split("\n");
               buffer = lines.pop() ?? "";
               for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed) continue;
+                for (const raw of parseNdjsonLine(line)) {
                 try {
-                  const event = JSON.parse(trimmed) as {
+                  const event = raw as {
                     type: string;
                     agent?: string;
                     message?: string;
@@ -1424,6 +1430,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     /** Plan para aprobación (HITL 4.4) */
                     plan?: Array<{ step_id: string; task_description: string; node: string }>;
                     planMessage?: string;
+                    code?: string;
                   };
                   if (event.type === "progress" && event.agent != null && event.message != null) {
                     set((s) => ({
@@ -1600,6 +1607,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   }
                 } catch (_) {
                   // ignore
+                }
                 }
               }
             }
@@ -2302,8 +2310,7 @@ if (prog && prog.step && prog.step !== "done") {
         }),
       });
       if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.message ?? "Error al generar Benchmark & Gap Analysis");
+        await throwStreamHttpError(r, "Error al generar Benchmark & Gap Analysis");
       }
       const reader = r.body?.getReader();
       const decoder = new TextDecoder();
@@ -2318,36 +2325,37 @@ if (prog && prog.step && prog.step !== "done") {
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
           for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              const event = JSON.parse(trimmed) as {
-                type: string;
-                agent?: string;
-                message?: string;
-                markdown?: string;
-                complexityProposal?: ComplexityPending;
-              };
-              if (event.type === "progress" && event.agent != null && event.message != null) {
-                set((s) => ({ agentProgress: [...s.agentProgress, { agent: event.agent!, message: event.message! }] }));
-              } else if (event.type === "done" && event.markdown != null) {
-                finalMarkdown = event.markdown;
-                if (event.complexityProposal != null) {
-                  set((s) => ({
-                    project:
-                      s.project != null
-                        ? { ...s.project, complexityPending: event.complexityProposal! }
-                        : s.project,
-                  }));
+            for (const event of parseNdjsonLine(line)) {
+              try {
+                const ev = event as {
+                  type: string;
+                  agent?: string;
+                  message?: string;
+                  markdown?: string;
+                  complexityProposal?: ComplexityPending;
+                  code?: string;
+                };
+                if (ev.type === "progress" && ev.agent != null && ev.message != null) {
+                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
+                } else if (ev.type === "done" && ev.markdown != null) {
+                  finalMarkdown = ev.markdown;
+                  if (ev.complexityProposal != null) {
+                    set((s) => ({
+                      project:
+                        s.project != null
+                          ? { ...s.project, complexityPending: ev.complexityProposal! }
+                          : s.project,
+                    }));
+                  }
+                } else if (ev.type === "error" && ev.message) {
+                  const err = new Error(ev.message) as Error & { code?: string };
+                  if (ev.code) err.code = ev.code;
+                  throw err;
                 }
-              } else if (event.type === "error" && event.message) {
-                const err = new Error(event.message) as Error & { code?: string };
-                if ((event as { code?: string }).code) err.code = (event as { code?: string }).code;
-                throw err;
+              } catch (parseErr) {
+                if (parseErr instanceof SyntaxError) continue;
+                throw parseErr;
               }
-            } catch (parseErr) {
-              if (parseErr instanceof SyntaxError) continue;
-              throw parseErr;
             }
           }
         }
@@ -2398,8 +2406,7 @@ if (prog && prog.step && prog.step !== "done") {
           }),
         });
         if (!r.ok) {
-          const err = await r.json().catch(() => ({}));
-          throw new Error(err.message ?? "Error al generar MDD");
+          await throwStreamHttpError(r, "Error al generar MDD");
         }
         const reader = r.body?.getReader();
         const decoder = new TextDecoder();
@@ -2414,27 +2421,27 @@ if (prog && prog.step && prog.step !== "done") {
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
             for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed) continue;
-              try {
-                const event = JSON.parse(trimmed) as { type: string; agent?: string; message?: string; markdown?: string };
-                if (event.type === "progress" && event.agent != null && event.message != null) {
-                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: event.agent!, message: event.message! }] }));
-                } else if (event.type === "draft" && event.markdown != null && event.markdown.trim().length > 80) {
-                  accumulatedMdd = event.markdown;
-                  set({ mddContent: event.markdown });
-                } else if (event.type === "done" && event.markdown != null) {
-                  finalMarkdown = event.markdown;
-                } else if (event.type === "blocked" && event.message) {
-                  throw new Error(String(event.message));
-                } else if (event.type === "error" && event.message) {
-                  const err = new Error(event.message) as Error & { code?: string };
-                  if ((event as { code?: string }).code) err.code = (event as { code?: string }).code;
-                  throw err;
+              for (const event of parseNdjsonLine(line)) {
+                try {
+                  const ev = event as { type: string; agent?: string; message?: string; markdown?: string; code?: string };
+                  if (ev.type === "progress" && ev.agent != null && ev.message != null) {
+                    set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
+                  } else if (ev.type === "draft" && ev.markdown != null && ev.markdown.trim().length > 80) {
+                    accumulatedMdd = ev.markdown;
+                    set({ mddContent: ev.markdown });
+                  } else if (ev.type === "done" && ev.markdown != null) {
+                    finalMarkdown = ev.markdown;
+                  } else if (ev.type === "blocked" && ev.message) {
+                    throw new Error(String(ev.message));
+                  } else if (ev.type === "error" && ev.message) {
+                    const err = new Error(ev.message) as Error & { code?: string };
+                    if (ev.code) err.code = ev.code;
+                    throw err;
+                  }
+                } catch (parseErr) {
+                  if (parseErr instanceof SyntaxError) continue;
+                  throw parseErr;
                 }
-              } catch (parseErr) {
-                if (parseErr instanceof SyntaxError) continue;
-                throw parseErr;
               }
             }
           }

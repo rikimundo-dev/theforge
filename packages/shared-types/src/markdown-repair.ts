@@ -38,7 +38,8 @@ export function repairMarkdownFences(raw: string): string {
       const hasClose = i < lines.length && /^```\s*$/.test(lines[i]!.trim());
       if (hasClose) i++;
       const body = inner.join("\n");
-      const unwrapLang = !lang || lang === "markdown" || lang === "md";
+      // LLMs sometimes fence BRD/MDD prose as ```mermaid; unwrap when body is markdown, not a diagram.
+      const unwrapLang = !lang || lang === "markdown" || lang === "md" || lang === "mermaid";
       if (hasClose && unwrapLang && markdownLikeDocFragment(body)) {
         if (out.length > 0 && (out[out.length - 1] ?? "").trim() !== "") out.push("");
         out.push(...body.split("\n"));

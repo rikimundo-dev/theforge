@@ -52,6 +52,7 @@ export interface UserAISettings {
   activeTenantInstanceId: string | null;
   embeddingProvider: ProviderId | null;
   embeddingsEnabled: boolean;
+  allowedChatModels?: string[];
 }
 
 export interface ProviderInstanceSummary {
