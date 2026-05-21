@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { prepareMddForOutput, shouldPreferDraftOverStructured } from "./mdd-prepare-output.js";
-import { replaceSection6Or7InDraft, seguridadItemsToSection6Markdown } from "./mdd-sanitize.js";
+import { getSection6Or7Range, replaceSection6Or7InDraft, seguridadItemsToSection6Markdown } from "./mdd-sanitize.js";
 import { mddSeguridadItemSchema } from "../state/mdd-structured.schema.js";
 
 const FULL_MDD_PREFIX = `# Master Design Document
@@ -65,6 +65,15 @@ describe("prepareMddForOutput", () => {
     assert.ok(out.includes("CREATE TABLE users"), "debe conservar §3");
     assert.ok(out.includes("Argon2id"), "debe conservar §6 previa, no Pendiente");
     assert.ok(!/## 1\. Contexto[\s\S]*\(Pendiente\)[\s\S]*## 2\./.test(out), "§2 no debe ser solo Pendiente");
+  });
+});
+
+describe("getSection6Or7Range", () => {
+  it("encuentra §6 tras §5 sin exigir salto de línea extra en el patrón", () => {
+    const draft = "## 5. Lógica\n\nx\n## 6. Seguridad\n\nviejo";
+    const range = getSection6Or7Range(draft, 6);
+    assert.ok(range);
+    assert.match(range!.heading, /Seguridad/i);
   });
 });
 

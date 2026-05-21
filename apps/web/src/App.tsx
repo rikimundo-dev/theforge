@@ -354,6 +354,18 @@ export default function App() {
     setUsersViewOpen(true);
   }, []);
 
+  const handleExitWorkshop = useCallback(() => {
+    useWorkshopStore.getState().setWorkshopActiveDocPanel("mdd");
+    setWorkshopProject(null);
+    setUsersViewOpen(false);
+    setSettingsViewOpen(false);
+  }, []);
+
+  const closePanelViews = useCallback(() => {
+    setUsersViewOpen(false);
+    setSettingsViewOpen(false);
+  }, []);
+
   if (!authed) {
     if (needsSetup === null) {
       return (
@@ -380,18 +392,6 @@ export default function App() {
 
   const userRole = getStoredUser()?.role;
   const isAdmin = userRole === "admin" || userRole === "super_admin";
-
-  const handleExitWorkshop = useCallback(() => {
-    useWorkshopStore.getState().setWorkshopActiveDocPanel("mdd");
-    setWorkshopProject(null);
-    setUsersViewOpen(false);
-    setSettingsViewOpen(false);
-  }, []);
-
-  const closePanelViews = useCallback(() => {
-    setUsersViewOpen(false);
-    setSettingsViewOpen(false);
-  }, []);
 
   const settingsPanel = settingsViewOpen ? (
     <SettingsView

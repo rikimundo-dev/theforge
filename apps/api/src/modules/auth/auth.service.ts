@@ -679,21 +679,15 @@ export class AuthService {
   }
 
   /** Cambiar rol de un usuario (admin-only). No permite degradarse a sí mismo (developer). */
-  async updateUserRole(targetUserId: string, role: string, actorUserId: string, actorRole: string) {
+  async updateUserRole(targetUserId: string, role: string, actorUserId: string) {
     if (role !== "admin" && role !== "developer" && role !== "super_admin") {
       throw new BadRequestException("Rol inválido. Use 'super_admin', 'admin' o 'developer'.");
-    }
-    if (role === "super_admin" && actorRole !== "super_admin") {
-      throw new ForbiddenException("Solo un super_admin puede asignar el rol super_admin");
     }
     if (targetUserId === actorUserId && role === "developer") {
       throw new ForbiddenException("No puedes degradar tu propio rol de administrador");
     }
     const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException("Usuario no encontrado");
-    if (user.role === "super_admin" && role !== "super_admin" && actorRole !== "super_admin") {
-      throw new ForbiddenException("Solo un super_admin puede cambiar el rol de otro super_admin");
-    }
 
     await this.prisma.user.update({
       where: { id: targetUserId },
@@ -765,7 +759,8 @@ export class AuthService {
       data: {
         email: normalized,
         name: name?.trim() || null,
-        role: role === "admin" ? "admin" : "developer",
+        role:
+          role === "super_admin" || role === "admin" ? role : "developer",
         mcpSecret: this.generateMcpSecret(),
       },
     });

@@ -168,7 +168,7 @@ export class UsersController {
   updateRole(@Param("id") id: string, @Body() body: { role?: string }) {
     requireAdmin();
     if (!body?.role) throw new BadRequestException("role requerido");
-    return this.auth.updateUserRole(id, body.role, getRequestUserId(), getRequestUserRole());
+    return this.auth.updateUserRole(id, body.role, getRequestUserId());
   }
 
   @Post()

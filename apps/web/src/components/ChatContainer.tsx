@@ -29,6 +29,10 @@ import {
   TooltipTrigger,
 } from "../components/ui";
 import { AiGenerationChatBubble, AiGenerativeDots } from "./AiGenerationLoader";
+import {
+  MDD_SECTION_COMMANDS,
+  resolveRegenerateSectionFromChatMessage,
+} from "../utils/mddSectionRegen";
 
 export type ActiveTab =
   | "benchmark"
@@ -93,43 +97,6 @@ function getChatComposerPlaceholder(isBenchmarkFirstAction: boolean, activeTab: 
   if (isBenchmarkFirstAction) return "Dominio, idea y enlaces (opcional)…";
   if (activeTab === "mdd") return "Mensaje o /sección…";
   return CHAT_COMPOSER_PLACEHOLDER[activeTab];
-}
-
-/** Comandos / para regenerar secciones del MDD (solo tab MDD). §1 = solo agente sintetizador de contexto desde §2–§7. */
-const MDD_SECTION_COMMANDS: { slug: string; label: string; section: number }[] = [
-  { slug: "contexto", label: "1. Contexto", section: 1 },
-  { slug: "arquitectura", label: "2. Arquitectura y Stack", section: 2 },
-  { slug: "modelo-datos", label: "3. Modelo de Datos", section: 3 },
-  { slug: "contratos-api", label: "4. Contratos de API", section: 4 },
-  { slug: "logica", label: "5. Lógica y Edge Cases", section: 5 },
-  { slug: "seguridad", label: "6. Seguridad", section: 6 },
-  { slug: "infraestructura", label: "7. Infraestructura", section: 7 },
-];
-
-function getRegenerateSectionFromSlashCommand(msg: string): number | null {
-  const t = msg.trim().toLowerCase();
-  if (!t.startsWith("/") || t.includes(" ")) return null;
-  const slug = t.slice(1);
-  if (!slug) return null;
-  const cmd = MDD_SECTION_COMMANDS.find(
-    (c) => c.slug === slug || String(c.section) === slug,
-  );
-  return cmd?.section ?? null;
-}
-
-/**
- * Detecta lenguaje natural tipo "regenera sección 2", "regenerar la seccion 6",
- * "regenera la 3", "regenera seccion 4", etc.
- */
-function detectNaturalRegenerateSection(msg: string): number | null {
-  const t = msg.trim().toLowerCase();
-  // Patrones: regenera/regenerar [la] sección/seccion [número]
-  const match = t.match(
-    /^regenera(?:r)?\s+(?:la\s+)?secci[oó]n\s+(\d)$/i,
-  );
-  if (!match) return null;
-  const section = parseInt(match[1]!, 10);
-  return section >= 1 && section <= 7 ? section : null;
 }
 
 const ACCEPT_IMG = /^image\/(png|jpeg|jpg|gif|webp)$/i;
@@ -531,9 +498,7 @@ export default function ChatContainer({
       setInputValue("");
       return;
     }
-    const section = activeTab === "mdd"
-      ? (getRegenerateSectionFromSlashCommand(msg) ?? detectNaturalRegenerateSection(msg))
-      : null;
+    const section = activeTab === "mdd" ? resolveRegenerateSectionFromChatMessage(msg) : null;
     const imageParts = pendingFiles.length ? await readFilesAsChatParts(pendingFiles) : [];
     setPendingFiles([]);
     setInputValue("");

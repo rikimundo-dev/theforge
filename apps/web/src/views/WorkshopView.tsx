@@ -714,7 +714,7 @@ export default function WorkshopView({
       /* clipboard */
     }
   }, [mddInicialLocalContent, activeLegacyState?.codebaseDoc]);
-  const [conformanceUseLlm, setConformanceUseLlm] = useState(false);
+
   type DocPanel =
     | "benchmark"
     | "legacy"
@@ -735,6 +735,32 @@ export default function WorkshopView({
     | "adrs";
   const centralPanel = useWorkshopStore((s) => s.workshopActiveDocPanel) as DocPanel;
   const setCentralPanel = useWorkshopStore((s) => s.setWorkshopActiveDocPanel);
+
+  /** Etapa 1 sin modificación: el MDD de la pestaña «MDD» no aplica; doc. partida = MDD Inicial (`codebaseDoc`). */
+  const legacyMddPanelIsAsIsOnly =
+    isLegacyProject &&
+    isStage1Legacy &&
+    !(activeLegacyState?.description ?? "").trim();
+
+  const handleRegenerateLegacyCodebaseDoc = useCallback(async () => {
+    if (!projectId) return null;
+    const res = await legacyGenerateCodebaseDoc(projectId, {
+      responseMode: codebaseDocResponseMode,
+      stageId: activeStageId ?? undefined,
+    });
+    if (res?.codebaseDoc) {
+      setMddInicialLocalContent(res.codebaseDoc);
+      setCentralPanel("mdd-inicial");
+    }
+    return res;
+  }, [
+    projectId,
+    legacyGenerateCodebaseDoc,
+    codebaseDocResponseMode,
+    activeStageId,
+    setCentralPanel,
+  ]);
+  const [conformanceUseLlm, setConformanceUseLlm] = useState(false);
   /** Por debajo de `lg`: una columna con control de Chat / Documentos / Semáforo. */
   type WorkshopMobileColumn = "chat" | "workspace" | "metrics";
   const [mobileWorkshopColumn, setMobileWorkshopColumn] = useState<WorkshopMobileColumn>("workspace");
@@ -2202,18 +2228,12 @@ export default function WorkshopView({
                 {centralPanel === "mdd-inicial" &&
                   isLegacyProject &&
                   projectId &&
-                  !!(activeLegacyState?.codebaseDoc ?? "").trim() && (
+                  !!(activeLegacyState?.codebaseDoc ?? mddInicialLocalContent ?? "").trim() && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={async () => {
-                          const res = await legacyGenerateCodebaseDoc(projectId, {
-                            responseMode: codebaseDocResponseMode,
-                            stageId: activeStageId ?? undefined,
-                          });
-                          if (res) setCentralPanel("mdd-inicial");
-                        }}
+                        onClick={() => void handleRegenerateLegacyCodebaseDoc()}
                         disabled={loading}
                         className={WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER}
                         aria-label="Regenerar documentación de partida del codebase (AriadneSpecs)"
@@ -2949,13 +2969,26 @@ export default function WorkshopView({
                   role="region"
                   aria-label="Generar o regenerar el MDD"
                 >
-                  {loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd") ? (
+                  {loading &&
+                  (loadingReason === "mdd" ||
+                    loadingReason === "legacy-mdd" ||
+                    (legacyMddPanelIsAsIsOnly && loadingReason === "legacy-codebase-doc")) ? (
                     <AiGenerationPanel
-                      title={mddContent?.trim() ? "Regenerando el MDD…" : "Generando el MDD…"}
+                      title={
+                        legacyMddPanelIsAsIsOnly
+                          ? (activeLegacyState?.codebaseDoc ?? mddInicialLocalContent)?.trim()
+                            ? "Regenerando MDD Inicial…"
+                            : "Generando MDD Inicial…"
+                          : mddContent?.trim()
+                            ? "Regenerando el MDD…"
+                            : "Generando el MDD…"
+                      }
                       subtitle={
-                        isLegacyProject
-                          ? "A partir de BRD y To-Be de la etapa activa (y documentación de partida si aplica)."
-                          : "A partir del DBGA / Benchmark guardado en Paso 0. Puede tardar unos minutos."
+                        legacyMddPanelIsAsIsOnly
+                          ? "Documentación de partida (codebase) vía Ariadne — se guarda en MDD Inicial, no en la pestaña MDD."
+                          : isLegacyProject
+                            ? "A partir de BRD y To-Be de la etapa activa (y documentación de partida si aplica)."
+                            : "A partir del DBGA / Benchmark guardado en Paso 0. Puede tardar unos minutos."
                       }
                     />
                   ) : (
@@ -2963,15 +2996,38 @@ export default function WorkshopView({
                       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center">
                         <button
                           type="button"
-                          onClick={() => void (isLegacyProject ? legacyGenerateMdd(projectId, activeStageId ?? undefined) : generateMddFromBenchmark(projectId))}
-                          disabled={loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd")}
+                          onClick={() =>
+                            void (legacyMddPanelIsAsIsOnly
+                              ? handleRegenerateLegacyCodebaseDoc()
+                              : isLegacyProject
+                                ? legacyGenerateMdd(projectId, activeStageId ?? undefined)
+                                : generateMddFromBenchmark(projectId))
+                          }
+                          disabled={
+                            loading &&
+                            (loadingReason === "mdd" ||
+                              loadingReason === "legacy-mdd" ||
+                              loadingReason === "legacy-codebase-doc")
+                          }
                           className={cn(
                             WORKSHOP_MDD_ACTION_PRIMARY,
                             "w-full justify-center lg:w-auto lg:min-w-0",
                             "bg-[var(--primary)] text-[var(--primary-foreground)] hover:bg-[var(--primary-hover)]",
                           )}
                         >
-                          {mddContent?.trim() ? (
+                          {legacyMddPanelIsAsIsOnly ? (
+                            (activeLegacyState?.codebaseDoc ?? mddInicialLocalContent)?.trim() ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                                Regenerar MDD Inicial
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
+                                Generar MDD Inicial
+                              </>
+                            )
+                          ) : mddContent?.trim() ? (
                             <>
                               <RefreshCw className="h-4 w-4 shrink-0" aria-hidden />
                               Regenerar MDD
@@ -3012,9 +3068,11 @@ export default function WorkshopView({
                         )}
                       </div>
                       <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
-                        {isLegacyProject
-                          ? "Genera el MDD desde BRD y To-Be de la etapa activa (y doc. de partida si aplica)."
-                          : "Genera el MDD a partir del DBGA / Benchmark guardado en Paso 0."}
+                        {legacyMddPanelIsAsIsOnly
+                          ? "En etapa 1 (AS-IS) la documentación de partida va en la pestaña MDD Inicial. Este botón regenera ahí (no en MDD de cambio)."
+                          : isLegacyProject
+                            ? "Genera el MDD desde BRD y To-Be de la etapa activa (y doc. de partida si aplica)."
+                            : "Genera el MDD a partir del DBGA / Benchmark guardado en Paso 0."}
                       </p>
                     </>
                   )}

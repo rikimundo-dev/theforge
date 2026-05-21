@@ -438,6 +438,19 @@ function pickDefaultStageId(stages: WorkshopStage[]): string | null {
 }
 
 /** Campos planos del proyecto alineados con la etapa en foco (MDD / semáforo / estimación). */
+/** MDD efectivo para regenerar §N: store + etapa activa (evita mandar borrador vacío al API). */
+function effectiveMddContentForSectionRegen(getState: () => {
+  mddContent: string;
+  activeStageId: string | null;
+  project: Project | null;
+}): string {
+  const { mddContent, activeStageId, project } = getState();
+  const fromStore = (mddContent ?? "").trim();
+  if (fromStore.length >= 100) return fromStore;
+  const st = project?.stages?.find((s) => s.id === activeStageId);
+  return (cleanDoc(st?.mddContent) ?? cleanDoc(project?.mddContent) ?? "").trim();
+}
+
 function workshopFlatFromStage(p: Project, stageId: string | null): Pick<Project, "mddContent" | "status" | "precisionScore" | "estimation"> {
   const stages = p.stages;
   if (!stageId || !stages?.length) {
@@ -1210,7 +1223,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           const updatedSession = (await appendRes.json()) as Session;
           set({ session: updatedSession });
         }
-        const mddContent = (get().mddContent ?? get().project?.mddContent ?? "").trim();
+        const mddContent = effectiveMddContentForSectionRegen(get);
         const regStage = get().activeStageId;
         const r = await apiFetch(`${API_BASE}/ai-analysis/mdd/stream/regenerate-section`, {
           method: "POST",
@@ -1242,37 +1255,51 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 const ev = event as { type: string; agent?: string; markdown?: string; message?: string; precision?: number; status?: string; precisionBreakdown?: PrecisionBreakdown };
                 if (ev.type === "progress" && ev.agent != null && ev.message != null) {
                   set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
-                } else if (ev.type === "done" && ev.markdown != null && ev.markdown.trim().length > 80) {
-                  set({ mddContent: ev.markdown });
-                  const { persistMddContent, fetchProject, fetchEstimation, fetchConformance } = get();
-                  await persistMddContent(ev.markdown, { force: true });
-                  await fetchProject(projectId);
-                  fetchEstimation(projectId).catch(() => { });
-                  fetchConformance(projectId).catch(() => { });
-                  const current = get();
+                } else if (ev.type === "done") {
+                  const merged = (ev.markdown ?? "").trim();
+                  if (merged.length > 80) {
+                    set({ mddContent: merged });
+                    const { persistMddContent, fetchProject, fetchEstimation, fetchConformance } = get();
+                    await persistMddContent(merged, { force: true });
+                    await fetchProject(projectId);
+                    fetchEstimation(projectId).catch(() => { });
+                    fetchConformance(projectId).catch(() => { });
+                    const current = get();
+                    set({
+                      project: current.project ? { ...current.project, mddContent: merged } : null,
+                      loading: false,
+                      loadingReason: null,
+                      agentProgress: [],
+                      evaluatorCritique: null,
+                    });
+                    const assistantRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: sessionMessageBody(
+                        {
+                          role: "assistant",
+                          content: `Sección §${regenerateSection} regenerada. Revisa el documento en el panel central (pestaña MDD).`,
+                          tab: "mdd",
+                        },
+                        get().activeStageId,
+                      ),
+                    });
+                    if (assistantRes.ok) {
+                      const sess = (await assistantRes.json()) as Session;
+                      set({ session: sess });
+                    }
+                    return;
+                  }
                   set({
-                    project: current.project ? { ...current.project, mddContent: ev.markdown } : null,
+                    error:
+                      merged.length > 0
+                        ? "La regeneración devolvió un documento demasiado corto; la sección no se aplicó al MDD."
+                        : "La regeneración terminó sin markdown actualizado.",
                     loading: false,
                     loadingReason: null,
                     agentProgress: [],
                     evaluatorCritique: null,
                   });
-                  const assistantRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: sessionMessageBody(
-                      {
-                        role: "assistant",
-                        content: `Sección §${regenerateSection} regenerada. Revisa el documento en el panel central.`,
-                        tab: "mdd",
-                      },
-                      get().activeStageId,
-                    ),
-                  });
-                  if (assistantRes.ok) {
-                    const sess = (await assistantRes.json()) as Session;
-                    set({ session: sess });
-                  }
                   return;
                 } else if (ev.type === "blocked" && ev.message) {
                   set({
@@ -1300,7 +1327,15 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             }
           }
         }
-        set({ loading: false, loadingReason: null, agentProgress: [], evaluatorCritique: null });
+        set({
+          loading: false,
+          loadingReason: null,
+          agentProgress: [],
+          evaluatorCritique: null,
+          error:
+            get().error ??
+            "La regeneración no actualizó el MDD. Usa la pestaña MDD (no MDD Inicial), escribe /seguridad o confirma el plan si el Manager lo pidió.",
+        });
       } catch (e) {
         const msg = e instanceof Error ? friendlyFetchError(e) : "Error al regenerar sección";
         const code =

@@ -2245,16 +2245,17 @@ export function getSection6Or7Range(
   const trimmed = (draft ?? "").trim();
   const re =
     section === 6
-      ? /\n(##\s+(?:6\.\s+)?Seguridad\b[^\n]*)/i
-      : /\n(##\s+(?:7\.\s+)?(?:Infraestructura|Integración)\b[^\n]*)/i;
+      ? /(?:^|\n)(##\s+(?:6\.\s+)?Seguridad\b[^\n]*)/im
+      : /(?:^|\n)(##\s+(?:7\.\s+)?(?:Infraestructura|Integración)\b[^\n]*)/im;
   const m = trimmed.match(re);
   if (!m || m.index == null) return null;
+  const heading = m[1] ?? (section === 6 ? "## 6. Seguridad" : "## 7. Infraestructura");
   const start = m.index + (m[0].startsWith("\n") ? 1 : 0);
-  const afterHeading = start + (m[1]?.length ?? 0);
+  const afterHeading = start + heading.length;
   const rest = trimmed.slice(afterHeading).replace(/^\s*\n+/, "");
   const nextH2 = rest.search(/\n##\s+/);
   const end = nextH2 >= 0 ? afterHeading + nextH2 : trimmed.length;
-  return { start, end, heading: m[1] ?? (section === 6 ? "## 6. Seguridad" : "## 7. Infraestructura") };
+  return { start, end, heading };
 }
 
 /**
