@@ -52,6 +52,8 @@ export interface UserProviderConfigSummary {
 export interface UserAISettings {
   activeProvider: ProviderId | null;
   activeTenantInstanceId: string | null;
+  /** Instancia dedicada para el agente Auditor MDD; null = mismo que proveedor activo. */
+  mddAuditorTenantInstanceId: string | null;
   embeddingProvider: ProviderId | null;
   embeddingsEnabled: boolean;
   allowedChatModels?: string[];
@@ -114,6 +116,7 @@ export interface UpsertProviderConfigBody {
 export interface UpdateAISettingsBody {
   activeProvider?: ProviderId;
   activeTenantInstanceId?: string | null;
+  mddAuditorTenantInstanceId?: string | null;
   embeddingProvider?: ProviderId | null;
   embeddingsEnabled?: boolean;
 }

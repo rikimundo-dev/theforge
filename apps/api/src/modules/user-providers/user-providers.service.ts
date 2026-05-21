@@ -47,6 +47,7 @@ export interface UpsertProviderConfigDto {
 export interface UpdateAISettingsDto {
   activeProvider?: string;
   activeTenantInstanceId?: string | null;
+  mddAuditorTenantInstanceId?: string | null;
   embeddingProvider?: string | null;
   embeddingsEnabled?: boolean;
 }
@@ -67,6 +68,7 @@ export class UserProvidersService {
     return {
       activeProvider: row?.activeProvider ?? null,
       activeTenantInstanceId: row?.activeTenantInstanceId ?? null,
+      mddAuditorTenantInstanceId: row?.mddAuditorTenantInstanceId ?? null,
       embeddingProvider: row?.embeddingProvider ?? null,
       embeddingsEnabled: row?.embeddingsEnabled ?? true,
       allowedChatModels: row?.allowedChatModels ?? [],
@@ -182,16 +184,24 @@ export class UserProvidersService {
       select: { role: true },
     });
     if (user?.role === "developer") {
-      if (dto.activeTenantInstanceId !== undefined || dto.activeProvider !== undefined) {
+      if (
+        dto.activeTenantInstanceId !== undefined ||
+        dto.activeProvider !== undefined ||
+        dto.mddAuditorTenantInstanceId !== undefined
+      ) {
         throw new ForbiddenException(
           "Los developers usan el proveedor predeterminado configurado por el super_admin",
         );
       }
     }
-    if (dto.activeTenantInstanceId !== undefined && dto.activeTenantInstanceId !== null) {
+    for (const instanceId of [
+      dto.activeTenantInstanceId,
+      dto.mddAuditorTenantInstanceId,
+    ]) {
+      if (instanceId === undefined || instanceId === null) continue;
       const inst = await this.prisma.providerInstance.findFirst({
         where: {
-          id: dto.activeTenantInstanceId,
+          id: instanceId,
           ...this.instanceAccessibleByUser(userId),
         },
       });
@@ -237,6 +247,7 @@ export class UserProvidersService {
         userId,
         activeProvider: dto.activeProvider ?? "openrouter",
         activeTenantInstanceId: dto.activeTenantInstanceId ?? undefined,
+        mddAuditorTenantInstanceId: dto.mddAuditorTenantInstanceId ?? undefined,
         embeddingProvider: dto.embeddingProvider ?? undefined,
         embeddingsEnabled: dto.embeddingsEnabled ?? true,
       },
@@ -244,6 +255,9 @@ export class UserProvidersService {
         ...(dto.activeProvider !== undefined ? { activeProvider: dto.activeProvider } : {}),
         ...(dto.activeTenantInstanceId !== undefined
           ? { activeTenantInstanceId: dto.activeTenantInstanceId }
+          : {}),
+        ...(dto.mddAuditorTenantInstanceId !== undefined
+          ? { mddAuditorTenantInstanceId: dto.mddAuditorTenantInstanceId }
           : {}),
         ...(dto.embeddingProvider !== undefined
           ? { embeddingProvider: dto.embeddingProvider }
@@ -254,6 +268,7 @@ export class UserProvidersService {
     return {
       activeProvider: row.activeProvider,
       activeTenantInstanceId: row.activeTenantInstanceId,
+      mddAuditorTenantInstanceId: row.mddAuditorTenantInstanceId,
       embeddingProvider: row.embeddingProvider,
       embeddingsEnabled: row.embeddingsEnabled,
     };
@@ -389,6 +404,24 @@ export class UserProvidersService {
       return this.runtimeFromTenantInstance(userId, tenant);
     }
     return this.resolveRuntimeForProvider(userId, await this.activeProviderId(userId));
+  }
+
+  /**
+   * Runtime del agente Auditor (grafo MDD). Si hay `mddAuditorTenantInstanceId` accesible, esa instancia;
+   * si no, el mismo runtime que `resolveRuntime`.
+   */
+  async resolveAuditorRuntime(userId: string): Promise<UserLLMRuntime> {
+    const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
+    const auditorInstanceId = settings?.mddAuditorTenantInstanceId;
+    if (auditorInstanceId) {
+      const inst = await this.prisma.providerInstance.findFirst({
+        where: { id: auditorInstanceId, ...this.instanceAccessibleByUser(userId) },
+      });
+      if (inst) {
+        return this.runtimeFromTenantInstance(userId, inst);
+      }
+    }
+    return this.resolveRuntime(userId);
   }
 
   async resolveEmbeddingRuntime(userId: string): Promise<UserLLMRuntime> {

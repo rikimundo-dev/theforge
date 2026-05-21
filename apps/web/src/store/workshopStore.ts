@@ -448,7 +448,7 @@ function effectiveMddContentForSectionRegen(getState: () => {
   const fromStore = (mddContent ?? "").trim();
   if (fromStore.length >= 100) return fromStore;
   const st = project?.stages?.find((s) => s.id === activeStageId);
-  return (cleanDoc(st?.mddContent) ?? cleanDoc(project?.mddContent) ?? "").trim();
+  return (cleanDoc(st?.mddContent ?? null) ?? cleanDoc(project?.mddContent ?? null) ?? "").trim();
 }
 
 function workshopFlatFromStage(p: Project, stageId: string | null): Pick<Project, "mddContent" | "status" | "precisionScore" | "estimation"> {

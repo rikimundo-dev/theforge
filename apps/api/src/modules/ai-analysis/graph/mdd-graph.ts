@@ -19,7 +19,7 @@ import { createMddGraphPopulatorNode } from "../nodes/mdd-graph-populator.node.j
 import { createMddCrossConsistencyNode } from "../nodes/mdd-cross-consistency.node.js";
 import { createMddBlackboardNode } from "../nodes/mdd-blackboard.node.js";
 import { GraphMemoryService } from "../graph-memory/graph-memory.service.js";
-import { createDbgaLLM } from "../llm/create-dbga-llm.js";
+import { createDbgaLLM, createMddAuditorLLM } from "../llm/create-dbga-llm.js";
 import type { AIFactory } from "../../ai/ai.factory.js";
 import { getMddAuditorTools, getMddArchitectTools } from "../tools/tool-registry.js";
 import type { TheForgeService } from "../../theforge/theforge.service.js";
@@ -84,6 +84,7 @@ export async function createMddGraph(
   options?: MddGraphCompileOptions,
 ) {
   const llm = await createDbgaLLM(aiFactory, userId);
+  const auditorLlm = await createMddAuditorLLM(aiFactory, userId);
   const nodeCache = options?.nodeCache ?? null;
 
   const clarifierNode = wrapCache(nodeCache, "clarifier", clarifierInput, createMddClarifierNode(llm));
@@ -101,7 +102,7 @@ export async function createMddGraph(
   const diagramInjectorNode = createMddDiagramInjectorNode();
   const consistencyNode = wrapCache(nodeCache, "cross_consistency", crossConsistencyInput, createMddCrossConsistencyNode(llm));
   const llmFormatterNode = wrapCache(nodeCache, "llm_formatter", llmFormatterInput, createMddLlmFormatterNode(llm));
-  const auditorNode = createMddAuditorNode(llm, getMddAuditorTools(), null);
+  const auditorNode = createMddAuditorNode(auditorLlm, getMddAuditorTools(), null);
   const graphPopulatorNode = createMddGraphPopulatorNode(llm, graphMemory);
 
   function routeAuditor(state: MDDStateType): string {
@@ -164,6 +165,7 @@ export async function createMddGraphWithManager(
   compileOptions?: MddGraphCompileOptions,
 ) {
   const llm = await createDbgaLLM(aiFactory, userId);
+  const auditorLlm = await createMddAuditorLLM(aiFactory, userId);
   const nodeCache = compileOptions?.nodeCache ?? null;
   const managerNode = createMddManagerNode(llm, graphMemory, precisionCalculator, managerToolDeps ?? null);
   const askInitialTopicNode = createMddAskInitialTopicNode();
@@ -184,7 +186,11 @@ export async function createMddGraphWithManager(
   const llmFormatterNode = wrapCache(nodeCache, "llm_formatter", llmFormatterInput, createMddLlmFormatterNode(llm));
   const diagramInjectorNode = createMddDiagramInjectorNode();
   const consistencyNode = wrapCache(nodeCache, "cross_consistency", crossConsistencyInput, createMddCrossConsistencyNode(llm));
-  const auditorNode = createMddAuditorNode(llm, getMddAuditorTools(), precisionCalculator ?? null);
+  const auditorNode = createMddAuditorNode(
+    auditorLlm,
+    getMddAuditorTools(),
+    precisionCalculator ?? null,
+  );
   const blackboardNode = createMddBlackboardNode(llm);
   const graphPopulatorNode = createMddGraphPopulatorNode(llm, graphMemory);
 

@@ -44,6 +44,9 @@ model UserAISettings {
   /// Instancia de proveedor a nivel tenant activa para el usuario (si enabledForUsers).
   activeTenantInstanceId String?
   activeTenantInstance   ProviderInstance? @relation(fields: [activeTenantInstanceId], references: [id], onDelete: SetNull)
+  /// Instancia dedicada para el agente Auditor del grafo MDD (p. ej. Opus). Null = mismo runtime que el proveedor activo.
+  mddAuditorTenantInstanceId String?
+  mddAuditorTenantInstance   ProviderInstance? @relation("UserMddAuditorInstance", fields: [mddAuditorTenantInstanceId], references: [id], onDelete: SetNull)
   /// Proveedor BYOK para embeddings cuando el activo no los expone (p. ej. anthropic).
   embeddingProvider      String?
   embeddingsEnabled      Boolean  @default(true)
@@ -76,7 +79,8 @@ model ProviderInstance {
   createdByUser          User     @relation("ProviderInstanceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
-  userAISettings         UserAISettings[]
+  userAISettings              UserAISettings[]
+  mddAuditorUserAISettings    UserAISettings[] @relation("UserMddAuditorInstance")
 
   @@unique([providerType, slug])
   @@index([providerType])

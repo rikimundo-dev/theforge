@@ -30,6 +30,10 @@ export class AIFactory {
     return this.userProviders.resolveRuntime(userId);
   }
 
+  async resolveAuditorRuntime(userId: string): Promise<UserLLMRuntime> {
+    return this.userProviders.resolveAuditorRuntime(userId);
+  }
+
   async createForUser(userId: string): Promise<LLMProvider> {
     const runtime = await this.resolveRuntime(userId);
     return this.create(runtime);

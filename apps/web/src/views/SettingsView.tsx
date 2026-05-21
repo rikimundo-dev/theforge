@@ -1,5 +1,6 @@
 import { Settings } from "lucide-react";
 import { ProviderInstancesCard } from "@/components/ProviderInstancesCard";
+import { AgentsConfigCard } from "@/components/AgentsConfigCard";
 import { McpSecretCard } from "@/components/McpSecretCard";
 import { AriadneConfigCard } from "@/components/AriadneConfigCard";
 interface SettingsViewProps {
@@ -19,12 +20,18 @@ export default function SettingsView({ showIaCost, onToggleIaCost }: SettingsVie
               Ajustes
             </h1>
             <p className="mt-1 text-sm text-[var(--foreground-muted)] sm:text-base">
-              Proveedores de IA, Ariadne y cuenta
+              Proveedores de IA, agentes, Ariadne y cuenta
             </p>
           </div>
         </header>
 
         <ProviderInstancesCard />
+        <section className="space-y-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--foreground-subtle)]">
+            Agentes
+          </h2>
+          <AgentsConfigCard />
+        </section>
         <section className="space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--foreground-subtle)]">
             Cuenta y herramientas

@@ -83,11 +83,24 @@ function buildWithFallbacks(
   return new ChainedFallbackChatModel(build, models);
 }
 
+export function createDbgaLLMFromRuntime(runtime: UserLLMRuntime): BaseChatModel {
+  const models = chatModelChain(runtime);
+  return buildWithFallbacks(runtime, models, (model) => buildLangChainChat(runtime, model));
+}
+
 /**
  * Factory for DBGA / MDD graphs: runtime BYOK del usuario (todos los proveedores del catálogo).
  */
 export async function createDbgaLLM(aiFactory: AIFactory, userId: string): Promise<BaseChatModel> {
   const runtime = await aiFactory.resolveRuntime(userId);
-  const models = chatModelChain(runtime);
-  return buildWithFallbacks(runtime, models, (model) => buildLangChainChat(runtime, model));
+  return createDbgaLLMFromRuntime(runtime);
+}
+
+/** LLM del nodo Auditor MDD: instancia dedicada en Ajustes o el proveedor activo. */
+export async function createMddAuditorLLM(
+  aiFactory: AIFactory,
+  userId: string,
+): Promise<BaseChatModel> {
+  const runtime = await aiFactory.resolveAuditorRuntime(userId);
+  return createDbgaLLMFromRuntime(runtime);
 }
