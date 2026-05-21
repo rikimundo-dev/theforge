@@ -7,10 +7,25 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 ### Added
 
 - **Enriquecimiento semántico UI/UX en MDD:** Nueva sección `## UI/UX Design Intent` añadida automáticamente al final del MDD. Clasifica cada entidad del modelo de datos (`CREATE TABLE` de §3) como `WorkflowProcess`, `DataRegistry` o `Configuration`; infiere lifecycle states con colores sugeridos; asigna `component_type` semántico (KanbanBoard, DataTable, PropertyGrid, etc.) y mapea props del modelo a props del componente. Implementado en `utils/mdd-enrich-uiux-intent.ts`; integrado en `prepareMddForOutput()` (chokepoint único de salida MDD). No altera contenido previo.
+- **Sección 8: UI Design System & Component Mapping en Blueprint:** Nueva sección anexada automáticamente al final del Blueprint. Clasifica las entidades del MDD §3 (`WorkflowProcess`, `DataRegistry`, `Configuration`), asigna componentes recomendados (KanbanBoard, DataTable, PropertyGrid), y especifica reglas de renderizado (prioridad de componente, estándar de formularios React Hook Form + Zod, responsive MobileStackView, validación de contrato previa). Implementado en `engine/blueprint-enrich-ui-system.ts`; integrado en `generateBlueprint()`. No altera secciones previas del Blueprint.
 
 ### Changed
 
 - **BUILD_CACHE_BUST**: 74 → 75
+
+---
+
+## [0.8.1] — 2026-05-21
+
+### Added
+
+- **Validación de idea DBGA insuficiente:** `streamAnalysis` rechaza saludos o textos demasiado cortos antes de invocar el grafo LangGraph, emitiendo un evento NDJSON `error` con código `INSUFFICIENT_IDEA` y mensaje en español orientado al Benchmark.
+- **Util `dbga-idea-validation`:** Heurística de saludos (normalización NFD, sin acentos) y umbral de longitud mínima; tests unitarios dedicados.
+
+### Fixed
+
+- **Nodo Scout (DBGA):** Si el modelo responde en prosa en lugar de JSON (p. ej. ante un saludo), el parseo ya no aborta todo el stream: se reutiliza `parseJsonOrThrow` compartido y se continúa con lista vacía de competidores.
+- **Errores de stream DBGA:** `formatDbgaStreamError` traduce `SyntaxError` por JSON inválido (token inesperado) a mensaje amigable en español, sin exponer detalles del motor de parseo al cliente.
 
 ---
 

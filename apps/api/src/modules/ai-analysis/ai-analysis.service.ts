@@ -42,6 +42,10 @@ import { createMddSoftwareArchitectNode } from "./nodes/mdd-software-architect.n
 import { getMddArchitectTools } from "./tools/tool-registry.js";
 import { contextSynthesizerComplexityAppendix } from "./utils/mdd-complexity-rigor.js";
 import { formatDbgaStreamError } from "./utils/dbga-stream-error.util.js";
+import {
+  INSUFFICIENT_DBGA_IDEA_MESSAGE,
+  isInsufficientDbgaIdea,
+} from "./utils/dbga-idea-validation.util.js";
 import { resolveLangGraphRecursionLimit } from "./utils/langgraph-recursion.util.js";
 import { prepareMddForOutput } from "./utils/mdd-prepare-output.js";
 
@@ -284,6 +288,15 @@ export class AiAnalysisService {
     idea: string,
     projectId?: string,
   ): AsyncGenerator<StreamProgressEvent> {
+    if (isInsufficientDbgaIdea(idea)) {
+      yield {
+        type: "error",
+        message: INSUFFICIENT_DBGA_IDEA_MESSAGE,
+        code: "INSUFFICIENT_IDEA",
+      };
+      return;
+    }
+
     let checkpointer: Awaited<ReturnType<CheckpointerService["getCheckpointer"]>>;
     let graph: Awaited<ReturnType<typeof createDbgaGraph>>;
     try {

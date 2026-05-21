@@ -4,6 +4,7 @@ import type { Estimation, Project, Stage } from "@theforge/database";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
+import { enrichBlueprintWithUiDesignSystem } from "../engine/blueprint-enrich-ui-system.js";
 import { MddUpdatePipelineService } from "../engine/mdd-update-pipeline.service.js";
 import { SemaphoreService, type SemaphoreEvaluationInput } from "../engine/semaphore.service.js";
 import { normalizeMddContent } from "../engine/mdd-markdown-parser.js";
@@ -1392,6 +1393,9 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
         }
       }
     }
+
+    // Anexar sección 8: UI Design System & Component Mapping (enriquecimiento semántico)
+    blueprintContent = enrichBlueprintWithUiDesignSystem(mddContent, blueprintContent);
 
     return this.update(projectId, { blueprintContent });
   }
