@@ -23,7 +23,7 @@ Auth multi-usuario con OTP por email + JWT. Cada `User` tiene su propio `mcpSecr
 
 - **`GET /users`** — lista usuarios (`{ id, email, role, name, hasMcpSecret, createdAt }[]`).
 - **`POST /users`** — body `{ email, name?, role? }`. Crea usuario y genera `mcpSecret`.
-- **`PATCH /users/:id/role`** — body `{ role }` (`super_admin` | `admin` | `developer`). Solo un `super_admin` puede asignar o quitar `super_admin`. No permite degradarse a sí mismo a `developer` (`403`).
+- **`PATCH /users/:id/role`** — body `{ role }` (`super_admin` | `admin` | `developer`). Cualquier `admin` o `super_admin` puede asignar o quitar `super_admin`. No permite degradarse a sí mismo a `developer` (`403`).
 - **`DELETE /users/:id`** — elimina usuario (cascada sobre projects/sessions). No permite borrar la propia cuenta (`403`).
 - **`GET /users/:id/mcp-secret`** — ver `mcpSecret` de cualquier usuario.
 - **`POST /users/:id/mcp-secret/regenerate`** — rotar `mcpSecret` de cualquier usuario.

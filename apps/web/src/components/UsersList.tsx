@@ -63,14 +63,8 @@ function formatRoleLabel(role: UserRow["role"]): string {
   }
 }
 
-function canEditUserRole(
-  viewerIsSuperAdmin: boolean,
-  targetRole: UserRow["role"],
-  isSelf: boolean,
-): boolean {
-  if (isSelf) return false;
-  if (targetRole === "super_admin" && !viewerIsSuperAdmin) return false;
-  return true;
+function canEditUserRole(isSelf: boolean): boolean {
+  return !isSelf;
 }
 
 async function copyToClipboard(text: string): Promise<void> {
@@ -105,7 +99,7 @@ export function UsersList() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "developer">("developer");
+  const [newRole, setNewRole] = useState<"super_admin" | "admin" | "developer">("developer");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roleActionError, setRoleActionError] = useState<string | null>(null);
@@ -342,11 +336,14 @@ export function UsersList() {
           />
           <select
             value={newRole}
-            onChange={(e) => setNewRole(e.target.value as "admin" | "developer")}
+            onChange={(e) =>
+              setNewRole(e.target.value as "super_admin" | "admin" | "developer")
+            }
             className="w-full text-sm rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1.5"
           >
             <option value="developer">Developer</option>
             <option value="admin">Admin</option>
+            <option value="super_admin">Super admin</option>
           </select>
           {error && <p className="text-xs text-[var(--destructive)]">{error}</p>}
           <div className="flex gap-2">
@@ -425,7 +422,7 @@ export function UsersList() {
                     >
                       {formatRoleLabel(u.role)}
                     </span>
-                  ) : canEditUserRole(isSuperAdmin, u.role, isSelf) ? (
+                  ) : canEditUserRole(isSelf) ? (
                     <select
                       value={u.role}
                       onChange={(e) =>
@@ -436,7 +433,7 @@ export function UsersList() {
                       }
                       className="text-sm rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1"
                     >
-                      {isSuperAdmin ? <option value="super_admin">Super admin</option> : null}
+                      <option value="super_admin">Super admin</option>
                       <option value="admin">Admin</option>
                       <option value="developer">Developer</option>
                     </select>
