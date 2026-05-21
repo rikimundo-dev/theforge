@@ -10,6 +10,7 @@ import {
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
 } from "./mdd-sanitize.js";
+import { enrichMddWithUiUxDesignIntent } from "./mdd-enrich-uiux-intent.js";
 
 export function hasStructuredContent(mdd: MddStructured | null | undefined): boolean {
   if (!mdd || typeof mdd !== "object") return false;
@@ -89,5 +90,6 @@ export function prepareMddForOutput(
   const sanitized =
     replaceContextWhenOnlyMetadata(sanitizeContextKeyValueAndObject(sanitizeContextSection(raw)));
   const normalized = normalizeMddFormat(sanitized);
-  return injectMddDiagrams(normalized, suggestMddDiagrams(normalized));
+  const withDiagrams = injectMddDiagrams(normalized, suggestMddDiagrams(normalized));
+  return enrichMddWithUiUxDesignIntent(withDiagrams);
 }

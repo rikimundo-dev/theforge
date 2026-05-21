@@ -2,6 +2,18 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.9.0] — 2026-05-22
+
+### Added
+
+- **Enriquecimiento semántico UI/UX en MDD:** Nueva sección `## UI/UX Design Intent` añadida automáticamente al final del MDD. Clasifica cada entidad del modelo de datos (`CREATE TABLE` de §3) como `WorkflowProcess`, `DataRegistry` o `Configuration`; infiere lifecycle states con colores sugeridos; asigna `component_type` semántico (KanbanBoard, DataTable, PropertyGrid, etc.) y mapea props del modelo a props del componente. Implementado en `utils/mdd-enrich-uiux-intent.ts`; integrado en `prepareMddForOutput()` (chokepoint único de salida MDD). No altera contenido previo.
+
+### Changed
+
+- **BUILD_CACHE_BUST**: 74 → 75
+
+---
+
 ## [0.8.0] — 2026-05-20
 
 ### Added
