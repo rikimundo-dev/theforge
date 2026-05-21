@@ -12,7 +12,7 @@ import {
   Res,
 } from "@nestjs/common";
 import type { Response } from "express";
-import { getRequestUserRole } from "../../common/request-user.store.js";
+import { requireAdmin } from "../../common/guards/role.helpers.js";
 import { DeliverablesQueueService, type GenerateJobType } from "./deliverables-queue.service.js";
 import { ProjectsService } from "./projects.service.js";
 import {
@@ -299,10 +299,7 @@ export class ProjectsController {
 
   @Delete(":id")
   remove(@Param("id") id: string) {
-    const role = getRequestUserRole();
-    if (role !== "admin") {
-      throw new ForbiddenException("Solo administradores pueden borrar proyectos");
-    }
+    requireAdmin();
     return this.projects.remove(id);
   }
 
