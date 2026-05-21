@@ -229,6 +229,86 @@ export function catalogEmbeddingModels(providerId: ProviderId): string[] {
   return [...new Set(models)];
 }
 
+/** Lista separada por comas, punto y coma o saltos de línea. */
+export function parseChatModelList(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(/[,;\n]+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+    ),
+  ];
+}
+
+/** Todos los modelos de chat publicados en catálogo (todos los proveedores). */
+export function allCatalogChatModels(): string[] {
+  return [
+    ...new Set(
+      (Object.keys(PROVIDER_CATALOG) as ProviderId[]).flatMap((id) => catalogChatModels(id)),
+    ),
+  ];
+}
+
+/** Pool de modelos que super_admin puede asignar a un usuario (catálogo + proveedores del equipo). */
+export function globalGrantAssignableChatModels(
+  teamInstances: Array<{
+    providerType: string;
+    chatModel: string;
+    chatModelFallbacks: string[];
+    allowedChatModels: string[];
+  }>,
+): string[] {
+  const fromTeam = teamInstances.flatMap((inst) => tenantInstanceAssignableChatModels(inst));
+  return [...new Set([...allCatalogChatModels(), ...fromTeam])];
+}
+
+/** Pool de modelos que super_admin puede asignar a un usuario sobre una instancia tenant. */
+export function tenantInstanceAssignableChatModels(instance: {
+  providerType: string;
+  chatModel: string;
+  chatModelFallbacks: string[];
+  allowedChatModels: string[];
+}): string[] {
+  if (!isProviderId(instance.providerType)) return [];
+  const providerId = instance.providerType;
+  const base =
+    instance.allowedChatModels.length > 0
+      ? instance.allowedChatModels
+      : catalogChatModels(providerId);
+  return [
+    ...new Set([
+      instance.chatModel,
+      ...instance.chatModelFallbacks,
+      ...base,
+    ]),
+  ];
+}
+
+/** Unión instancia + grants por usuario para validar runtime. */
+export function mergedTenantChatModelWhitelist(
+  instance: { allowedChatModels: string[] },
+  userAllowedChatModels: string[] | null | undefined,
+): string[] {
+  return [...new Set([...instance.allowedChatModels, ...(userAllowedChatModels ?? [])])];
+}
+
+/**
+ * Con grants del super_admin, solo cuenta la lista del usuario.
+ * Sin grants, aplica whitelist de la instancia / catálogo.
+ */
+export function isChatModelAllowedForTenantUser(
+  model: string,
+  userGrants: string[],
+  providerId: ProviderId,
+  instanceAllowedChatModels: string[],
+  bypassWhitelist: boolean,
+): boolean {
+  if (bypassWhitelist) return true;
+  if (userGrants.length > 0) return userGrants.includes(model);
+  return isChatModelWhitelisted(providerId, model, instanceAllowedChatModels, false);
+}
+
 export function isChatModelWhitelisted(
   providerId: ProviderId,
   model: string,
