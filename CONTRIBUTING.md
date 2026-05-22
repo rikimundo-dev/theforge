@@ -19,12 +19,12 @@ More detail: [`docs/notebooklm/THEFORGE-INDEX.md`](docs/notebooklm/THEFORGE-INDE
 
 ## Local development
 
-- Node ≥ 20, npm workspaces.
-- `npm install`
+- Node ≥ 20, pnpm 9 (`corepack enable`).
+- `pnpm install`
 - Database: configure `DATABASE_URL` (see `.env.example` at repo root), then:
-  - `npm run db:generate`
-  - `npm run db:push` (or migrations workflow you use)
-- `npm run dev` (Turbo) or filtered dev for api/web only.
+  - `pnpm run db:generate`
+  - `pnpm run db:push` (or migrations workflow you use)
+- `pnpm run dev` (Turbo) or `pnpm run dev:api` / `pnpm run dev:web`.
 
 Docker: see [`README.md`](README.md) **Docker** section.
 
@@ -36,12 +36,12 @@ Docker: see [`README.md`](README.md) **Docker** section.
 
 ## Tests and lint
 
-- `npm run lint` at root (Turbo).
-- **`npm run test`** at root: smoke y unit tests en API, web (utilidades puras) y `business-rules`.
-- **`npm run test:types`**: `tsc --noEmit` en API y web (detecta imports rotos y tipos antes de desplegar).
-- API: `cd apps/api && npm test` — incluye `src/smoke/cross-module-imports.smoke.spec.ts` (imports entre módulos Nest).
-- Web: `cd apps/web && npm test` — utilidades NDJSON, errores HTTP, markdown, design tokens.
-- MCP alignment (API): `npm run test:mcp-alignment` en `apps/api`.
+- `pnpm run lint` at root (Turbo).
+- **`pnpm run test`** at root: smoke y unit tests en API, web (utilidades puras) y `business-rules`.
+- **`pnpm run test:types`**: `tsc --noEmit` en API y web (detecta imports rotos y tipos antes de desplegar).
+- API: `pnpm --filter @theforge/api test` — incluye `src/smoke/cross-module-imports.smoke.spec.ts` (imports entre módulos Nest).
+- Web: `pnpm --filter @theforge/web test` — utilidades NDJSON, errores HTTP, markdown, design tokens.
+- MCP alignment (API): `pnpm --filter @theforge/api run test:mcp-alignment`.
 
 ## Pull requests
 

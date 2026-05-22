@@ -8,14 +8,16 @@ RUN apk add --no-cache gcompat openssl
 
 WORKDIR /app
 
-COPY package.json turbo.json .npmrc ./
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY packages/database/package.json packages/database/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/business-rules/package.json packages/business-rules/
 COPY packages/config/package.json packages/config/
 COPY apps/api/package.json apps/api/
 
-RUN npm install
+RUN pnpm install --frozen-lockfile
 
 COPY packages/database packages/database
 COPY packages/shared-types packages/shared-types
@@ -25,9 +27,9 @@ COPY apps/api apps/api
 COPY scripts/rotate-master-key.ts scripts/rotate-master-key.ts
 
 ENV DATABASE_URL="postgresql://local:local@db:5432/theforge"
-RUN npx turbo run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
+RUN pnpm exec turbo run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
 
-# Production stage — layout npm workspaces desde builder
+# Production stage — layout pnpm hoisted desde builder
 FROM node:20-alpine AS runner
 
 RUN apk add --no-cache wget openssl

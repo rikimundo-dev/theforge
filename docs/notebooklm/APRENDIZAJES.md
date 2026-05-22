@@ -191,8 +191,8 @@ _Rellenar con datos reales._
 ### Sesión — Local dev y arranque (28 ene 2026)
 
 - **Qué hicimos:** Automatizar arranque en local: (1) script `scripts/ensure-postgres.js` que comprueba/inicia Colima y contenedor Postgres `theforge-db`; (2) `dev:local` en package raíz = ensure-postgres + turbo dev; (3) soporte para Colima (`colima start --cpu 2 --memory 4`) dentro del mismo script; (4) scripts `dev:api` y `dev:web` para correr solo back o solo front (dev:api incluye ensure-postgres); (5) corrección de errores de arranque: entryFile Nest, copia de Prisma generated a dist, ruta de master-prompt.md en runtime, carga de `.env` con dotenv en API; (6) README-LOCAL con instrucciones de back/front en terminales separadas.
-- **Qué falló:** Varios fallos en cadena al ejecutar `npm run dev`: módulo dist/main no encontrado; luego database/generated; luego master-prompt.md; luego clave IA (`AI_API_KEY` / `OPENAI_API_KEY`) no leída. Cada uno se fue corrigiendo en orden. Lockfile: con npm, tras cambios en dependencias, `npm install` actualiza `package-lock.json`.
-- **Qué cambiamos / pivotamos:** Ningún pivote de producto; solo ajustes de tooling y paths (monorepo + Nest + Prisma + assets).
+- **Qué falló:** Varios fallos en cadena al ejecutar `pnpm run dev` (antes `npm run dev`): módulo dist/main no encontrado; luego database/generated; luego master-prompt.md; luego clave IA (`AI_API_KEY` / `OPENAI_API_KEY`) no leída. Cada uno se fue corrigiendo en orden. Lockfile histórico: `package-lock.json` (sustituido por **`pnpm-lock.yaml`**; no mezclar gestores).
+- **Qué cambiamos / pivotamos:** Ningún pivote de producto; solo ajustes de tooling y paths (monorepo + Nest + Prisma + assets). Monorepo migrado a **pnpm** (mayo 2026).
 - **Tiempo aproximado:** ~1 h (varios ciclos prueba–error–fix).
 
 ### Sesión — Guía UX/UI (Workshop) (28–29 ene 2026)
@@ -224,4 +224,4 @@ _Rellenar con datos reales._
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

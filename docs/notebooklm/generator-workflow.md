@@ -49,8 +49,9 @@ This document outlines the standard operating procedure for generating high-prec
 To initiate this workflow in Cursor/Antigravity:
 
 ```bash
-# Start the generator
-npx ts-node scripts/generate-mdd.ts --interactive
+# Desde apps/api (tras pnpm install en la raíz)
+cd apps/api
+pnpm exec tsx scripts/generate-mdd.ts --interactive
 ```
 
 ### Proveedor LLM (alineado al API The Forge)
@@ -60,4 +61,4 @@ El backend usa **OpenRouter** (`OPENROUTER_API_KEY` o `AI_API_KEY` / `OPENAI_API
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

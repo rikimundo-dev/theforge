@@ -37,4 +37,4 @@ Ver también: [THEFORGE-MCP.md](./THEFORGE-MCP.md), carpeta [integracion-theforg
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

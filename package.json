@@ -4,15 +4,11 @@
   "private": true,
   "author": "Jorge Correa <jcorrea@e-personal.net>",
   "license": "Apache-2.0",
-  "packageManager": "npm@10.8.2",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "dev:local": "node scripts/ensure-infra.js && npm run dev",
+    "dev:local": "node scripts/ensure-infra.js && pnpm run dev",
     "dev:api": "node scripts/ensure-infra.js && turbo run dev --filter=@theforge/api",
     "dev:web": "turbo run dev --filter=@theforge/web",
     "lint": "turbo run lint",

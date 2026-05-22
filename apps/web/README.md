@@ -12,4 +12,4 @@ Frontend React (Vite) + Tailwind de TheForge.
 - **Nginx (`nginx.conf`):** `/assets/*` no usa el fallback del SPA (`try_files` solo sirve ficheros reales) para que un chunk faltante no se sustituya por `index.html` (error de MIME `text/html` en módulos JS). `index.html` va con `Cache-Control: no-cache` para alinear shell y hashes tras cada deploy.
 - **Estimación MXN:** `src/utils/costCalculator.ts` delega en `@theforge/business-rules` (misma lógica que el API). Vite resuelve el paquete al **fuente** del monorepo (`vite.config.ts` + `tsconfig` paths) para que Rollup no falle con re-exports CJS del `dist`.
 
-`npm run dev -w @theforge/web` (desde la raíz del monorepo) → http://localhost:5173
+`pnpm run dev:web` o `pnpm --filter @theforge/web dev` (desde la raíz) → http://localhost:5173

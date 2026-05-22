@@ -52,16 +52,17 @@ Clona el repositorio e instala dependencias:
 ```bash
 git clone https://github.com/kreodevs/theforge.git
 cd theforge
-npm install
+corepack enable
+pnpm install
 ```
 
 Configura la base de datos:
 
 ```bash
 # Renombra .env.example a .env y ajusta DATABASE_URL
-npm run db:generate
-npm run db:push
-npm run dev
+pnpm run db:generate
+pnpm run db:push
+pnpm run dev
 ```
 
 | Servicio | URL                     |
@@ -123,7 +124,7 @@ En Dokploy: Environment del servicio **theforge-api** → una línea JSON → re
 | Escenario | Qué poner en env | Efecto en tokens ya guardados |
 |-----------|------------------|-------------------------------|
 | **1. Primera vez** | Solo `"1"`, activa `1` | N/A |
-| **2. Rotación correcta** | `"1"` vieja + `"2"` nueva, activa `2`, luego `npm run rotate-master-key` | Siguen OK con v1 hasta migrar; tras el script todo en v2 |
+| **2. Rotación correcta** | `"1"` vieja + `"2"` nueva, activa `2`, luego `pnpm run rotate-master-key` | Siguen OK con v1 hasta migrar; tras el script todo en v2 |
 | **3. Coexistencia v2 + v3** | `"2"` y `"3"` en JSON, activa `3` | v2 sigue descifrando; nuevos guardados en v3; migración opcional con el script |
 | **4. Solo subir versión activa** | Activas `3` pero no existe `"3"` en JSON | **Nuevos** fallan al cifrar; viejos OK si su versión sigue en el JSON |
 | **5. Reemplazar valor de la misma versión** | Mismo `"1"`, otro base64 | **Irrrecuperables** — hay que re-ingresar API keys en la UI |
@@ -164,7 +165,7 @@ En Dokploy: Environment del servicio **theforge-api** → una línea JSON → re
    export DATABASE_URL="postgresql://..."
    export TOKEN_MASTER_KEYS='{"1":"...","2":"..."}'
    export TOKEN_ACTIVE_KEY_VERSION=2
-   npm run rotate-master-key
+   pnpm run rotate-master-key
    ```
 
    Salida esperada: líneas por tabla y `total rotated=N`.
@@ -176,8 +177,8 @@ En Dokploy: Environment del servicio **theforge-api** → una línea JSON → re
 
 | Dónde | Comando |
 |-------|---------|
-| Monorepo (local o CI) | `npm run rotate-master-key` (requiere `npm install` y `npm run db:generate`) |
-| Contenedor API (Dokploy) | Terminal web del servicio **theforge-api** → `cd /app && npm run rotate-master-key` |
+| Monorepo (local o CI) | `pnpm run rotate-master-key` (requiere `pnpm install` y `pnpm run db:generate`) |
+| Contenedor API (Dokploy) | Terminal web del servicio **theforge-api** → `cd /app && pnpm run rotate-master-key` |
 
 El contenedor ya incluye `scripts/rotate-master-key.ts` y hereda `DATABASE_URL`, `TOKEN_MASTER_KEYS` y `TOKEN_ACTIVE_KEY_VERSION` del entorno de Dokploy. **No sustituyas** el entrypoint del API por `node dist/main.js` solo (ver [`apps/api/README.md`](./apps/api/README.md)).
 
@@ -236,7 +237,7 @@ Sí. Quita una versión solo cuando ninguna fila la use o tras migrar con `rotat
 | `TOKEN_MASTER_KEYS` | — | **Obligatorio.** JSON versión → clave 32 bytes base64 |
 | `TOKEN_ACTIVE_KEY_VERSION` | `1` | Versión al cifrar tokens nuevos |
 
-Guía completa: sección [Cifrado de tokens BYOK](#cifrado-de-tokens-byok-claves-maestras). Rotación: `npm run rotate-master-key`.
+Guía completa: sección [Cifrado de tokens BYOK](#cifrado-de-tokens-byok-claves-maestras). Rotación: `pnpm run rotate-master-key`.
 
 </details>
 

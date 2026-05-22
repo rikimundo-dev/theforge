@@ -3,13 +3,14 @@
 FROM node:20-alpine AS api-builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
-COPY package.json turbo.json .npmrc ./
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY packages/database/package.json packages/database/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/business-rules/package.json packages/business-rules/
 COPY packages/config/package.json packages/config/
 COPY apps/api/package.json apps/api/
-RUN npm install
+RUN pnpm install --frozen-lockfile
 COPY packages/database packages/database
 COPY packages/shared-types packages/shared-types
 COPY packages/business-rules packages/business-rules
@@ -17,28 +18,29 @@ COPY packages/config packages/config
 COPY apps/api apps/api
 COPY scripts/rotate-master-key.ts scripts/rotate-master-key.ts
 ENV DATABASE_URL="postgresql://theforge:theforge@localhost:5432/theforge"
-RUN npx turbo run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
+RUN pnpm exec turbo run build --filter=@theforge/database --filter=@theforge/shared-types --filter=@theforge/business-rules --filter=@theforge/api
 
 # ========== Build Web ==========
 FROM node:20-alpine AS web-builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
-COPY package.json turbo.json .npmrc ./
+RUN corepack enable
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
 COPY packages/config/package.json packages/config/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/business-rules/package.json packages/business-rules/
 COPY apps/web/package.json apps/web/
-RUN npm install
+RUN pnpm install --frozen-lockfile
 COPY packages/config packages/config
 COPY packages/shared-types packages/shared-types
 COPY packages/business-rules packages/business-rules
 COPY apps/web apps/web
-RUN npx turbo run build --filter=@theforge/web
+RUN pnpm exec turbo run build --filter=@theforge/web
 
 # ========== Contenedor único: Postgres + API + Nginx (para Dokploy) ==========
 FROM postgres:15-alpine
 
-RUN apk add --no-cache nodejs npm nginx
+RUN apk add --no-cache nodejs nginx
 
 ENV POSTGRES_USER=theforge
 ENV POSTGRES_PASSWORD=theforge

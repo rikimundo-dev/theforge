@@ -7,7 +7,7 @@ Prisma schema y client compartido.
 - **Migración `20260327140000_ensure_pg_enums_idempotent`:** crea con `IF NOT EXISTS` los ENUM de Prisma (`Status`, `ProjectType`, `ComplexityLevel`, `StageStatus`, `EpisodicMemoryKind`) para desbloquear deploys donde faltaba el tipo antes de `ADD COLUMN …`.
 - **Client:** generado en `src/generated`; exportado por el package.
 
-Desde la **raíz** del monorepo: `npm run db:generate` (o el `build` del paquete) genera el client. `npm run db:push` aplica el schema a la DB. `npm run db:migrate` ejecuta migraciones en producción.
+Desde la **raíz** del monorepo: `pnpm run db:generate` (o el `build` del paquete) genera el client. `pnpm run db:push` aplica el schema a la DB. `pnpm run db:migrate` ejecuta migraciones en producción.
 
 **LangGraph (Paso 0 / DBGA):** las tablas `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations` en `public` las crea `PostgresSaver.setup()` al arrancar la API y también la migración `20260513180000_langgraph_checkpoint_tables` (idempotente). Si ves `relation "public.checkpoints" does not exist`, aplica migraciones pendientes y redeploy de la API.
 

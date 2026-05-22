@@ -21,7 +21,9 @@ En ambos casos el **MDD es la Constitución**: todo se valida contra él (SDD). 
 
 ---
 
-## 3. Estructura del monorepo (Turborepo)
+## 3. Estructura del monorepo (pnpm + Turborepo)
+
+Gestor: **pnpm** (`pnpm-workspace.yaml`, `pnpm-lock.yaml`). Desarrollo: `pnpm install` → `pnpm run dev:local` (ver [README-LOCAL.md](../../README-LOCAL.md)).
 
 ```
 /
@@ -31,11 +33,13 @@ En ambos casos el **MDD es la Constitución**: todo se valida contra él (SDD). 
 ├── packages/
 │   ├── database/     # Prisma schema (Project, Stage, Session, Estimation→Stage, etc.) y client
 │   ├── shared-types/ # DTOs e interfaces compartidas (Zod)
+│   ├── mcp-server/   # MCP propio (tools sobre API Nest)
 │   └── config/       # TypeScript, ESLint, Tailwind base
 ├── docs/             # docs/README.md + notebooklm/ (corpus) + archive/ (histórico)
 ├── blueprint.md      # Guía de implementación técnica (Constitución → plan)
 ├── mdd.md            # MDD del producto TheForge (7 secciones)
 ├── docker-compose.yml
+├── pnpm-workspace.yaml
 └── turbo.json
 ```
 
@@ -110,4 +114,4 @@ Cada entregable se valida (Revisor) y se persiste en el proyecto. La estructura 
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

@@ -17,13 +17,13 @@ Re-cifra API keys BYOK almacenadas hacia `TOKEN_ACTIVE_KEY_VERSION`.
 **Uso:**
 
 ```bash
-npm run rotate-master-key
+pnpm run rotate-master-key
 ```
 
 **Dokploy (sin SSH):** Terminal web del contenedor `theforge-api`:
 
 ```bash
-cd /app && npm run rotate-master-key
+cd /app && pnpm run rotate-master-key
 ```
 
 Documentación completa: [README.md § Cifrado de tokens BYOK](../README.md#cifrado-de-tokens-byok-claves-maestras).

@@ -396,9 +396,9 @@ La aplicación **no** usa stdio: el servicio `TheForgeService` (`apps/api/src/mo
 - **Auth:** `MCP_AUTH_TOKEN` → `Authorization: Bearer`; `MCP_X_M2M_TOKEN` → `X-M2M-Token` (alternativa AriadneSpecs).
 - **Variables:** `THEFORGE_MCP_URL`, `MCP_AUTH_TOKEN`, `MCP_X_M2M_TOKEN`, `THEFORGE_LIST_PROJECTS_CACHE_MS` (caché de `list_known_projects` para resolver workspace vs repo).
 - **Resolución `projectId`:** `list_known_projects.id` = workspace (ingest `/projects/:id/…`); `roots[].id` = repo. El Nest resuelve en `ariadne-mcp-scope.util.ts`: workspace `id` para **`ask_codebase`** / **`get_modification_plan`**; **`roots[].id`** (o primer root) para herramientas de grafo / **`semantic_search`**, más `scope.repoIds` en ask/plan cuando aplica.
-- **Contrato de argumentos:** `theforge-mcp-client-contract.ts` + `npm run test:mcp-alignment -w @theforge/api` desde la raíz del monorepo (herramientas esperadas y claves frente a `tools/list`).
+- **Contrato de argumentos:** `theforge-mcp-client-contract.ts` + `pnpm --filter @theforge/api run test:mcp-alignment` desde la raíz del monorepo (herramientas esperadas y claves frente a `tools/list`).
 - **Troubleshooting Cursor / HTML:** en Ariadne, `docs/MCP_AYUDA.md` §7 — respuesta `<!doctype` suele indicar que `/mcp` no enruta al servicio MCP; **401** si falta token cuando el servidor exige autenticación al **path `/mcp`** (distinto de errores Nest internos al MCP, §10).
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

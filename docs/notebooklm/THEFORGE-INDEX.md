@@ -42,7 +42,9 @@ flowchart LR
 
 ---
 
-## 2. Estructura del monorepo (Turborepo)
+## 2. Estructura del monorepo (pnpm + Turborepo)
+
+Gestor: **pnpm** (`pnpm-workspace.yaml`, `pnpm-lock.yaml`, `.npmrc` con `node-linker=hoisted`). Scripts en `package.json` raíz vía Turbo; filtros: `pnpm --filter @theforge/api …`.
 
 ```
 /
@@ -53,11 +55,15 @@ flowchart LR
 │   ├── database/       # Prisma schema + client
 │   ├── shared-types/   # DTOs e interfaces
 │   ├── business-rules/ # Reglas puras compartidas (estimación MXN, parse infra)
+│   ├── mcp-server/     # MCP propio (API Nest como tools)
 │   └── config/         # TS, ESLint, Tailwind
 ├── docker-compose.yml
+├── pnpm-workspace.yaml
 ├── turbo.json
 └── .cursor/rules/
 ```
+
+Desarrollo local: `pnpm install` → `pnpm run db:generate` → `pnpm run dev:local` (ver [README-LOCAL.md](../../README-LOCAL.md)).
 
 ---
 
@@ -181,4 +187,4 @@ Modelos principales: **Project** (entregables globales: SPEC, Blueprint, API, In
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

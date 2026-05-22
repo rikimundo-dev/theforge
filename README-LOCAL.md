@@ -5,7 +5,7 @@ Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para la bas
 ## Requisitos
 
 - **Node** ≥20  
-- **npm** (incluido con Node; monorepo vía `workspaces` en la raíz)  
+- **pnpm** 9 (`corepack enable`; `packageManager` en `package.json`)  
 - **Colima** (runtime de contenedores en Mac; si no está corriendo, `dev:local` ejecuta `colima start --cpu 2 --memory 4`)  
 - **Docker** CLI (para Postgres; Colima lo provee)
 
@@ -16,17 +16,18 @@ Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para la bas
 ### 1. Dependencias
 
 ```bash
-npm install
+corepack enable
+pnpm install
 ```
 
-Si **`npm install`** falla con `Cannot read properties of null (reading 'matches')` (stack en `@npmcli/arborist`), suele ser **`node_modules` mezclado**: p. ej. quedó un árbol **pnpm** (`node_modules/.pnpm`) y luego se usó **npm**. Borra todos los `node_modules` del monorepo y reinstala:
+Si cambiaste de **npm** a **pnpm** (o al revés), borra `node_modules` y el lockfile del otro gestor antes de reinstalar:
 
 ```bash
-rm -rf node_modules apps/*/node_modules packages/*/node_modules
-npm install
+rm -rf node_modules package-lock.json
+pnpm install
 ```
 
-Evita alternar **pnpm** y **npm** en la misma raíz sin limpiar.
+No mezcles **npm** y **pnpm** en la misma raíz: usa solo `pnpm-lock.yaml`.
 
 ### 2. Levantar solo Postgres
 
@@ -58,8 +59,8 @@ OPENROUTER_API_KEY=sk-or-v1-...
 ### 4. Crear tablas (Prisma)
 
 ```bash
-npm run db:generate
-npm run db:push
+pnpm run db:generate
+pnpm run db:push
 ```
 
 ### 5. Arrancar API y Web
@@ -69,13 +70,13 @@ npm run db:push
 Levanta Postgres si no está y luego API + Web:
 
 ```bash
-npm run dev:local
+pnpm run dev:local
 ```
 
 O solo API + Web (Postgres ya levantado):
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 **Back y front en terminales separadas**
@@ -93,7 +94,7 @@ npm run dev
    Desde la raíz:
 
    ```bash
-   npm run dev:api
+   pnpm run dev:api
    ```
 
 3. **Terminal 2 — Frontend (Web):**
@@ -101,7 +102,7 @@ npm run dev
    Desde la raíz:
 
    ```bash
-   npm run dev:web
+   pnpm run dev:web
    ```
 
 - **Web:** http://localhost:5173  
@@ -145,19 +146,19 @@ Si tienes PostgreSQL 15 en local:
    DATABASE_URL=postgresql://USUARIO:PASSWORD@localhost:5432/theforge
    ```
 
-3. Luego: `npm install` → `npm run db:generate` → `npm run db:push` → `npm run dev`.
+3. Luego: `pnpm install` → `pnpm run db:generate` → `pnpm run db:push` → `pnpm run dev`.
 
 ---
 
 ## Resumen rápido (Opción A)
 
 ```bash
-npm install
+pnpm install
 echo "DATABASE_URL=postgresql://theforge:theforge@localhost:5432/theforge" > .env
-npm run db:generate && npm run db:push
-npm run dev:local
+pnpm run db:generate && pnpm run db:push
+pnpm run dev:local
 ```
 
-`dev:local` levanta Postgres en Docker si no existe o está parado; luego arranca API y Web. Si prefieres levantar Postgres a mano, usa el comando `docker run ...` del paso 2 y luego `npm run dev`.
+`dev:local` levanta Postgres en Docker si no existe o está parado; luego arranca API y Web. Si prefieres levantar Postgres a mano, usa el comando `docker run ...` del paso 2 y luego `pnpm run dev`.
 
 Abre http://localhost:5173 y crea un proyecto para comprobar que todo va bien.

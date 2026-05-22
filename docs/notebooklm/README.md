@@ -2,6 +2,27 @@
 
 Material **curado para cargar en NotebookLM** (o cualquier RAG): arquitectura, SDD, MCP cliente, despliegue, seguridad y planes de producto vigentes. **No sustituye al código**; enlaces a `apps/`, `packages/` y a la raíz del monorepo (`blueprint.md`, `mdd.md`) usan rutas relativas `../../` desde esta carpeta.
 
+## Gestor de paquetes (pnpm)
+
+El monorepo usa **pnpm 9** (`packageManager` en `package.json` raíz, `pnpm-workspace.yaml`, lockfile `pnpm-lock.yaml`). Comandos habituales **desde la raíz** del repo:
+
+```bash
+corepack enable
+pnpm install
+pnpm run dev              # API + Web (Turbo)
+pnpm run dev:local        # Postgres (Colima/Docker) + dev
+pnpm run dev:api
+pnpm run dev:web
+pnpm run db:generate
+pnpm run db:push
+pnpm run build
+pnpm run test
+pnpm run test:types
+pnpm --filter @theforge/api run test:mcp-alignment
+```
+
+Docker multi-stage: `corepack enable` + `pnpm install --frozen-lockfile` + `pnpm exec turbo run build` (ver `apps/api/Dockerfile`, `apps/web/Dockerfile`). No uses `npm` ni `package-lock.json` en este repo (ignorado en `.gitignore`).
+
 ## Orden sugerido al crear el cuaderno
 
 1. **THEFORGE-INDEX.md** — visión única: flujo, IA agnóstica, semáforo, estimación MXN, Docker, Prisma.
@@ -25,4 +46,4 @@ Cuaderno canónico: **«The Forge - by Kreo»**. Tras editar estos `.md`, volver
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

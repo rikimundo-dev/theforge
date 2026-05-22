@@ -16,6 +16,8 @@ Documentación para usar el conocimiento indexado por **AriadneSpecs** (grafo de
 
 Flujo legacy detallado (histórico): [../../archive/PLAN-FLUJO-LEGACY-V2.md](../../archive/PLAN-FLUJO-LEGACY-V2.md).
 
+**Monorepo The Forge:** gestor **pnpm** (`pnpm-workspace.yaml`). Desarrollo: `pnpm install` en la raíz → `pnpm run dev:local` o `pnpm run dev`. Ver [../README.md](../README.md).
+
 ## Uso en Cursor
 
 Configurar AriadneSpecs en `~/.cursor/mcp.json` (ver `theforge.md`). La regla `.cursor/rules/ariadne-mcp.mdc` enlaza contrato HTTP, variables y resolución `projectId` frente al monorepo Ariadne.
@@ -26,4 +28,4 @@ En la entrada se distingue **proyecto nuevo** vs **legacy (TheForge)**; los proy
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*

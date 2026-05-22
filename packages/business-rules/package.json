@@ -12,10 +12,10 @@
     "test": "node --import tsx --test 'src/**/*.spec.ts'"
   },
   "dependencies": {
-    "@theforge/shared-types": "*"
+    "@theforge/shared-types": "workspace:*"
   },
   "devDependencies": {
-    "@theforge/config": "*",
+    "@theforge/config": "workspace:*",
     "typescript": "^5.6.3"
   }
 }

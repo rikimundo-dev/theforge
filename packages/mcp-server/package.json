@@ -15,7 +15,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@theforge/shared-types": "*"
+    "@theforge/shared-types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

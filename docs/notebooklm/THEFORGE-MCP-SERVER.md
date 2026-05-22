@@ -2,7 +2,7 @@
 
 Paquete **`packages/mcp-server`** del monorepo The Forge: servidor **MCP propio** que expone la **API REST Nest** (`apps/api`) como herramientas MCP. **No es** el MCP **AriadneSpecs** (código indexado del cliente); ese sigue siendo externo (`THEFORGE_MCP_URL` → oráculo Ariadne). Este servidor es **The Forge sobre The Forge**: IDE u orquestador llama al MCP → JWT M2M → mismo backend que la web.
 
-**Última revisión:** 2026-05-02.
+**Última revisión:** 2026-05-22 (despliegue vía pnpm en monorepo).
 
 ---
 
@@ -13,7 +13,7 @@ Paquete **`packages/mcp-server`** del monorepo The Forge: servidor **MCP propio*
 | **Paquete** | `@theforge/mcp-server` (`pnpm --filter @theforge/mcp-server build`) |
 | **Binario** | `theforge-mcp` → `dist/index.js` |
 | **Modo stdio** | Por defecto (sin args): Cursor / Claude Desktop ejecutan el binario. |
-| **Modo HTTP** | `node dist/index.js --http` o `npm run start` — **Streamable HTTP**, puerto `PORT` (default **3100**; en algunos despliegues se mapea a **3000**). |
+| **Modo HTTP** | `node dist/index.js --http` o `pnpm --filter @theforge/mcp-server start` — **Streamable HTTP**, puerto `PORT` (default **3100**; en algunos despliegues se mapea a **3000**). |
 | **Backend** | `THEFORGE_API_URL` (default `http://localhost:3000`) — misma API que el front. |
 
 ---
@@ -61,12 +61,12 @@ Los nombres exactos y `inputSchema` están en el código fuente; la lista puede 
 
 ```bash
 # En la raíz del monorepo
-cd packages/mcp-server
+corepack enable
 pnpm install
-pnpm run build
+pnpm exec turbo run build --filter=@theforge/mcp-server
 export MCP_M2M_SECRET=...   # mismo que apps/api
 export THEFORGE_API_URL=http://localhost:3000
-node dist/index.js --http   # escucha PORT o 3100
+node packages/mcp-server/dist/index.js --http   # PORT / 3100
 ```
 
 **Cursor (`mcp.json`):** servidor con `url` apuntando a `http://localhost:3100/mcp` (o la ruta que exponga el transport HTTP del SDK) **solo** si el binario publica ese endpoint; ver implementación actual de `StreamableHTTPServerTransport` en `index.ts`.
@@ -93,4 +93,4 @@ No mezclar URLs ni secretos: M2M de The Forge ≠ `MCP_AUTH_TOKEN` de Ariadne.
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-02. Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
