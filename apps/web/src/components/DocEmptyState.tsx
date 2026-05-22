@@ -18,12 +18,15 @@ export function DocEmptyState({
   legacyGenerateLabel,
   onLegacyGenerate,
   legacyGenerateLoading,
+  generateButtonLabel,
+  prerequisiteHint,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   onGenerate: () => void;
   loading: boolean;
+  /** When false, primary generate stays disabled and `prerequisiteHint` is shown. */
   hasMdd: boolean;
   /** ej. Blueprint §3 incompleto — bloquea generación aunque haya MDD */
   generateBlocked?: boolean;
@@ -31,6 +34,10 @@ export function DocEmptyState({
   legacyGenerateLabel?: string;
   onLegacyGenerate?: () => void;
   legacyGenerateLoading?: boolean;
+  /** Overrides default «Generar {title} desde MDD». */
+  generateButtonLabel?: string;
+  /** Shown when `hasMdd` is false (e.g. Benchmark needs Fase 0). */
+  prerequisiteHint?: string;
 }) {
   const blocked = !!generateBlocked;
   if (loading && !blocked) {
@@ -64,11 +71,12 @@ export function DocEmptyState({
           generativeLoading={loading}
         >
           {!loading ? <Sparkles className="h-4 w-4 shrink-0 opacity-95" strokeWidth={2} aria-hidden /> : null}
-          Generar {title} desde MDD
+          {generateButtonLabel ?? `Generar ${title} desde MDD`}
         </Button>
         {!hasMdd && (
           <p className="text-xs leading-relaxed text-[var(--muted-foreground)]">
-            Necesitas tener contenido en el MDD para generar este documento.
+            {prerequisiteHint ??
+              "Necesitas tener contenido en el MDD para generar este documento."}
           </p>
         )}
         {blocked && generateBlockedReason && (

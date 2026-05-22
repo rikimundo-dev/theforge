@@ -41,6 +41,7 @@ import {
 import type { TheForgeUser } from "@/utils/apiClient";
 import { useTheme, type ThemePreference } from "@/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
+import { getProjectMonogram } from "@/utils/projectMonogram";
 import { useWorkshopStore } from "../store/workshopStore";
 import { buildWorkshopDocNavItems, workshopTabDocHasContent } from "../utils/workshopDocNav";
 
@@ -297,6 +298,17 @@ export function DashboardSidebar({
     return list;
   }, [dashboardProjects]);
 
+  const projectsRailTooltip = useMemo(() => {
+    if (projectsLoading) return "Cargando proyectos…";
+    if (sortedDashboardProjects.length === 0) {
+      return projectSearchQuery.trim() ? "Sin coincidencias" : "Aún no hay proyectos";
+    }
+    return `Proyectos (${sortedDashboardProjects.length})`;
+  }, [projectsLoading, sortedDashboardProjects.length, projectSearchQuery]);
+
+  const showProjectsRailList =
+    rail && !projectsLoading && sortedDashboardProjects.length > 0;
+
   useEffect(() => {
     setWorkshopStepsExpanded(true);
   }, [workshopProject?.id]);
@@ -435,6 +447,19 @@ export function DashboardSidebar({
   ]);
 
   const inWorkshop = !!workshopProject && typeof onExitWorkshop === "function";
+
+  const workshopDeliverablesLoading =
+    inWorkshop &&
+    workshopProject != null &&
+    (!storeProject || storeProject.id !== workshopProject.id);
+
+  const workshopRailTooltip = useMemo(() => {
+    if (!workshopProject) return "Proyecto";
+    if (workshopDeliverablesLoading) return "Cargando entregables…";
+    return `Proyecto: ${workshopProject.name}`;
+  }, [workshopProject, workshopDeliverablesLoading]);
+
+  const showWorkshopRailSteps = rail && inWorkshop && !workshopDeliverablesLoading;
 
   useEffect(() => {
     if (!inWorkshop) setProjectsNavExpanded(true);
@@ -664,7 +689,7 @@ export function DashboardSidebar({
                       </div>
                     </TooltipTrigger>
                     <TooltipContent side="right" align="center" sideOffset={10}>
-                      Proyecto: {workshopProject.name}
+                      {workshopRailTooltip}
                     </TooltipContent>
                   </Tooltip>
                 ) : (
@@ -691,7 +716,7 @@ export function DashboardSidebar({
                     />
                   </button>
                 )}
-                {(rail || workshopStepsExpanded) ? (
+                {showWorkshopRailSteps || (!rail && workshopStepsExpanded) ? (
                 <div
                   id="workshop-deliverables-panel"
                   className={cn(
@@ -702,7 +727,7 @@ export function DashboardSidebar({
                   <p
                     className={cn(
                       "mb-1.5 shrink-0 px-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted-foreground)]",
-                      rail && "lg:hidden",
+                      rail && "hidden",
                     )}
                   >
                     Pasos del flujo
@@ -717,8 +742,12 @@ export function DashboardSidebar({
                     role="list"
                     aria-label="Pasos del workshop"
                   >
-                    {!storeProject || storeProject.id !== workshopProject.id ? (
-                      <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">Cargando entregables…</p>
+                    {workshopDeliverablesLoading ? (
+                      !rail ? (
+                        <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
+                          Cargando entregables…
+                        </p>
+                      ) : null
                     ) : (
                       <div className="relative">
                         {!rail ? (
@@ -851,7 +880,7 @@ export function DashboardSidebar({
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="right" align="center" sideOffset={10}>
-                    Proyectos ({sortedDashboardProjects.length})
+                    {projectsRailTooltip}
                   </TooltipContent>
                 </Tooltip>
               ) : (
@@ -881,7 +910,7 @@ export function DashboardSidebar({
                   />
                 </button>
               )}
-              {rail || projectsNavExpanded ? (
+              {showProjectsRailList || (!rail && projectsNavExpanded) ? (
                 <div
                   id="dashboard-projects-nav-panel"
                   className={cn("mt-2 flex min-h-0 min-w-0 flex-col", rail ? "px-0" : "overflow-hidden px-1")}
@@ -896,13 +925,13 @@ export function DashboardSidebar({
                     role="list"
                     aria-label="Lista de proyectos"
                   >
-                    {projectsLoading ? (
+                    {!rail && projectsLoading ? (
                       <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">Cargando proyectos…</p>
-                    ) : sortedDashboardProjects.length === 0 ? (
+                    ) : !rail && sortedDashboardProjects.length === 0 ? (
                       <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
                         {projectSearchQuery.trim() ? "Sin coincidencias" : "Aún no hay proyectos"}
                       </p>
-                    ) : (
+                    ) : sortedDashboardProjects.length > 0 ? (
                       <div className="relative w-full">
                         {!rail ? (
                           <span
@@ -916,7 +945,9 @@ export function DashboardSidebar({
                             rail ? "flex flex-col items-center gap-1" : "space-y-0.5 py-0.5",
                           )}
                         >
-                          {sortedDashboardProjects.map((project) => (
+                          {sortedDashboardProjects.map((project) => {
+                            const isActiveProject = workshopProject?.id === project.id;
+                            return (
                             <li
                               key={project.id}
                               className={cn("relative shrink-0", !rail && "pl-5 lg:pl-6")}
@@ -929,16 +960,28 @@ export function DashboardSidebar({
                                   type="button"
                                   role="listitem"
                                   title={project.name}
+                                  aria-current={isActiveProject ? "page" : undefined}
                                   onClick={() => handleOpenDashboardProject(project)}
                                   className={cn(
                                     "flex min-w-0 items-center font-medium transition-colors",
                                     rail
-                                      ? railControlClass("mx-auto text-[var(--muted-foreground)]")
+                                      ? isActiveProject
+                                        ? railControlActiveClass(
+                                            "mx-auto text-[var(--primary)]",
+                                          )
+                                        : railControlClass(
+                                            "mx-auto text-[var(--sidebar-foreground)]",
+                                          )
                                       : "mb-px w-full gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--sidebar-foreground))] last:mb-0 hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)] hover:text-[var(--sidebar-accent-foreground)]",
                                   )}
                                 >
                                   {rail ? (
-                                    <FolderOpen className="size-4 shrink-0" aria-hidden />
+                                    <span
+                                      className="text-[11px] font-semibold uppercase leading-none tracking-wide"
+                                      aria-hidden
+                                    >
+                                      {getProjectMonogram(project.name)}
+                                    </span>
                                   ) : (
                                     <>
                                       <FolderOpen
@@ -957,10 +1000,11 @@ export function DashboardSidebar({
                                 </button>
                               </CollapsedRailHint>
                             </li>
-                          ))}
+                            );
+                          })}
                         </ul>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               ) : null}

@@ -1,17 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Cable, Settings, Shield, Sparkles } from "lucide-react";
+import { Cable, Settings, Shield, Sparkles } from "lucide-react";
 import { ProviderInstancesCard } from "@/components/ProviderInstancesCard";
-import { AgentsConfigCard } from "@/components/AgentsConfigCard";
 import { AccountConfigCard } from "@/components/AccountConfigCard";
 import { AriadneConfigCard } from "@/components/AriadneConfigCard";
 import { UnderlineTabs, type UnderlineTabItem } from "@/components/ui/UnderlineTabs";
 import { getStoredUser } from "@/utils/apiClient";
 
-type SettingsTab = "providers" | "agents" | "ariadne" | "account";
+type SettingsTab = "providers" | "ariadne" | "account";
 
 const SETTINGS_TABS: UnderlineTabItem<SettingsTab>[] = [
   { id: "providers", label: "Proveedores de IA", shortLabel: "Proveedores", icon: Sparkles },
-  { id: "agents", label: "Agentes", shortLabel: "Agentes", icon: Bot },
   { id: "ariadne", label: "Ariadne", shortLabel: "Ariadne", icon: Cable },
   { id: "account", label: "Cuenta", shortLabel: "Cuenta", icon: Shield },
 ];
@@ -48,7 +46,7 @@ export default function SettingsView({ showIaCost, onToggleIaCost }: SettingsVie
             <p className="mt-1 text-sm text-[var(--foreground-muted)] sm:text-base">
               {isDeveloper
                 ? "Token MCP y preferencias de tu cuenta"
-                : "Proveedores de IA, agentes, Ariadne y cuenta"}
+                : "Proveedores de IA, Ariadne y cuenta"}
             </p>
           </div>
 
@@ -75,16 +73,6 @@ export default function SettingsView({ showIaCost, onToggleIaCost }: SettingsVie
               className={activeTab === "providers" ? "space-y-6" : undefined}
             >
               {activeTab === "providers" ? <ProviderInstancesCard /> : null}
-            </div>
-
-            <div
-              id="settings-panel-agents"
-              role="tabpanel"
-              aria-labelledby="settings-tab-agents"
-              hidden={activeTab !== "agents"}
-              className={activeTab === "agents" ? "space-y-6" : undefined}
-            >
-              {activeTab === "agents" ? <AgentsConfigCard /> : null}
             </div>
 
             <div

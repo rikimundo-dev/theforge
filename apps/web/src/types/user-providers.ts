@@ -52,7 +52,7 @@ export interface UserProviderConfigSummary {
 export interface UserAISettings {
   activeProvider: ProviderId | null;
   activeTenantInstanceId: string | null;
-  /** Instancia dedicada para el Auditor MDD; null = instancia activa. */
+  /** @deprecated Ya no se usa; el Auditor toma `auditorChatModel` de la instancia activa. */
   mddAuditorTenantInstanceId: string | null;
   embeddingProvider: ProviderId | null;
   embeddingsEnabled: boolean;
@@ -118,7 +118,6 @@ export interface UpsertProviderConfigBody {
 export interface UpdateAISettingsBody {
   activeProvider?: ProviderId;
   activeTenantInstanceId?: string | null;
-  mddAuditorTenantInstanceId?: string | null;
   embeddingProvider?: ProviderId | null;
   embeddingsEnabled?: boolean;
 }

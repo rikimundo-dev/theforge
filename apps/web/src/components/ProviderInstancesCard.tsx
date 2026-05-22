@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { Button } from "./ui";
 import { getStoredUser } from "@/utils/apiClient";
@@ -37,6 +37,15 @@ export function ProviderInstancesCard() {
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
   const activeInstanceId = userSettings?.activeTenantInstanceId ?? null;
+
+  const sortedInstances = useMemo(() => {
+    if (!activeInstanceId) return instances;
+    return [...instances].sort((a, b) => {
+      if (a.id === activeInstanceId) return -1;
+      if (b.id === activeInstanceId) return 1;
+      return 0;
+    });
+  }, [instances, activeInstanceId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -187,7 +196,7 @@ export function ProviderInstancesCard() {
             <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
             Cargando instancias…
           </div>
-        ) : instances.length === 0 ? (
+        ) : sortedInstances.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_20%,var(--card))] px-6 py-10 text-center">
             <p className="text-sm text-[var(--foreground-muted)]">
               {canManage
@@ -197,7 +206,7 @@ export function ProviderInstancesCard() {
           </div>
         ) : (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-            {instances.map((inst) => {
+            {sortedInstances.map((inst) => {
               const isActive = activeInstanceId === inst.id;
               const cardProps = {
                 inst,

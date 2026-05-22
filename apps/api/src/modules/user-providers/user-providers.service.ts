@@ -47,6 +47,7 @@ export interface UpsertProviderConfigDto {
 export interface UpdateAISettingsDto {
   activeProvider?: string;
   activeTenantInstanceId?: string | null;
+  /** @deprecated Rechazado; configurar `auditorChatModel` en la instancia activa. */
   mddAuditorTenantInstanceId?: string | null;
   embeddingProvider?: string | null;
   embeddingsEnabled?: boolean;
@@ -189,21 +190,19 @@ export class UserProvidersService {
       where: { id: userId },
       select: { role: true },
     });
+    if (dto.mddAuditorTenantInstanceId !== undefined) {
+      throw new BadRequestException(
+        "El Auditor MDD se configura en la instancia activa (modelo de auditor en el modal de la instancia)",
+      );
+    }
     if (user?.role === "developer") {
-      if (
-        dto.activeTenantInstanceId !== undefined ||
-        dto.activeProvider !== undefined ||
-        dto.mddAuditorTenantInstanceId !== undefined
-      ) {
+      if (dto.activeTenantInstanceId !== undefined || dto.activeProvider !== undefined) {
         throw new ForbiddenException(
           "Los developers usan el proveedor predeterminado configurado por el super_admin",
         );
       }
     }
-    for (const instanceId of [
-      dto.activeTenantInstanceId,
-      dto.mddAuditorTenantInstanceId,
-    ]) {
+    for (const instanceId of [dto.activeTenantInstanceId]) {
       if (instanceId === undefined || instanceId === null) continue;
       const inst = await this.prisma.providerInstance.findFirst({
         where: {
@@ -414,21 +413,10 @@ export class UserProvidersService {
 
   /**
    * Runtime del agente Auditor (grafo MDD).
-   * 1) Instancia dedicada (`mddAuditorTenantInstanceId`) con `auditorChatModel` opcional.
-   * 2) Instancia activa con `auditorChatModel` opcional.
-   * 3) Mismo runtime que `resolveRuntime`.
+   * Usa la instancia activa del usuario; `auditorChatModel` en la instancia es opcional.
+   * Si no hay override, mismo runtime que `resolveRuntime`.
    */
   async resolveAuditorRuntime(userId: string): Promise<UserLLMRuntime> {
-    const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
-    const dedicatedId = settings?.mddAuditorTenantInstanceId;
-    if (dedicatedId) {
-      const dedicated = await this.prisma.providerInstance.findFirst({
-        where: { id: dedicatedId, ...this.instanceAccessibleByUser(userId) },
-      });
-      if (dedicated) {
-        return this.runtimeFromTenantInstanceForAuditor(userId, dedicated);
-      }
-    }
     const tenant = await this.resolveTenantInstanceForUser(userId);
     if (tenant) return this.runtimeFromTenantInstanceForAuditor(userId, tenant);
     return this.resolveRuntime(userId);
