@@ -71,7 +71,7 @@ export const CONTEXT_SYNTHESIZER_PROMPT = loadPrompt(
 export const SOFTWARE_ARCHITECT_MDD_PROMPT = loadPrompt(
   "mdd",
   "software-architect-prompt.md",
-  "Eres el Arquitecto de Software del MDD. Transforma el borrador del Clarificador en documento técnico: schema SQL completo (tablas, UUIDs, relaciones) y contratos de API con payloads JSON. Responde solo con JSON: { mddDraft }.",
+  "Eres el Arquitecto de Software del MDD. Transforma el borrador del Clarificador en documento técnico: schema SQL completo (tablas, UUIDs, relaciones) y contratos de API con payloads JSON. Responde solo con JSON: { mddDraft }. NO uses tags de razonamiento ni pienses en voz alta. Devuelve ÚNICAMENTE el JSON.",
 );
 
 export const ARCHITECT_CRITIC_MDD_PROMPT = loadPrompt(
@@ -89,13 +89,13 @@ export const FRONTEND_ARCHITECT_MDD_PROMPT = loadPrompt(
 export const SECURITY_ARCHITECT_MDD_PROMPT = loadPrompt(
   "mdd",
   "security-architect-prompt.md",
-  "Eres el Arquitecto de Seguridad del MDD. Añade la sección ## Seguridad en markdown. Responde solo con JSON: { securitySection }.",
+  "Eres el Arquitecto de Seguridad del MDD. Añade la sección ## Seguridad en markdown. Responde solo con JSON: { securitySection }. NO uses tags de razonamiento ni pienses en voz alta. Devuelve ÚNICAMENTE el JSON sin markdown ni código adicional.",
 );
 
 export const INTEGRATION_ENGINEER_MDD_PROMPT = loadPrompt(
   "mdd",
   "integration-engineer-prompt.md",
-  "Eres el Ingeniero de Integración del MDD. Añade la sección ## Integración en markdown. Responde solo con JSON: { integrationSection }.",
+  "Eres el Ingeniero de Integración del MDD. Añade la sección ## Integración en markdown. Responde solo con JSON: { integrationSection }. NO uses tags de razonamiento ni pienses en voz alta. Devuelve ÚNICAMENTE el JSON.",
 );
 
 export const REDACTOR_MDD_PROMPT = loadPrompt(
@@ -107,7 +107,7 @@ export const REDACTOR_MDD_PROMPT = loadPrompt(
 export const AUDITOR_MDD_PROMPT = loadPrompt(
   "mdd",
   "auditor-prompt.md",
-  "Eres el Auditor del MDD. Sigue el Protocolo de auditoría (5 pasos). Responde solo con JSON: auditorScore (0-100), auditorDecision ('clarifier' si <85, 'done' si >=85), auditorFeedback, status, critical_gaps, syntax_errors, infrastructure_ready. Textos en español.",
+  "Eres el Auditor del MDD. Sigue el Protocolo de auditoría (5 pasos). Responde solo con JSON: auditorScore (0-100), auditorDecision ('clarifier' si <85, 'done' si >=85), auditorFeedback, status, critical_gaps, syntax_errors, infrastructure_ready. Textos en español. NO uses tags de razonamiento ni pienses en voz alta. Devuelve ÚNICAMENTE el JSON.",
 );
 
 export const MANAGER_MDD_PROMPT = loadPrompt(

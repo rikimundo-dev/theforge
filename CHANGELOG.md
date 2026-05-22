@@ -2,6 +2,23 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.9.1] — 2026-05-22
+
+### Fixed
+
+- **§6 Seguridad no se generaba con DeepSeek/Claude:** `stripThinkingTags()` solo limpiaba tags HTML-style (``), ignorando los formatos nativos de DeepSeek (`` ```think``` ``) y Claude. El texto con razonamiento llegaba a `isCorruptedSecurityLlmText()` que lo descartaba como corrupto, eliminando toda la sección 6.
+  - `stripThinkingTags` ahora también remueve fenced code blocks con "think/thought/reasoning"
+  - Patrón `"6\.\s*Seguridad"\s*:` removido de `CORRUPTED_SECURITY_TEXT_PATTERNS` — matcheaba falsos positivos dentro de valores JSON válidos
+  - `parseSecurityLlmResponse` ahora prueba legacy JSON (`{ securitySection }`) antes del chequeo de corrupción, alineado con el formato del prompt default
+- **Prompts MDD con supresión de razonamiento explícito:** Software Architect, Security, Integration y MDD Auditor ahora incluyen "NO uses tags de razonamiento ni pienses en voz alta. Devuelve ÚNICAMENTE el JSON." para prevenir thinking output desde la fuente.
+- **`prepareMddForOutput` pierde §6 al reconstruir desde structured:** Nueva guarda en `shouldPreferDraftOverStructured`: si el draft tiene contenido real en §6 (>15 chars, no "Pendiente") pero el structured solo tiene placeholder, se preserva el draft.
+
+### Changed
+
+- **BUILD_CACHE_BUST**: 75 → 76
+
+---
+
 ## [0.9.0] — 2026-05-22
 
 ### Added
