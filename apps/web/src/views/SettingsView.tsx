@@ -2,19 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Bot, Cable, Settings, Shield, Sparkles } from "lucide-react";
 import { ProviderInstancesCard } from "@/components/ProviderInstancesCard";
 import { AgentsConfigCard } from "@/components/AgentsConfigCard";
-import { McpSecretCard } from "@/components/McpSecretCard";
+import { AccountConfigCard } from "@/components/AccountConfigCard";
 import { AriadneConfigCard } from "@/components/AriadneConfigCard";
-import { UnderlineTabs } from "@/components/ui/UnderlineTabs";
+import { UnderlineTabs, type UnderlineTabItem } from "@/components/ui/UnderlineTabs";
 import { getStoredUser } from "@/utils/apiClient";
 
 type SettingsTab = "providers" | "agents" | "ariadne" | "account";
 
-const SETTINGS_TABS: {
-  id: SettingsTab;
-  label: string;
-  shortLabel: string;
-  icon: typeof Sparkles;
-}[] = [
+const SETTINGS_TABS: UnderlineTabItem<SettingsTab>[] = [
   { id: "providers", label: "Proveedores de IA", shortLabel: "Proveedores", icon: Sparkles },
   { id: "agents", label: "Agentes", shortLabel: "Agentes", icon: Bot },
   { id: "ariadne", label: "Ariadne", shortLabel: "Ariadne", icon: Cable },
@@ -107,30 +102,13 @@ export default function SettingsView({ showIaCost, onToggleIaCost }: SettingsVie
               role="tabpanel"
               aria-labelledby="settings-tab-account"
               hidden={activeTab !== "account"}
-              className={activeTab === "account" ? "space-y-4" : undefined}
+              className={activeTab === "account" ? "space-y-6" : undefined}
             >
               {activeTab === "account" ? (
-                <>
-                  <McpSecretCard />
-                  <label className="flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)] p-3">
-                    <span className="text-sm font-medium">Mostrar costo de IA en semáforo</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={showIaCost}
-                      onClick={onToggleIaCost}
-                      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                        showIaCost ? "bg-[var(--primary)]" : "bg-[var(--border)]"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                          showIaCost ? "translate-x-4" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-                  </label>
-                </>
+                <AccountConfigCard
+                  showIaCost={showIaCost}
+                  onToggleIaCost={onToggleIaCost}
+                />
               ) : null}
             </div>
           </div>

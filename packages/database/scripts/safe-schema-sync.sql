@@ -104,3 +104,10 @@ INSERT INTO "public"."checkpoint_migrations" (v) VALUES (1) ON CONFLICT (v) DO N
 INSERT INTO "public"."checkpoint_migrations" (v) VALUES (2) ON CONFLICT (v) DO NOTHING;
 INSERT INTO "public"."checkpoint_migrations" (v) VALUES (3) ON CONFLICT (v) DO NOTHING;
 INSERT INTO "public"."checkpoint_migrations" (v) VALUES (4) ON CONFLICT (v) DO NOTHING;
+
+-- 4. User: MCP / Ariadne columns (present in schema.prisma; add if missing on older DBs)
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "mcpSecret" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "ariadneMcpUrl" TEXT;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "ariadneMcpToken" TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "User_mcpSecret_key" ON "User"("mcpSecret");

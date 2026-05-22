@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Flame, KeyRound, Loader2, Mail, Shield } from "lucide-react";
+import { Flame, Loader2, Mail, Shield } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { LoginScreenChrome, LoginThemeSwitcher } from "@/components/login/LoginChrome";
 import { API_BASE, setAccessToken } from "@/utils/apiClient";
@@ -11,13 +11,10 @@ interface LoginViewProps {
 }
 
 type Step = "send" | "code" | "sso";
-type LoginMethod = "otp" | "mcp";
 
 export default function LoginView({ onLoggedIn }: LoginViewProps) {
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [mcpSecret, setMcpSecret] = useState("");
-  const [loginMethod, setLoginMethod] = useState<LoginMethod>("otp");
   const [step, setStep] = useState<Step>("send");
   const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,9 +80,7 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
         /* empty */
       }
       if (!r.ok) {
-        throw new Error(
-          `${parseErrorBodyText(rawText, "No se pudo enviar el código por correo", r.status)}. Si tienes un secret MCP, usa «Secret MCP» para entrar sin correo.`,
-        );
+        throw new Error(parseErrorBodyText(rawText, "No se pudo enviar el código por correo", r.status));
       }
       setEmail(normalized);
       if (data.devCode) {
@@ -97,38 +92,6 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
       setStep("code");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loginWithMcpSecret(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const secret = mcpSecret.trim();
-    if (!secret) {
-      setError("Introduce tu secret MCP");
-      return;
-    }
-    setLoading(true);
-    try {
-      const r = await fetch(`${API_BASE}/auth/mcp-login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
-      });
-      const data = (await r.json()) as { accessToken?: string; message?: string };
-      if (!r.ok || !data.accessToken) {
-        throw new Error(
-          typeof data.message === "string"
-            ? data.message
-            : "Secret MCP inválido. Pídelo a un administrador o en Ajustes si ya entraste antes.",
-        );
-      }
-      setAccessToken(data.accessToken);
-      onLoggedIn();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }
@@ -171,7 +134,6 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
 
   const otpFormId = "login-otp-request-form";
   const verifyFormId = "login-otp-verify-form";
-  const mcpFormId = "login-mcp-form";
 
   return (
     <LoginScreenChrome>
@@ -218,9 +180,7 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
                 The Forge
               </h1>
               <p className="mt-2 max-w-sm px-0.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                {loginMethod === "otp"
-                  ? "Correo registrado para recibir el código, o usa tu secret MCP sin correo."
-                  : "Entra con el secret MCP de tu cuenta (sin correo ni OTP)."}
+                Introduce tu correo corporativo registrado; te enviaremos un código de acceso.
               </p>
               <div className="mt-4 inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-[color-mix(in_oklch,var(--primary)_52%,var(--border))] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--primary)] dark:border-[color-mix(in_oklch,var(--primary)_42%,var(--border))] sm:px-3.5">
                 <Shield className="h-3.5 w-3.5 shrink-0 opacity-90" aria-hidden />
@@ -228,75 +188,7 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
               </div>
             </div>
 
-            <div className="my-5 flex rounded-xl border border-[var(--border)] p-1">
-              <button
-                type="button"
-                className={cn(
-                  "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  loginMethod === "otp"
-                    ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                    : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]",
-                )}
-                onClick={() => {
-                  setLoginMethod("otp");
-                  setError(null);
-                }}
-              >
-                Correo
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  loginMethod === "mcp"
-                    ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
-                    : "text-[var(--foreground-muted)] hover:text-[var(--foreground)]",
-                )}
-                onClick={() => {
-                  setLoginMethod("mcp");
-                  setStep("send");
-                  setError(null);
-                }}
-              >
-                Secret MCP
-              </button>
-            </div>
-
-            {loginMethod === "mcp" ? (
-              <form id={mcpFormId} onSubmit={loginWithMcpSecret} className="space-y-5">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="login-mcp-secret"
-                    className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--foreground-muted)]"
-                  >
-                    Secret MCP
-                  </label>
-                  <div className="relative">
-                    <KeyRound
-                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--foreground-muted)]"
-                      aria-hidden
-                    />
-                    <Input
-                      id="login-mcp-secret"
-                      type="password"
-                      autoComplete="off"
-                      placeholder="Pega el secret de 64 caracteres"
-                      value={mcpSecret}
-                      onChange={(ev) => setMcpSecret(ev.target.value)}
-                      disabled={loading}
-                      required
-                      className="h-12 min-h-[48px] rounded-xl pl-10 font-mono text-sm sm:h-11 sm:min-h-0"
-                    />
-                  </div>
-                  <p className="text-xs text-[var(--foreground-muted)]">
-                    Sin correo ni OTP. Lo da un administrador o al crear el primer admin.
-                  </p>
-                </div>
-                {error ? <p className="text-sm text-[var(--destructive)]">{error}</p> : null}
-              </form>
-            ) : null}
-
-            {loginMethod === "otp" && step === "send" ? (
+            {step === "send" ? (
               <>
                 <form id={otpFormId} onSubmit={requestOtp} className="space-y-5">
                   <div className="space-y-2">
@@ -346,67 +238,54 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
                   </p>
                 </div>
               </>
-            ) : null}
-
-            {loginMethod === "otp" && step !== "send" ? (
-              <>
-                <form id={verifyFormId} onSubmit={verifyOtp} className="space-y-5">
-                  <p className="break-words text-center text-sm text-[var(--foreground-muted)]">
-                    {devOtpHint
-                      ? "Código OTP (OTP_DEV_EXPOSE_CODE=1, sin correo)"
-                      : "Código enviado a"}{" "}
-                    {!devOtpHint ? (
-                      <span className="break-all font-medium text-[var(--foreground)]">{email}</span>
-                    ) : null}
-                  </p>
-                  {devOtpHint ? (
-                    <p className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-center font-mono text-lg tracking-widest">
-                      {devOtpHint}
-                    </p>
+            ) : (
+              <form id={verifyFormId} onSubmit={verifyOtp} className="space-y-5">
+                <p className="break-words text-center text-sm text-[var(--foreground-muted)]">
+                  {devOtpHint
+                    ? "Código OTP (OTP_DEV_EXPOSE_CODE=1, sin correo)"
+                    : "Código enviado a"}{" "}
+                  {!devOtpHint ? (
+                    <span className="break-all font-medium text-[var(--foreground)]">{email}</span>
                   ) : null}
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="login-code"
-                      className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--foreground-muted)]"
-                    >
-                      Código de 6 dígitos
-                    </label>
-                    <Input
-                      id="login-code"
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      autoCapitalize="off"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      enterKeyHint="done"
-                      placeholder="000000"
-                      maxLength={6}
-                      pattern="\d{6}"
-                      value={code}
-                      onChange={(ev) => setCode(ev.target.value.replace(/\D/g, "").slice(0, 6))}
-                      required
-                      className="h-12 min-h-[48px] rounded-xl text-center text-base tracking-[0.28em] sm:h-11 sm:min-h-0 sm:text-lg sm:tracking-[0.3em]"
-                      disabled={loading}
-                    />
-                  </div>
-                  {error ? <p className="text-sm text-[var(--destructive)]">{error}</p> : null}
-                </form>
-              </>
-            ) : null}
+                </p>
+                {devOtpHint ? (
+                  <p className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2 text-center font-mono text-lg tracking-widest">
+                    {devOtpHint}
+                  </p>
+                ) : null}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="login-code"
+                    className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--foreground-muted)]"
+                  >
+                    Código de 6 dígitos
+                  </label>
+                  <Input
+                    id="login-code"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="done"
+                    placeholder="000000"
+                    maxLength={6}
+                    pattern="\d{6}"
+                    value={code}
+                    onChange={(ev) => setCode(ev.target.value.replace(/\D/g, "").slice(0, 6))}
+                    required
+                    className="h-12 min-h-[48px] rounded-xl text-center text-base tracking-[0.28em] sm:h-11 sm:min-h-0 sm:text-lg sm:tracking-[0.3em]"
+                    disabled={loading}
+                  />
+                </div>
+                {error ? <p className="text-sm text-[var(--destructive)]">{error}</p> : null}
+              </form>
+            )}
           </div>
         </div>
 
-        {loginMethod === "mcp" ? (
-          <Button
-            type="submit"
-            form={mcpFormId}
-            className="mt-5 h-12 min-h-[48px] w-full touch-manipulation rounded-xl text-base font-semibold shadow-[var(--shadow-sm)]"
-            disabled={loading || !mcpSecret.trim()}
-          >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : "Entrar"}
-          </Button>
-        ) : step === "send" ? (
+        {step === "send" ? (
           <>
             <Button
               type="submit"

@@ -11,6 +11,8 @@ import {
   Input,
 } from "./ui";
 import { ProviderConfigFormFields } from "./ProviderConfigFormFields";
+import { ProviderTypePicker } from "./ProviderTypePicker";
+import { ProviderLogo } from "./ProviderLogo";
 import type {
   ProviderCatalogEntry,
   ProviderId,
@@ -335,7 +337,19 @@ export function ProviderInstanceModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent size="xl" className="flex max-h-[90dvh] max-w-2xl flex-col gap-0 p-0">
+      <DialogContent
+        size="xl"
+        className={cn(
+          "flex max-h-[90dvh] flex-col gap-0 p-0",
+          "sm:max-w-2xl sm:rounded-lg",
+          "max-sm:fixed max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:left-0 max-sm:max-h-[min(94dvh,720px)] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0",
+          "max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:pb-[max(1rem,env(safe-area-inset-bottom))]",
+          "max-sm:data-[state=open]:slide-in-from-bottom-8 max-sm:data-[state=closed]:slide-out-to-bottom-8",
+          "max-sm:data-[state=open]:slide-in-from-left-0 max-sm:data-[state=open]:slide-in-from-top-0",
+          "max-sm:data-[state=closed]:slide-out-to-left-0 max-sm:data-[state=closed]:slide-out-to-top-0",
+          "max-sm:data-[state=open]:zoom-in-100 max-sm:data-[state=closed]:zoom-out-100",
+        )}
+      >
         <form
           id="provider-instance-form"
           key={isEditing ? `edit-${editingId}` : "create"}
@@ -344,16 +358,24 @@ export function ProviderInstanceModal({
           autoComplete="off"
           onSubmit={(e) => void handleSubmit(e)}
         >
-          <DialogHeader className="shrink-0 px-6 pt-6">
-            <DialogTitle>
-              {isEditing ? "Editar instancia" : "Nueva instancia de proveedor"}
-            </DialogTitle>
-            <DialogDescription>
-              Clave API y modelos. El slug identifica la instancia. Marca como activa para usarla en
-              el taller.
-            </DialogDescription>
+          <div
+            className="mx-auto mt-2.5 h-1 w-10 shrink-0 rounded-full bg-[var(--border)] sm:hidden"
+            aria-hidden
+          />
+          <DialogHeader className="shrink-0 space-y-2 px-4 pt-4 text-left sm:px-6 sm:pt-6">
+            <div className="flex items-center gap-3">
+              {activeCatalog ? <ProviderLogo provider={providerType} size="md" /> : null}
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-left text-base sm:text-lg">
+                  {isEditing ? "Editar instancia" : "Nueva instancia"}
+                </DialogTitle>
+                <DialogDescription className="text-left text-xs sm:text-sm">
+                  Elige proveedor, API key y modelos. Marca como activa para el taller.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 [scrollbar-gutter:stable]">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [scrollbar-gutter:stable] sm:px-6">
           <div className="space-y-4">
             {catalogError && !activeCatalog ? (
               <p
@@ -377,27 +399,27 @@ export function ProviderInstanceModal({
                 <span className="font-mono">{slugsForType.join(", ")}</span>. Elige un slug nuevo.
               </p>
             ) : null}
-            <div className="grid gap-4 sm:grid-cols-2">
-              <FormField id="provider-type" label="Tipo de proveedor" required>
-                <select
-                  id="provider-type"
-                  className="flex h-9 w-full rounded-md border border-[var(--input-border)] bg-[var(--input)] px-3 py-1 text-sm text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] disabled:opacity-50"
+            <FormField id="provider-type" label="Proveedor" required>
+              {isEditing ? (
+                <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--muted)]/30 px-3.5 py-3">
+                  <ProviderLogo provider={providerType} size="md" />
+                  <span className="text-sm font-medium text-[var(--foreground)]">
+                    {activeCatalog?.label ?? providerType}
+                  </span>
+                </div>
+              ) : catalog.length > 0 ? (
+                <ProviderTypePicker
+                  catalog={catalog}
                   value={providerType}
-                  disabled={isEditing}
-                  onChange={(e) => {
-                    const id = e.target.value as ProviderId;
+                  onChange={(id) => {
                     setProviderType(id);
                     const c = catalog.find((x) => x.id === id);
-                    if (c && !isEditing) setConfigForm(createEmptyUserProviderForm(c));
+                    if (c) setConfigForm(createEmptyUserProviderForm(c));
                   }}
-                >
-                  {catalog.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
-              </FormField>
+                />
+              ) : null}
+            </FormField>
+            <div className="grid gap-4 sm:grid-cols-2">
               <FormField
                 id="slug"
                 label="Slug"
@@ -556,11 +578,12 @@ export function ProviderInstanceModal({
             ) : null}
           </div>
           </div>
-          <DialogFooter className="shrink-0 border-t border-[var(--border)] px-6 py-4">
-            <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={saving}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={saving || !activeCatalog}>
+          <DialogFooter className="shrink-0 flex flex-col gap-2 border-t border-[var(--border)] px-4 py-4 sm:flex-row sm:justify-end sm:px-6">
+            <Button
+              type="submit"
+              disabled={saving || !activeCatalog}
+              className="h-11 w-full rounded-xl sm:order-2 sm:w-auto"
+            >
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
@@ -571,6 +594,15 @@ export function ProviderInstanceModal({
               ) : (
                 "Crear instancia"
               )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 w-full rounded-xl sm:order-1 sm:w-auto"
+              onClick={() => handleOpenChange(false)}
+              disabled={saving}
+            >
+              Cancelar
             </Button>
           </DialogFooter>
         </form>

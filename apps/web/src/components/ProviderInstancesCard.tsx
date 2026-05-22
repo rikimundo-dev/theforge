@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Pencil, Plus, Star, Trash2 } from "lucide-react";
-import {
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "./ui";
-import { ListAddButton } from "./ListAddButton";
-import { ListRowIconButton } from "./ListRowIconButton";
-import { getProviderIcon } from "@/constants/provider-icons";
+import { Loader2, Plus } from "lucide-react";
+import { Button } from "./ui";
 import { getStoredUser } from "@/utils/apiClient";
 import type { ProviderInstanceSummary, UserAISettings } from "@/types/user-providers";
 import {
@@ -21,7 +11,10 @@ import {
 } from "@/lib/provider-instances-api";
 import { fetchUserAISettings, updateUserAISettings } from "@/lib/user-providers-api";
 import { ProviderInstanceModal } from "./ProviderInstanceModal";
-import { cn } from "@/lib/utils";
+import {
+  ProviderInstanceCardDesktop,
+  ProviderInstanceCardMobile,
+} from "./ProviderInstanceCard";
 
 function canManageInstances(role: string | undefined) {
   return role === "admin" || role === "super_admin";
@@ -97,7 +90,7 @@ export function ProviderInstancesCard() {
       setInstances((prev) =>
         prev.map((i) => (i.id === inst.id ? { ...i, enabledForUsers: !next } : i)),
       );
-      setError(e instanceof Error ? e.message : "No se pudo actualizar la visibilidad");
+      setError(e instanceof Error ? e.message : "No se pudieron actualizar la visibilidad");
     } finally {
       setTogglingId(null);
     }
@@ -128,11 +121,11 @@ export function ProviderInstancesCard() {
 
   const description = canManage
     ? isSuperAdmin
-      ? "Crea proveedores para el equipo (visibles con el interruptor) o personales. Los administradores ven los del equipo y pueden crear los suyos."
-      : "Proveedores del equipo (solo lectura) y los personales que crees. Marca cualquiera como Activa (Usar); el default del equipo solo aplica si no eliges ninguno."
+      ? "Crea proveedores para el equipo o personales. Activa el que quieras usar en el taller."
+      : "Instancias del equipo y las tuyas. Marca una como activa para el taller."
     : isDeveloper
-      ? "Usas el proveedor predeterminado del equipo configurado por el super_admin. No puedes cambiarlo aquí."
-      : "Marca uno como Activa (Usar). Si no eliges ninguno, se usa el predeterminado del equipo.";
+      ? "Usas el proveedor predeterminado del equipo configurado por el super_admin."
+      : "Elige la instancia activa para el taller.";
 
   function canMutateInstance(inst: ProviderInstanceSummary) {
     if (!canManage) return false;
@@ -147,141 +140,93 @@ export function ProviderInstancesCard() {
 
   return (
     <>
-      <Card variant="ghost">
-        <CardHeader className="border-b-0">
-          <CardTitle>Gestionar instancias</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="min-h-0 flex-1 space-y-4 py-2">
-            {canManage ? (
-              <ListAddButton
-                icon={Plus}
-                label="Agregar instancia"
-                onClick={openCreateModal}
-                disabled={loading}
-              />
-            ) : null}
-
-            {error ? (
-              <p className="rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-3 py-2 text-sm text-[var(--destructive)]">
-                {error}
-              </p>
-            ) : null}
-
-            {loading ? (
-              <div className="flex items-center gap-2 py-4 text-sm text-[var(--foreground-muted)]">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando instancias…
-              </div>
-            ) : instances.length === 0 ? (
-              <p className="py-2 text-sm text-[var(--foreground-muted)]">
-                {canManage
-                  ? "No hay instancias. Crea la primera con el botón de arriba."
-                  : "No hay instancias disponibles. Pide a un administrador que configure una."}
-              </p>
-            ) : (
-              instances.map((inst) => {
-                const Icon = getProviderIcon(inst.providerType);
-                const isActive = activeInstanceId === inst.id;
-                return (
-                  <div
-                    key={inst.id}
-                    className={cn(
-                      "rounded-lg border border-[var(--border)]",
-                      isActive && "border-[var(--primary)]/50",
-                    )}
-                  >
-                    <div className="flex items-center justify-between gap-2 p-3">
-                      <div className="flex min-w-0 flex-1 items-start gap-2">
-                        <Icon className="mt-0.5 h-5 w-5 shrink-0 text-[var(--primary)]" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-[var(--foreground)]">
-                            {inst.displayName}
-                          </p>
-                          <p className="truncate text-xs text-[var(--foreground-muted)]">
-                            {inst.chatModel}
-                          </p>
-                          {isSuperAdmin && canManage ? (
-                            <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs text-[var(--foreground-muted)]">
-                              <button
-                                type="button"
-                                role="switch"
-                                aria-checked={inst.enabledForUsers}
-                                aria-label="Visible para el equipo"
-                                disabled={togglingId === inst.id}
-                                onClick={() => void handleToggleVisibleForTeam(inst)}
-                                className={cn(
-                                  "relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors disabled:opacity-50",
-                                  inst.enabledForUsers
-                                    ? "bg-[var(--primary)]"
-                                    : "bg-[color-mix(in_oklch,var(--muted-foreground)_25%,var(--border))]",
-                                )}
-                              >
-                                <span
-                                  className={cn(
-                                    "pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-                                    inst.enabledForUsers ? "translate-x-4" : "translate-x-0",
-                                  )}
-                                />
-                              </button>
-                              <span className="select-none">Visible para el equipo</span>
-                              {togglingId === inst.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                              ) : null}
-                            </label>
-                          ) : null}
-                        </div>
-                      </div>
-                      <div className="ml-2 flex shrink-0 items-center gap-1">
-                        {!isDeveloper ? (
-                          <Button
-                            type="button"
-                            variant={isActive ? "default" : "outline"}
-                            size="sm"
-                            disabled={isActive || activatingId === inst.id}
-                            onClick={() => void handleSetActive(inst)}
-                          >
-                            {activatingId === inst.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Star className="h-4 w-4" />
-                            )}
-                            {isActive ? "Activa" : "Usar"}
-                          </Button>
-                        ) : isActive ? (
-                          <span className="rounded-md border border-[var(--border)] bg-[var(--muted)]/40 px-2 py-1 text-sm font-medium text-[var(--foreground)]">
-                            Predeterminado
-                          </span>
-                        ) : null}
-                        {canMutateInstance(inst) ? (
-                          <>
-                            <ListRowIconButton
-                              aria-label="Editar"
-                              onClick={() => {
-                                setEditing(inst);
-                                setModalOpen(true);
-                              }}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </ListRowIconButton>
-                            <ListRowIconButton
-                              aria-label="Eliminar"
-                              onClick={() => void handleDelete(inst.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </ListRowIconButton>
-                          </>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
+      <section className="space-y-4 sm:space-y-5">
+        <div className="flex flex-col gap-3 max-sm:gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="text-base font-semibold tracking-tight text-[var(--foreground)] sm:text-lg">
+              Instancias de proveedor
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--foreground-muted)]">
+              {description}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+          {canManage ? (
+            <Button
+              type="button"
+              className="h-11 w-full shrink-0 gap-2 rounded-xl shadow-sm max-sm:rounded-2xl sm:w-auto sm:px-4"
+              disabled={loading}
+              onClick={openCreateModal}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              Agregar instancia
+            </Button>
+          ) : null}
+        </div>
+
+        {canManage ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 w-full justify-center gap-2 rounded-2xl border-dashed bg-[color-mix(in_oklch,var(--muted)_25%,var(--card))] sm:hidden"
+            disabled={loading}
+            onClick={openCreateModal}
+          >
+            <Plus className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden />
+            Agregar instancia
+          </Button>
+        ) : null}
+
+        {error ? (
+          <p className="rounded-2xl border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)]">
+            {error}
+          </p>
+        ) : null}
+
+        {loading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-[var(--foreground-muted)]">
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+            Cargando instancias…
+          </div>
+        ) : instances.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_20%,var(--card))] px-6 py-10 text-center">
+            <p className="text-sm text-[var(--foreground-muted)]">
+              {canManage
+                ? "No hay instancias. Agrega la primera con el botón de arriba."
+                : "No hay instancias disponibles. Pide a un administrador que configure una."}
+            </p>
+          </div>
+        ) : (
+          <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+            {instances.map((inst) => {
+              const isActive = activeInstanceId === inst.id;
+              const cardProps = {
+                inst,
+                isActive,
+                isDeveloper,
+                isSuperAdmin,
+                canManage,
+                canMutate: canMutateInstance(inst),
+                togglingId,
+                activatingId,
+                onToggleVisibleForTeam: () => void handleToggleVisibleForTeam(inst),
+                onSetActive: () => void handleSetActive(inst),
+                onEdit: () => {
+                  setEditing(inst);
+                  setModalOpen(true);
+                },
+                onDelete: () => void handleDelete(inst.id),
+              };
+              return (
+                <li key={inst.id} className="min-w-0">
+                  <ProviderInstanceCardMobile {...cardProps} />
+                  <ProviderInstanceCardDesktop {...cardProps} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
+
       {canManage ? (
         <ProviderInstanceModal
           open={modalOpen}
