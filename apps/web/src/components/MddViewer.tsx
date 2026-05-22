@@ -3,7 +3,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { repairMarkdownFences } from "@theforge/shared-types/markdown-repair";
-import { normalizeMermaid } from "@theforge/shared-types/mermaid";
 import { parseMarkdownSections } from "../utils/markdownSections";
 
 /** Quita bloques ```mermaid vacíos para no intentar renderizarlos (evita SVG de error). */
@@ -63,21 +62,50 @@ function normalizeMermaidContent(content: string): string {
 }
 
 /**
- * Aplica la normalización experta normalizeMermaid de @theforge/shared-types/mermaid
- * sobre contenido Mermaid crudo (sin fences). Corrige IDs con espacios, bloques sin
- * cerrar, quotes inconsistentes, etc. Es un safety net para diagramas guardados antes
- * del fix (el backend normaliza al persistir, pero datos viejos en DB necesitan
- * corrección al renderizar).
+ * Inline de normalizeMermaid desde shared-types para evitar dependencia build-time
+ * que rompe el Docker build (el dist/ local viejo se copia al contenedor).
+ * Corrige IDs con espacios, bloques sin cerrar, quotes inconsistentes, etc.
  */
 function normalizeMermaidExpert(raw: string): string {
   if (!raw?.trim()) return raw ?? "";
   try {
-    const fenced = "```mermaid\n" + raw + "\n```";
-    const result = normalizeMermaid(fenced);
-    return result
-      .replace(/^```mermaid\s*\n?/i, "")
-      .replace(/\n?```\s*$/i, "")
-      .trim();
+    const lines = raw.split("\n");
+    const out: string[] = [];
+    let openBlocks = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i]!;
+
+      // Skip the graph/flowchart declaration (pass through)
+      if (/^(graph|flowchart)\s/i.test(line.trim())) {
+        out.push(line);
+        continue;
+      }
+
+      const trimmed = line.trim();
+
+      // Track subgraph openings
+      if (/^subgraph\s/.test(trimmed)) openBlocks++;
+      // Track alt/opt/loop/par/critical/break openings
+      if (/^(alt|opt|loop|par|critical|break)\s/.test(trimmed)) openBlocks++;
+      // Track end closings
+      if (/^end\s*$/.test(trimmed)) openBlocks = Math.max(0, openBlocks - 1);
+
+      // Fix IDs with spaces in node definitions: "Client Browser[" → "Client_Browser["
+      line = line.replace(/(\w+)\s+(\w+)(\[|\()/g, (_m, p1: string, p2: string, p3: string) => {
+        return `${p1.replace(/\s+/g, "_")}_${p2.replace(/\s+/g, "_")}${p3}`;
+      });
+
+      out.push(line);
+    }
+
+    // Close unclosed blocks
+    for (let i = 0; i < openBlocks; i++) out.push("  end");
+
+    let result = out.join("\n");
+    // Remove excessive blank lines
+    result = result.replace(/\n{3,}/g, "\n\n");
+    return result.trim();
   } catch {
     return raw;
   }

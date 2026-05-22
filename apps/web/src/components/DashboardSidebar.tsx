@@ -11,19 +11,16 @@ import {
   useRef,
   useState,
   type MouseEvent,
-  type ComponentProps,
   type ReactElement,
   type ReactNode,
 } from "react";
 import {
   ArrowLeft,
-  Check,
-  CheckCircle2,
+  CircleCheck,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Flame,
   FolderOpen,
+  Heart,
   LogOut,
   Menu,
   Monitor,
@@ -46,43 +43,21 @@ import { useTheme, type ThemePreference } from "@/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { useWorkshopStore } from "../store/workshopStore";
 import { buildWorkshopDocNavItems, workshopTabDocHasContent } from "../utils/workshopDocNav";
-import { SIDEBAR_RAIL_ICON_BTN_IDLE, SIDEBAR_RAIL_ICON_BTN_OUTLINED } from "@/constants/workshopDocToolbar";
-import { WorkshopRailIconButton } from "@/components/WorkshopButtons";
 
-/** Esquinas del rail — redondeo suave (no círculo); el tema compacto sigue en `rounded-full`. */
-const sidebarRailButtonClass = "rounded-xl";
-
-const sidebarRailIconClass = "h-3.5 w-3.5 shrink-0";
-
-/** Separación vertical entre iconos del rail colapsado (opciones de navegación). */
-const sidebarRailStackGapClass = "gap-2";
-
-/** Separación vertical entre fases del flujo en el rail colapsado. */
-const sidebarRailPhaseStackGapClass = "gap-1";
-
-/** Línea divisoria entre opciones de navegación y fases en el rail colapsado. */
-const sidebarRailSeparatorClass =
-  "mx-auto h-px w-6 shrink-0 bg-[color-mix(in_oklch,var(--sidebar-border)_75%,var(--sidebar))]";
-
-/** Marca TheForge en el rail colapsado — borde visible, sin relleno. */
-function SidebarRailBrandMark() {
-  return (
-    <div
-      className={cn(
-        SIDEBAR_RAIL_ICON_BTN_OUTLINED,
-        sidebarRailButtonClass,
-        "pointer-events-none mx-auto",
-      )}
-      aria-hidden
-    >
-      <Flame className={cn(sidebarRailIconClass, "text-[var(--primary)]")} />
-    </div>
-  );
+/** Project row shown under the dashboard “Proyectos” menu group. */
+export interface DashboardSidebarProjectItem {
+  id: string;
+  name: string;
+  isFavorite?: boolean;
 }
 
 export interface DashboardSidebarProps {
   projectSearchQuery: string;
   onProjectSearchChange: (value: string) => void;
+  /** Filtered project list for the dashboard sidebar submenu (respects search). */
+  dashboardProjects?: DashboardSidebarProjectItem[];
+  projectsLoading?: boolean;
+  onOpenProject?: (project: DashboardSidebarProjectItem) => void;
   user: TheForgeUser | null;
   onLogout: () => void;
   onOpenSettings: () => void;
@@ -123,6 +98,71 @@ function closeDetailsFromEvent(e: MouseEvent<HTMLElement>) {
   if (root) (root as HTMLDetailsElement).open = false;
 }
 
+/** Shared 40×40 control for the collapsed (rail) sidebar — one shape, surface, and focus ring. */
+const RAIL_CONTROL_SIZE = "size-10 shrink-0";
+const RAIL_CONTROL_RADIUS = "rounded-[var(--radius-md)]";
+const RAIL_CONTROL_FOCUS =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]";
+const RAIL_CONTROL_SURFACE =
+  "border border-[color-mix(in_oklch,var(--sidebar-border)_70%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)]";
+const RAIL_CONTROL_INTERACTIVE =
+  "transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] active:scale-[0.97]";
+const railControlClass = (extra?: string) =>
+  cn(
+    "flex items-center justify-center",
+    RAIL_CONTROL_SIZE,
+    RAIL_CONTROL_RADIUS,
+    RAIL_CONTROL_SURFACE,
+    RAIL_CONTROL_FOCUS,
+    RAIL_CONTROL_INTERACTIVE,
+    extra,
+  );
+const railControlActiveClass = (extra?: string) =>
+  cn(
+    "flex items-center justify-center",
+    RAIL_CONTROL_SIZE,
+    RAIL_CONTROL_RADIUS,
+    RAIL_CONTROL_FOCUS,
+    "border border-[color-mix(in_oklch,var(--primary)_28%,transparent)] bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))]",
+    extra,
+  );
+
+/** Solid success badge on workshop step icons (rail + expanded). */
+const STEP_DONE_BADGE_CLASS =
+  "fill-[color-mix(in_oklch,var(--success)_92%,transparent)] text-[var(--sidebar)] stroke-[var(--sidebar)]";
+
+/** Panel-left toggle (Lucide PanelLeft geometry) with duotone fill on the sidebar column. */
+function SidebarToggleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      className={cn("size-5 shrink-0 text-[var(--sidebar-foreground)]", className)}
+      aria-hidden
+    >
+      <rect
+        x="3"
+        y="3"
+        width="6"
+        height="18"
+        rx="1"
+        className="fill-[color-mix(in_oklch,currentColor_24%,transparent)]"
+      />
+      <rect
+        x="3"
+        y="3"
+        width="18"
+        height="18"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      />
+      <path d="M9 3v18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /**
  * Tooltip for collapsed rail: native `title` is easy to miss and can behave poorly with nested overflow.
  */
@@ -146,71 +186,41 @@ function CollapsedRailHint({
   );
 }
 
-const sidebarInsetButtonBaseClass =
-  "inline-flex shrink-0 items-center justify-center border border-transparent font-medium transition-[background-color,border-color,color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]";
-
-function sidebarInsetShellClass(compact: boolean) {
-  return cn(
-    "w-fit bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] p-0.5 shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)]",
-    compact ? "rounded-full" : "rounded-[var(--radius-lg)]",
-  );
-}
-
-const sidebarInsetButtonIdleClass =
-  "bg-transparent text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]";
-
-const sidebarAccountButtonClass = cn(
-  sidebarInsetButtonBaseClass,
-  SIDEBAR_RAIL_ICON_BTN_IDLE,
-  sidebarRailButtonClass,
-  "text-xs font-semibold text-[var(--primary)] hover:bg-[var(--sidebar-accent)]",
-  "group-open/account:border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] group-open/account:bg-[color-mix(in_oklch,var(--primary)_12%,var(--sidebar))] group-open/account:shadow-sm",
-);
-
-const sidebarInsetButtonSelectedClass =
-  "border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm";
-
-function SidebarInsetToggleButton({
-  selected,
-  compact,
-  className,
-  children,
-  ...props
-}: ComponentProps<"button"> & { selected?: boolean; compact?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        sidebarInsetButtonBaseClass,
-        compact ? "h-8 w-8 rounded-full" : "min-h-8 flex-1 flex-col gap-0.5 rounded-[var(--radius-md)] py-1.5 text-[10px]",
-        selected ? sidebarInsetButtonSelectedClass : sidebarInsetButtonIdleClass,
-        className,
-      )}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
-
 function ThemeModeToggle({ compact }: { compact: boolean }) {
   const { preference, setPreference } = useTheme();
 
   const item = (value: ThemePreference, label: string, icon: ReactNode) => {
     const button = (
-      <SidebarInsetToggleButton
-        selected={preference === value}
-        compact={compact}
+      <button
+        type="button"
         onClick={() => setPreference(value)}
         title={label}
         aria-label={label}
         aria-pressed={preference === value}
+        className={cn(
+          "flex items-center justify-center font-medium transition-colors",
+          compact
+            ? cn(
+                RAIL_CONTROL_SIZE,
+                RAIL_CONTROL_RADIUS,
+                RAIL_CONTROL_FOCUS,
+                preference === value
+                  ? "border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[var(--primary)] text-[var(--primary-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary-foreground)_12%,transparent)]"
+                  : cn(RAIL_CONTROL_SURFACE, "text-[var(--sidebar-foreground)]", RAIL_CONTROL_INTERACTIVE),
+              )
+            : cn(
+                "flex-1 flex-col gap-0.5 rounded-[var(--radius-md)] py-1.5 text-[10px]",
+                preference === value
+                  ? "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm"
+                  : "text-[var(--sidebar-foreground)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+              ),
+        )}
       >
         <span className={cn("flex items-center justify-center", !compact && "flex-col gap-0.5")}>
           <span className="[&>svg]:h-4 [&>svg]:w-4">{icon}</span>
           {!compact ? <span className="leading-none">{label}</span> : null}
         </span>
-      </SidebarInsetToggleButton>
+      </button>
     );
     if (!compact) return button;
     return (
@@ -226,14 +236,15 @@ function ThemeModeToggle({ compact }: { compact: boolean }) {
   return (
     <div
       className={cn(
-        sidebarInsetShellClass(compact),
         "mb-2",
-        compact ? "mx-auto flex flex-col gap-0.5" : "w-full max-w-none",
+        compact
+          ? "flex flex-col items-center gap-2"
+          : "rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] p-0.5 shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)]",
       )}
       role="group"
       aria-label="Tema de la interfaz"
     >
-      <div className={cn(compact ? "flex flex-col gap-0.5" : "flex w-full gap-0.5")}>
+      <div className={cn(compact ? "flex flex-col items-center gap-2" : "flex gap-0.5")}>
         {item("light", "Claro", <Sun className="h-4 w-4" />)}
         {item("system", "Sistema", <Monitor className="h-4 w-4" />)}
         {item("dark", "Oscuro", <Moon className="h-4 w-4" />)}
@@ -245,6 +256,9 @@ function ThemeModeToggle({ compact }: { compact: boolean }) {
 export function DashboardSidebar({
   projectSearchQuery,
   onProjectSearchChange,
+  dashboardProjects = [],
+  projectsLoading = false,
+  onOpenProject,
   user,
   onLogout,
   onOpenSettings,
@@ -257,12 +271,31 @@ export function DashboardSidebar({
   onBeforeNavigateToProjects,
   onBeforeNavigateToWorkshopDoc,
 }: DashboardSidebarProps) {
-  const rail = collapsed;
   /** Drawer navigation below lg; fixed sidebar column from lg. */
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  /** Collapsed icon rail only on lg+; mobile drawer always shows labels and full-width rows. */
+  const [isLgViewport, setIsLgViewport] = useState(() =>
+    typeof globalThis.matchMedia === "function"
+      ? globalThis.matchMedia("(min-width: 1024px)").matches
+      : true,
+  );
+  const rail = collapsed && isLgViewport;
   const projectSearchInputRef = useRef<HTMLInputElement | null>(null);
   /** Expanded/collapsed list under the workshop project name (header toggles this). */
   const [workshopStepsExpanded, setWorkshopStepsExpanded] = useState(true);
+  /** Expanded/collapsed list under the dashboard “Proyectos” group. */
+  const [projectsNavExpanded, setProjectsNavExpanded] = useState(true);
+
+  const sortedDashboardProjects = useMemo(() => {
+    const list = [...dashboardProjects];
+    list.sort((a, b) => {
+      const favA = a.isFavorite ? 1 : 0;
+      const favB = b.isFavorite ? 1 : 0;
+      if (favB !== favA) return favB - favA;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+    return list;
+  }, [dashboardProjects]);
 
   useEffect(() => {
     setWorkshopStepsExpanded(true);
@@ -293,8 +326,10 @@ export function DashboardSidebar({
     if (typeof globalThis.matchMedia !== "function") return;
     const mq = globalThis.matchMedia("(min-width: 1024px)");
     function onChange() {
+      setIsLgViewport(mq.matches);
       if (mq.matches) setMobileNavOpen(false);
     }
+    onChange();
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
   }, []);
@@ -305,14 +340,6 @@ export function DashboardSidebar({
       projectSearchInputRef.current?.focus();
     });
   }, []);
-
-  const handleScrollToProjects = useCallback(() => {
-    onBeforeNavigateToProjects?.();
-    setMobileNavOpen(false);
-    requestAnimationFrame(() => {
-      document.getElementById("dashboard-projects")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, [onBeforeNavigateToProjects]);
 
   const storeProject = useWorkshopStore((s) => s.project);
   const workshopStages = useWorkshopStore((s) => s.workshopStages);
@@ -409,6 +436,19 @@ export function DashboardSidebar({
 
   const inWorkshop = !!workshopProject && typeof onExitWorkshop === "function";
 
+  useEffect(() => {
+    if (!inWorkshop) setProjectsNavExpanded(true);
+  }, [inWorkshop, dashboardProjects.length]);
+
+  const handleOpenDashboardProject = useCallback(
+    (project: DashboardSidebarProjectItem) => {
+      closeMobileNav();
+      onBeforeNavigateToProjects?.();
+      onOpenProject?.(project);
+    },
+    [closeMobileNav, onBeforeNavigateToProjects, onOpenProject],
+  );
+
   const handleExitWorkshopNav = useCallback(() => {
     closeMobileNav();
     onExitWorkshop?.();
@@ -468,7 +508,7 @@ export function DashboardSidebar({
       className={cn(
         "flex w-full shrink-0 flex-col border-[var(--sidebar-border)] bg-[var(--sidebar)] text-[var(--sidebar-foreground)] lg:border-b-0 lg:border-r lg:min-h-0 lg:self-stretch lg:sticky lg:top-0 lg:transition-[width] lg:duration-200 lg:ease-out",
         // Mobile: slide-over drawer; desktop: unchanged width and sticky column.
-        "max-lg:absolute max-lg:left-0 max-lg:top-0 max-lg:z-50 max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-[min(19rem,92vw)] max-lg:overflow-y-auto max-lg:overscroll-y-contain max-lg:border-r max-lg:shadow-2xl max-lg:transition-transform max-lg:duration-200 max-lg:ease-out max-lg:[-webkit-overflow-scrolling:touch]",
+        "max-lg:absolute max-lg:left-0 max-lg:top-0 max-lg:z-50 max-lg:flex max-lg:h-[100dvh] max-lg:max-h-[100dvh] max-lg:w-[min(19rem,92vw)] max-lg:flex-col max-lg:overflow-y-auto max-lg:overscroll-y-contain max-lg:border-r max-lg:pb-[env(safe-area-inset-bottom)] max-lg:shadow-2xl max-lg:transition-transform max-lg:duration-200 max-lg:ease-out max-lg:[-webkit-overflow-scrolling:touch]",
         mobileNavOpen
           ? "max-lg:translate-x-0 max-lg:pointer-events-auto"
           : "max-lg:-translate-x-full max-lg:pointer-events-none",
@@ -485,18 +525,17 @@ export function DashboardSidebar({
     >
       <div
         className={cn(
-          "flex flex-col min-h-0",
+          "flex min-h-0 w-full min-w-0 flex-col",
           inWorkshop
-            ? cn("min-h-0 flex-1 overflow-hidden", rail ? "gap-0" : "gap-4")
-            : cn("min-h-0 lg:flex-1 lg:overflow-hidden", rail ? sidebarRailStackGapClass : "gap-4"),
+            ? cn("min-h-0 flex-1", rail ? "gap-2 overflow-visible" : "gap-4 overflow-hidden")
+            : "min-h-0 flex-1 gap-4 lg:overflow-hidden",
           rail ? "p-3 lg:px-2 lg:py-3" : "px-3 py-3 lg:px-3 lg:py-3",
         )}
       >
         <div
           className={cn(
             "flex w-full gap-2 max-lg:hidden",
-            rail ? cn("lg:flex-col lg:items-center", sidebarRailStackGapClass) : "items-center justify-between",
-            rail && "lg:hidden",
+            rail ? "lg:flex-col lg:items-center lg:gap-2.5" : "items-center justify-between",
           )}
         >
           <div
@@ -505,13 +544,15 @@ export function DashboardSidebar({
               rail ? "lg:flex-none lg:justify-center" : "flex-1",
             )}
           >
-            {rail ? (
-              <SidebarRailBrandMark />
-            ) : (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--sidebar-foreground)_7%,var(--sidebar))] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_10%,transparent)]">
-                <Flame className="h-5 w-5 text-[var(--primary)]" aria-hidden />
-              </div>
-            )}
+            <div
+              className={cn(
+                rail
+                  ? railControlClass("pointer-events-none cursor-default hover:bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))]")
+                  : "flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--sidebar-foreground)_7%,var(--sidebar))] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_10%,transparent)]",
+              )}
+            >
+              <Flame className="h-5 w-5 text-[var(--primary)]" aria-hidden />
+            </div>
             <div className={cn("min-w-0", rail && "lg:hidden")}>
               <p className="truncate text-base font-semibold tracking-tight text-[var(--sidebar-foreground)]">
                 TheForge
@@ -520,74 +561,27 @@ export function DashboardSidebar({
             </div>
           </div>
           <CollapsedRailHint rail={rail} label="Expandir barra lateral">
-            {rail ? (
-              <WorkshopRailIconButton
-                outlined
-                onClick={onToggleCollapsed}
-                title={rail ? "Expandir barra lateral" : "Contraer barra lateral"}
-                aria-expanded={!rail}
-                className={sidebarRailButtonClass}
-              >
-                <ChevronLeft className={cn(sidebarRailIconClass, rail && "hidden")} aria-hidden />
-                <ChevronRight className={cn(sidebarRailIconClass, "hidden", rail && "block")} aria-hidden />
-              </WorkshopRailIconButton>
-            ) : (
-              <WorkshopRailIconButton
-                outlined
-                onClick={onToggleCollapsed}
-                title="Contraer barra lateral"
-                aria-expanded={!rail}
-                size="default"
-                className={cn("hidden lg:inline-flex", sidebarRailButtonClass)}
-              >
-                <ChevronLeft className={sidebarRailIconClass} aria-hidden />
-              </WorkshopRailIconButton>
-            )}
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              title={rail ? "Expandir barra lateral" : "Contraer barra lateral"}
+              aria-expanded={!rail}
+              className={cn(
+                "hidden shrink-0 items-center justify-center text-[var(--sidebar-foreground)] lg:flex",
+                rail
+                  ? railControlClass()
+                  : "rounded-[var(--radius-md)] border border-[color-mix(in_oklch,var(--sidebar-border)_70%,var(--sidebar))] bg-[color-mix(in_oklch,var(--sidebar-foreground)_6%,var(--sidebar))] p-2 shadow-[inset_0_1px_0_0_color-mix(in_oklch,var(--sidebar-foreground)_8%,transparent)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)] active:scale-[0.97]",
+              )}
+            >
+              <SidebarToggleIcon />
+            </button>
           </CollapsedRailHint>
         </div>
 
-        {!inWorkshop && rail ? (
-          <div className={cn("hidden lg:flex lg:flex-col lg:items-center", sidebarRailStackGapClass)}>
-            <SidebarRailBrandMark />
-            <CollapsedRailHint rail={rail} label="Expandir barra lateral">
-              <WorkshopRailIconButton
-                outlined
-                onClick={onToggleCollapsed}
-                title="Expandir barra lateral"
-                aria-expanded={false}
-                className={sidebarRailButtonClass}
-              >
-                <ChevronRight className={sidebarRailIconClass} aria-hidden />
-              </WorkshopRailIconButton>
-            </CollapsedRailHint>
-            <CollapsedRailHint rail={rail} label="Buscar proyectos — expandir barra lateral">
-              <WorkshopRailIconButton
-                title="Expandir barra para buscar"
-                aria-label="Expandir barra lateral para buscar proyectos"
-                onClick={onToggleCollapsed}
-                className={sidebarRailButtonClass}
-              >
-                <Search className={sidebarRailIconClass} aria-hidden />
-              </WorkshopRailIconButton>
-            </CollapsedRailHint>
-            <CollapsedRailHint rail={rail} label="Proyectos">
-              <WorkshopRailIconButton
-                onClick={handleScrollToProjects}
-                title="Proyectos"
-                aria-label="Proyectos"
-                aria-current="page"
-                className={sidebarRailButtonClass}
-              >
-                <FolderOpen className={cn(sidebarRailIconClass, "text-[var(--primary)]")} aria-hidden />
-              </WorkshopRailIconButton>
-            </CollapsedRailHint>
-          </div>
-        ) : null}
-
         {!inWorkshop ? (
-          <div className={cn("group/project-search relative", rail && "lg:hidden")}>
+          <div className={cn("relative", rail && "lg:hidden")}>
             <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)] transition-colors duration-[var(--transition-base)] group-hover/project-search:text-[var(--primary)] group-focus-within/project-search:text-[var(--primary)]"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]"
               aria-hidden
             />
             <Input
@@ -602,10 +596,25 @@ export function DashboardSidebar({
           </div>
         ) : null}
 
+        <div className={cn("relative hidden", rail && "lg:block", inWorkshop && "lg:hidden")}>
+          <CollapsedRailHint rail={rail} label="Buscar proyectos — expandir barra lateral">
+            <button
+              type="button"
+              title="Expandir barra para buscar"
+              aria-label="Expandir barra lateral para buscar proyectos"
+              onClick={onToggleCollapsed}
+              className={railControlClass("mx-auto text-[var(--sidebar-foreground)]")}
+            >
+              <Search className="h-5 w-5" />
+            </button>
+          </CollapsedRailHint>
+        </div>
+
         <nav
           className={cn(
             "flex min-w-0 flex-col gap-1",
-            inWorkshop && "min-h-0 flex-1 overflow-hidden",
+            inWorkshop && "min-h-0 flex-1",
+            inWorkshop && !rail && "overflow-hidden",
           )}
           aria-label="Secciones"
         >
@@ -619,78 +628,45 @@ export function DashboardSidebar({
           </p>
 
           {inWorkshop ? (
-            <div
-              className={cn(
-                "flex min-h-0 min-w-0 flex-1 flex-col",
-                rail ? cn(sidebarRailStackGapClass, "items-center") : "gap-2",
-              )}
-            >
-              {rail ? (
-                <>
-                  <SidebarRailBrandMark />
-                  <CollapsedRailHint rail={rail} label="Expandir barra lateral">
-                    <WorkshopRailIconButton
-                      outlined
-                      onClick={onToggleCollapsed}
-                      title="Expandir barra lateral"
-                      aria-expanded={false}
-                      className={cn("mx-auto", sidebarRailButtonClass)}
-                    >
-                      <ChevronRight className={sidebarRailIconClass} aria-hidden />
-                    </WorkshopRailIconButton>
-                  </CollapsedRailHint>
-                  <CollapsedRailHint rail={rail} label="Buscar proyectos — expandir barra lateral">
-                    <WorkshopRailIconButton
-                      title="Expandir barra para buscar"
-                      aria-label="Expandir barra lateral para buscar proyectos"
-                      onClick={onToggleCollapsed}
-                      className={cn("mx-auto", sidebarRailButtonClass)}
-                    >
-                      <Search className={sidebarRailIconClass} aria-hidden />
-                    </WorkshopRailIconButton>
-                  </CollapsedRailHint>
-                </>
-              ) : null}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
               <CollapsedRailHint rail={rail} label="Volver al panel de proyectos">
-                {rail ? (
-                  <WorkshopRailIconButton
-                    onClick={handleExitWorkshopNav}
-                    title="Volver al panel de proyectos"
-                    aria-label="Volver al panel de proyectos"
-                    className={cn("mx-auto", sidebarRailButtonClass)}
-                  >
-                    <ArrowLeft className={sidebarRailIconClass} aria-hidden />
-                  </WorkshopRailIconButton>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleExitWorkshopNav}
-                    title="Volver al panel de proyectos"
-                    className="flex w-full shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]"
-                  >
-                    <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
-                    <span className="truncate">Panel de proyectos</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleExitWorkshopNav}
+                  title="Volver al panel de proyectos"
+                  className={cn(
+                    "flex shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+                    rail ? railControlClass("mx-auto text-[var(--sidebar-foreground)]") : "w-full",
+                  )}
+                >
+                  <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className={cn("truncate", rail && "lg:hidden")}>Panel de proyectos</span>
+                </button>
               </CollapsedRailHint>
 
               {/* Not <details>: flex + min-h-0 height math stays reliable; collapse is explicit state on the header button. */}
               <div
-                className="group/ws flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+                className={cn(
+                  "group/ws flex min-h-0 min-w-0 flex-1 flex-col",
+                  !rail && "overflow-hidden",
+                )}
                 role="group"
                 aria-label={`Proyecto ${workshopProject.name}`}
               >
                 {rail ? (
-                  <div className="flex shrink-0 justify-center">
-                    <CollapsedRailHint rail={rail} label={`Proyecto: ${workshopProject.name}`}>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
                       <div
-                        className={cn(SIDEBAR_RAIL_ICON_BTN_IDLE, sidebarRailButtonClass, "pointer-events-none hover:bg-transparent")}
-                        aria-hidden
+                        className={railControlActiveClass("mx-auto")}
+                        title={undefined}
                       >
-                        <FolderOpen className={sidebarRailIconClass} />
+                        <FolderOpen className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden />
                       </div>
-                    </CollapsedRailHint>
-                  </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" align="center" sideOffset={10}>
+                      Proyecto: {workshopProject.name}
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
                   <button
                     type="button"
@@ -715,16 +691,12 @@ export function DashboardSidebar({
                     />
                   </button>
                 )}
-                {rail ? (
-                  <div className={cn(sidebarRailSeparatorClass, "my-1")} role="separator" aria-hidden />
-                ) : null}
                 {(rail || workshopStepsExpanded) ? (
                 <div
                   id="workshop-deliverables-panel"
                   className={cn(
-                    "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-                    !rail && "mt-2 px-1",
-                    rail && "px-0",
+                    "mt-2 flex min-h-0 min-w-0 flex-1 flex-col",
+                    rail ? "px-0" : "overflow-hidden px-1",
                   )}
                 >
                   <p
@@ -737,8 +709,10 @@ export function DashboardSidebar({
                   </p>
                   <div
                     className={cn(
-                      "relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [-webkit-overflow-scrolling:touch]",
-                      rail ? "sidebar-rail-phase-scroll pb-0.5" : "px-0.5 pb-1",
+                      "relative min-h-0 flex-1 overscroll-y-contain pb-1 [-webkit-overflow-scrolling:touch]",
+                      rail
+                        ? "scrollbar-rail overflow-y-auto overflow-x-visible"
+                        : "overflow-x-hidden overflow-y-auto px-0.5 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1.5",
                     )}
                     role="list"
                     aria-label="Pasos del workshop"
@@ -755,8 +729,8 @@ export function DashboardSidebar({
                         ) : null}
                         <ul
                           className={cn(
-                            "relative m-0 list-none p-0 py-0.5",
-                            rail ? cn("flex flex-col items-center", sidebarRailPhaseStackGapClass) : "space-y-0.5",
+                            "relative m-0 list-none p-0",
+                            rail ? "flex flex-col items-center gap-1 py-0.5" : "space-y-0.5 py-0.5",
                           )}
                         >
                           {workshopDeliverables.map((item) => {
@@ -766,11 +740,7 @@ export function DashboardSidebar({
                             return (
                               <li
                                 key={item.id}
-                                className={cn(
-                                  "relative",
-                                  !rail && "pl-5 lg:pl-6",
-                                  rail && "flex justify-center py-0",
-                                )}
+                                className={cn("relative shrink-0", !rail && "pl-5 lg:pl-6")}
                               >
                                 {!rail && isCurrent ? (
                                   <span
@@ -784,72 +754,74 @@ export function DashboardSidebar({
                                     done ? `${item.label} · Con contenido · ${item.title}` : `${item.label} · ${item.title}`
                                   }
                                 >
-                                  {rail ? (
-                                    <WorkshopRailIconButton
-                                      selected={isCurrent}
-                                      role="listitem"
-                                      title={`${item.title}${done ? " — con contenido" : ""}`}
-                                      aria-current={isCurrent ? "page" : undefined}
-                                      onClick={() => {
-                                        closeMobileNav();
-                                        onBeforeNavigateToWorkshopDoc?.();
-                                        setWorkshopActiveDocPanel(item.id);
-                                      }}
-                                      className={cn("mx-auto", sidebarRailButtonClass)}
-                                    >
-                                      <span className="relative flex h-3.5 w-3.5 items-center justify-center" aria-hidden>
-                                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                                  <button
+                                    type="button"
+                                    role="listitem"
+                                    title={`${item.title}${done ? " — con contenido" : ""}`}
+                                    aria-current={isCurrent ? "page" : undefined}
+                                    onClick={() => {
+                                      closeMobileNav();
+                                      onBeforeNavigateToWorkshopDoc?.();
+                                      setWorkshopActiveDocPanel(item.id);
+                                    }}
+                                    className={cn(
+                                      "flex min-w-0 items-center font-medium transition-colors",
+                                      rail
+                                        ? cn(
+                                            "mx-auto box-border shrink-0 p-0",
+                                            isCurrent
+                                              ? railControlActiveClass("text-[var(--primary)]")
+                                              : railControlClass("text-[var(--muted-foreground)]"),
+                                          )
+                                        : cn(
+                                            "mb-px w-full gap-2.5 rounded-md px-2 py-1.5 text-left text-sm last:mb-0",
+                                            isCurrent
+                                              ? "bg-[color-mix(in_oklch,var(--sidebar-accent)_100%,transparent)] text-[var(--sidebar-accent-foreground)]"
+                                              : "text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--sidebar-foreground))] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)]",
+                                          ),
+                                    )}
+                                  >
+                                    {rail ? (
+                                      <span className="relative flex size-5 items-center justify-center" aria-hidden>
+                                        <Icon
+                                          className={cn(
+                                            "size-4",
+                                            isCurrent ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]",
+                                          )}
+                                        />
                                         {done ? (
-                                          <span
+                                          <CircleCheck
                                             className={cn(
-                                              "pointer-events-none absolute -bottom-[3px] -right-[3px] flex h-[9px] w-[9px] items-center justify-center rounded-full bg-[var(--success)] text-[var(--success-foreground)]",
-                                              isCurrent
-                                                ? "ring-1 ring-[var(--primary-foreground)]"
-                                                : "ring-1 ring-[var(--sidebar)]",
+                                              "pointer-events-none absolute bottom-0 right-0 size-3",
+                                              STEP_DONE_BADGE_CLASS,
                                             )}
+                                            strokeWidth={2}
                                             aria-hidden
-                                          >
-                                            <Check className="h-[5px] w-[5px]" strokeWidth={3} />
-                                          </span>
+                                          />
                                         ) : null}
                                       </span>
-                                    </WorkshopRailIconButton>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      role="listitem"
-                                      title={`${item.title}${done ? " — con contenido" : ""}`}
-                                      aria-current={isCurrent ? "page" : undefined}
-                                      onClick={() => {
-                                        closeMobileNav();
-                                        onBeforeNavigateToWorkshopDoc?.();
-                                        setWorkshopActiveDocPanel(item.id);
-                                      }}
-                                      className={cn(
-                                        "mb-px flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm font-medium transition-colors last:mb-0",
-                                        isCurrent
-                                          ? "bg-[color-mix(in_oklch,var(--sidebar-accent)_100%,transparent)] text-[var(--sidebar-accent-foreground)]"
-                                          : "text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--sidebar-foreground))] hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)]",
-                                      )}
-                                    >
-                                      <Icon
-                                        className={cn(
-                                          "h-4 w-4 shrink-0 opacity-90",
-                                          isCurrent
-                                            ? "text-[var(--primary)]"
-                                            : "text-[color-mix(in_oklch,var(--muted-foreground)_92%,var(--sidebar-foreground))]",
-                                        )}
-                                        aria-hidden
-                                      />
-                                      <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
-                                      {done ? (
-                                        <CheckCircle2
-                                          className="h-3.5 w-3.5 shrink-0 text-[color-mix(in_oklch,var(--success)_78%,var(--sidebar-foreground))] opacity-90"
+                                    ) : (
+                                      <>
+                                        <Icon
+                                          className={cn(
+                                            "h-4 w-4 shrink-0 opacity-90",
+                                            isCurrent
+                                              ? "text-[var(--primary)]"
+                                              : "text-[color-mix(in_oklch,var(--muted-foreground)_92%,var(--sidebar-foreground))]",
+                                          )}
                                           aria-hidden
                                         />
-                                      ) : null}
-                                    </button>
-                                  )}
+                                        <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
+                                        {done ? (
+                                          <CircleCheck
+                                            className={cn("h-3.5 w-3.5 shrink-0", STEP_DONE_BADGE_CLASS)}
+                                            strokeWidth={2}
+                                            aria-hidden
+                                          />
+                                        ) : null}
+                                      </>
+                                    )}
+                                  </button>
                                 </CollapsedRailHint>
                               </li>
                             );
@@ -863,41 +835,148 @@ export function DashboardSidebar({
               </div>
             </div>
           ) : (
-            <CollapsedRailHint rail={rail} label="Proyectos">
+            <div
+              className={cn("group/projects flex min-h-0 min-w-0 flex-col", !rail && "max-h-[min(50vh,22rem)]")}
+              role="group"
+              aria-label="Proyectos"
+            >
               {rail ? (
-                <WorkshopRailIconButton
-                  onClick={handleScrollToProjects}
-                  title="Proyectos"
-                  aria-label="Proyectos"
-                  aria-current="page"
-                  className={cn("mx-auto lg:hidden", sidebarRailButtonClass)}
-                >
-                  <FolderOpen className={cn(sidebarRailIconClass, "text-[var(--primary)]")} aria-hidden />
-                </WorkshopRailIconButton>
+                <Tooltip delayDuration={200}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className={railControlActiveClass("mx-auto")}
+                      aria-hidden
+                    >
+                      <FolderOpen className="h-5 w-5 shrink-0 text-[var(--primary)]" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center" sideOffset={10}>
+                    Proyectos ({sortedDashboardProjects.length})
+                  </TooltipContent>
+                </Tooltip>
               ) : (
                 <button
                   type="button"
-                  onClick={handleScrollToProjects}
+                  aria-expanded={projectsNavExpanded}
+                  aria-controls="dashboard-projects-nav-panel"
                   title="Proyectos"
-                  className="flex w-full items-center gap-3 rounded-[var(--radius-lg)] bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] px-3 py-2.5 text-left text-sm font-medium text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)] transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))]"
+                  onClick={() => setProjectsNavExpanded((open) => !open)}
+                  className={cn(
+                    "flex w-full shrink-0 items-center gap-2 rounded-[var(--radius-lg)] px-2 py-2 text-left",
+                    "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--sidebar-foreground)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]",
+                    "outline-none transition-colors hover:bg-[color-mix(in_oklch,var(--primary)_20%,var(--sidebar))] focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]",
+                  )}
                 >
                   <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
-                  <span>Proyectos</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">Proyectos</span>
+                  <span className="shrink-0 tabular-nums text-[11px] text-[var(--muted-foreground)]">
+                    {sortedDashboardProjects.length}
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
+                      projectsNavExpanded ? "rotate-180" : "rotate-0",
+                    )}
+                    aria-hidden
+                  />
                 </button>
               )}
-            </CollapsedRailHint>
+              {rail || projectsNavExpanded ? (
+                <div
+                  id="dashboard-projects-nav-panel"
+                  className={cn("mt-2 flex min-h-0 min-w-0 flex-col", rail ? "px-0" : "overflow-hidden px-1")}
+                >
+                  <div
+                    className={cn(
+                      "relative min-h-0 flex-1 overscroll-y-contain pb-1 [-webkit-overflow-scrolling:touch]",
+                      rail
+                        ? "scrollbar-rail flex flex-col items-center gap-1 overflow-y-auto overflow-x-visible py-0.5"
+                        : "max-h-[min(42vh,18rem)] overflow-x-hidden overflow-y-auto px-0.5 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1.5",
+                    )}
+                    role="list"
+                    aria-label="Lista de proyectos"
+                  >
+                    {projectsLoading ? (
+                      <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">Cargando proyectos…</p>
+                    ) : sortedDashboardProjects.length === 0 ? (
+                      <p className="px-1 py-2 text-xs text-[var(--muted-foreground)]">
+                        {projectSearchQuery.trim() ? "Sin coincidencias" : "Aún no hay proyectos"}
+                      </p>
+                    ) : (
+                      <div className="relative w-full">
+                        {!rail ? (
+                          <span
+                            className="pointer-events-none absolute bottom-1 left-[0.8125rem] top-1 w-px bg-[color-mix(in_oklch,var(--sidebar-border)_92%,transparent)]"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <ul
+                          className={cn(
+                            "relative m-0 list-none p-0",
+                            rail ? "flex flex-col items-center gap-1" : "space-y-0.5 py-0.5",
+                          )}
+                        >
+                          {sortedDashboardProjects.map((project) => (
+                            <li
+                              key={project.id}
+                              className={cn("relative shrink-0", !rail && "pl-5 lg:pl-6")}
+                            >
+                              <CollapsedRailHint
+                                rail={rail}
+                                label={project.isFavorite ? `${project.name} · Favorito` : project.name}
+                              >
+                                <button
+                                  type="button"
+                                  role="listitem"
+                                  title={project.name}
+                                  onClick={() => handleOpenDashboardProject(project)}
+                                  className={cn(
+                                    "flex min-w-0 items-center font-medium transition-colors",
+                                    rail
+                                      ? railControlClass("mx-auto text-[var(--muted-foreground)]")
+                                      : "mb-px w-full gap-2 rounded-md px-2 py-1.5 text-left text-sm text-[color-mix(in_oklch,var(--muted-foreground)_96%,var(--sidebar-foreground))] last:mb-0 hover:bg-[color-mix(in_oklch,var(--sidebar-accent)_72%,transparent)] hover:text-[var(--sidebar-accent-foreground)]",
+                                  )}
+                                >
+                                  {rail ? (
+                                    <FolderOpen className="size-4 shrink-0" aria-hidden />
+                                  ) : (
+                                    <>
+                                      <FolderOpen
+                                        className="h-4 w-4 shrink-0 text-[color-mix(in_oklch,var(--muted-foreground)_92%,var(--sidebar-foreground))]"
+                                        aria-hidden
+                                      />
+                                      <span className="min-w-0 flex-1 truncate leading-snug">{project.name}</span>
+                                      {project.isFavorite ? (
+                                        <Heart
+                                          className="h-3.5 w-3.5 shrink-0 fill-[var(--primary)] text-[var(--primary)]"
+                                          aria-hidden
+                                        />
+                                      ) : null}
+                                    </>
+                                  )}
+                                </button>
+                              </CollapsedRailHint>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           )}
         </nav>
       </div>
 
       <div
         className={cn(
-          "mt-auto shrink-0 border-t border-[color-mix(in_oklch,var(--sidebar-border)_75%,var(--sidebar))] p-2",
-          rail && cn("lg:relative lg:z-[1] lg:flex lg:flex-col lg:items-center lg:px-1.5", sidebarRailStackGapClass),
+          "mt-auto w-full min-w-0 shrink-0 border-t border-[color-mix(in_oklch,var(--sidebar-border)_75%,var(--sidebar))] p-2",
+          rail && "lg:relative lg:z-[1] lg:px-1.5",
         )}
       >
         <ThemeModeToggle compact={rail} />
-        <details className={cn("group/account relative", rail && "lg:w-fit")}>
+        <details className="group relative w-full min-w-0">
           <summary
             aria-label={
               rail
@@ -905,15 +984,24 @@ export function DashboardSidebar({
                 : undefined
             }
             className={cn(
-              "flex cursor-pointer list-none items-center gap-3 rounded-[var(--radius-lg)] px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden",
-              !rail && "hover:bg-[var(--sidebar-accent)]",
-              rail && "lg:inline-flex lg:justify-center lg:p-0",
+              "flex w-full min-w-0 cursor-pointer list-none items-center gap-3 rounded-[var(--radius-lg)] px-2 py-2 marker:content-none [&::-webkit-details-marker]:hidden",
+              rail
+                ? "lg:justify-center lg:gap-0 lg:p-0 lg:hover:bg-transparent"
+                : "hover:bg-[var(--sidebar-accent)]",
             )}
           >
             {rail ? (
               <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
-                  <span className={sidebarAccountButtonClass}>{getUserInitials(user)}</span>
+                  <span
+                    className={cn(
+                      railControlClass("text-xs font-semibold text-[var(--primary)]"),
+                      "outline-none",
+                    )}
+                    aria-hidden
+                  >
+                    {getUserInitials(user)}
+                  </span>
                 </TooltipTrigger>
                 <TooltipContent side="right" align="end" sideOffset={10} className="max-w-[14rem]">
                   <span className="block font-medium text-[var(--popover-foreground)]">{getDisplayName(user)}</span>
@@ -925,25 +1013,26 @@ export function DashboardSidebar({
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <>
-                <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-transparent bg-transparent text-xs font-semibold text-[var(--primary)]"
-                  aria-hidden
-                >
-                  {getUserInitials(user)}
-                </div>
-                <div className="min-w-0 flex-1 text-left">
-                  <p className="truncate text-sm font-medium text-[var(--sidebar-foreground)]">
-                    {getDisplayName(user)}
-                  </p>
-                  <p className="truncate text-xs text-[var(--muted-foreground)]">{user?.email || ""}</p>
-                </div>
-                <ChevronDown
-                  className="h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform group-open/account:rotate-180"
-                  aria-hidden
-                />
-              </>
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color-mix(in_oklch,var(--sidebar-foreground)_9%,var(--sidebar))] text-xs font-semibold text-[var(--primary)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--sidebar-foreground)_12%,transparent)]"
+                aria-hidden
+              >
+                {getUserInitials(user)}
+              </div>
             )}
+            <div className={cn("min-w-0 flex-1 text-left", rail && "lg:hidden")}>
+              <p className="truncate text-sm font-medium text-[var(--sidebar-foreground)]">
+                {getDisplayName(user)}
+              </p>
+              <p className="truncate text-xs text-[var(--muted-foreground)]">{user?.email || ""}</p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform group-open:rotate-180",
+                rail && "lg:hidden",
+              )}
+              aria-hidden
+            />
           </summary>
           <div
             className={cn(

@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ComplexityLevel, Prisma, StageStatus, Status } from "@theforge/database";
 import type { Estimation, Project, Stage } from "@theforge/database";
-import { getRequestUserId } from "../../common/request-user.store.js";
+import { getRequestUserId, getRequestUserRole } from "../../common/request-user.store.js";
+import { isAdminOrAbove } from "../../common/roles.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
 import { enrichBlueprintWithUiDesignSystem } from "../engine/blueprint-enrich-ui-system.js";
@@ -462,9 +463,15 @@ export class ProjectsService implements IOrchestratorProjectsPort {
   }
 
   async remove(id: string) {
+    const project = await this.assertProjectAccess(id);
+    const userId = getRequestUserId();
+    const isOwner = project.userId === userId;
+    if (!isOwner && !isAdminOrAbove(getRequestUserRole())) {
+      throw new NotFoundException("Project not found");
+    }
     await this.prisma.architecturalPreference.deleteMany({ where: { projectId: id } });
     try {
-      await this.prisma.project.delete({ where: this.projectWhereForUser(id) });
+      await this.prisma.project.delete({ where: { id } });
     } catch {
       throw new NotFoundException("Project not found");
     }
