@@ -15,7 +15,7 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 
 ### Changed
 
-- **BUILD_CACHE_BUST**: 77 → 78
+- **BUILD_CACHE_BUST**: 78 → 79
 
 ---
 
