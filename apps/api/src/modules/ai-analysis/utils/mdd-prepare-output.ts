@@ -11,6 +11,7 @@ import {
   sanitizeContextSection,
 } from "./mdd-sanitize.js";
 import { enrichMddWithUiUxDesignIntent } from "./mdd-enrich-uiux-intent.js";
+import { isPlaceholderSeguridad } from "./mdd-security-parse.js";
 
 export function hasStructuredContent(mdd: MddStructured | null | undefined): boolean {
   if (!mdd || typeof mdd !== "object") return false;
@@ -53,6 +54,15 @@ export function shouldPreferDraftOverStructured(
   const trimmed = (draft ?? "").trim();
   if (trimmed.length < 200) return false;
   if (draftHasSubstantialSection6(trimmed)) return true;
+  // Si el draft tiene §6 pero el structured solo tiene placeholder, preservar draft
+  const s6Range = getSection6Or7Range(trimmed, 6);
+  if (s6Range) {
+    const body = trimmed.slice(s6Range.start + s6Range.heading.length, s6Range.end).replace(/^\s*\n+/, "").trim();
+    const hasRealContent = body.length > 15 && !/^\s*\(?Pendiente[^)]*\)?\s*$/im.test(body);
+    if (hasRealContent && (!structured?.seguridad?.length || isPlaceholderSeguridad(structured.seguridad))) {
+      return true;
+    }
+  }
   if (draftHasSubstantialSection3(trimmed)) return true;
   if (countH2Sections(trimmed) >= 4 && trimmed.length > 500) return true;
   if (!hasStructuredContent(structured)) return trimmed.length > 0;

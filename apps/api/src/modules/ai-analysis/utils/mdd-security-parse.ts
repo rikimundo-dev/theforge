@@ -35,7 +35,6 @@ export const CORRUPTED_SECURITY_TEXT_PATTERNS: RegExp[] = [
   /<\s*think(?:ing)?\s*>/i,
   /\bthinking\s*:/i,
   /\bhere'?s\s+my\s+thinking\b/i,
-  /"6\.\s*Seguridad"\s*:/,
   /^\s*\{\s*$/m,
   /^\s*-\s*"\w+"\s*:/m,
 ];
@@ -245,32 +244,53 @@ export function seguridadItemsFromDraftSection6(draft: string): MddSeguridadItem
  * Parsea la respuesta del LLM de Security a items estructurados.
  * Devuelve null si no hay JSON/markdown válido o si la salida parece corrupta.
  */
-/** Strips <think>…</think> / <thinking>…</thinking> blocks emitted by reasoning models. */
+/**
+ * Strips reasoning/thinking blocks emitted by models:
+ * - <think>…</think> / <thinking>…</thinking> (HTML-style)
+ * - ```think …``` / ```thinking …``` (Markdown-fenced)
+ * - ``` …``` (generic fenced block containing "think")
+ * Also normalizes extra blank lines left after stripping.
+ */
 export function stripThinkingTags(text: string): string {
-  return (text ?? "")
+  let result = (text ?? "")
+    // HTML-style think/thinking tags
     .replace(/<think(?:ing)?>\s*[\s\S]*?<\/think(?:ing)?>/gi, "")
+    // Markdown-fenced think blocks (```think ... ``` or ```thinking ... ```)
+    .replace(/```think(?:ing)?\s*\n[\s\S]*?\n```\s*/gi, "")
+    // Generic fenced code blocks that contain "think"
+    .replace(/```[\s\S]*?\b(?:think|thought|reasoning)\b[\s\S]*?```\s*/gi, "")
+    // Collapse 3+ consecutive newlines into 2
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
+  return result;
 }
 
 export function parseSecurityLlmResponse(text: string): MddSeguridadItem[] | null {
   const trimmed = stripThinkingTags(text);
   if (!trimmed) return null;
 
-  // Try structured JSON first (before corruption check — valid JSON has high "json fragment" line ratio
-  // which isCorruptedSecurityLlmText would incorrectly flag as corrupted).
+  // 1. Try structured JSON first: { seguridad: [...] }
+  //    (before corruption check — valid JSON has high "json fragment" line ratio
+  //    which isCorruptedSecurityLlmText would incorrectly flag as corrupted).
   const structured = tryStructuredJson(trimmed);
   if (structured) {
     const sanitized = sanitizeSeguridadItems(structured);
     if (sanitized && !isCorruptedSeguridadSlice(sanitized)) return sanitized;
   }
 
-  if (isCorruptedSecurityLlmText(trimmed)) return null;
-
+  // 2. Try legacy JSON: { securitySection: "## 6. Seguridad\n\n..." }
+  //    (before corruption check — DeepSeek/Claude often output this format
+  //    following the default prompt instruction.)
   const legacySection = tryLegacyJson(trimmed);
   if (legacySection) {
     const fromLegacy = tryMarkdownSection(legacySection.startsWith("##") ? legacySection : `## Seguridad\n\n${legacySection}`);
     if (fromLegacy) return fromLegacy;
   }
 
+  // 3. Corruption check only for raw markdown fallback
+  //    (structured and legacy JSON already exhausted).
+  if (isCorruptedSecurityLlmText(trimmed)) return null;
+
+  // 4. Try raw markdown
   return tryMarkdownSection(trimmed);
 }
