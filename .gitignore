@@ -21,7 +21,9 @@ packages/database/src/generated
 # IDE
 .idea
 .vscode
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 .gemini/
 *.code-workspace
 *.swp

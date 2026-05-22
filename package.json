@@ -21,7 +21,8 @@
     "db:generate": "turbo run db:generate --filter=@theforge/database",
     "db:push": "turbo run db:push --filter=@theforge/database",
     "db:migrate": "turbo run db:migrate --filter=@theforge/database",
-    "rotate-master-key": "tsx scripts/rotate-master-key.ts"
+    "rotate-master-key": "tsx scripts/rotate-master-key.ts",
+    "setup:githooks": "sh scripts/setup-githooks.sh"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

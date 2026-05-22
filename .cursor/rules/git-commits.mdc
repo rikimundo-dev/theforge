@@ -1,0 +1,45 @@
+---
+description: Git commits — sin trailers Co-authored-by de IA (obligatorio)
+alwaysApply: true
+---
+
+# Git commits
+
+## Co-authored-by de agentes IA (OBLIGATORIO — siempre)
+
+**Prohibido en todo commit** añadir `Co-authored-by` de Cursor, Copilot u otro agente, salvo petición **explícita** del usuario.
+
+- No incluir esa línea en `git commit -m`, HEREDOC ni mensajes de amend/rebase.
+- Si el IDE la inyecta, reescribe el mensaje sin ella antes de push.
+- El hook `.githooks/prepare-commit-msg` la elimina al commitear; activar una vez: `npm run setup:githooks`.
+
+Ejemplos prohibidos:
+
+```
+Co-authored-by: Cursor <cursoragent@cursor.com>
+Co-authored-by: GitHub Copilot <...>
+Co-authored-by: <cualquier agente IA> <agent@...>
+```
+
+Los commits deben listar solo autor(es) humano(s) previstos.
+
+## Conventional commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) when the repo already does: `type(scope): subject` (e.g. `fix(api): handle timeout`). Keep the subject imperative and under ~72 characters.
+
+**Every commit must include a brief body** (1–3 sentences) after a blank line: what changed and why. The subject alone is not enough — even for small fixes and tests.
+
+Example (HEREDOC with subject + body):
+
+```
+fix(api): handle upstream timeout
+
+Retry once with backoff when the provider returns 504, so analysis
+streams fail gracefully instead of hanging the client.
+```
+
+## When committing
+
+- Follow the user's commit workflow (status, diff, HEREDOC for `-m` with subject **and** body).
+- Do not amend or force-push unless the user explicitly requests it and safety rules allow it.
+- Never run `git config` to change identity or hooks.

@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Quita trailers Co-authored-by de agentes IA (Cursor, Copilot, etc.).
+commit_msg_file=$1
+[ -n "$commit_msg_file" ] && [ -f "$commit_msg_file" ] || exit 0
+
+tmp=$(mktemp) || exit 0
+trap 'rm -f "$tmp"' EXIT
+
+grep -Ev \
+  -e '^Co-authored-by: Cursor <' \
+  -e '^Co-authored-by: GitHub Copilot' \
+  -e '^Co-authored-by: Copilot <' \
+  -e '^Co-authored-by:.*cursoragent@' \
+  -e '^Co-authored-by:.*copilot@' \
+  "$commit_msg_file" >"$tmp" && mv "$tmp" "$commit_msg_file"
+trap - EXIT
+rm -f "$tmp"
