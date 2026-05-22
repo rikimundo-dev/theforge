@@ -59,6 +59,17 @@ body {
 }
 
 @layer utilities {
+  /** Collapsed sidebar step list: scroll without a wide gutter overlapping 40px controls. */
+  .scrollbar-rail {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-rail::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   /** Scroll compacto para la lista de fases en el rail colapsado del sidebar. */
   .sidebar-rail-phase-scroll {
     scrollbar-width: thin;
