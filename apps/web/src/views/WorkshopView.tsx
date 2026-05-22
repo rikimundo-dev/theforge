@@ -45,7 +45,6 @@ import {
 import {
   WORKSHOP_HEADER_CTL,
   WORKSHOP_HEADER_CTL_HOVER,
-  WORKSHOP_HEADER_ICON_BTN,
 } from "../constants/workshopHeaderToolbar";
 import type { CodebaseDocResponseMode } from "@theforge/shared-types";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
@@ -1543,7 +1542,7 @@ export default function WorkshopView({
                 )}
               >
                 <span
-                  className={cn(WORKSHOP_HEADER_ICON_BTN, "hidden sm:inline-flex pointer-events-none text-[var(--foreground-subtle)]")}
+                  className="hidden sm:inline-flex h-9 w-9 shrink-0 items-center justify-center pointer-events-none text-[var(--foreground-subtle)]"
                   aria-hidden
                 >
                   <Layers className="h-4 w-4 shrink-0" strokeWidth={2} />
@@ -1615,49 +1614,32 @@ export default function WorkshopView({
                   }}
                 />
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <WorkshopHeaderIconButton
-                      onClick={() => {
-                        if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
-                        launchHermes(projectId)
-                          .then((res: { success: boolean; status: number } | undefined) => {
-                            if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
-                          })
-                          .catch((err: Error) => setError(err.message));
-                      }}
-                      disabled={loading || hermesConfigured === false}
-                      className={hermesConfigured === false ? "cursor-not-allowed opacity-60" : undefined}
-                      title={
-                        hermesConfigured === null
-                          ? "Verificando configuración…"
-                          : hermesConfigured
-                            ? "Lanzar proyecto a Hermes Agent"
-                            : "Hermes no configurado"
-                      }
-                      aria-label={
-                        hermesConfigured === null
-                          ? "Verificando Hermes"
-                          : hermesConfigured
-                            ? "Lanzar proyecto a Hermes Agent"
-                            : "Hermes no configurado"
-                      }
-                    >
-                      {loading && loadingReason === "launch-hermes" ? (
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                      ) : (
-                        <Rocket className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                      )}
-                    </WorkshopHeaderIconButton>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {hermesConfigured === null
-                      ? "Verificando Hermes…"
-                      : hermesConfigured
-                        ? "Lanzar proyecto a Hermes Agent"
-                        : "Hermes no configurado (HERMES_WEBHOOK_URL / HERMES_API_KEY)"}
-                  </TooltipContent>
-                </Tooltip>
+                {hermesConfigured === true ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <WorkshopHeaderIconButton
+                        onClick={() => {
+                          if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
+                          launchHermes(projectId)
+                            .then((res: { success: boolean; status: number } | undefined) => {
+                              if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
+                            })
+                            .catch((err: Error) => setError(err.message));
+                        }}
+                        disabled={loading}
+                        title="Lanzar proyecto a Hermes Agent"
+                        aria-label="Lanzar proyecto a Hermes Agent"
+                      >
+                        {loading && loadingReason === "launch-hermes" ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                        ) : (
+                          <Rocket className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                        )}
+                      </WorkshopHeaderIconButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Lanzar proyecto a Hermes Agent</TooltipContent>
+                  </Tooltip>
+                ) : null}
 
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -1699,49 +1681,32 @@ export default function WorkshopView({
                   }}
                 />
 
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <WorkshopHeaderIconButton
-                      onClick={() => {
-                        if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
-                        launchHermes(projectId)
-                          .then((res: { success: boolean; status: number } | undefined) => {
-                            if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
-                          })
-                          .catch((err: Error) => setError(err.message));
-                      }}
-                      disabled={loading || hermesConfigured === false}
-                      className={hermesConfigured === false ? "cursor-not-allowed opacity-60" : undefined}
-                      title={
-                        hermesConfigured === null
-                          ? "Verificando configuración…"
-                          : hermesConfigured
-                            ? "Lanzar proyecto a Hermes Agent"
-                            : "Hermes no configurado"
-                      }
-                      aria-label={
-                        hermesConfigured === null
-                          ? "Verificando Hermes"
-                          : hermesConfigured
-                            ? "Lanzar proyecto a Hermes Agent"
-                            : "Hermes no configurado"
-                      }
-                    >
-                      {loading && loadingReason === "launch-hermes" ? (
-                        <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
-                      ) : (
-                        <Rocket className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
-                      )}
-                    </WorkshopHeaderIconButton>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    {hermesConfigured === null
-                      ? "Verificando Hermes…"
-                      : hermesConfigured
-                        ? "Lanzar proyecto a Hermes Agent"
-                        : "Hermes no configurado"}
-                  </TooltipContent>
-                </Tooltip>
+                {hermesConfigured === true ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <WorkshopHeaderIconButton
+                        onClick={() => {
+                          if (!window.confirm("¿Lanzar este proyecto a Hermes Agent para desarrollo?")) return;
+                          launchHermes(projectId)
+                            .then((res: { success: boolean; status: number } | undefined) => {
+                              if (res?.success) setError("✅ Proyecto enviado a Hermes Agent");
+                            })
+                            .catch((err: Error) => setError(err.message));
+                        }}
+                        disabled={loading}
+                        title="Lanzar proyecto a Hermes Agent"
+                        aria-label="Lanzar proyecto a Hermes Agent"
+                      >
+                        {loading && loadingReason === "launch-hermes" ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                        ) : (
+                          <Rocket className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                        )}
+                      </WorkshopHeaderIconButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Lanzar proyecto a Hermes Agent</TooltipContent>
+                  </Tooltip>
+                ) : null}
 
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2840,89 +2805,103 @@ export default function WorkshopView({
                   </>
                 ) : (
                   <>
-                      {loading && loadingReason === "phase0-deep-research" && (
-                        <div className="shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] px-4 py-2 mb-3 text-sm text-[color-mix(in_oklch,var(--primary)_65%,var(--foreground))] flex items-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                          <span>Generando Deep Research… Suele tardar 1–2 minutos; no cierres la página.</span>
-                        </div>
-                      )}
-                      {phase0SummaryViewMode === "preview" ? (
-                        <WorkshopPanelActionRegion role="region" aria-label="Acciones de Benchmark">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <WorkshopPanelButton
-                              tone="primary"
-                              onClick={async () => {
-                                await phase0DeepResearch(projectId, {
-                                  userIdea: lastBenchmarkIdea.trim() || undefined,
-                                  includeBenchmark: true,
-                                });
-                              }}
-                              disabled={loading}
-                              loading={loading && loadingReason === "phase0-deep-research"}
-                              title="Generar Benchmark & Deep Research desde el análisis de Fase 0"
-                            >
-                              {!loading || loadingReason !== "phase0-deep-research" ? (
-                                <WorkshopButtonIcon icon={Rocket} tone="primary" />
-                              ) : null}
-                              {loading && loadingReason === "phase0-deep-research" ? "Generando…" : "Generar Benchmark"}
-                            </WorkshopPanelButton>
-                            {phase0SummaryContent != null && phase0SummaryContent !== "" ? (
-                              <WorkshopPanelButton
-                                tone="danger"
-                                onClick={() => projectId && clearPhase0SummaryContent(projectId)}
-                                title="Borrar el resumen Benchmark (podrás generar uno nuevo desde Fase 0)"
-                              >
-                                <WorkshopButtonIcon icon={Trash2} tone="danger" />
-                                Borrar benchmark
-                              </WorkshopPanelButton>
-                            ) : null}
-                          </div>
-                          <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
-                            {phase0SummaryContent?.trim()
-                              ? "Deep Research a partir del DBGA de Fase 0."
-                              : "Completa el análisis en Fase 0 y genera el Benchmark aquí. Suele tardar 1–2 min."}
-                          </p>
-                        </WorkshopPanelActionRegion>
-                      ) : phase0SummaryContent != null && phase0SummaryContent !== "" ? (
-                        <WorkshopPanelActionRegion className="items-end" role="region" aria-label="Acciones de Benchmark">
-                          <WorkshopPanelButton
-                            tone="danger"
-                            onClick={() => projectId && clearPhase0SummaryContent(projectId)}
-                            title="Borrar el resumen Benchmark (podrás generar uno nuevo desde Fase 0)"
-                          >
-                            <WorkshopButtonIcon icon={Trash2} tone="danger" />
-                            Borrar benchmark
-                          </WorkshopPanelButton>
-                        </WorkshopPanelActionRegion>
-                      ) : null}
-                      <div className="flex-1 flex flex-col min-h-0">
-                        <div className="flex-1 flex flex-col min-h-0">
-                          {phase0SummaryViewMode === "preview" && phase0SummaryContent != null && phase0SummaryContent !== "" ? (
-                            <div className="flex-1 min-h-[200px] overflow-auto">
-                              <MddViewer content={phase0SummaryContent ?? ""} />
-                            </div>
-                          ) : phase0SummaryViewMode === "preview" ? (
-                            <div className="flex-1 flex items-center justify-center min-h-[200px]">
-                              <div className="text-center">
-                                <Globe className="w-8 h-8 mx-auto mb-2 text-[var(--muted-foreground)] opacity-40" />
-                                <p className="text-sm text-[var(--muted-foreground)]">
-                                  Aún no hay Benchmark. Completa el análisis en <strong>Fase 0</strong> y presiona{" "}
-                                  <strong>Generar Benchmark</strong> arriba en esta pestaña.
-                                </p>
-                              </div>
-                            </div>
-                          ) : (
-                            <textarea
-                              value={phase0SummaryContent ?? ""}
-                              onChange={(e) => setPhase0SummaryContent(e.target.value || null)}
-                              onBlur={handlePhase0SummaryBlur}
-                              placeholder="# Resumen Deep Research..."
-                              className="flex-1 min-h-[200px] w-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
-                              spellCheck={false}
-                            />
-                          )}
-                        </div>
+                    {phase0SummaryViewMode === "preview" && !phase0SummaryContent?.trim() ? (
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <DocEmptyState
+                          icon={Globe}
+                          title="Benchmark"
+                          description="Deep Research y gap analysis a partir del análisis de Fase 0 (DBGA). Suele tardar 1–2 min."
+                          onGenerate={() =>
+                            void phase0DeepResearch(projectId, {
+                              userIdea: lastBenchmarkIdea.trim() || undefined,
+                              includeBenchmark: true,
+                            })
+                          }
+                          loading={loading && loadingReason === "phase0-deep-research"}
+                          hasMdd={!!dbgaContent?.trim()}
+                          generateButtonLabel="Generar Benchmark"
+                          prerequisiteHint="Completa el análisis en la pestaña Fase 0 antes de generar el Benchmark."
+                        />
                       </div>
+                    ) : (
+                      <>
+                        {loading && loadingReason === "phase0-deep-research" && (
+                          <div className="shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] px-4 py-2 mb-3 text-sm text-[color-mix(in_oklch,var(--primary)_65%,var(--foreground))] flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                            <span>Generando Deep Research… Suele tardar 1–2 minutos; no cierres la página.</span>
+                          </div>
+                        )}
+                        {phase0SummaryViewMode === "preview" ? (
+                          <WorkshopPanelActionRegion role="region" aria-label="Acciones de Benchmark">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <WorkshopPanelButton
+                                tone="primary"
+                                onClick={async () => {
+                                  await phase0DeepResearch(projectId, {
+                                    userIdea: lastBenchmarkIdea.trim() || undefined,
+                                    includeBenchmark: true,
+                                  });
+                                }}
+                                disabled={loading || !dbgaContent?.trim()}
+                                loading={loading && loadingReason === "phase0-deep-research"}
+                                title="Generar Benchmark & Deep Research desde el análisis de Fase 0"
+                              >
+                                {!loading || loadingReason !== "phase0-deep-research" ? (
+                                  <WorkshopButtonIcon icon={Rocket} tone="primary" />
+                                ) : null}
+                                {loading && loadingReason === "phase0-deep-research"
+                                  ? "Generando…"
+                                  : "Regenerar Benchmark"}
+                              </WorkshopPanelButton>
+                              {phase0SummaryContent != null && phase0SummaryContent !== "" ? (
+                                <WorkshopPanelButton
+                                  tone="danger"
+                                  onClick={() => projectId && clearPhase0SummaryContent(projectId)}
+                                  title="Borrar el resumen Benchmark (podrás generar uno nuevo desde Fase 0)"
+                                >
+                                  <WorkshopButtonIcon icon={Trash2} tone="danger" />
+                                  Borrar benchmark
+                                </WorkshopPanelButton>
+                              ) : null}
+                            </div>
+                            <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
+                              Deep Research a partir del DBGA de Fase 0.
+                            </p>
+                          </WorkshopPanelActionRegion>
+                        ) : phase0SummaryContent != null && phase0SummaryContent !== "" ? (
+                          <WorkshopPanelActionRegion className="items-end" role="region" aria-label="Acciones de Benchmark">
+                            <WorkshopPanelButton
+                              tone="danger"
+                              onClick={() => projectId && clearPhase0SummaryContent(projectId)}
+                              title="Borrar el resumen Benchmark (podrás generar uno nuevo desde Fase 0)"
+                            >
+                              <WorkshopButtonIcon icon={Trash2} tone="danger" />
+                              Borrar benchmark
+                            </WorkshopPanelButton>
+                          </WorkshopPanelActionRegion>
+                        ) : null}
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <div className="flex-1 flex flex-col min-h-0">
+                            {phase0SummaryViewMode === "preview" &&
+                            phase0SummaryContent != null &&
+                            phase0SummaryContent !== "" ? (
+                              <div className="flex-1 min-h-[200px] overflow-auto">
+                                <MddViewer content={phase0SummaryContent ?? ""} />
+                              </div>
+                            ) : (
+                              <textarea
+                                value={phase0SummaryContent ?? ""}
+                                onChange={(e) => setPhase0SummaryContent(e.target.value || null)}
+                                onBlur={handlePhase0SummaryBlur}
+                                placeholder="# Resumen Deep Research..."
+                                className="flex-1 min-h-[200px] w-full bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
+                                spellCheck={false}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </>

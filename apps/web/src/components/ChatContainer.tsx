@@ -1,4 +1,4 @@
-import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from "react";
+import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, type ComponentPropsWithoutRef } from "react";
 import {
   LEGACY_CODEBASE_DOC_STEPS,
   LEGACY_MDD_STEPS,
@@ -102,6 +102,37 @@ function getChatComposerPlaceholder(isBenchmarkFirstAction: boolean, activeTab: 
 }
 
 const ACCEPT_IMG = /^image\/(png|jpeg|jpg|gif|webp)$/i;
+
+/** Assistant messages may include literal `<br>` in table cells; normalize to line breaks for GFM. */
+function normalizeChatMarkdown(content: string): string {
+  return content.replace(/<br\s*\/?>/gi, "\n");
+}
+
+const CHAT_MARKDOWN_COMPONENTS = {
+  table: (props: ComponentPropsWithoutRef<"table">) => (
+    <div className="my-2 max-w-full overflow-x-auto rounded-md border border-[var(--border)] [-webkit-overflow-scrolling:touch] [scrollbar-width:thin]">
+      <table className="w-full min-w-[18rem] border-collapse text-left text-xs" {...props} />
+    </div>
+  ),
+  th: (props: ComponentPropsWithoutRef<"th">) => (
+    <th
+      className="border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_42%,var(--card))] px-2 py-1.5 text-left align-top font-medium break-words"
+      {...props}
+    />
+  ),
+  td: (props: ComponentPropsWithoutRef<"td">) => (
+    <td
+      className="border border-[var(--border)] px-2 py-1.5 align-top break-words [overflow-wrap:anywhere]"
+      {...props}
+    />
+  ),
+  pre: (props: ComponentPropsWithoutRef<"pre">) => (
+    <pre
+      className="my-2 max-w-full overflow-x-auto rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_78%,var(--card))] p-3 text-xs"
+      {...props}
+    />
+  ),
+};
 
 /** Single bordered “AI bar”: attach + textarea + send share one surface (Claude/ChatGPT-style unified chrome). */
 /** Máx. altura del textarea antes de scroll interno (solo pegas enormes); el shell crece hacia arriba con el contenido. */
@@ -223,8 +254,8 @@ function PlanApprovalCard({
         <ReactMarkdown>{planMessage}</ReactMarkdown>
       </div>
       <p className="text-xs text-[var(--foreground-muted)] mb-1.5 font-medium shrink-0">Tareas y responsables:</p>
-      <div className="mb-3">
-        <table className="w-full text-sm border-collapse">
+      <div className="mb-3 max-w-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
+        <table className="w-full min-w-[16rem] text-sm border-collapse">
           <thead>
             <tr className="text-left text-[var(--foreground-muted)] border-b border-[var(--border)]">
               <th className="py-1.5 pr-2 w-8">#</th>
@@ -815,15 +846,15 @@ export default function ChatContainer({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-          <div ref={chatScrollRef} onScroll={handleChatScroll} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+          <div ref={chatScrollRef} onScroll={handleChatScroll} className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-4 space-y-4">
             {messagesToShow.length ? (
               messagesToShow.map((msg, i) => (
                 <div
                   key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex min-w-0 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
                   <div
-                    className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${msg.role === "user"
+                    className={`min-w-0 max-w-[85%] overflow-hidden rounded-lg px-3 py-2 text-sm ${msg.role === "user"
                       ? "bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[color-mix(in_oklch,var(--primary)_58%,var(--foreground))]"
                       : "bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)]"
                       }`}
@@ -836,8 +867,10 @@ export default function ChatContainer({
                       </span>
                     ) : null}
                     {msg.role === "assistant" ? (
-                      <div className="prose prose-invert prose-sm max-w-none prose-table:text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] prose-th:border-[var(--border)] prose-td:border-[var(--border)]">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                      <div className="prose prose-invert prose-sm min-w-0 max-w-full prose-table:text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] prose-th:border-[var(--border)] prose-td:border-[var(--border)] [&_table]:my-0">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={CHAT_MARKDOWN_COMPONENTS}>
+                          {normalizeChatMarkdown(msg.content)}
+                        </ReactMarkdown>
                       </div>
                     ) : (
                       <div>
