@@ -106,7 +106,7 @@ export class UserProvidersService {
     };
   }
 
-  /** super_admin: modelos permitidos para un admin/dev (sin cambiar su proveedor activo). */
+  /** super_admin: modelos permitidos solo para admins (sin cambiar su proveedor activo). */
   async updateUserAllowedChatModels(targetUserId: string, modelsRaw: string) {
     const target = await this.prisma.user.findUnique({
       where: { id: targetUserId },
@@ -115,6 +115,11 @@ export class UserProvidersService {
     if (!target) throw new NotFoundException("Usuario no encontrado");
     if (target.role === "super_admin") {
       throw new BadRequestException("No se asignan grants de modelos a otro super_admin");
+    }
+    if (target.role === "developer") {
+      throw new BadRequestException(
+        "Los developers usan el proveedor del equipo; no se asignan modelos individuales",
+      );
     }
 
     const models = parseChatModelList(modelsRaw);
@@ -154,6 +159,7 @@ export class UserProvidersService {
       select: { role: true },
     });
     if (!user || isSuperAdmin(user.role)) return;
+    if (user.role === "developer") return;
 
     const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
     const grants = settings?.allowedChatModels ?? [];
@@ -559,7 +565,12 @@ export class UserProvidersService {
     const bypass = await this.userBypassesModelPolicy(userId);
     const catalog = PROVIDER_CATALOG[provider];
     const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
-    const userGrants = settings?.allowedChatModels ?? [];
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true },
+    });
+    const userGrants =
+      user?.role === "developer" ? [] : (settings?.allowedChatModels ?? []);
     const chatModel = opts?.chatModelOverride?.trim() || instance.chatModel;
     const modelRole = opts?.chatModelOverride ? "auditor" : "activo";
 

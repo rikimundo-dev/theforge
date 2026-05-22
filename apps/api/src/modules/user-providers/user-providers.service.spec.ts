@@ -377,6 +377,16 @@ test("UserProvidersService.updateUserAllowedChatModels — super_admin puede asi
   ]);
 });
 
+test("UserProvidersService.updateUserAllowedChatModels — rechaza asignación a developer", async () => {
+  const prisma = mockPrisma();
+  (prisma as { __store: { userRole: string } }).__store.userRole = "developer";
+  const svc = new UserProvidersService(prisma, mockCrypto());
+  await assert.rejects(
+    () => svc.updateUserAllowedChatModels(USER_ID, "minimax/minimax-m2.5"),
+    (err: unknown) => err instanceof BadRequestException,
+  );
+});
+
 test("UserProvidersService.updateUserAllowedChatModels — rechaza nombre demasiado corto", async () => {
   const prisma = mockPrisma();
   const svc = new UserProvidersService(prisma, mockCrypto());
