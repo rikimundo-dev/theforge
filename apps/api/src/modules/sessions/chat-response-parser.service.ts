@@ -44,6 +44,20 @@ export class ChatResponseParserService {
     return this.splitDocAndChat(response, "DBGA");
   }
 
+  splitPhase0AndChat(response: string): { docPart: string; chatPart: string } | null {
+    return this.splitDocAndChat(response, "PHASE0");
+  }
+
+  /** Full-replacement merge for Phase0 (documento completo, sin secciones numeradas). */
+  mergePhase0OrUseFull(currentPhase0: string | undefined, newPart: string): string {
+    const cleaned = newPart.trim();
+    if (!cleaned) return (currentPhase0 ?? "").trim();
+    const current = (currentPhase0 ?? "").trim();
+    const looksLikeFullDoc = cleaned.length >= 500;
+    if (looksLikeFullDoc) return cleaned;
+    return current || cleaned;
+  }
+
   /**
    * DBGA (Paso 0): el modelo suele mandar solo el fragmento nuevo + ---FIN_DBGA---.
    * Sin merge, eso reemplaza todo el benchmark y “borra” el documento.
@@ -231,6 +245,7 @@ export class ChatResponseParserService {
       infra: /^#\s*(?:Infraestructura|Infrastructure|Infra(?![a-z]))(?:\s|$)/im,
       benchmark: /^#\s*(?:Benchmark|Domain Benchmark|Análisis)\b/im,
       brd: /^#\s*(?:BRD|Business Requirements Document)\b/im,
+      phase0: /^#\s*(?:Fase 0|Phase 0|Especificador)/im,
     };
 
     const pattern = HEADING_PATTERNS[activeTab];

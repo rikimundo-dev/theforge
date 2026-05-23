@@ -127,6 +127,7 @@ export class SessionsService {
       currentMddContent?: string;
       currentDbgaContent?: string;
       currentUxUiGuideContent?: string;
+      currentPhase0SummaryContent?: string;
       currentBlueprintContent?: string;
       currentSpecContent?: string;
       currentBrdContent?: string;
@@ -148,6 +149,7 @@ export class SessionsService {
     mddContent?: string | null;
     uxUiGuideContent?: string | null;
     dbgaContent?: string | null;
+    phase0SummaryContent?: string | null;
     specContent?: string | null;
     brdContent?: string | null;
     toBeManualContent?: string | null;
@@ -187,6 +189,7 @@ export class SessionsService {
         currentMddContent: options?.currentMddContent,
         currentDbgaContent: options?.currentDbgaContent,
         currentUxUiGuideContent: options?.currentUxUiGuideContent,
+        currentPhase0SummaryContent: options?.currentPhase0SummaryContent,
         currentBlueprintContent: options?.currentBlueprintContent,
         currentSpecContent: options?.currentSpecContent,
         currentBrdContent: options?.currentBrdContent,
@@ -216,6 +219,7 @@ export class SessionsService {
     const mddSplit = this.parser.splitMddAndChat(safeResponse);
     const uxSplit = this.parser.splitUxUiGuideAndChat(safeResponse);
     let dbgaSplit = this.parser.splitDbgaAndChat(safeResponse);
+    let phase0Split = this.parser.splitPhase0AndChat(safeResponse);
     let specSplit = this.parser.splitDocAndChat(safeResponse, "SPEC");
     let brdSplit = this.parser.splitDocAndChat(safeResponse, "BRD");
     let blueSplit = this.parser.splitDocAndChat(safeResponse, "BLUEPRINT");
@@ -232,6 +236,7 @@ export class SessionsService {
     let hasDbga = dbgaSplit !== null;
     let hasSpec = specSplit !== null;
     let hasBrd = brdSplit !== null;
+    let hasPhase0 = phase0Split !== null;
     let hasBlue = blueSplit !== null;
     let hasApi = apiSplit !== null;
     let hasFlows = flowsSplit !== null;
@@ -243,11 +248,13 @@ export class SessionsService {
 
     let uxDocPart: string | undefined = hasUx ? uxSplit!.docPart : undefined;
     let dbgaDocPart: string | undefined = hasDbga ? dbgaSplit!.docPart : undefined;
+    let phase0DocPart: string | undefined = hasPhase0 ? phase0Split!.docPart : undefined;
 
     let rawChat = safeResponse;
     if (hasMdd) rawChat = mddSplit!.chatPart;
     else if (hasUx) rawChat = uxSplit!.chatPart;
     else if (hasDbga) rawChat = dbgaSplit!.chatPart;
+    else if (hasPhase0) rawChat = phase0Split!.chatPart;
     else if (hasSpec) rawChat = specSplit!.chatPart;
     else if (hasBrd) rawChat = brdSplit!.chatPart;
     else if (hasBlue) rawChat = blueSplit!.chatPart;
@@ -328,6 +335,7 @@ export class SessionsService {
           case "user-stories": storiesSplit = fbSplit; hasStories = true; break;
           case "benchmark": dbgaSplit = fbSplit; hasDbga = true; dbgaDocPart = fbSplit.docPart; break;
           case "brd": brdSplit = fbSplit; hasBrd = true; break;
+          case "phase0": phase0Split = fbSplit; hasPhase0 = true; phase0DocPart = fbSplit.docPart; break;
         }
         // Only apply fallback if no higher-priority document was found
         if (!hasMdd && !hasUx) {
@@ -395,6 +403,12 @@ export class SessionsService {
             this.parser.cleanDocumentContent(dbgaDocPart),
           )
         : undefined,
+      phase0SummaryContent: hasPhase0
+        ? this.parser.mergePhase0OrUseFull(
+            undefined,
+            this.parser.cleanDocumentContent(phase0DocPart!),
+          )
+        : undefined,
       specContent: hasSpec ? this.parser.cleanDocumentContent(specSplit!.docPart) : undefined,
       brdContent: hasBrd ? this.parser.cleanDocumentContent(brdSplit!.docPart) : undefined,
       blueprintContent: hasBlue ? this.parser.mergeDocSectionOrUseFull(options?.currentBlueprintContent, this.parser.cleanDocumentContent(blueSplit!.docPart)) : undefined,
@@ -418,6 +432,7 @@ export class SessionsService {
       currentMddContent?: string;
       currentDbgaContent?: string;
       currentUxUiGuideContent?: string;
+      currentPhase0SummaryContent?: string;
       currentBlueprintContent?: string;
       currentSpecContent?: string;
       currentBrdContent?: string;
@@ -444,6 +459,7 @@ export class SessionsService {
       mddContent?: string | null;
       uxUiGuideContent?: string | null;
       dbgaContent?: string | null;
+      phase0SummaryContent?: string | null;
       specContent?: string | null;
       brdContent?: string | null;
       toBeManualContent?: string | null;
@@ -490,6 +506,7 @@ export class SessionsService {
         currentMddContent: options?.currentMddContent,
         currentDbgaContent: options?.currentDbgaContent,
         currentUxUiGuideContent: options?.currentUxUiGuideContent,
+        currentPhase0SummaryContent: options?.currentPhase0SummaryContent,
         currentBlueprintContent: options?.currentBlueprintContent,
         currentSpecContent: options?.currentSpecContent,
         currentBrdContent: options?.currentBrdContent,
@@ -506,7 +523,7 @@ export class SessionsService {
       throw err;
     }
 
-    const DOC_DELIMITER_RE = /-{1,}\s*FIN_(?:MDD|UX_UI|DBGA|SPEC|BRD|BLUEPRINT|API|FLOWS|TASKS|INFRA|ARCH|USECASES|STORIES)\s*-{1,}/i;
+    const DOC_DELIMITER_RE = /-{1,}\s*FIN_(?:MDD|UX_UI|DBGA|PHASE0|SPEC|BRD|BLUEPRINT|API|FLOWS|TASKS|INFRA|ARCH|USECASES|STORIES)\s*-{1,}/i;
     let buffer = "";
     let documentChunksDone = false;
     for await (const chunk of stream) {
@@ -539,6 +556,7 @@ export class SessionsService {
     const mddSplit = this.parser.splitMddAndChat(safeResponse);
     const uxSplit = this.parser.splitUxUiGuideAndChat(safeResponse);
     let dbgaSplit = this.parser.splitDbgaAndChat(safeResponse);
+    let phase0Split = this.parser.splitPhase0AndChat(safeResponse);
     let specSplit = this.parser.splitDocAndChat(safeResponse, "SPEC");
     let brdSplit = this.parser.splitDocAndChat(safeResponse, "BRD");
     let blueSplit = this.parser.splitDocAndChat(safeResponse, "BLUEPRINT");
@@ -555,6 +573,7 @@ export class SessionsService {
     let hasDbga = dbgaSplit !== null;
     let hasSpec = specSplit !== null;
     let hasBrd = brdSplit !== null;
+    let hasPhase0 = phase0Split !== null;
     let hasBlue = blueSplit !== null;
     let hasApi = apiSplit !== null;
     let hasFlows = flowsSplit !== null;
@@ -566,11 +585,13 @@ export class SessionsService {
 
     let uxDocPart: string | undefined = hasUx ? uxSplit!.docPart : undefined;
     let dbgaDocPart: string | undefined = hasDbga ? dbgaSplit!.docPart : undefined;
+    let phase0DocPart: string | undefined = hasPhase0 ? phase0Split!.docPart : undefined;
 
     let rawChat = safeResponse;
     if (hasMdd) rawChat = mddSplit!.chatPart;
     else if (hasUx) rawChat = uxSplit!.chatPart;
     else if (hasDbga) rawChat = dbgaSplit!.chatPart;
+    else if (hasPhase0) rawChat = phase0Split!.chatPart;
     else if (hasSpec) rawChat = specSplit!.chatPart;
     else if (hasBrd) rawChat = brdSplit!.chatPart;
     else if (hasBlue) rawChat = blueSplit!.chatPart;
@@ -647,6 +668,7 @@ export class SessionsService {
           case "user-stories": storiesSplit = fbSplit; hasStories = true; break;
           case "benchmark": dbgaSplit = fbSplit; hasDbga = true; dbgaDocPart = fbSplit.docPart; break;
           case "brd": brdSplit = fbSplit; hasBrd = true; break;
+          case "phase0": phase0Split = fbSplit; hasPhase0 = true; phase0DocPart = fbSplit.docPart; break;
         }
         if (!hasMdd && !hasUx && !hasDbga) {
           let fbFound = false;
@@ -691,6 +713,12 @@ export class SessionsService {
         ? this.parser.mergeDbgaOrUseFull(
             options?.currentDbgaContent,
             this.parser.cleanDocumentContent(dbgaDocPart),
+          )
+        : undefined,
+      phase0SummaryContent: hasPhase0
+        ? this.parser.mergePhase0OrUseFull(
+            undefined,
+            this.parser.cleanDocumentContent(phase0DocPart!),
           )
         : undefined,
       specContent: hasSpec ? this.parser.cleanDocumentContent(specSplit!.docPart) : undefined,

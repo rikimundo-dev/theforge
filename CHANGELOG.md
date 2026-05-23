@@ -358,4 +358,20 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 
 ---
 
-Este documento representa el estado incremental del proyecto a fecha de **20 de mayo de 2026**.
+|Este documento representa el estado incremental del proyecto a fecha de **20 de mayo de 2026**.
+
+## [0.10.2] — 2026-05-23
+
+### Added
+
+- **Chat → Phase0**: ahora el tab `phase0` soporta el delimitador `---FIN_PHASE0---` para que las ediciones en el chat se persistan correctamente a `phase0SummaryContent`.
+- **Parser**: método `splitPhase0AndChat` + `mergePhase0OrUseFull` + fallback `detectDocFallback` para tab `phase0`.
+- **SessionsService**: soporte completo de `phase0SummaryContent` en `chat()`, `chatStream()`, y su tipo de retorno.
+- **Orchestrator**: persistencia de `phase0SummaryContent` cuando vuelve del chat, tanto en `chat()` como en `chatStream()`.
+- **LLM context**: nueva opción `currentPhase0SummaryContent` en `GenerateResponseOptions` para que el LLM reciba el documento actual al editar.
+- **Controller**: `phase0SummaryContent` aceptado como parámetro desde el frontend.
+- **AI service**: tag `PHASE0` registrado en el mapa de delimitadores del sistema de prompts.
+
+### Fixed
+
+- Las conversaciones que refinaban el documento Fase 0 en el Workshop quedaban perdidas — no existía el pipeline de parseo/persistencia para `phase0SummaryContent`. Ahora el flujo completo (LLM → parser → service → persistencia) funciona igual que para MDD, DBGA, SPEC, etc.

@@ -203,12 +203,16 @@ export class AiOrchestratorService {
     let mddFromResponse: string | null | undefined;
     let uxUiGuideFromResponse: string | null | undefined;
     let dbgaFromResponse: string | null | undefined;
+    let phase0FromResponse: string | null | undefined;
     let brdFromResponse: string | null | undefined;
     try {
       const chatResult = await this.sessions.chat(session.id, message, {
         currentMddContent: currentMdd,
         currentDbgaContent: currentDbga,
         currentUxUiGuideContent: currentUxUiGuide,
+        currentPhase0SummaryContent: activeTab?.trim() === "phase0"
+          ? (dbgaContentFromClient ?? project.phase0SummaryContent ?? "").trim() || undefined
+          : undefined,
         currentBlueprintContent: (isUxUiGuide || activeTab?.trim() === "api-contracts") ? (project.blueprintContent ?? undefined) : undefined,
       currentBrdContent: activeTab?.trim() === "brd" ? currentBrd : undefined,
       activeTab,
@@ -222,6 +226,7 @@ export class AiOrchestratorService {
       mddFromResponse = chatResult.mddContent;
       uxUiGuideFromResponse = chatResult.uxUiGuideContent;
       dbgaFromResponse = chatResult.dbgaContent;
+      phase0FromResponse = chatResult.phase0SummaryContent;
       brdFromResponse = chatResult.brdContent;
     } catch (err) {
       const msg =
@@ -244,6 +249,14 @@ export class AiOrchestratorService {
     if (dbgaFromResponse != null && dbgaFromResponse.length > 0) {
       console.log("[Orchestrator] persisting dbgaContent (Benchmark refinado) length:", dbgaFromResponse.length);
       updatedProject = await this.projects.update(projectId, { dbgaContent: dbgaFromResponse });
+    }
+    if (mddFromResponse == null && dbgaFromResponse == null) {
+      // Phase0 document from chat — persist if it came back
+      // (only when no higher-priority document was returned)
+    }
+    if (phase0FromResponse != null && phase0FromResponse.length > 0) {
+      console.log("[Orchestrator] persisting phase0SummaryContent length:", phase0FromResponse.length);
+      updatedProject = await this.projects.update(projectId, { phase0SummaryContent: phase0FromResponse });
     }
     if (brdFromResponse != null && brdFromResponse.length > 0) {
       await this.projects.patchStage(projectId, route.stageId, { brdContent: brdFromResponse });
@@ -291,6 +304,7 @@ export class AiOrchestratorService {
       activeTab?: string;
       uxUiGuideContentFromClient?: string;
       dbgaContentFromClient?: string;
+      phase0SummaryContentFromClient?: string;
       brdContentFromClient?: string;
       stageIdFromClient?: string;
     },
@@ -410,6 +424,9 @@ export class AiOrchestratorService {
       currentMddContent: currentMdd,
       currentDbgaContent: currentDbga,
       currentUxUiGuideContent: currentUxUiGuide,
+      currentPhase0SummaryContent: activeTab?.trim() === "phase0"
+        ? (specContentFromClient ?? (project as any).phase0SummaryContent ?? "").trim() || undefined
+        : undefined,
       currentBlueprintContent: (isUxUiGuide || activeTab?.trim() === "api-contracts") ? (project.blueprintContent ?? undefined) : undefined,
       currentSpecContent: activeTab?.trim() === "spec" ? currentSpec : undefined,
       currentBrdContent: activeTab?.trim() === "brd" ? currentBrdStream : undefined,
@@ -451,6 +468,9 @@ export class AiOrchestratorService {
         if (msg.brdContent != null && msg.brdContent.length > 0) {
           await this.projects.patchStage(projectId, routeStream.stageId, { brdContent: msg.brdContent });
           updatedProject = await this.projects.findOne(projectId);
+        }
+        if (msg.phase0SummaryContent != null && msg.phase0SummaryContent.length > 0) {
+          updatedProject = await this.projects.update(projectId, { phase0SummaryContent: msg.phase0SummaryContent });
         }
         if (msg.blueprintContent != null && msg.blueprintContent.length > 0) {
           updatedProject = await this.projects.update(projectId, { blueprintContent: msg.blueprintContent });

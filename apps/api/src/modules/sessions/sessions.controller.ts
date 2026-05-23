@@ -50,6 +50,7 @@ export class SessionsController {
       mddContent?: string | null;
       uxUiGuideContent?: string | null;
       dbgaContent?: string | null;
+      phase0SummaryContent?: string | null;
     },
   ) {
     const images = parseChatImageAttachments(body?.images);
@@ -64,6 +65,7 @@ export class SessionsController {
       activeTab: body.activeTab?.trim() || undefined,
       uxUiGuideContentFromClient: body.uxUiGuideContent?.trim() || undefined,
       dbgaContentFromClient: body.dbgaContent?.trim() || undefined,
+      phase0SummaryContentFromClient: body.phase0SummaryContent?.trim() || undefined,
       stageIdFromClient: body.stageId?.trim() || undefined,
     });
   }

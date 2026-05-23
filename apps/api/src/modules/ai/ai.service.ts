@@ -163,6 +163,7 @@ export class AiService {
           "logic-flows": "FLOWS",
           tasks: "TASKS",
           infra: "INFRA",
+          phase0: "PHASE0",
         };
         const tag = tagMap[at];
         if (tag && !options?.welcomeBrief) {
