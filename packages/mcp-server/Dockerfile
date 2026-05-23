@@ -37,8 +37,8 @@ COPY --from=builder /app/package.json ./
 # node_modules raíz (hoisted; NO confiar en node_modules dentro de packages/*/)
 COPY --from=builder /app/node_modules ./node_modules
 # shared-types compilado (lo necesita @theforge/shared-types vía workspace symlink)
-COPY --from=builder /app/packages/shared-types/package.json ./packages/shared-types/
-COPY --from=builder /app/packages/shared-types/dist ./packages/shared-types/dist
+COPY --from=builder /app/packages/shared-types ./packages/shared-types
+COPY --from=builder /app/packages/config ./packages/config
 
 # mcp-server compilado
 COPY --from=builder /app/packages/mcp-server/dist ./dist
