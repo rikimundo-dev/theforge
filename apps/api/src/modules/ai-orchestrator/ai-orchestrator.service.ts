@@ -16,6 +16,7 @@ import { SddIngestorService } from "../ai-analysis/sdd-ingestor.service.js";
 import { AgentEvaluatorService } from "../agent-supervisor/agent-evaluator.service.js";
 import { EpisodicMemoryKind } from "@theforge/database";
 import { uxGuideLlmOptions } from "../ai/ux-guide-llm-context.js";
+import { AiService } from "../ai/ai.service.js";
 
 function filterChatByTab(log: ChatMessage[], tab: string): ChatMessage[] {
   return log.filter((m) => (m.tab ?? "mdd") === tab);
@@ -46,6 +47,7 @@ export class AiOrchestratorService {
     private readonly agentSupervisor: AgentSupervisorService,
     private readonly sddIngestor: SddIngestorService,
     private readonly agentEvaluator: AgentEvaluatorService,
+    private readonly ai: AiService,
   ) { }
 
   private scheduleSddIngest(projectId: string, ingestMdd: boolean): void {
@@ -238,6 +240,24 @@ export class AiOrchestratorService {
       );
     }
     if (!updatedSession) throw new NotFoundException("Session not found after chat");
+
+    // Fallback: si el user pidio cambios en benchmark pero DeepSeek no emitio el documento
+    if (dbgaFromResponse == null && activeTab?.trim() === "benchmark" && message.trim()) {
+      const wroteDoc = (updatedSession.chatLog as ChatMessage[] ?? []).slice(-3).some(
+        (m: ChatMessage) => m.role === "assistant" && m.tab === "benchmark" && m.content.length > 100
+      );
+      if (wroteDoc) {
+        const fallbackDoc = await this.regenerateDbgaFromChatFallback(
+          message,
+          currentDbga,
+        );
+        if (fallbackDoc) {
+          dbgaFromResponse = fallbackDoc;
+          console.log("[Orchestrator] fallback regenero dbgaContent, length:", fallbackDoc.length);
+        }
+      }
+    }
+
     let updatedProject: Awaited<ReturnType<IOrchestratorProjectsPort["update"]>> | null = null;
     if (mddFromResponse != null && mddFromResponse.length > 0) {
       updatedProject = await this.projects.update(projectId, { mddContent: mddFromResponse, stageId: route.stageId });
@@ -613,5 +633,48 @@ export class AiOrchestratorService {
       session: updatedSession,
       project: updatedProject ?? project,
     };
+  }
+
+  /**
+   * Fallback regeneración DBGA cuando el modelo principal (DeepSeek) responde
+   * conversacionalmente sin emitir ---FIN_DBGA---.
+   * Llama al mismo LLM con un prompt estricto que fuerza la salida del documento completo.
+   */
+  private async regenerateDbgaFromChatFallback(
+    userMessage: string,
+    currentDbga: string | undefined,
+  ): Promise<string | null> {
+    try {
+      const prompt = `El usuario pidió modificar el DBGA.
+
+Mensaje del usuario: "${userMessage.slice(0, 2000)}"
+
+INSTRUCCIÓN: Genera el DBGA COMPLETO actualizado aplicando los cambios solicitados.
+NO agregues saludos, ni explicaciones, ni "He añadido...".
+Devuelve SOLO el contenido del documento en markdown.
+TERMINA con ---FIN_DBGA---
+
+Documento DBGA actual:
+---
+${(currentDbga ?? "").trim().slice(0, 12000)}
+---`;
+
+      const response = await this.ai.generateResponse(prompt, [], {
+        systemPrompt: "Eres un generador de documentos preciso. Devuelve SOLO el documento completo actualizado. Termina con ---FIN_DBGA---. Sin conversación, sin saludos, sin explicaciones.",
+      });
+
+      const finIdx = response.indexOf("---FIN_DBGA---");
+      if (finIdx >= 0) {
+        return response.slice(0, finIdx).trim();
+      }
+      // Si no encontró el delimitador pero parece documento completo, devolverlo igual
+      if (response.length > 1000) {
+        return response.trim();
+      }
+      return null;
+    } catch (err) {
+      console.error("[Orchestrator] Fallback regeneration error:", err);
+      return null;
+    }
   }
 }
