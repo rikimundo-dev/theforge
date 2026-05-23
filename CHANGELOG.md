@@ -2,6 +2,29 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.10.0] — 2026-05-23
+
+### Added
+
+- **Fase 0 Interactiva — Entrevistador IA guiado:** Nuevo módulo dentro del pipeline de especificación que permite al usuario describir su idea (o pegar un documento externo) y recibir un borrador inicial de 8 secciones. Luego, el entrevistador hace **una pregunta a la vez** (máx 5) para llenar gaps críticos, actualizando el borrador en vivo tras cada respuesta. Al completarse, el documento se serializa a markdown y se inyecta como `dbgaContent` para que el pipeline MDD existente lo consuma automáticamente.
+  - `ai-analysis/phase0/phase0.types.ts` — interfaces del documento (8 secciones: propósito, entidades, reglas, flujos, roles, integraciones, edge cases, pendientes)
+  - `ai-analysis/phase0/phase0-gap-analyzer.ts` — 7 reglas lógicas de validación por criticidad (sin LLM, funciona como fallback)
+  - `ai-analysis/phase0/phase0-to-markdown.ts` — serializa el JSON estructurado a markdown legible para el pipeline
+  - `ai-analysis/phase0/phase0-interview.service.ts` — orquestador del loop: start → question → answer → finalize
+  - 3 prompts en `prompts/phase0/`: arranque (idea/doc → borrador + gaps), question (una pregunta a la vez), update (respuesta → actualización)
+  - 4 endpoints REST: `POST /ai-analysis/phase0/start`, `GET phase0/question/:threadId`, `POST phase0/answer`, `GET phase0/state/:threadId`
+  - DB: 3 campos nuevos en `Project` (`phase0Status`, `phase0Gaps`, `phase0Questions`) + safe-schema-sync.sql
+- **Frontend Phase0InterviewPanel:** Nuevo componente React con input inicial, indicador de progreso (5 dots), una pregunta a la vez con respuesta inline, borrador visible toggle, y estados idle/starting/interviewing/done/error. Integrado en la pestaña Fase 0 del Workshop.
+
+### Changed
+
+- **WorkshopView:** La pestaña Fase 0 ahora muestra el entrevistador interactivo cuando no hay `dbgaContent`, y el flujo legacy (DBGA) cuando ya existe contenido. La integración es transparente: al completar la entrevista, se genera `dbgaContent` y el panel legacy se muestra automáticamente.
+- **load-prompts.ts:** Registro de `PHASE0_ARRANQUE_PROMPT`, `PHASE0_QUESTION_PROMPT`, `PHASE0_UPDATE_PROMPT` en el loader central.
+- **AiAnalysisController / Module:** Import, provider, export e inyección de `Phase0InterviewService`.
+- **BUILD_CACHE_BUST**: 80 → 81
+
+---
+
 ## [0.9.2] — 2026-05-22
 
 ### Fixed

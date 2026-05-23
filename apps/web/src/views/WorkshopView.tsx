@@ -76,6 +76,7 @@ import {
   WorkshopButtonIcon,
 } from "../components/WorkshopButtons";
 import { UxUiGuidePanel } from "../components/UxUiGuidePanel";
+import { Phase0InterviewPanel } from "../components/Phase0InterviewPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { AdrsPanel } from "../components/AdrsPanel";
 import { useAutoSaveContent } from "../hooks/useAutoSaveContent";
@@ -2731,6 +2732,12 @@ export default function WorkshopView({
                 />
 
                 {benchmarkPhaseTab === "fase0" ? (
+                  !dbgaContent?.trim() ? (
+                    <Phase0InterviewPanel
+                      projectId={projectId}
+                      onComplete={() => {}}
+                    />
+                  ) : (
                   <>
                     {loading && loadingReason === "phase0-deep-research" && (
                       <div className="shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] px-4 py-2 mb-2 text-sm text-[color-mix(in_oklch,var(--primary)_65%,var(--foreground))] flex items-center gap-2">
@@ -2803,7 +2810,7 @@ export default function WorkshopView({
                         </div>
                       </div>
                   </>
-                ) : (
+                  )) : (
                   <>
                     {phase0SummaryViewMode === "preview" && !phase0SummaryContent?.trim() ? (
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col">

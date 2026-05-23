@@ -227,6 +227,12 @@ model Project {
   infraContent         String?   @db.Text
   uxUiGuideContent     String?   @db.Text
   phase0SummaryContent String?   @db.Text
+  /// Estado del flujo Fase 0 interactivo: "idle" | "interviewing" | "done"
+  phase0Status        String?   @default("idle")
+  /// Gaps pendientes (JSON)
+  phase0Gaps          String?   @db.Text
+  /// Contador de preguntas realizadas
+  phase0Questions     Int?      @default(0)
   aemContent           String?   @db.Text
   /// Estado del flujo legacy: { description?, filesToModify?, questions?, answers? }
   legacyFlowState      Json?

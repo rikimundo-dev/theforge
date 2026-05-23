@@ -116,6 +116,25 @@ export const MANAGER_MDD_PROMPT = loadPrompt(
   "Eres el Manager del MDD. Entrevista al usuario con máximo 2 preguntas por ronda. Responde solo con JSON: { questions: string[] }.",
 );
 
+// Fase 0 — Entrevistador interactivo
+export const PHASE0_ARRANQUE_PROMPT = loadPrompt(
+  "phase0",
+  "arranque-prompt.md",
+  "Eres analista de dominio. Construye borrador inicial de Fase 0 + gaps. JSON: { borrador: {...}, gaps: [...] }.",
+);
+
+export const PHASE0_QUESTION_PROMPT = loadPrompt(
+  "phase0",
+  "question-prompt.md",
+  "Eres entrevistador. Una pregunta a la vez. JSON: { type: 'question'|'done', question?: string }.",
+);
+
+export const PHASE0_UPDATE_PROMPT = loadPrompt(
+  "phase0",
+  "update-prompt.md",
+  "Eres analista. Actualiza borrador + gaps con respuesta. JSON: { borrador: {...}, gaps: [...] }.",
+);
+
 export const MANAGER_PLAN_GENERATOR_PROMPT = loadPrompt(
   "mdd",
   "manager-plan-generator-prompt.md",

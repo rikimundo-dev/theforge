@@ -111,3 +111,8 @@ ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "ariadneMcpUrl" TEXT;
 ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "ariadneMcpToken" TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "User_mcpSecret_key" ON "User"("mcpSecret");
+
+-- 5. Project: Fase 0 interactive interview columns
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "phase0Gaps" TEXT;
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "phase0Status" TEXT NOT NULL DEFAULT 'idle';
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "phase0Questions" INTEGER NOT NULL DEFAULT 0;
