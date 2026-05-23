@@ -290,6 +290,8 @@ export default function WorkshopView({
 
   const specContent = specContentField ?? project?.specContent ?? null;
   const dbgaContent = dbgaContentField ?? project?.dbgaContent ?? null;
+  /** Contenido visible en el panel Fase 0: usa dbgaContent o specContent legacy como fallback */
+  const fase0Content = dbgaContent ?? specContent ?? null;
   const blueprintContent = blueprintContentField ?? project?.blueprintContent ?? null;
   const apiContractsContent = apiContractsContentField ?? project?.apiContractsContent ?? null;
   const logicFlowsContent = logicFlowsContentField ?? project?.logicFlowsContent ?? null;
@@ -2795,13 +2797,13 @@ export default function WorkshopView({
                     <div className="flex-1 flex flex-col min-h-0 border-t border-[var(--border)] pt-4">
                         <h3 className="shrink-0 text-sm font-medium text-[var(--muted-foreground)] mb-2">Análisis (DBGA) — Fase 0</h3>
                         <div className="flex-1 flex flex-col min-h-0">
-                          {benchmarkViewMode === "preview" && dbgaContent != null && dbgaContent !== "" ? (
+                          {benchmarkViewMode === "preview" && fase0Content != null && fase0Content !== "" ? (
                             <div className="flex-1 min-h-[200px] overflow-auto">
-                              <MddViewer content={dbgaContent} />
+                              <MddViewer content={fase0Content} />
                             </div>
                           ) : (
                             <textarea
-                              value={dbgaContent ?? ""}
+                              value={fase0Content ?? ""}
                               onChange={(e) => setDbgaContent(e.target.value)}
                               onBlur={handleBenchmarkBlur}
                               placeholder="# Domain Benchmark & Gap Analysis..."
