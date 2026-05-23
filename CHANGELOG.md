@@ -375,3 +375,13 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 ### Fixed
 
 - Las conversaciones que refinaban el documento Fase 0 en el Workshop quedaban perdidas — no existía el pipeline de parseo/persistencia para `phase0SummaryContent`. Ahora el flujo completo (LLM → parser → service → persistencia) funciona igual que para MDD, DBGA, SPEC, etc.
+
+## [0.10.3] — 2026-05-23
+
+### Added
+
+- **Fallback regeneración DBGA en streaming**: cuando DeepSeek no emite el delimitador `---FIN_DBGA---` en el chat streaming del tab Benchmark, el sistema detecta la omisión y llama de nuevo al modelo con un prompt estricto que fuerza la generación completa del documento. Aplica tanto al endpoint `POST /chat` (no-streaming) como al `POST /chat/stream`.
+
+### Fixed
+
+- Las ediciones en el chat del tab Benchmark/Fase 0 que quedaban perdidas porque DeepSeek respondía conversacionalmente sin emitir `---FIN_DBGA---`. Ahora el fallback de regeneración captura esos casos y persiste el documento.

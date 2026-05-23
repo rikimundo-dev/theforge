@@ -474,6 +474,19 @@ export class AiOrchestratorService {
       if (msg.type === "chunk") {
         yield { event: "chunk", data: { content: msg.content } };
       } else {
+        // --- FALLBACK: si DeepSeek no emitió ---FIN_DBGA--- en stream, regenerar ---
+        if ((msg as any).dbgaContent == null && activeTab?.trim() === "benchmark" && message.trim()) {
+          const wroteDoc = ((msg as any).session?.chatLog ?? []).slice(-3).some(
+            (m: any) => m.role === "assistant" && m.tab === "benchmark" && m.content?.length > 100,
+          );
+          if (wroteDoc) {
+            const fallbackDoc = await this.regenerateDbgaFromChatFallback(message, currentDbga);
+            if (fallbackDoc) {
+              (msg as any).dbgaContent = fallbackDoc;
+              console.log("[Orchestrator] fallback regeneró dbgaContent en stream, length:", fallbackDoc.length);
+            }
+          }
+        }
         let updatedProject: Awaited<ReturnType<IOrchestratorProjectsPort["update"]>> | null = null;
         if (msg.mddContent != null && msg.mddContent.length > 0) {
           updatedProject = await this.projects.update(projectId, {
