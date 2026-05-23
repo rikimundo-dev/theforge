@@ -43,6 +43,16 @@ Todas las notas relevantes de este repositorio se documentan aquí. El formato s
 
 - **BUILD_CACHE_BUST**: 82 → 83
 
+## [0.10.3] — 2026-05-23
+
+### Fixed
+
+- **MCP Server crash al inicio:** El Dockerfile del MCP copiaba `package.json` del mcp-server a la raíz (`./`) en vez de a su ruta correcta (`./packages/mcp-server/`), lo que rompía la resolución del workspace `@theforge/shared-types` desde node_modules hoisted.
+
+### Changed
+
+- **BUILD_CACHE_BUST**: 83 → 84
+
 ---
 
 
