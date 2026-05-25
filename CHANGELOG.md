@@ -2,6 +2,13 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.10.1] — 2026-05-25
+
+### Fixed
+
+- **Healthchecks en docker-compose:** Reemplazados `127.0.0.1:3000` y DNS service-name (`theforge-mcp:3000`) por `localhost:3000` en los healthchecks de `theforge-api` y `theforge-mcp`. `127.0.0.1` daba falso negativo en Dokploy (monitor externo apunta al host físico, no al contenedor). DNS por service-name fallaba en Swarm por hairpin VIP. `localhost` es portable en Compose y Swarm.
+- **BUILD_CACHE_BUST**: 88 → 89
+
 ## [0.10.0] — 2026-05-23
 
 ### Added

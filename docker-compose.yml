@@ -67,7 +67,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-88}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-89}
     container_name: theforge-api
     # Carga THEFORGE_MCP_URL / MCP_* desde `.env` local sin pisar con "" si Compose no
     # tiene esas claves al interpolar `${VAR:-}`. En Dokploy: también inyecta por servicio
@@ -135,16 +135,16 @@ services:
     expose:
       - "3000"
     healthcheck:
-      # CMD corre dentro del task: 127.0.0.1 = loopback del contenedor (Nest en :3000).
-      # No usar DNS theforge-api aquí — en Swarm/Dokploy el hairpin al propio servicio suele fallar.
-      # Dokploy Advanced (monitor externo): no pongas 127.0.0.1; usa localhost:3000/health dentro del task
-      # o el healthcheck de este compose. Traefik: GET /health (sin prefijo /api).
+      # CMD corre dentro del task: localhost = loopback del contenedor (Nest en :3000).
+      # No usar DNS theforge-api ni 127.0.0.1 aquí — en Swarm/Dokploy el hairpin al propio servicio suele fallar
+      # y 127.0.0.1 en monitor externo apunta al host, no al contenedor.
+      # Traefik: GET /health (sin prefijo /api).
       test:
         [
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://127.0.0.1:3000/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+          "require('http').get('http://localhost:3000/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 10s
@@ -158,7 +158,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-88}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-89}
     container_name: theforge-web
     networks:
       - default
@@ -182,7 +182,7 @@ services:
       context: .
       dockerfile: packages/mcp-server/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-88}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-89}
     container_name: theforge-mcp
     networks:
       - default
@@ -198,13 +198,15 @@ services:
       THEFORGE_API_URL: "http://theforge-api:3000"
       # MCP_M2M_SECRET se recibe del cliente via header HTTP — no va en env
     healthcheck:
-      # Probe por nombre de servicio (red Docker), no 127.0.0.1 — en Dokploy 127.0.0.1 ≠ loopback del contenedor
+      # Probe por localhost (loopback del contenedor en Swarm y Compose).
+      # NO usar DNS theforge-mcp ni 127.0.0.1 — en Swarm DNS al propio servicio
+      # puede fallar por hairpin VIP, y 127.0.0.1 en monitor externo apunta al host.
       test:
         [
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://theforge-mcp:3000/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
+          "require('http').get('http://localhost:3000/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))",
         ]
       interval: 30s
       timeout: 10s
