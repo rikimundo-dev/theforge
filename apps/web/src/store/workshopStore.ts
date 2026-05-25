@@ -1214,27 +1214,59 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       field: keyof Project,
       raw: string | null | undefined,
       label: string,
-    ): Promise<{ ok: boolean; message: string }> => {
+    ): Promise<{ ok: boolean; message: string; changed: boolean }> => {
       const source = (raw ?? "").trim();
-      if (!source) return { ok: false, message: `No hay contenido en ${label} para formatear.` };
+      if (!source) return { ok: false, message: `No hay contenido en ${label} para formatear.`, changed: false };
       const formatted = fmt(source);
-      if (formatted === source) {
-        return { ok: true, message: `${label}: ya estaba bien formateado (sin cambios).` };
+      const changed = formatted !== source;
+      if (!changed) {
+        return { ok: true, message: `${label}: sin cambios detectables tras formatear.`, changed: false };
       }
       await persistField(field as string, formatted, get, set);
-      return { ok: true, message: `${label} formateado (fences, tablas y Mermaid). Revisa el panel.` };
+      set({ [field]: formatted } as Partial<WorkshopState>);
+      return {
+        ok: true,
+        message: `${label} formateado (tablas, SQL pegado, fences). Revisa el panel.`,
+        changed: true,
+      };
     };
 
     switch (tab) {
       case "benchmark": {
-        const dbga = get().dbgaContent ?? project?.dbgaContent ?? null;
-        const main = await persistProjectField("dbgaContent", dbga, "DBGA (Fase 0)");
-        if (!main.ok) return main;
-        const p0 = get().phase0SummaryContent ?? project?.phase0SummaryContent ?? null;
-        if ((p0 ?? "").trim().length > 0) {
-          await persistField("phase0SummaryContent", fmt(p0), get, set);
+        const dbga = (get().dbgaContent ?? project?.dbgaContent ?? "").trim();
+        const spec = (get().specContent ?? project?.specContent ?? "").trim();
+        const p0 = (get().phase0SummaryContent ?? project?.phase0SummaryContent ?? "").trim();
+        const parts: string[] = [];
+        let anyChanged = false;
+        let anyOk = false;
+
+        if (dbga.length > 0) {
+          const r = await persistProjectField("dbgaContent", dbga, "Fase 0 (DBGA)");
+          parts.push(r.message);
+          anyOk = anyOk || r.ok;
+          anyChanged = anyChanged || r.changed;
         }
-        return main;
+        if (spec.length > 0) {
+          const r = await persistProjectField("specContent", spec, "Fase 0 (Spec)");
+          parts.push(r.message);
+          anyOk = anyOk || r.ok;
+          anyChanged = anyChanged || r.changed;
+        }
+        if (p0.length > 0) {
+          const r = await persistProjectField("phase0SummaryContent", p0, "Benchmark (Deep Research)");
+          parts.push(r.message);
+          anyOk = anyOk || r.ok;
+          anyChanged = anyChanged || r.changed;
+        }
+        if (!dbga && !spec && !p0) {
+          return { ok: false, message: "No hay documento en Fase 0 / Benchmark para formatear." };
+        }
+        return {
+          ok: anyOk,
+          message: anyChanged
+            ? parts.join(" ")
+            : `${parts.join(" ")} Si el panel no cambió, confirma que estás en la pestaña correcta (Fase 0 vs Benchmark).`,
+        };
       }
       case "brd": {
         const sid = activeStageId;

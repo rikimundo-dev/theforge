@@ -6,10 +6,11 @@
 import { repairMarkdownFences } from "./markdown-repair.js";
 import { normalizeAllTables } from "./markdown-table.js";
 import { normalizeMermaid } from "./mermaid.js";
+import { repairPastedMarkdown } from "./repair-pasted-markdown.js";
 
 export function formatDocumentMarkdown(text: string): string {
   if (!text) return "";
-  let cleaned = text.trim();
+  let cleaned = repairPastedMarkdown(text).trim();
   cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
   const yamlMatch = cleaned.match(/^---[\s\S]*?\n---\s*\n?/);
   const searchStart = yamlMatch ? yamlMatch[0].length : 0;

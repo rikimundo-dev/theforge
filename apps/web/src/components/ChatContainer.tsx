@@ -1100,7 +1100,7 @@ export default function ChatContainer({
                     }}
                     className="px-2.5 py-1.5 rounded-md text-sm bg-[var(--muted)] hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--foreground)] hover:text-[color-mix(in_oklch,var(--primary)_72%,var(--foreground))] border border-[var(--border)] hover:border-[color-mix(in_oklch,var(--primary)_40%,var(--border))]"
                   >
-                    {FORMAT_DOCUMENT_COMMAND.label} — {FORMAT_DOCUMENT_COMMAND.description}
+                    {FORMAT_DOCUMENT_COMMAND.label} — {FORMAT_DOCUMENT_COMMAND.description} (DBGA, Spec y Benchmark si existen)
                   </button>
                 </div>
               )}
