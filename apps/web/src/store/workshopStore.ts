@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import type { ChatImagePart, CodebaseDocResponseMode } from "@theforge/shared-types";
 import { isFormatDocumentChatCommand } from "../utils/documentFormatCommand";
-import { formatDocumentMarkdown } from "@theforge/shared-types/format-document-markdown";
+import {
+  formatDbgaDocument,
+  formatDocumentMarkdown,
+} from "@theforge/shared-types/format-document-markdown";
 import { apiFetch, API_BASE, fetchWithRetry, addToOfflineQueue, flushOfflineQueue } from "../utils/apiClient";
 import {
   parseApiErrorPayloadFromResponse,
@@ -1241,10 +1244,23 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         let anyOk = false;
 
         if (dbga.length > 0) {
-          const r = await persistProjectField("dbgaContent", dbga, "Fase 0 (DBGA)");
-          parts.push(r.message);
-          anyOk = anyOk || r.ok;
-          anyChanged = anyChanged || r.changed;
+          const { formatted, strippedMdd } = formatDbgaDocument(dbga);
+          const changed = formatted !== dbga || !!strippedMdd;
+          if (!changed) {
+            parts.push("Fase 0 (DBGA): sin cambios detectables tras formatear.");
+          } else {
+            await persistField("dbgaContent", formatted, get, set);
+            set({ dbgaContent: formatted });
+            let msg =
+              "Fase 0 (DBGA) formateado (tablas, SQL, secciones). Revisa el panel Análisis.";
+            if (strippedMdd) {
+              const kb = Math.round(strippedMdd.length / 1024);
+              msg += ` Se extrajo un MDD embebido al final (~${kb} KB); revísalo en la pestaña MDD del proyecto.`;
+            }
+            parts.push(msg);
+            anyChanged = true;
+          }
+          anyOk = true;
         }
         if (spec.length > 0) {
           const r = await persistProjectField("specContent", spec, "Fase 0 (Spec)");

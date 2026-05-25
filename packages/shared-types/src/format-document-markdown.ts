@@ -6,6 +6,7 @@
 import { repairMarkdownFences } from "./markdown-repair.js";
 import { normalizeAllTables } from "./markdown-table.js";
 import { normalizeMermaid } from "./mermaid.js";
+import { splitEmbeddedMddFromDbga } from "./dbga-document-structure.js";
 import { repairPastedMarkdown } from "./repair-pasted-markdown.js";
 
 export function formatDocumentMarkdown(text: string): string {
@@ -32,4 +33,16 @@ export function formatDocumentMarkdown(text: string): string {
   cleaned = normalizeAllTables(cleaned);
   cleaned = normalizeMermaid(cleaned);
   return cleaned;
+}
+
+/** Formatea solo el cuerpo DBGA/Research; separa MDD embebido al final. */
+export function formatDbgaDocument(raw: string): {
+  formatted: string;
+  strippedMdd: string | null;
+} {
+  const { dbgaBody, embeddedMdd } = splitEmbeddedMddFromDbga(raw);
+  return {
+    formatted: formatDocumentMarkdown(dbgaBody),
+    strippedMdd: embeddedMdd,
+  };
 }

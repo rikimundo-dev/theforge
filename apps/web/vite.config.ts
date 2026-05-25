@@ -29,6 +29,10 @@ export default defineConfig({
         __dirname,
         "../../packages/shared-types/src/format-document-markdown.ts",
       ),
+      "@theforge/shared-types/dbga-document-structure": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/dbga-document-structure.ts",
+      ),
     },
   },
   server: {
