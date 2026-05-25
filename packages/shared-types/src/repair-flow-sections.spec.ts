@@ -27,7 +27,7 @@ describe("repairFlowSectionsToMermaid", () => {
 `;
     const out = repairFlowSectionsToMermaid(raw);
     assert.match(out, /```mermaid\nflowchart TD/);
-    assert.match(out, /S0\[/);
+    assert.match(out, /s0\("/);
   });
 });
 
@@ -46,6 +46,6 @@ describe("repairPastedMarkdown flujo Odoo", () => {
     const out = repairPastedMarkdown(raw);
     assert.match(out, /### Flujo de procesamiento/);
     assert.match(out, /```mermaid/);
-    assert.match(out, /^- Odoo envía/m);
+    assert.match(out, /p1\("Odoo envía el payload/);
   });
 });

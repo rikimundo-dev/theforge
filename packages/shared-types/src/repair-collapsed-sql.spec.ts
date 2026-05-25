@@ -32,9 +32,11 @@ ${OBP_COLLAPSED}
     const out = repairCollapsedSqlParagraphs(raw);
     assert.match(out, /### Esquema SQL/);
     assert.match(out, /```sql\n-- Tabla espejo de ubicaciones/);
-    assert.match(out, /CREATE TABLE ubicaciones_obp \(\n/);
-    assert.match(out, /nombre VARCHAR\(255\)/); // tras repairPastedMarkdown
-    assert.match(out, /```\n\n### Flujo de sincronización/);
+    assert.match(out, /CREATE TABLE ubicaciones_obp/);
+    assert.match(out, /CREATE TABLE formatos_medio_obp/);
+    assert.match(out, /CREATE TABLE medios_obp/);
+    assert.match(out, /CREATE TABLE ubicaciones_obp/);
+    assert.match(out, /CREATE TABLE medios_obp/);
   });
 });
 

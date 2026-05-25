@@ -13,7 +13,21 @@ export function splitSqlColumnDefs(inner: string): string[] {
   const cols: string[] = [];
   let depth = 0;
   let start = 0;
-  for (let i = 0; i < inner.length; i++) {
+  let i = 0;
+  while (i < inner.length) {
+    if (inner.slice(i, i + 2) === "--") {
+      i += 2;
+      while (i < inner.length) {
+        if (inner[i] === "," && depth === 0) {
+          i++;
+          break;
+        }
+        if (inner[i] === "(") depth++;
+        else if (inner[i] === ")") depth--;
+        i++;
+      }
+      continue;
+    }
     const ch = inner[i]!;
     if (ch === "(") depth++;
     else if (ch === ")") depth--;
@@ -22,6 +36,7 @@ export function splitSqlColumnDefs(inner: string): string[] {
       if (part) cols.push(part);
       start = i + 1;
     }
+    i++;
   }
   const last = inner.slice(start).trim();
   if (last) cols.push(last);
@@ -31,17 +46,28 @@ export function splitSqlColumnDefs(inner: string): string[] {
 /** Extrae CREATE TABLE … ); de texto colapsado (espacios/newlines arbitrarios). */
 export function extractCreateStatements(sql: string): SqlCreateStatement[] {
   const s = sql.replace(/\s+/g, " ").trim();
-  const parts = s.split(/\)\s*;\s+(?=(?:--\s*)?CREATE TABLE\b)/i);
   const results: SqlCreateStatement[] = [];
-
-  for (const part of parts) {
-    const m = part.match(/(?:--\s*(.*?)\s*)?CREATE TABLE\s+(\w+)\s*\(\s*(.*)$/is);
-    if (!m) continue;
-    results.push({
+  const re = /(?:--\s*(.*?)\s*)?CREATE TABLE\s+(\w+)\s*\(/gi;
+  const hits: { comment?: string; name: string; open: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    hits.push({
       comment: m[1]?.trim() || undefined,
       name: m[2]!,
-      body: m[3]!.trim(),
+      open: m.index + m[0].length,
     });
+  }
+  for (let h = 0; h < hits.length; h++) {
+    const { comment, name, open } = hits[h]!;
+    let depth = 1;
+    let i = open;
+    while (i < s.length && depth > 0) {
+      if (s[i] === "(") depth++;
+      else if (s[i] === ")") depth--;
+      i++;
+    }
+    const body = s.slice(open, i - 1).trim();
+    results.push({ comment, name, body });
   }
   return results;
 }
@@ -110,14 +136,15 @@ export function repairCollapsedSqlParagraphs(text: string): string {
         const lt = lines[i]!.trim();
         if (!lt) {
           i++;
-          break;
+          continue;
         }
         if (/^```/.test(lt)) break;
         if (/^#{1,6}\s/.test(lt) && !/^Esquema SQL/i.test(lt)) break;
         if (lineLooksCollapsedSql(lt) || /^--\s*Tabla espejo/i.test(lt) || /^CREATE TABLE/i.test(lt)) {
           chunk.push(lt);
           i++;
-        } else break;
+        } else if (chunk.length > 0) break;
+        else i++;
       }
 
       const expanded = expandCollapsedSqlText(chunk.join(" "));

@@ -597,61 +597,55 @@ export function validateMermaid(raw: string): string[] {
  * - Quotes inconsistentes → normaliza a double quotes
  * - Líneas en blanco excesivas → compacta
  */
-export function normalizeMermaid(raw: string): string {
-  if (!raw?.trim()) return raw ?? "";
+/** Normaliza solo el cuerpo del diagrama (sin fences). */
+export function normalizeMermaidDiagramBody(raw: string): string {
+  if (!raw?.trim()) return "";
 
-  let text = raw
-    // Strip ```mermaid / ``` fences
-    .replace(/^```mermaid\s*\n?/i, "")
-    .replace(/\n?```\s*$/i, "")
-    .trim();
-
-  const lines = text.split("\n");
+  const lines = raw.trim().split("\n");
   const out: string[] = [];
-
-  // Track open blocks
   let openBlocks = 0;
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i]!;
 
-    // Fix node IDs with spaces in flowchart/graph
-    if (/^(graph|flowchart)\s/i.test(line)) {
+    if (/^(graph|flowchart)\s/i.test(line.trim())) {
       out.push(line);
       continue;
     }
 
-    // Fix subgraph without end later
-    if (/^\s*subgraph\s/.test(line.trim())) {
-      openBlocks++;
-    }
+    if (/^\s*subgraph\s/.test(line.trim())) openBlocks++;
+    if (/^\s*(alt|opt|loop|par|critical|break)\s/.test(line.trim())) openBlocks++;
+    if (/^\s*end\s*$/.test(line.trim())) openBlocks = Math.max(0, openBlocks - 1);
 
-    // Fix unclosed alt/opt/loop in sequence
-    if (/^\s*(alt|opt|loop|par|critical|break)\s/.test(line.trim())) {
-      openBlocks++;
-    }
-
-    if (/^\s*end\s*$/.test(line.trim())) {
-      openBlocks = Math.max(0, openBlocks - 1);
-    }
-
-    // Fix IDs with spaces in node definitions
-    line = line.replace(/(\w+)\s+(\w+)(\[|\()/g, (match, p1, p2, p3) => {
+    line = line.replace(/(\w+)\s+(\w+)(\[|\()/g, (_match, p1: string, p2: string, p3: string) => {
       return `${cleanId(p1)}_${cleanId(p2)}${p3}`;
     });
 
     out.push(line);
   }
 
-  // Close unclosed blocks
-  for (let i = 0; i < openBlocks; i++) {
-    out.push("  end");
-  }
+  for (let i = 0; i < openBlocks; i++) out.push("  end");
 
-  let result = "```mermaid\n" + out.join("\n") + "\n```";
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
-  // Remove excessive blank lines
-  result = result.replace(/\n{3,}/g, "\n\n");
+/** Un solo bloque ```mermaid … ``` (entrada puede incluir fences). */
+export function normalizeMermaid(raw: string): string {
+  if (!raw?.trim()) return raw ?? "";
+  const text = raw
+    .replace(/^```mermaid\s*\n?/i, "")
+    .replace(/\n?```\s*$/i, "")
+    .trim();
+  const body = normalizeMermaidDiagramBody(text);
+  if (!body) return raw;
+  return `\`\`\`mermaid\n${body}\n\`\`\``;
+}
 
-  return result;
+/** Normaliza cada bloque mermaid del documento sin tocar el resto del markdown. */
+export function normalizeMermaidInDocument(document: string): string {
+  if (!document?.trim()) return document ?? "";
+  return document.replace(/```mermaid\s*\n([\s\S]*?)```/gi, (_block, inner: string) => {
+    const body = normalizeMermaidDiagramBody(inner);
+    return body ? `\`\`\`mermaid\n${body}\n\`\`\`` : "```mermaid\n```";
+  });
 }

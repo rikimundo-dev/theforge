@@ -4,20 +4,26 @@
 
 const FLOW_HEADING = /^#{2,4}\s+Flujo de\s+/i;
 
-function escapeMermaidLabel(s: string): string {
-  return s.replace(/"/g, "'").replace(/\[/g, "(").replace(/\]/g, ")").slice(0, 72);
+/** Etiquetas seguras para flowchart (sin {}, /, comillas rotas). */
+export function escapeMermaidLabel(s: string): string {
+  return s
+    .replace(/["[\]{}()#;|<>]/g, " ")
+    .replace(/\//g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 48);
 }
 
 function slugId(i: number): string {
-  return `S${i}`;
+  return `s${i}`;
 }
 
 /** "Evento en origen: texto" → etiqueta corta para nodo */
 function stepLabel(line: string): string {
   const t = line.replace(/^[-*]\s+/, "").trim();
   const colon = t.match(/^([^:]+):\s*(.+)$/);
-  if (colon) return `${colon[1]!.trim()}: ${colon[2]!.trim().slice(0, 40)}`;
-  return t.slice(0, 60);
+  if (colon) return `${colon[1]!.trim()} — ${colon[2]!.trim().slice(0, 32)}`;
+  return t.slice(0, 48);
 }
 
 export function stepsToFlowchartMermaid(steps: string[]): string {
@@ -25,11 +31,12 @@ export function stepsToFlowchartMermaid(steps: string[]): string {
   const lines = ["```mermaid", "flowchart TD"];
   for (let i = 0; i < steps.length; i++) {
     const id = slugId(i);
-    lines.push(`  ${id}["${escapeMermaidLabel(stepLabel(steps[i]!))}"]`);
+    const label = escapeMermaidLabel(stepLabel(steps[i]!));
+    lines.push(`  ${id}("${label}")`);
     if (i > 0) lines.push(`  ${slugId(i - 1)} --> ${id}`);
   }
   lines.push("```");
-  return lines.join("\n");
+  return `${lines.join("\n")}\n`;
 }
 
 /** Flujo Odoo con rama Si existe / Si no existe */
@@ -56,36 +63,36 @@ export function odooCostFlowToMermaid(lines: string[]): string {
   }
 
   const out = ["```mermaid", "flowchart TD"];
-  let last = "START";
-  out.push(`  START(["Inicio"])`);
+  let last = "start";
+  out.push(`  start("Inicio")`);
   pre.forEach((step, i) => {
-    const id = `P${i}`;
-    out.push(`  ${id}["${escapeMermaidLabel(stepLabel(step))}"]`);
+    const id = `p${i}`;
+    out.push(`  ${id}("${escapeMermaidLabel(stepLabel(step))}")`);
     out.push(`  ${last} --> ${id}`);
     last = id;
   });
-  out.push(`  DEC{"¿Registro existe?"}`);
-  out.push(`  ${last} --> DEC`);
+  out.push(`  dec{"Registro existe?"}`);
+  out.push(`  ${last} --> dec`);
   existsBranch.forEach((step, i) => {
-    const id = `E${i}`;
-    out.push(`  ${id}["${escapeMermaidLabel(stepLabel(step))}"]`);
-    out.push(i === 0 ? `  DEC -->|Sí| ${id}` : `  E${i - 1} --> ${id}`);
+    const id = `e${i}`;
+    out.push(`  ${id}("${escapeMermaidLabel(stepLabel(step))}")`);
+    out.push(i === 0 ? `  dec -->|Si| ${id}` : `  e${i - 1} --> ${id}`);
   });
-  const lastE = existsBranch.length ? `E${existsBranch.length - 1}` : "DEC";
+  const lastE = existsBranch.length ? `e${existsBranch.length - 1}` : "dec";
   notExistsBranch.forEach((step, i) => {
-    const id = `N${i}`;
-    out.push(`  ${id}["${escapeMermaidLabel(stepLabel(step))}"]`);
-    out.push(i === 0 ? `  DEC -->|No| ${id}` : `  N${i - 1} --> ${id}`);
+    const id = `n${i}`;
+    out.push(`  ${id}("${escapeMermaidLabel(stepLabel(step))}")`);
+    out.push(i === 0 ? `  dec -->|No| ${id}` : `  n${i - 1} --> ${id}`);
   });
   const endFrom = notExistsBranch.length
-    ? `N${notExistsBranch.length - 1}`
+    ? `n${notExistsBranch.length - 1}`
     : existsBranch.length
       ? lastE
-      : "DEC";
-  out.push(`  END(["Responde resultado"])`);
-  out.push(`  ${endFrom} --> END`);
+      : "dec";
+  out.push(`  finish("Respuesta API")`);
+  out.push(`  ${endFrom} --> finish`);
   out.push("```");
-  return out.join("\n");
+  return `${out.join("\n")}\n`;
 }
 
 export function repairFlowSectionsToMermaid(text: string): string {
@@ -103,7 +110,11 @@ export function repairFlowSectionsToMermaid(text: string): string {
       while (i < lines.length) {
         const lt = lines[i]!.trim();
         if (/^#{1,4}\s/.test(lt) && !FLOW_HEADING.test(lt)) break;
-        if (/^```/.test(lt) && body.length > 0) break;
+        if (/^```mermaid/i.test(lt)) {
+          while (i < lines.length && !/^```\s*$/.test(lines[i]!.trim())) i++;
+          if (i < lines.length) i++;
+          break;
+        }
         body.push(lines[i]!);
         i++;
       }
@@ -111,15 +122,10 @@ export function repairFlowSectionsToMermaid(text: string): string {
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("```") && !/^#{1,6}\s/.test(l));
       const isOdoo = /procesamiento/i.test(t) && steps.some((s) => /Si existe:/i.test(s));
-      const bullets = steps
-        .filter((s) => !/^Si (no )?existe:/i.test(s))
-        .map((s) => (s.startsWith("- ") ? s : `- ${s.replace(/^[-*]\s+/, "")}`));
       const mermaid = isOdoo ? odooCostFlowToMermaid(steps) : stepsToFlowchartMermaid(steps);
       if (mermaid) {
         out.push("");
-        out.push(mermaid);
-        out.push("");
-        out.push(...bullets);
+        out.push(mermaid.trimEnd());
         out.push("");
       } else {
         out.push(...body);
