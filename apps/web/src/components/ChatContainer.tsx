@@ -9,6 +9,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown, Rocket } from "lucide-react";
+import { apiFetch } from "../utils/apiClient";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
 import type { ChatImagePart } from "@theforge/shared-types";
@@ -409,6 +410,7 @@ export default function ChatContainer({
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const recordingStartRef = useRef<number>(0);
 
   const stageNameForBadge = useMemo(() => {
     return (stageId: string | undefined) => {
@@ -524,7 +526,7 @@ export default function ChatContainer({
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(
+        const r = await apiFetch(
           `${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`,
         );
         if (r.ok) {
@@ -555,16 +557,15 @@ export default function ChatContainer({
         if (e.data.size > 0) chunks.push(e.data);
       };
       recorder.onstop = async () => {
-        // Release mic
         stream.getTracks().forEach((t) => t.stop());
+        const elapsed = Date.now() - recordingStartRef.current;
         const blob = new Blob(chunks, { type: mimeType });
-        if (blob.size < 100) return; // silence / too short
+        if (blob.size < 100 || elapsed < 1000) return;
 
-        // Send to backend
         try {
           const formData = new FormData();
           formData.append("audio", blob, "recording.webm");
-          const r = await fetch(
+          const r = await apiFetch(
             `${import.meta.env.VITE_API_URL ?? "/api"}/audio/transcribe`,
             { method: "POST", body: formData },
           );
@@ -575,17 +576,23 @@ export default function ChatContainer({
                 const sep = prev.trim() ? " " : "";
                 return prev + sep + data.text.trim();
               });
-              // Focus textarea after setting value
               requestAnimationFrame(() => chatInputRef.current?.focus());
             }
+          } else {
+            const err = await r.json().catch(() => ({ message: `Error ${r.status}` })) as { message?: string };
+            console.warn("[STT]", r.status, err);
+            setInputValue((prev) => prev || `⚠️ STT: ${(err as Record<string, unknown>).message ?? r.status}`);
           }
-        } catch { /* transcribe failed – silently */ }
+        } catch (e) {
+          console.warn("[STT] network error", e);
+        }
       };
       recorder.onerror = () => {
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
       };
       recorder.start();
+      recordingStartRef.current = Date.now();
       setRecording(true);
     } catch {
       // Permission denied or no mic
