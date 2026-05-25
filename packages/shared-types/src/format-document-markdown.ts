@@ -15,8 +15,17 @@ import {
 
 export function formatDocumentMarkdown(text: string): string {
   if (!text) return "";
-  let cleaned = repairPastedMarkdown(text).trim();
-  cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
+  const trimmed = text.trim();
+  const hadOuterMarkdownFence =
+    /^```(?:markdown|md)?\s*\n/i.test(trimmed) && /\n```\s*$/i.test(trimmed);
+
+  let cleaned = repairPastedMarkdown(trimmed);
+  if (hadOuterMarkdownFence) {
+    cleaned = cleaned
+      .replace(/^```(?:markdown|md)?\s*\n/i, "")
+      .replace(/\n```\s*$/i, "")
+      .trim();
+  }
   const yamlMatch = cleaned.match(/^---[\s\S]*?\n---\s*\n?/);
   const searchStart = yamlMatch ? yamlMatch[0].length : 0;
   if (searchStart > 0) {
@@ -27,12 +36,11 @@ export function formatDocumentMarkdown(text: string): string {
     }
   } else {
     const headerMatch = cleaned.match(/^#+|(?<=\n)\s*#+/);
-    if (headerMatch && headerMatch.index !== undefined) {
+    // Solo quita preámbulo sin #; si ya empieza en # no recorta nada
+    if (headerMatch?.index != null && headerMatch.index > 0) {
       cleaned = cleaned.slice(headerMatch.index).trim();
     }
   }
-  cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
-  cleaned = cleaned.replace(/\s*```\s*$/i, "");
   cleaned = repairMarkdownFences(cleaned.trim());
   cleaned = normalizeAllTables(cleaned);
   cleaned = repairTableBoundaries(cleaned);

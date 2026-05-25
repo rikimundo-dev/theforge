@@ -122,11 +122,18 @@ export function repairFlowSectionsToMermaid(text: string): string {
         .map((l) => l.trim())
         .filter((l) => l && !l.startsWith("```") && !/^#{1,6}\s/.test(l));
       const isOdoo = /procesamiento/i.test(t) && steps.some((s) => /Si existe:/i.test(s));
+      const bullets = steps
+        .filter((s) => !/^Si (no )?existe:/i.test(s))
+        .map((s) => (s.startsWith("- ") ? s : `- ${s.replace(/^[-*]\s+/, "")}`));
       const mermaid = isOdoo ? odooCostFlowToMermaid(steps) : stepsToFlowchartMermaid(steps);
       if (mermaid) {
         out.push("");
         out.push(mermaid.trimEnd());
         out.push("");
+        if (bullets.length > 0) {
+          out.push(...bullets);
+          out.push("");
+        }
       } else {
         out.push(...body);
       }

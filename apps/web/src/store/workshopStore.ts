@@ -1245,8 +1245,8 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
         if (dbga.length > 0) {
           const { formatted, strippedMdd } = formatDbgaDocument(dbga);
-          const changed = formatted !== dbga || !!strippedMdd;
-          if (!changed) {
+          const changed = formatted !== dbga;
+          if (!changed && !strippedMdd) {
             parts.push("Fase 0 (DBGA): sin cambios detectables tras formatear.");
           } else {
             await persistField("dbgaContent", formatted, get, set);
@@ -1255,7 +1255,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
               "Fase 0 (DBGA) formateado (tablas, SQL, secciones). Revisa el panel Análisis.";
             if (strippedMdd) {
               const kb = Math.round(strippedMdd.length / 1024);
-              msg += ` Se extrajo un MDD embebido al final (~${kb} KB); revísalo en la pestaña MDD del proyecto.`;
+              const mddEmpty = !(get().mddContent ?? project?.mddContent ?? "").trim();
+              if (mddEmpty) {
+                await persistField("mddContent", strippedMdd, get, set);
+                set({ mddContent: strippedMdd });
+                msg += ` MDD duplicado al final del DBGA (~${kb} KB) movido a pestaña MDD (no se borró).`;
+              } else {
+                msg += ` Hay un MDD pegado al final del DBGA (~${kb} KB) que se quitó del panel; el MDD del proyecto ya tenía contenido — revísalo en el chat/historial si lo necesitas.`;
+              }
             }
             parts.push(msg);
             anyChanged = true;
