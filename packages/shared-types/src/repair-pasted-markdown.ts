@@ -2,6 +2,7 @@
  * Reparaciones heurísticas para markdown pegado desde Word/Excel/chat (sin LLM).
  */
 
+import { repairCollapsedSqlParagraphs } from "./repair-collapsed-sql.js";
 import { repairFlowSectionsToMermaid } from "./repair-flow-sections.js";
 
 const SQL_GLUE_REPLACEMENTS: Array<[RegExp, string]> = [
@@ -10,6 +11,7 @@ const SQL_GLUE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/NOT_NULL_REFERENCES/gi, "NOT NULL REFERENCES"],
   [/UUID\s+NOT\s+NULL_REFERENCES/gi, "UUID NOT NULL REFERENCES"],
   [/UUID_REFERENCES/gi, "UUID REFERENCES"],
+  [/REFERENCES_([a-z_]+)/gi, "REFERENCES $1"],
   [/([a-z])_(VARCHAR|TEXT|JSONB|BOOLEAN|INTEGER|BIGINT|DECIMAL|TIMESTAMPTZ|INET)\b/gi, "$1 $2"],
   [/(?<![a-z])_(UUID)\b/g, " UUID"],
   [/_(NOT\s+NULL)\b/gi, " $1"],
@@ -283,6 +285,10 @@ export function repairPromoteBareSectionHeadings(text: string): string {
       out.push(`## ${t}`);
       continue;
     }
+    if (/^Esquema SQL/i.test(t)) {
+      out.push(/^#{1,4}\s/.test(t) ? line : `### ${t}`);
+      continue;
+    }
     if (/^Flujo de sincronización/i.test(t)) {
       out.push(`### ${t}`);
       continue;
@@ -446,6 +452,7 @@ export function repairPastedMarkdown(text: string): string {
   out = repairStrayCodeFences(out);
   out = repairPromoteBareSectionHeadings(out);
   out = repairDemoteFalseApiHeadings(out);
+  out = repairCollapsedSqlParagraphs(out);
   out = repairOrphanSqlBlocks(out);
   out = repairLooseJsonBlocks(out);
   out = repairJsonFenceIntegrity(out);
