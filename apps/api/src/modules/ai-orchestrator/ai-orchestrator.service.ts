@@ -241,12 +241,23 @@ export class AiOrchestratorService {
     }
     if (!updatedSession) throw new NotFoundException("Session not found after chat");
 
-    // Fallback: si el user pidio cambios en benchmark pero DeepSeek no emitio el documento
+    // Fallback: DBGA solo en chat (sin ---FIN_DBGA---)
     if (dbgaFromResponse == null && activeTab?.trim() === "benchmark" && message.trim()) {
-      const wroteDoc = (updatedSession.chatLog as ChatMessage[] ?? []).slice(-3).some(
-        (m: ChatMessage) => m.role === "assistant" && m.tab === "benchmark" && m.content.length > 100
-      );
-      if (wroteDoc) {
+      const log = (updatedSession.chatLog as ChatMessage[]) ?? [];
+      const lastAsst = [...log]
+        .reverse()
+        .find((m) => m.role === "assistant" && (m.tab ?? "mdd") === "benchmark");
+      if (lastAsst?.content?.trim()) {
+        const salvaged = this.sessions.salvageDbgaFromAssistantText(
+          lastAsst.content,
+          currentDbga,
+        );
+        if (salvaged) {
+          dbgaFromResponse = salvaged;
+          console.log("[Orchestrator] salvage DBGA desde chat, length:", salvaged.length);
+        }
+      }
+      if (dbgaFromResponse == null && lastAsst && lastAsst.content.length > 100) {
         const fallbackDoc = await this.regenerateDbgaFromChatFallback(
           message,
           currentDbga,
@@ -474,12 +485,22 @@ export class AiOrchestratorService {
       if (msg.type === "chunk") {
         yield { event: "chunk", data: { content: msg.content } };
       } else {
-        // --- FALLBACK: si DeepSeek no emitió ---FIN_DBGA--- en stream, regenerar ---
         if ((msg as any).dbgaContent == null && activeTab?.trim() === "benchmark" && message.trim()) {
-          const wroteDoc = ((msg as any).session?.chatLog ?? []).slice(-3).some(
-            (m: any) => m.role === "assistant" && m.tab === "benchmark" && m.content?.length > 100,
-          );
-          if (wroteDoc) {
+          const log = ((msg as any).session?.chatLog ?? []) as ChatMessage[];
+          const lastAsst = [...log]
+            .reverse()
+            .find((m) => m.role === "assistant" && (m.tab ?? "mdd") === "benchmark");
+          if (lastAsst?.content?.trim()) {
+            const salvaged = this.sessions.salvageDbgaFromAssistantText(
+              lastAsst.content,
+              currentDbga,
+            );
+            if (salvaged) {
+              (msg as any).dbgaContent = salvaged;
+              console.log("[Orchestrator] salvage DBGA en stream, length:", salvaged.length);
+            }
+          }
+          if ((msg as any).dbgaContent == null && lastAsst && lastAsst.content.length > 100) {
             const fallbackDoc = await this.regenerateDbgaFromChatFallback(message, currentDbga);
             if (fallbackDoc) {
               (msg as any).dbgaContent = fallbackDoc;
