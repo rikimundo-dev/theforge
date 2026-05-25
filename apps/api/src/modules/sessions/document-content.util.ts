@@ -3,9 +3,7 @@
  * (respuestas de chat con bloques ---FIN_MDD---, etc.). Sin Nest; `repairMarkdownFences` desde shared-types.
  */
 
-import { repairMarkdownFences } from "@theforge/shared-types/markdown-repair";
-import { normalizeAllTables } from "@theforge/shared-types/markdown-table";
-import { normalizeMermaid } from "@theforge/shared-types/mermaid";
+import { formatDocumentMarkdown } from "@theforge/shared-types";
 
 /** Normaliza guiones Unicode a ASCII '-' para que coincidan delimitadores como ---FIN_MDD---. */
 export function normalizeDashes(s: string): string {
@@ -21,34 +19,5 @@ export function stripChatLabel(text: string): string {
 
 /** Quita intros de chat y vallas de markdown (fences) de documentos generados por IA. */
 export function cleanDocumentContent(text: string): string {
-  if (!text) return "";
-  let cleaned = text.trim();
-  cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
-  // Saltar bloque YAML (---\\n...\\n---) — el frontmatter es contenido válido,
-  // no un preámbulo que deba cortarse. Buscar # heading solo después del YAML.
-  const yamlMatch = cleaned.match(/^---[\s\S]*?\n---\s*\n?/);
-  const searchStart = yamlMatch ? yamlMatch[0].length : 0;
-  if (searchStart > 0) {
-    // Tiene YAML frontmatter — buscar # heading solo en el cuerpo después del YAML
-    const body = cleaned.slice(searchStart);
-    const bodyHeader = body.match(/^#+|(?<=\n)\s*#+/);
-    if (bodyHeader && bodyHeader.index !== undefined && bodyHeader.index > 0) {
-      // Hay texto antes del primer heading en el body — cortar ese preámbulo
-      cleaned = cleaned.slice(0, searchStart) + body.slice(bodyHeader.index).trimStart();
-    }
-  } else {
-    // Sin YAML — comportamiento original: buscar # en todo el contenido
-    const headerMatch = cleaned.match(/^#+|(?<=\n)\s*#+/);
-    if (headerMatch && headerMatch.index !== undefined) {
-      cleaned = cleaned.slice(headerMatch.index).trim();
-    }
-  }
-  cleaned = cleaned.replace(/^```(?:markdown)?\s*/i, "");
-  cleaned = cleaned.replace(/\s*```\s*$/i, "");
-  cleaned = repairMarkdownFences(cleaned.trim());
-  // Normalizar tablas markdown (sin línea en blanco tras separador, padding uniforme)
-  cleaned = normalizeAllTables(cleaned);
-  // Normalizar diagramas Mermaid (IDs con espacios, bloques sin cerrar, quotes)
-  cleaned = normalizeMermaid(cleaned);
-  return cleaned;
+  return formatDocumentMarkdown(text);
 }

@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import type { ChatImagePart, CodebaseDocResponseMode } from "@theforge/shared-types";
+import { formatDocumentMarkdown } from "@theforge/shared-types";
+import { isFormatDocumentChatCommand } from "../utils/documentFormatCommand";
 import { apiFetch, API_BASE, fetchWithRetry, addToOfflineQueue, flushOfflineQueue } from "../utils/apiClient";
 import {
   parseApiErrorPayloadFromResponse,
@@ -681,6 +683,8 @@ interface WorkshopState {
     activeTab?: string,
     options?: { regenerateSection?: number; images?: ChatImagePart[] },
   ) => Promise<void>;
+  /** `/formatear` — normaliza markdown del documento del tab (sin LLM). */
+  formatDocumentForActiveTab: (activeTab?: string) => Promise<{ ok: boolean; message: string }>;
   updateMddContent: (content: string) => void;
   persistMddContent: (content: string, options?: { force?: boolean }) => Promise<void>;
   revertMddContent: () => void;
@@ -1197,6 +1201,109 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     }
   },
 
+  formatDocumentForActiveTab: async (activeTab) => {
+    const tab = activeTab ?? "mdd";
+    const { projectId, project, activeStageId } = get();
+    if (!projectId?.trim()) {
+      return { ok: false, message: "No hay proyecto activo." };
+    }
+
+    const fmt = (raw: string | null | undefined) => formatDocumentMarkdown((raw ?? "").trim());
+
+    const persistProjectField = async (
+      field: keyof Project,
+      raw: string | null | undefined,
+      label: string,
+    ): Promise<{ ok: boolean; message: string }> => {
+      const source = (raw ?? "").trim();
+      if (!source) return { ok: false, message: `No hay contenido en ${label} para formatear.` };
+      const formatted = fmt(source);
+      if (formatted === source) {
+        return { ok: true, message: `${label}: ya estaba bien formateado (sin cambios).` };
+      }
+      await persistField(field as string, formatted, get, set);
+      return { ok: true, message: `${label} formateado (fences, tablas y Mermaid). Revisa el panel.` };
+    };
+
+    switch (tab) {
+      case "benchmark": {
+        const dbga = get().dbgaContent ?? project?.dbgaContent ?? null;
+        const main = await persistProjectField("dbgaContent", dbga, "DBGA (Fase 0)");
+        if (!main.ok) return main;
+        const p0 = get().phase0SummaryContent ?? project?.phase0SummaryContent ?? null;
+        if ((p0 ?? "").trim().length > 0) {
+          await persistField("phase0SummaryContent", fmt(p0), get, set);
+        }
+        return main;
+      }
+      case "brd": {
+        const sid = activeStageId;
+        const st = project?.stages?.find((s) => s.id === sid);
+        const brd = (st?.brdContent ?? "").trim();
+        if (!brd) return { ok: false, message: "No hay BRD en la etapa activa." };
+        if (!sid) return { ok: false, message: "Selecciona una etapa para formatear el BRD." };
+        const formatted = fmt(brd);
+        const ok = await get().patchWorkshopStage(sid, { brdContent: formatted });
+        return ok
+          ? { ok: true, message: "BRD formateado. Revisa el panel." }
+          : { ok: false, message: "No se pudo guardar el BRD formateado." };
+      }
+      case "mdd-inicial":
+      case "legacy": {
+        const doc = (project?.legacyFlowState?.codebaseDoc ?? "").trim();
+        if (!doc) {
+          return {
+            ok: false,
+            message: "No hay documentación de partida (MDD Inicial / legacy) para formatear.",
+          };
+        }
+        const formatted = fmt(doc);
+        const saved = await get().legacyUpdateCodebaseDoc(projectId, formatted);
+        return saved
+          ? { ok: true, message: "Documentación de partida formateada. Revisa el panel." }
+          : { ok: false, message: "No se pudo guardar el documento formateado." };
+      }
+      case "adrs":
+        return { ok: false, message: "ADRs: edita y formatea desde el panel del documento." };
+      case "mdd": {
+        const source = effectiveMddContentForSectionRegen(get);
+        if (!source) return { ok: false, message: "No hay MDD para formatear." };
+        const formatted = fmt(source);
+        if (formatted === source) {
+          return { ok: true, message: "MDD: ya estaba bien formateado (sin cambios)." };
+        }
+        await get().persistMddContent(formatted, { force: true });
+        return { ok: true, message: "MDD formateado (fences, tablas y Mermaid). Revisa el panel." };
+      }
+      case "spec":
+        return persistProjectField("specContent", get().specContent ?? project?.specContent, "Spec");
+      case "ux-ui-guide":
+        return persistProjectField(
+          "uxUiGuideContent",
+          get().uxUiGuideContent ?? project?.uxUiGuideContent,
+          "Guía UX/UI",
+        );
+      case "blueprint":
+        return persistProjectField("blueprintContent", get().blueprintContent, "Blueprint");
+      case "tasks":
+        return persistProjectField("tasksContent", get().tasksContent, "Tasks");
+      case "api-contracts":
+        return persistProjectField("apiContractsContent", get().apiContractsContent, "Contratos API");
+      case "logic-flows":
+        return persistProjectField("logicFlowsContent", get().logicFlowsContent, "Flujos");
+      case "architecture":
+        return persistProjectField("architectureContent", get().architectureContent, "Arquitectura");
+      case "use-cases":
+        return persistProjectField("useCasesContent", get().useCasesContent, "Casos de uso");
+      case "user-stories":
+        return persistProjectField("userStoriesContent", get().userStoriesContent, "Historias de usuario");
+      case "infra":
+        return persistProjectField("infraContent", get().infraContent, "Infraestructura");
+      default:
+        return { ok: false, message: `Tab «${tab}» sin documento formateable desde el chat.` };
+    }
+  },
+
   sendMessage: async (message, activeTab, options) => {
     const { projectId, session } = get();
     const images = options?.images ?? [];
@@ -1204,6 +1311,40 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     const tab = activeTab ?? "mdd";
     const msg = message.trim();
     const regenerateSection = options?.regenerateSection;
+
+    if (isFormatDocumentChatCommand(msg) && !images.length) {
+      set({ loading: true, error: null, synced: false });
+      try {
+        const result = await get().formatDocumentForActiveTab(tab);
+        if (session?.id) {
+          const stageId = get().activeStageId;
+          const userRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: sessionMessageBody({ role: "user", content: msg, tab }, stageId),
+          });
+          let nextSession = session;
+          if (userRes.ok) nextSession = (await userRes.json()) as Session;
+          const asstRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: sessionMessageBody(
+              { role: "assistant", content: result.message, tab },
+              stageId,
+            ),
+          });
+          if (asstRes.ok) nextSession = (await asstRes.json()) as Session;
+          set({ session: nextSession, error: result.ok ? null : result.message });
+        } else {
+          set({ error: result.ok ? null : result.message });
+        }
+      } catch (e) {
+        set({ error: e instanceof Error ? e.message : "Error al formatear el documento" });
+      } finally {
+        set({ loading: false });
+      }
+      return;
+    }
 
     // Comandos /: solo si el cliente pide regenerar una sección (2–7). Resto del tiempo → Manager/resume.
     if (tab === "mdd" && session?.id && typeof regenerateSection === "number" && regenerateSection >= 1 && regenerateSection <= 7) {

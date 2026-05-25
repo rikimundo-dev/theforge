@@ -340,10 +340,9 @@ export class SessionsService {
         }
         // Only apply fallback if no higher-priority document was found
         if (!hasUx) {
-          // Find the matching split in the rawChat chain (lines 252-265 style)
           let fbFound = false;
           if (hasMdd) { rawChat = mddSplit!.chatPart; fbFound = true; }
-          else if (hasDbga) { rawChat = dbgaSplit!.chatPart; fbFound = true; }
+          else if (hasDbga && dbgaSplit) { rawChat = dbgaSplit.chatPart; fbFound = true; }
           else if (hasSpec) { rawChat = specSplit!.chatPart; fbFound = true; }
           else if (hasBrd) { rawChat = brdSplit!.chatPart; fbFound = true; }
           else if (hasBlue) { rawChat = blueSplit!.chatPart; fbFound = true; }
@@ -672,9 +671,10 @@ export class SessionsService {
           case "brd": brdSplit = fbSplit; hasBrd = true; break;
           case "phase0": phase0Split = fbSplit; hasPhase0 = true; phase0DocPart = fbSplit.docPart; break;
         }
-        if (!hasMdd && !hasUx && !hasDbga) {
+        if (!hasMdd && !hasUx) {
           let fbFound = false;
-          if (hasSpec) { rawChat = specSplit!.chatPart; fbFound = true; }
+          if (hasDbga && dbgaSplit) { rawChat = dbgaSplit.chatPart; fbFound = true; }
+          else if (hasSpec) { rawChat = specSplit!.chatPart; fbFound = true; }
           else if (hasBrd) { rawChat = brdSplit!.chatPart; fbFound = true; }
           else if (hasBlue) { rawChat = blueSplit!.chatPart; fbFound = true; }
           else if (hasApi) { rawChat = apiSplit!.chatPart; fbFound = true; }
@@ -989,5 +989,27 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
     });
     if (!row) throw new NotFoundException("Session not found");
     return row;
+  }
+
+  /**
+   * Recupera DBGA cuando el modelo lo dejó solo en el mensaje de chat (sin ---FIN_DBGA---).
+   */
+  salvageDbgaFromAssistantText(
+    assistantText: string,
+    currentDbga?: string,
+  ): string | null {
+    const trimmed = assistantText?.trim() ?? "";
+    if (trimmed.length < 200) return null;
+
+    const split =
+      this.parser.splitDbgaAndChat(trimmed) ??
+      this.parser.detectBenchmarkDocFallback(trimmed);
+    if (!split?.docPart?.trim()) return null;
+
+    const merged = this.parser.mergeDbgaOrUseFull(
+      currentDbga,
+      this.parser.cleanDocumentContent(split.docPart),
+    );
+    return merged.length > 0 ? merged : null;
   }
 }
