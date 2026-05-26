@@ -12,7 +12,7 @@ import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, R
 import { apiFetch } from "../utils/apiClient";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
-import type { ChatImagePart } from "@theforge/shared-types";
+import { VISION_CONTEXT_HEADER, type ChatImagePart } from "@theforge/shared-types";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
 import {
   Button,
@@ -132,6 +132,14 @@ function getChatComposerPlaceholder(isBenchmarkFirstAction: boolean, activeTab: 
 }
 
 const ACCEPT_IMG = /^image\/(png|jpeg|jpg|gif|webp)$/i;
+
+function splitUserChatContent(content: string): { text: string; vision?: string } {
+  const idx = content.indexOf(VISION_CONTEXT_HEADER);
+  if (idx < 0) return { text: content };
+  const vision = content.slice(idx + VISION_CONTEXT_HEADER.length).replace(/^\n+/, "").trim();
+  const text = content.slice(0, idx).trimEnd();
+  return { text, vision: vision || undefined };
+}
 
 /** Assistant messages may include literal `<br>` in table cells; normalize to line breaks for GFM. */
 function normalizeChatMarkdown(content: string): string {
@@ -934,7 +942,24 @@ export default function ChatContainer({
                             ))}
                           </div>
                         ) : null}
-                        <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                        {(() => {
+                          const { text, vision } = splitUserChatContent(msg.content);
+                          return (
+                            <>
+                              {text ? (
+                                <div className="whitespace-pre-wrap break-words">{text}</div>
+                              ) : null}
+                              {vision ? (
+                                <div className="mt-2 rounded-md border border-[color-mix(in_oklch,var(--primary)_22%,var(--border))] bg-[color-mix(in_oklch,var(--muted)_35%,transparent)] px-2.5 py-2 text-xs text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))]">
+                                  <p className="mb-1 font-medium text-[color-mix(in_oklch,var(--primary)_70%,var(--foreground))]">
+                                    Referencia visual (visión)
+                                  </p>
+                                  <div className="whitespace-pre-wrap break-words">{vision}</div>
+                                </div>
+                              ) : null}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

@@ -487,18 +487,36 @@ export class AiService {
   }
 
   /**
-   * Visión → texto para inyectar en el grafo MDD (Manager) sin soportar multimodal en LangGraph.
+   * Visión → texto para el chat y agentes sin multimodal (Manager MDD, orquestador, historial).
    */
-  async describeImagesForMddPipeline(userText: string, images: ChatImagePart[]): Promise<string> {
+  async describeImagesForChat(
+    userText: string,
+    images: ChatImagePart[],
+    activeTab?: string,
+  ): Promise<string> {
     if (!images.length) return "";
+    const tab = (activeTab ?? "mdd").trim() || "mdd";
     const hint = (userText ?? "").trim().slice(0, 4000) || "(sin texto adicional)";
-    const prompt = `El usuario está elaborando el Master Design Document. Mensaje o petición asociada:\n---\n${hint}\n---\n\nDescribe lo que muestran las imágenes: modelo de datos, UI, flujos, stack visible, etc. Responde en español, viñetas; indica partes ilegibles.`;
+    const tabHint =
+      tab === "mdd"
+        ? "Master Design Document"
+        : tab === "ux-ui-guide"
+          ? "Guía UX/UI y design system"
+          : tab === "benchmark"
+            ? "Benchmark & Gap Analysis"
+            : `documento o pestaña «${tab}» del Workshop`;
+    const prompt = `El usuario trabaja en ${tabHint}. Mensaje o petición asociada:\n---\n${hint}\n---\n\nDescribe con precisión lo que muestran las imágenes (UI, diagramas, datos, flujos, stack, texto visible, etc.). Responde en español, en viñetas; indica partes ilegibles o ambiguas.`;
     const out = await this.generateResponse(prompt, [], {
       systemPrompt:
         "Eres arquitecto de software: extrae solo información sustentada en las imágenes; no inventes.",
       userMessageImages: images,
     });
     return out.trim().slice(0, 12000);
+  }
+
+  /** Alias del pipeline MDD (Manager LangGraph). */
+  async describeImagesForMddPipeline(userText: string, images: ChatImagePart[]): Promise<string> {
+    return this.describeImagesForChat(userText, images, "mdd");
   }
 
   async parseChecklist(text: string) {

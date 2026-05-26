@@ -1,5 +1,9 @@
 import { create } from "zustand";
-import type { ChatImagePart, CodebaseDocResponseMode } from "@theforge/shared-types";
+import {
+  contentIncludesVisionBlock,
+  type ChatImagePart,
+  type CodebaseDocResponseMode,
+} from "@theforge/shared-types";
 import { isFormatDocumentChatCommand } from "../utils/documentFormatCommand";
 import {
   formatDbgaDocument,
@@ -130,6 +134,18 @@ export function sessionMessageBody(
     ...base,
     ...(stageId?.trim() ? { stageId: stageId.trim() } : {}),
   });
+}
+
+function lastMddUserMessageContent(
+  log: { role: string; content: string; tab?: string }[] | undefined,
+): string | null {
+  if (!log?.length) return null;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const m = log[i];
+    if (!m) continue;
+    if (m.role === "user" && (m.tab ?? "mdd") === "mdd") return m.content;
+  }
+  return null;
 }
 
 const cleanDoc = (text: string | null) => {
@@ -1596,6 +1612,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
           evaluatorCritique: null,
         });
         try {
+          let sessionForManager: Session | null = session;
           if (!looksLikeMddDocument) {
             const appendRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
               method: "POST",
@@ -1612,9 +1629,18 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             });
             if (!appendRes.ok) throw new Error("Error al enviar mensaje");
             const updatedSession = (await appendRes.json()) as Session;
+            sessionForManager = updatedSession;
             set({ session: updatedSession });
           }
           set({ streamingUserMessage: null, streamingUserImages: null });
+
+          const enrichedFromChat = lastMddUserMessageContent(sessionForManager?.chatLog);
+          const managerText =
+            enrichedFromChat && contentIncludesVisionBlock(enrichedFromChat)
+              ? enrichedFromChat
+              : messageForApi;
+          const imagesForManager =
+            images.length > 0 && !contentIncludesVisionBlock(managerText) ? images : [];
 
           const url =
             managerThreadId != null
@@ -1627,17 +1653,17 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
               ? {
                 projectId,
                 threadId: managerThreadId,
-                userMessage: messageForApi,
+                userMessage: managerText,
                 mddContent: draftForMdd,
-                ...(images.length ? { images } : {}),
+                ...(imagesForManager.length ? { images: imagesForManager } : {}),
               }
               : {
                 projectId,
                 dbgaContent: (get().dbgaContent ?? get().project?.dbgaContent ?? "").trim() || undefined,
-                initialMessage: messageForApi,
+                initialMessage: managerText,
                 mddContent: draftForMdd,
                 ...(mddStage ? { stageId: mddStage } : {}),
-                ...(images.length ? { images } : {}),
+                ...(imagesForManager.length ? { images: imagesForManager } : {}),
               };
           const r = await apiFetch(url, {
             method: "POST",

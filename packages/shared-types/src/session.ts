@@ -8,6 +8,14 @@ export const chatImagePartSchema = z.object({
 
 export type ChatImagePart = z.infer<typeof chatImagePartSchema>;
 
+/** Cabecera del bloque de interpretación de visión persistido en `content` del mensaje user. */
+export const VISION_CONTEXT_HEADER =
+  "--- Contexto de imagen(es) adjunta(s) (interpretación) ---";
+
+export function contentIncludesVisionBlock(content: string): boolean {
+  return content.includes(VISION_CONTEXT_HEADER);
+}
+
 const chatMessageSchema = z
   .object({
     role: z.enum(["user", "assistant"]),
