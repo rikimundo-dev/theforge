@@ -10,10 +10,15 @@ import {
   createSessionSchema,
   appendChatSchema,
   contextStepEnum,
+  contentIncludesVisionBlock,
   type AppendChatDto,
   type ChatMessage,
   type ChatImagePart,
 } from "@theforge/shared-types";
+import {
+  formatVisionContextBlock,
+  mergeUserTextWithVisionBlock,
+} from "../ai/utils/vision-context.util.js";
 
 function filterChatByTab(log: ChatMessage[], tab: string): ChatMessage[] {
   return log.filter((m) => (m.tab ?? "mdd") === tab);
@@ -23,7 +28,12 @@ function sessionHistoryToLlm(history: ChatMessage[]): LlmChatMessage[] {
   return history.map((m) => ({
     role: m.role,
     content: m.content,
-    ...(m.role === "user" && m.images != null && m.images.length > 0 ? { images: m.images } : {}),
+    ...(m.role === "user" &&
+    m.images != null &&
+    m.images.length > 0 &&
+    !contentIncludesVisionBlock(m.content)
+      ? { images: m.images }
+      : {}),
   }));
 }
 
@@ -107,8 +117,18 @@ export class SessionsService {
     });
     if (!session) throw new NotFoundException("Session not found");
 
+    let entry: ChatMessage = parsed;
+    if (parsed.role === "user" && parsed.images?.length) {
+      const enriched = await this.enrichUserContentWithVision(
+        parsed.content,
+        parsed.images,
+        parsed.tab,
+      );
+      entry = { ...parsed, content: enriched };
+    }
+
     const chatLog = session.chatLog as ChatMessage[];
-    const updated = [...chatLog, parsed];
+    const updated = [...chatLog, entry];
 
     await this.prisma.session.update({
       where: { id: sessionId },
@@ -118,6 +138,41 @@ export class SessionsService {
     return this.prisma.session.findFirst({
       where: this.sessionScope(sessionId),
     });
+  }
+
+  /** Modelo de visión → texto en el mensaje; las imágenes se conservan para la UI del chat. */
+  private async enrichUserContentWithVision(
+    userMessage: string,
+    images: ChatImagePart[],
+    activeTab?: string,
+  ): Promise<string> {
+    if (!images.length) return userMessage;
+    if (contentIncludesVisionBlock(userMessage)) return userMessage;
+    try {
+      const summary = await this.ai.describeImagesForChat(userMessage, images, activeTab);
+      const block = formatVisionContextBlock(summary);
+      if (!block) return userMessage.trim() || "(Imagen adjunta)";
+      return mergeUserTextWithVisionBlock(userMessage, block);
+    } catch (err) {
+      console.warn("[Sessions] enrichUserContentWithVision failed:", err);
+      return userMessage.trim() || "(Imagen adjunta)";
+    }
+  }
+
+  private async resolveUserTurnForLlm(
+    userMessage: string,
+    images: ChatImagePart[] | undefined,
+    activeTab: string,
+  ): Promise<{ promptForModel: string; contentForLog: string; imagesForLlm?: ChatImagePart[] }> {
+    const trimmed = userMessage.trim();
+    if (!images?.length) {
+      return { promptForModel: trimmed, contentForLog: userMessage };
+    }
+    const contentForLog = await this.enrichUserContentWithVision(userMessage, images, activeTab);
+    const promptForModel =
+      contentForLog.trim() ||
+      "(El usuario envió solo imágenes; usa el contexto visual descrito en el mensaje.)";
+    return { promptForModel, contentForLog, imagesForLlm: undefined };
   }
 
   async chat(
@@ -178,14 +233,14 @@ export class SessionsService {
     });
     const learningHistory = await this.preferences.getPreferencesForContext(session.projectId, 5);
     const llmHistory = sessionHistoryToLlm(history);
-    const promptForModel =
-      userMessage.trim() ||
-      (options?.userImages?.length
-        ? "(El usuario envió solo imágenes; usa el contenido visual en el contexto del documento activo.)"
-        : "");
+    const userTurn = await this.resolveUserTurnForLlm(
+      userMessage,
+      options?.userImages,
+      activeTab,
+    );
     let response: string;
     try {
-      response = await this.ai.generateResponse(promptForModel, llmHistory, {
+      response = await this.ai.generateResponse(userTurn.promptForModel, llmHistory, {
         currentMddContent: options?.currentMddContent,
         currentDbgaContent: options?.currentDbgaContent,
         currentUxUiGuideContent: options?.currentUxUiGuideContent,
@@ -199,7 +254,7 @@ export class SessionsService {
         complexityInterviewContext: options?.complexityInterviewContext,
         projectTypeForUxGuide: options?.projectTypeForUxGuide,
         uxGuideAdditionalDocs: options?.uxGuideAdditionalDocs,
-        userMessageImages: options?.userImages,
+        userMessageImages: userTurn.imagesForLlm,
       });
     } catch (err) {
       console.error("[Chat] ai.generateResponse error:", err);
@@ -364,11 +419,9 @@ export class SessionsService {
 
     const tab = options?.activeTab ?? "mdd";
     const stageId = options?.stageId?.trim();
-    const userContentForLog =
-      userMessage.trim() || (options?.userImages?.length ? "(Imagen adjunta)" : userMessage);
     const userMsgBase = {
       role: "user" as const,
-      content: userContentForLog,
+      content: userTurn.contentForLog,
       tab,
       ...(options?.userImages?.length ? { images: options.userImages } : {}),
     };
@@ -484,11 +537,14 @@ export class SessionsService {
     const activeTab = options?.activeTab ?? "mdd";
     const tab = activeTab;
     const stageId = options?.stageId?.trim();
-    const userContentForLog =
-      userMessage.trim() || (options?.userImages?.length ? "(Imagen adjunta)" : userMessage);
+    const userTurn = await this.resolveUserTurnForLlm(
+      userMessage,
+      options?.userImages,
+      activeTab,
+    );
     const userEntryBase = {
       role: "user" as const,
-      content: userContentForLog,
+      content: userTurn.contentForLog,
       tab,
       ...(options?.userImages?.length ? { images: options.userImages } : {}),
     };
@@ -496,14 +552,9 @@ export class SessionsService {
 
     const learningHistory = await this.preferences.getPreferencesForContext(session.projectId, 5);
     const llmHistory = sessionHistoryToLlm(history);
-    const promptForModel =
-      userMessage.trim() ||
-      (options?.userImages?.length
-        ? "(El usuario envió solo imágenes; usa el contenido visual en el contexto del documento activo.)"
-        : "");
     let stream: AsyncIterable<string>;
     try {
-      stream = await this.ai.generateResponseStream(promptForModel, llmHistory, {
+      stream = await this.ai.generateResponseStream(userTurn.promptForModel, llmHistory, {
         currentMddContent: options?.currentMddContent,
         currentDbgaContent: options?.currentDbgaContent,
         currentUxUiGuideContent: options?.currentUxUiGuideContent,
@@ -517,7 +568,7 @@ export class SessionsService {
         complexityInterviewContext: options?.complexityInterviewContext,
         projectTypeForUxGuide: options?.projectTypeForUxGuide,
         uxGuideAdditionalDocs: options?.uxGuideAdditionalDocs,
-        userMessageImages: options?.userImages,
+        userMessageImages: userTurn.imagesForLlm,
       });
     } catch (err) {
       console.error("[ChatStream] ai.generateResponseStream error:", err);

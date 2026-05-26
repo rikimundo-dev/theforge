@@ -29,7 +29,8 @@ import { pickPrimaryStage } from "../projects/stage-helpers.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.service.js";
 import { EpisodicMemoryKind, type ComplexityLevel } from "@theforge/database";
-import type { ChatImagePart } from "@theforge/shared-types";
+import { contentIncludesVisionBlock, type ChatImagePart } from "@theforge/shared-types";
+import { formatVisionContextBlock, mergeUserTextWithVisionBlock } from "../ai/utils/vision-context.util.js";
 import { markdownToMddStructured } from "./utils/mdd-markdown-to-structured.js";
 import { HumanMessage } from "@langchain/core/messages";
 import { createDbgaLLM } from "./llm/create-dbga-llm.js";
@@ -629,13 +630,15 @@ export class AiAnalysisService {
     if (looksLikeMddDocument) {
       this.logger.warn("[MDD stream/manager] initialMessage parece el documento MDD (no la petición del usuario); se ignora como lastUserMessage");
     }
-    if (imageAttachments?.length) {
+    if (imageAttachments?.length && !contentIncludesVisionBlock(rawInitial)) {
       try {
         const summary = await this.ai.describeImagesForMddPipeline(rawInitial, imageAttachments);
-        const block = `--- Contexto de imagen(es) adjunta(s) (interpretación) ---\n${summary}`;
-        lastUserMessage = lastUserMessage?.trim()
-          ? `${lastUserMessage.trim()}\n\n${block}`
-          : block;
+        const block = formatVisionContextBlock(summary);
+        if (block) {
+          lastUserMessage = lastUserMessage?.trim()
+            ? mergeUserTextWithVisionBlock(lastUserMessage, block)
+            : block;
+        }
       } catch (e) {
         this.logger.warn(`[MDD stream/manager] describeImages failed: ${String(e)}`);
       }
@@ -878,11 +881,15 @@ export class AiAnalysisService {
     imageAttachments?: ChatImagePart[],
   ): AsyncGenerator<StreamMddManagerEvent> {
     let resumeText = (userMessage ?? "").trim();
-    if (imageAttachments?.length) {
+    if (imageAttachments?.length && !contentIncludesVisionBlock(resumeText)) {
       try {
         const summary = await this.ai.describeImagesForMddPipeline(resumeText, imageAttachments);
-        const block = `--- Contexto de imagen(es) adjunta(s) (interpretación) ---\n${summary}`;
-        resumeText = resumeText ? `${resumeText}\n\n${block}` : block;
+        const block = formatVisionContextBlock(summary);
+        if (block) {
+          resumeText = resumeText
+            ? mergeUserTextWithVisionBlock(resumeText, block)
+            : block;
+        }
       } catch (e) {
         this.logger.warn(`[MDD stream/resume] describeImages failed: ${String(e)}`);
       }

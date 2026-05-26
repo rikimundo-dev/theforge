@@ -12,6 +12,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js"
     },
+    "./session": {
+      "types": "./dist/session.d.ts",
+      "import": "./dist/session.js",
+      "require": "./dist/session.js"
+    },
     "./markdown-repair": {
       "types": "./dist/markdown-repair.d.ts",
       "import": "./dist/markdown-repair.js",
