@@ -1,36 +1,50 @@
 ---
+
 description: Git commits — sin trailers Co-authored-by de IA (obligatorio)
+
 alwaysApply: true
+
 ---
+
+ 
 
 # Git commits
 
+ 
+
 ## Co-authored-by de agentes IA (OBLIGATORIO — siempre)
 
-**Prohibido en todo commit** añadir `Co-authored-by` de Cursor, Copilot u otro agente, salvo petición **explícita** del usuario.
+ 
+
+**Prohibido en todo commit** añadir `Co-authored-by` o `Made with Cursor` de Cursor, Copilot u otro agente, salvo petición **explícita** del usuario.
+
+ 
 
 - No incluir esa línea en `git commit -m`, HEREDOC ni mensajes de amend/rebase.
+
 - Si el IDE la inyecta, reescribe el mensaje sin ella antes de push.
+
 - El hook `.githooks/prepare-commit-msg` la elimina al commitear; activar una vez: `npm run setup:githooks`.
+
+ 
 
 Ejemplos prohibidos:
 
+ 
+
 ```
+
 Co-authored-by: Cursor <cursoragent@cursor.com>
+
 Co-authored-by: GitHub Copilot <...>
+
 Co-authored-by: <cualquier agente IA> <agent@...>
+
+Made with Cursor
+
 ```
 
 Los commits deben listar solo autor(es) humano(s) previstos.
-
-## Pull requests (OBLIGATORIO — siempre)
-
-**Prohibido** en la descripción del PR (cuerpo de `gh pr create`, plantillas o ediciones):
-
-- `Made with [Cursor](https://cursor.com)` o variantes («Made with Cursor», badge, enlace a cursor.com).
-- Cualquier atribución a Cursor, Copilot u otro agente IA en el texto del PR.
-
-Antes de crear o actualizar un PR, revisa que el cuerpo no incluya esas líneas. Si el IDE las añade, elimínalas con `gh pr edit` antes de pedir review.
 
 ## Conventional commits
 
