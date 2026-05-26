@@ -28,6 +28,20 @@ Endpoint Odoo para costos reales.`;
     const merged = parser.mergeDbgaOrUseFull(longDbga, full);
     assert.equal(merged, full.trim());
   });
+
+  it("acepta Research Report como documento completo de Fase 0", () => {
+    const research = `# Research Report — Módulo de Costos OBP
+
+## Módulos del proyecto
+Contenido extenso del discovery con tablas y módulos numerados.`.repeat(8);
+    const updated = `# Research Report — Módulo de Costos OBP
+
+## Multi-tenancy
+tenant_id en catálogo y tablas espejo.`.repeat(8);
+    const merged = parser.mergeDbgaOrUseFull(research, updated);
+    assert.ok(merged.includes("Multi-tenancy"));
+    assert.ok(merged.includes("tenant_id"));
+  });
 });
 
 describe("detectBenchmarkDocFallback", () => {

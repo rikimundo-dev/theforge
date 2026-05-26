@@ -447,16 +447,16 @@ export class SessionsService {
     });
     const cleanedMddPart = hasMdd ? this.parser.cleanDocumentContent(mddSplit!.mddPart) : "";
     const finalMdd = hasMdd ? this.parser.mergeMddSectionOrUseFull(options?.currentMddContent, cleanedMddPart) : undefined;
+    const finalDbga = await this.resolveDbgaContentForReturn(
+      userMessage,
+      options,
+      dbgaDocPart,
+    );
     return {
       session: updatedSession,
       mddContent: finalMdd && finalMdd.length > 0 ? finalMdd : undefined,
       uxUiGuideContent: hasUx ? this.parser.mergeUxUiGuideSectionOrUseFull(options?.currentUxUiGuideContent, this.parser.cleanDocumentContent(uxDocPart!)) : undefined,
-      dbgaContent: dbgaDocPart
-        ? this.parser.mergeDbgaOrUseFull(
-            options?.currentDbgaContent,
-            this.parser.cleanDocumentContent(dbgaDocPart),
-          )
-        : undefined,
+      dbgaContent: finalDbga,
       phase0SummaryContent: hasPhase0
         ? this.parser.mergePhase0OrUseFull(
             undefined,
@@ -757,17 +757,17 @@ export class SessionsService {
     });
     const cleanedMddPart = hasMdd ? this.parser.cleanDocumentContent(mddSplit!.mddPart) : "";
     const finalMdd = hasMdd ? this.parser.mergeMddSectionOrUseFull(options?.currentMddContent, cleanedMddPart) : undefined;
+    const finalDbga = await this.resolveDbgaContentForReturn(
+      userMessage,
+      options,
+      dbgaDocPart,
+    );
     yield {
       type: "done",
       session: updatedSession,
       mddContent: finalMdd && finalMdd.length > 0 ? finalMdd : undefined,
       uxUiGuideContent: hasUx ? this.parser.mergeUxUiGuideSectionOrUseFull(options?.currentUxUiGuideContent, this.parser.cleanDocumentContent(uxDocPart!)) : undefined,
-      dbgaContent: dbgaDocPart
-        ? this.parser.mergeDbgaOrUseFull(
-            options?.currentDbgaContent,
-            this.parser.cleanDocumentContent(dbgaDocPart),
-          )
-        : undefined,
+      dbgaContent: finalDbga,
       phase0SummaryContent: hasPhase0
         ? this.parser.mergePhase0OrUseFull(
             undefined,
@@ -1040,6 +1040,80 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
     });
     if (!row) throw new NotFoundException("Session not found");
     return row;
+  }
+
+  /**
+   * Segunda pasada cuando el stream/chat no trajo `---FIN_DBGA---` pero el usuario pidió cambios.
+   * Usa el mismo prompt de refinado (BENCHMARK_REFINE) con el DBGA actual en system.
+   */
+  private async resolveDbgaContentForReturn(
+    userMessage: string,
+    options: { activeTab?: string; currentDbgaContent?: string } | undefined,
+    dbgaDocPart: string | undefined,
+  ): Promise<string | undefined> {
+    let merged = dbgaDocPart
+      ? this.parser.mergeDbgaOrUseFull(
+          options?.currentDbgaContent,
+          this.parser.cleanDocumentContent(dbgaDocPart),
+        )
+      : undefined;
+    const tab = (options?.activeTab ?? "mdd").trim();
+    const current = options?.currentDbgaContent?.trim() ?? "";
+    if ((!merged || merged.length === 0) && tab === "benchmark" && userMessage.trim() && current) {
+      const refined = await this.refineDbgaFromUserRequest(userMessage, current);
+      if (refined) {
+        merged = refined;
+        console.log("[Sessions] refineDbgaFromUserRequest aplicado, length:", refined.length);
+      }
+    }
+    return merged && merged.length > 0 ? merged : undefined;
+  }
+
+  async refineDbgaFromUserRequest(
+    userMessage: string,
+    currentDbga: string,
+  ): Promise<string | null> {
+    const msg = userMessage.trim();
+    const current = currentDbga.trim();
+    if (!msg || !current) return null;
+    try {
+      const response = await this.ai.generateResponse(msg, [], {
+        activeTab: "benchmark",
+        currentDbgaContent: current,
+      });
+      return this.extractMergedDbgaFromModelResponse(response, current);
+    } catch (err) {
+      console.warn("[Sessions] refineDbgaFromUserRequest failed:", err);
+      return null;
+    }
+  }
+
+  private extractMergedDbgaFromModelResponse(
+    response: string,
+    currentDbga?: string,
+  ): string | null {
+    const trimmed = response?.trim() ?? "";
+    if (!trimmed) return null;
+
+    const finIdx = trimmed.indexOf("---FIN_DBGA---");
+    const withoutFin = finIdx >= 0 ? trimmed.slice(0, finIdx).trim() : trimmed;
+
+    const split =
+      this.parser.splitDbgaAndChat(trimmed) ??
+      this.parser.detectBenchmarkDocFallback(withoutFin) ??
+      this.parser.detectBenchmarkDocFallback(trimmed);
+
+    let docPart = split?.docPart?.trim();
+    if (!docPart && withoutFin.length >= 800) {
+      docPart = withoutFin;
+    }
+    if (!docPart) return null;
+
+    const merged = this.parser.mergeDbgaOrUseFull(
+      currentDbga,
+      this.parser.cleanDocumentContent(docPart),
+    );
+    return merged.length > 0 ? merged : null;
   }
 
   /**

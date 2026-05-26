@@ -241,8 +241,13 @@ export class AiOrchestratorService {
     }
     if (!updatedSession) throw new NotFoundException("Session not found after chat");
 
-    // Fallback: DBGA solo en chat (sin ---FIN_DBGA---)
-    if (dbgaFromResponse == null && activeTab?.trim() === "benchmark" && message.trim()) {
+    // Fallback: el modelo respondió solo en chat sin ---FIN_DBGA---
+    if (
+      dbgaFromResponse == null &&
+      activeTab?.trim() === "benchmark" &&
+      message.trim() &&
+      (currentDbga?.trim() ?? "").length > 0
+    ) {
       const log = (updatedSession.chatLog as ChatMessage[]) ?? [];
       const lastAsst = [...log]
         .reverse()
@@ -257,14 +262,14 @@ export class AiOrchestratorService {
           console.log("[Orchestrator] salvage DBGA desde chat, length:", salvaged.length);
         }
       }
-      if (dbgaFromResponse == null && lastAsst && lastAsst.content.length > 100) {
-        const fallbackDoc = await this.regenerateDbgaFromChatFallback(
+      if (dbgaFromResponse == null) {
+        const refined = await this.sessions.refineDbgaFromUserRequest(
           message,
-          currentDbga,
+          currentDbga!.trim(),
         );
-        if (fallbackDoc) {
-          dbgaFromResponse = fallbackDoc;
-          console.log("[Orchestrator] fallback regenero dbgaContent, length:", fallbackDoc.length);
+        if (refined) {
+          dbgaFromResponse = refined;
+          console.log("[Orchestrator] refineDbgaFromUserRequest, length:", refined.length);
         }
       }
     }
@@ -485,7 +490,12 @@ export class AiOrchestratorService {
       if (msg.type === "chunk") {
         yield { event: "chunk", data: { content: msg.content } };
       } else {
-        if ((msg as any).dbgaContent == null && activeTab?.trim() === "benchmark" && message.trim()) {
+        if (
+          (msg as any).dbgaContent == null &&
+          activeTab?.trim() === "benchmark" &&
+          message.trim() &&
+          (currentDbga?.trim() ?? "").length > 0
+        ) {
           const log = ((msg as any).session?.chatLog ?? []) as ChatMessage[];
           const lastAsst = [...log]
             .reverse()
@@ -500,11 +510,17 @@ export class AiOrchestratorService {
               console.log("[Orchestrator] salvage DBGA en stream, length:", salvaged.length);
             }
           }
-          if ((msg as any).dbgaContent == null && lastAsst && lastAsst.content.length > 100) {
-            const fallbackDoc = await this.regenerateDbgaFromChatFallback(message, currentDbga);
-            if (fallbackDoc) {
-              (msg as any).dbgaContent = fallbackDoc;
-              console.log("[Orchestrator] fallback regeneró dbgaContent en stream, length:", fallbackDoc.length);
+          if ((msg as any).dbgaContent == null) {
+            const refined = await this.sessions.refineDbgaFromUserRequest(
+              message,
+              currentDbga!.trim(),
+            );
+            if (refined) {
+              (msg as any).dbgaContent = refined;
+              console.log(
+                "[Orchestrator] refineDbgaFromUserRequest en stream, length:",
+                refined.length,
+              );
             }
           }
         }
@@ -669,46 +685,4 @@ export class AiOrchestratorService {
     };
   }
 
-  /**
-   * Fallback regeneración DBGA cuando el modelo principal (DeepSeek) responde
-   * conversacionalmente sin emitir ---FIN_DBGA---.
-   * Llama al mismo LLM con un prompt estricto que fuerza la salida del documento completo.
-   */
-  private async regenerateDbgaFromChatFallback(
-    userMessage: string,
-    currentDbga: string | undefined,
-  ): Promise<string | null> {
-    try {
-      const prompt = `El usuario pidió modificar el DBGA.
-
-Mensaje del usuario: "${userMessage.slice(0, 2000)}"
-
-INSTRUCCIÓN: Genera el DBGA COMPLETO actualizado aplicando los cambios solicitados.
-NO agregues saludos, ni explicaciones, ni "He añadido...".
-Devuelve SOLO el contenido del documento en markdown.
-TERMINA con ---FIN_DBGA---
-
-Documento DBGA actual:
----
-${(currentDbga ?? "").trim().slice(0, 12000)}
----`;
-
-      const response = await this.ai.generateResponse(prompt, [], {
-        systemPrompt: "Eres un generador de documentos preciso. Devuelve SOLO el documento completo actualizado. Termina con ---FIN_DBGA---. Sin conversación, sin saludos, sin explicaciones.",
-      });
-
-      const finIdx = response.indexOf("---FIN_DBGA---");
-      if (finIdx >= 0) {
-        return response.slice(0, finIdx).trim();
-      }
-      // Si no encontró el delimitador pero parece documento completo, devolverlo igual
-      if (response.length > 1000) {
-        return response.trim();
-      }
-      return null;
-    } catch (err) {
-      console.error("[Orchestrator] Fallback regeneration error:", err);
-      return null;
-    }
-  }
 }
