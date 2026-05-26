@@ -1,10 +1,33 @@
-import { useState } from "react";
-import type { ComponentPropsWithoutRef } from "react";
+import { useState, type ComponentPropsWithoutRef } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  ArrowRight,
+  BookOpen,
+  Boxes,
+  Brain,
+  CheckSquare,
+  ClipboardList,
+  FileText,
+  GitBranch,
+  HelpCircle,
+  LayoutTemplate,
+  ListTodo,
+  Palette,
+  Plug,
+  Scale,
+  Server,
+  Sparkles,
+  Target,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  Button,
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui";
@@ -20,15 +43,32 @@ type WorkshopHelpModalProps = {
 interface HelpSection {
   id: string;
   label: string;
-  icon: string;
   content: string;
 }
+
+const SECTION_ICONS: Record<string, LucideIcon> = {
+  manual: BookOpen,
+  sdd: Brain,
+  mdd: FileText,
+  spec: ClipboardList,
+  brd: Target,
+  "to-be": Sparkles,
+  architecture: Boxes,
+  "use-cases": Users,
+  "user-stories": ListTodo,
+  blueprint: LayoutTemplate,
+  "ux-ui-guide": Palette,
+  "api-contracts": Plug,
+  "logic-flows": GitBranch,
+  tasks: CheckSquare,
+  infra: Server,
+  adrs: Scale,
+};
 
 const SECTIONS: HelpSection[] = [
   {
     id: "manual",
     label: "Manual de TheForge",
-    icon: "📘",
     content: [
       "# Manual de TheForge",
       "",
@@ -103,7 +143,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "sdd",
     label: "Specification Driven Development",
-    icon: "🧠",
     content: [
       "# Specification Driven Development (SDD)",
       "",
@@ -205,7 +244,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "mdd",
     label: "MDD — Master Design Document",
-    icon: "📄",
     content: [
       "# MDD — Master Design Document",
       "",
@@ -249,7 +287,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "spec",
     label: "Spec — Especificación Funcional",
-    icon: "📄",
     content: [
       "# Spec — Especificación Funcional / Técnica",
       "",
@@ -285,7 +322,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "brd",
     label: "BRD — Business Requirements Document",
-    icon: "📄",
     content: [
       "# BRD — Business Requirements Document",
       "",
@@ -319,7 +355,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "to-be",
     label: "To-Be — Manual de Estado Deseado",
-    icon: "📄",
     content: [
       "# To-Be — Manual de Estado Deseado",
       "",
@@ -354,7 +389,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "architecture",
     label: "Arquitectura",
-    icon: "📄",
     content: [
       "# Arquitectura de Software",
       "",
@@ -386,7 +420,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "use-cases",
     label: "Casos de Uso",
-    icon: "📄",
     content: [
       "# Casos de Uso",
       "",
@@ -418,7 +451,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "user-stories",
     label: "H. de Usuario",
-    icon: "📄",
     content: [
       "# Historias de Usuario",
       "",
@@ -449,7 +481,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "blueprint",
     label: "Blueprint",
-    icon: "📄",
     content: [
       "# Blueprint",
       "",
@@ -483,7 +514,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "ux-ui-guide",
     label: "Design System",
-    icon: "🎨",
     content: [
       "# Design System",
       "",
@@ -515,7 +545,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "api-contracts",
     label: "Contratos de API",
-    icon: "📄",
     content: [
       "# Contratos de API",
       "",
@@ -547,7 +576,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "logic-flows",
     label: "Flujos de Lógica",
-    icon: "📄",
     content: [
       "# Flujos de Lógica",
       "",
@@ -578,7 +606,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "tasks",
     label: "Tasks",
-    icon: "📄",
     content: [
       "# Tasks — Desglose de Trabajo",
       "",
@@ -610,7 +637,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "infra",
     label: "Infraestructura",
-    icon: "📄",
     content: [
       "# Infraestructura",
       "",
@@ -643,7 +669,6 @@ const SECTIONS: HelpSection[] = [
   {
     id: "adrs",
     label: "ADRs — Architectural Decision Records",
-    icon: "📄",
     content: [
       "# ADRs — Architectural Decision Records",
       "",
@@ -675,7 +700,56 @@ const SECTIONS: HelpSection[] = [
   },
 ];
 
+const NAV_GROUPS: { label: string; sectionIds: string[] }[] = [
+  { label: "Guía", sectionIds: ["manual"] },
+  { label: "Metodología", sectionIds: ["sdd"] },
+  {
+    label: "Documentos",
+    sectionIds: [
+      "mdd",
+      "spec",
+      "brd",
+      "to-be",
+      "architecture",
+      "use-cases",
+      "user-stories",
+      "blueprint",
+      "ux-ui-guide",
+      "api-contracts",
+      "logic-flows",
+      "tasks",
+      "infra",
+      "adrs",
+    ],
+  },
+];
+
+const SECTION_BY_ID = new Map(SECTIONS.map((s) => [s.id, s]));
+
 /* ───── Markdown renderer components ───── */
+
+function FlowStepPills({ text }: { text: string }) {
+  const steps = text.split(/\s*→\s*/).map((s) => s.trim()).filter(Boolean);
+  if (steps.length < 2) return null;
+  return (
+    <div
+      className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_22%,var(--card))] p-3"
+      role="list"
+      aria-label="Secuencia del flujo"
+    >
+      {steps.map((step, index) => (
+        <span key={`${step}-${index}`} className="inline-flex items-center gap-1.5" role="listitem">
+          {index > 0 ? (
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
+          ) : null}
+          <span className="rounded-full border border-[color-mix(in_oklch,var(--primary)_25%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] px-2.5 py-1 font-mono text-[11px] font-medium text-[var(--foreground)]">
+            {step}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const mdComponents = {
   h1: (props: ComponentPropsWithoutRef<"h1">) => (
@@ -714,6 +788,10 @@ const mdComponents = {
           {children}
         </code>
       );
+    }
+    const inlineText = String(children ?? "").replace(/\n/g, " ").trim();
+    if (inlineText.includes("→")) {
+      return <FlowStepPills text={inlineText} />;
     }
     return (
       <code
@@ -755,74 +833,155 @@ const mdComponents = {
   ),
 };
 
+function HelpNavButton({
+  section,
+  active,
+  onSelect,
+}: {
+  section: HelpSection;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const Icon = SECTION_ICONS[section.id] ?? FileText;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full min-w-0 items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors",
+        active
+          ? "bg-[color-mix(in_oklch,var(--primary)_14%,var(--sidebar))] text-[var(--primary)] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]"
+          : "text-[var(--muted-foreground)] hover:bg-[color-mix(in_oklch,var(--muted)_45%,transparent)] hover:text-[var(--foreground)]",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+          active
+            ? "bg-[color-mix(in_oklch,var(--primary)_18%,var(--card))] text-[var(--primary)]"
+            : "bg-[color-mix(in_oklch,var(--muted)_55%,var(--card))] text-[var(--muted-foreground)]",
+        )}
+        aria-hidden
+      >
+        <Icon className="h-4 w-4" strokeWidth={2} />
+      </span>
+      <span className="min-w-0 flex-1 truncate leading-snug">{section.label}</span>
+    </button>
+  );
+}
+
+function HelpSidebar({
+  activeSection,
+  onSelectSection,
+}: {
+  activeSection: string;
+  onSelectSection: (id: string) => void;
+}) {
+  return (
+    <nav
+      className="flex min-h-0 flex-col gap-1 overflow-y-auto p-2 [scrollbar-gutter:stable] sm:max-h-[min(62vh,560px)]"
+      aria-label="Secciones de ayuda"
+    >
+      {NAV_GROUPS.map((group) => (
+        <div key={group.label} className="min-w-0">
+          <p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted-foreground)] first:pt-1">
+            {group.label}
+          </p>
+          <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
+            {group.sectionIds.map((id) => {
+              const section = SECTION_BY_ID.get(id);
+              if (!section) return null;
+              return (
+                <li key={id}>
+                  <HelpNavButton
+                    section={section}
+                    active={id === activeSection}
+                    onSelect={() => onSelectSection(id)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 /* ───── Component ───── */
 
 export default function WorkshopHelpModal({ open, onClose }: WorkshopHelpModalProps) {
   const [activeSection, setActiveSection] = useState(SECTIONS[0]!.id);
 
-  const section: HelpSection = SECTIONS.find((s) => s.id === activeSection) ?? SECTIONS[0]!;
+  const section: HelpSection = SECTION_BY_ID.get(activeSection) ?? SECTIONS[0]!;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent
+        size="xl"
         showClose
-        className={cn(
-          "flex max-h-[min(90vh,900px)] w-[calc(100vw-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0",
-          "border-[var(--border)] bg-[var(--card)] sm:rounded-[var(--radius)]",
-        )}
+        className="flex max-h-[min(92vh,900px)] w-[calc(100vw-1.25rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
       >
-        <DialogHeader className="shrink-0 space-y-0 border-b border-[var(--border)] px-6 pb-4 pt-6 pr-14 text-left">
-          <DialogTitle id="workshop-help-title">
-            Ayuda — TheForge
-          </DialogTitle>
-        </DialogHeader>
+        <div className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--primary)_9%,var(--card))] px-5 pb-4 pt-5 sm:px-6 sm:pb-5 sm:pt-6">
+          <DialogHeader className="space-y-3 text-left">
+            <div className="flex items-start gap-3 pr-6">
+              <span
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_oklch,var(--primary)_16%,var(--card))] shadow-[inset_0_0_0_1px_color-mix(in_oklch,var(--primary)_28%,transparent)]"
+                aria-hidden
+              >
+                <HelpCircle className="h-5 w-5 text-[var(--primary)]" strokeWidth={2} />
+              </span>
+              <div className="min-w-0 space-y-1">
+                <DialogTitle
+                  id="workshop-help-title"
+                  className="text-lg font-semibold tracking-tight text-[var(--foreground)] sm:text-xl"
+                >
+                  Ayuda — TheForge
+                </DialogTitle>
+                <DialogDescription className="text-sm leading-relaxed text-[var(--muted-foreground)]">
+                  Manual del workshop, metodología SDD y referencia de cada documento del flujo.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+        </div>
 
         <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
-          {/* ── Sidebar (desktop) / Select (mobile, sticky) ── */}
-          <nav className="shrink-0 border-b border-[var(--border)] sm:w-56 sm:border-b-0 sm:border-r sm:overflow-y-auto">
-            {/* Mobile: select — sticky so user can switch sections without scrolling up */}
+          <div className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_14%,var(--card))] sm:w-60 sm:border-b-0 sm:border-r lg:w-64">
             <select
               value={activeSection}
               onChange={(e) => setActiveSection(e.target.value)}
-              className="sticky top-0 z-10 block w-full border-0 border-b border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm text-[var(--foreground)] outline-none focus:ring-0 sm:hidden"
+              className={cn(
+                "sticky top-0 z-10 m-2 block w-[calc(100%-1rem)] rounded-md border border-[var(--input-border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm sm:hidden",
+                "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]",
+              )}
               aria-label="Sección de ayuda"
             >
               {SECTIONS.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.icon} {s.label}
+                  {s.label}
                 </option>
               ))}
             </select>
+            <div className="hidden sm:block">
+              <HelpSidebar activeSection={activeSection} onSelectSection={setActiveSection} />
+            </div>
+          </div>
 
-            {/* Desktop: sidebar list */}
-            <ul className="hidden flex-col gap-0.5 p-2 sm:flex">
-              {SECTIONS.map((s) => (
-                <li key={s.id}>
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection(s.id)}
-                    className={cn(
-                      "w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-                      s.id === activeSection
-                        ? "bg-[color-mix(in_oklch,var(--primary)_14%,transparent)] text-[var(--primary)]"
-                        : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]",
-                    )}
-                  >
-                    <span className="mr-2">{s.icon}</span>
-                    {s.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </nav>
-
-          {/* ── Content ── */}
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4 scroll-smooth [scrollbar-color:color-mix(in_oklch,var(--muted-foreground)_55%,transparent)_transparent]">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-              {section.content}
-            </ReactMarkdown>
+          <div className="relative min-h-0 min-w-0 flex-1">
+            <div className="max-h-[min(62vh,560px)] overflow-y-auto px-5 py-4 scroll-smooth sm:px-6 sm:py-5 [scrollbar-gutter:stable]">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                {section.content}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
+
+        <DialogFooter className="shrink-0 gap-2 border-t border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_18%,var(--card))] px-5 py-3 sm:px-6">
+          <Button type="button" variant="default" className="w-full sm:w-auto" onClick={onClose}>
+            Entendido
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

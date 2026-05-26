@@ -27,8 +27,16 @@ import UsersView from "./views/UsersView";
 import { CreateProjectWizardDialog } from "./components/CreateProjectWizardDialog";
 import { ProjectFolderTile } from "./components/ProjectFolderTile";
 import { DashboardSidebar } from "./components/DashboardSidebar";
+import { DashboardPanelHeader } from "./components/DashboardPanelHeader";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { apiFetch, clearAccessToken, getAccessToken, API_BASE, getStoredUser } from "./utils/apiClient";
+import {
+  apiFetch,
+  clearAccessToken,
+  getAccessToken,
+  API_BASE,
+  getStoredUser,
+  refreshStoredUserFromApi,
+} from "./utils/apiClient";
 import { cn } from "./lib/utils";
 import {
   Button,
@@ -87,13 +95,6 @@ interface TheForgeRepository {
 }
 
 const SIDEBAR_COLLAPSED_KEY = "theforge-sidebar-collapsed";
-
-const PANEL_FLOW_STEPS = [
-  "Entrevista proactiva",
-  "MDD",
-  "Semáforo",
-  "Estimación",
-] as const;
 
 function readSidebarCollapsed(): boolean {
   try {
@@ -332,6 +333,11 @@ export default function App() {
     const allowed = new Set(displayedProjects.map((p) => p.id));
     setSelectedProjectIds((prev) => prev.filter((id) => allowed.has(id)));
   }, [displayedProjects]);
+
+  useEffect(() => {
+    if (!authed) return;
+    void refreshStoredUserFromApi();
+  }, [authed]);
 
   useEffect(() => {
     if (!authed || workshopProject) return;
@@ -722,85 +728,22 @@ export default function App() {
         ) : (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-[max(1.5rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto w-full max-w-[min(100%,88rem)] space-y-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
-        <header className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--foreground-subtle)]">
-              Panel
-            </p>
-            <nav aria-label="Flujo del panel" className="mt-1.5">
-              <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-[var(--foreground-muted)] sm:text-sm">
-                {PANEL_FLOW_STEPS.map((step, index) => (
-                  <li key={step} className="flex items-center gap-1.5">
-                    {index > 0 ? (
-                      <span className="shrink-0 text-[var(--foreground-subtle)]" aria-hidden>
-                        →
-                      </span>
-                    ) : null}
-                    <span className="whitespace-nowrap">{step}</span>
-                  </li>
-                ))}
-              </ol>
-            </nav>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <Button
-              type="button"
-              size="icon"
-              className="touch-manipulation sm:hidden"
-              onClick={() => setShowCreateWizard(true)}
-              disabled={loading}
-              aria-label="Crear nuevo proyecto"
-              title="Crear nuevo proyecto"
-            >
-              <Plus className="h-4 w-4 shrink-0" aria-hidden />
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="touch-manipulation sm:hidden"
-              onClick={() => void loadProjects()}
-              disabled={loading}
-              aria-label="Refrescar lista de proyectos"
-              title="Refrescar"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
-            </Button>
-            <Button
-              type="button"
-              className="hidden w-full touch-manipulation min-h-11 sm:inline-flex sm:w-auto sm:min-h-10"
-              onClick={() => setShowCreateWizard(true)}
-              disabled={loading}
-            >
-              <Plus className="h-4 w-4 shrink-0" aria-hidden />
-              Crear nuevo proyecto
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="hidden w-full touch-manipulation min-h-11 sm:inline-flex sm:w-auto sm:min-h-10"
-              onClick={() => void loadProjects()}
-              disabled={loading}
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RefreshCw className="h-4 w-4" aria-hidden />}
-              Refrescar
-            </Button>
-          </div>
-        </header>
+        <DashboardPanelHeader
+          loading={loading}
+          onCreateProject={() => setShowCreateWizard(true)}
+          onRefresh={() => void loadProjects()}
+        />
 
         <Card id="dashboard-projects">
-          <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
-            <div className="min-w-0 w-full lg:max-w-xl lg:flex-1">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex min-h-9 min-w-0 w-full shrink-0 items-center sm:max-w-xl sm:flex-1">
               <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <FolderOpen className="h-5 w-5 shrink-0 text-[var(--primary)]" aria-hidden />
                 Proyectos
               </CardTitle>
-              <p className="mt-1.5 text-sm leading-relaxed text-[var(--foreground-muted)]">
-                Carpetas estilo Drive: pulsa una carpeta para abrir el taller. Si eres administrador, marca las casillas y usa la barra inferior para borrar en lote.
-              </p>
             </div>
             <div
-              className="flex w-full shrink-0 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] lg:w-auto lg:flex-wrap lg:overflow-visible [&::-webkit-scrollbar]:hidden"
+              className="flex w-full shrink-0 items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] sm:w-auto sm:flex-wrap sm:overflow-visible sm:pb-0 [&::-webkit-scrollbar]:hidden"
               role="tablist"
               aria-label="Filtrar proyectos"
             >

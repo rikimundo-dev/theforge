@@ -1,8 +1,69 @@
 import type {
+  ProviderCatalogEntry,
   ProviderInstanceSummary,
   UserAISettings,
   UserProviderConfigSummary,
 } from "@/types/user-providers";
+
+export type DisplayVisionModelSource =
+  | "configured"
+  | "extras"
+  | "catalog-default"
+  | "chat-fallback"
+  | null;
+
+export interface DisplayVisionModel {
+  supportsVision: boolean;
+  model: string | null;
+  source: DisplayVisionModelSource;
+}
+
+const VISION_HINT_BY_SOURCE: Record<
+  Exclude<DisplayVisionModelSource, null>,
+  string
+> = {
+  configured: "",
+  extras: "",
+  "catalog-default": "Predeterminado del catálogo",
+  "chat-fallback": "Mismo modelo que el chat",
+};
+
+export function visionModelHint(source: DisplayVisionModelSource): string | null {
+  if (!source) return null;
+  const hint = VISION_HINT_BY_SOURCE[source];
+  return hint || null;
+}
+
+/** Mirrors API `resolveVisionModelForRuntime` for read-only UI. */
+export function resolveDisplayVisionModel(
+  _providerType: string | null,
+  chatModel: string | null,
+  visionModel: string | null | undefined,
+  extras: Record<string, unknown> | null | undefined,
+  catalogEntry: ProviderCatalogEntry | undefined,
+): DisplayVisionModel {
+  if (!catalogEntry?.supportsVision) {
+    return { supportsVision: false, model: null, source: null };
+  }
+  const configured = visionModel?.trim();
+  if (configured) {
+    return { supportsVision: true, model: configured, source: "configured" };
+  }
+  const legacyExtras =
+    typeof extras?.visionModel === "string" ? extras.visionModel.trim() : "";
+  if (legacyExtras) {
+    return { supportsVision: true, model: legacyExtras, source: "extras" };
+  }
+  const catalogDefault = catalogEntry.defaultVisionModel?.trim();
+  if (catalogDefault) {
+    return { supportsVision: true, model: catalogDefault, source: "catalog-default" };
+  }
+  const chat = chatModel?.trim();
+  if (chat) {
+    return { supportsVision: true, model: chat, source: "chat-fallback" };
+  }
+  return { supportsVision: true, model: null, source: null };
+}
 
 export type EffectiveProviderSource =
   | "selected-instance"

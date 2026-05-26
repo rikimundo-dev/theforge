@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Input } from "./ui/Input";
 import {
+  Badge,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -752,7 +753,7 @@ export function DashboardSidebar({
                       <div className="relative">
                         {!rail ? (
                           <span
-                            className="pointer-events-none absolute bottom-1 left-[0.8125rem] top-1 w-px bg-[color-mix(in_oklch,var(--sidebar-border)_92%,transparent)]"
+                            className="pointer-events-none absolute bottom-1 left-[0.8125rem] top-1 w-0 border-l border-dotted border-[color-mix(in_oklch,var(--sidebar-border)_92%,transparent)]"
                             aria-hidden
                           />
                         ) : null}
@@ -898,9 +899,12 @@ export function DashboardSidebar({
                 >
                   <FolderOpen className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">Proyectos</span>
-                  <span className="shrink-0 tabular-nums text-[11px] text-[var(--muted-foreground)]">
+                  <Badge
+                    variant="secondary"
+                    className="h-5 min-w-5 shrink-0 justify-center px-1.5 py-0 text-[10px] font-semibold tabular-nums"
+                  >
                     {sortedDashboardProjects.length}
-                  </span>
+                  </Badge>
                   <ChevronDown
                     className={cn(
                       "h-4 w-4 shrink-0 text-[var(--muted-foreground)] transition-transform duration-200",
@@ -935,7 +939,7 @@ export function DashboardSidebar({
                       <div className="relative w-full">
                         {!rail ? (
                           <span
-                            className="pointer-events-none absolute bottom-1 left-[0.8125rem] top-1 w-px bg-[color-mix(in_oklch,var(--sidebar-border)_92%,transparent)]"
+                            className="pointer-events-none absolute bottom-1 left-[0.8125rem] top-1 w-0 border-l border-dotted border-[color-mix(in_oklch,var(--sidebar-border)_92%,transparent)]"
                             aria-hidden
                           />
                         ) : null}

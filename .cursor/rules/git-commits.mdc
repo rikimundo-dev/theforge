@@ -1,24 +1,47 @@
 ---
+
 description: Git commits — sin trailers Co-authored-by de IA (obligatorio)
+
 alwaysApply: true
+
 ---
+
+ 
 
 # Git commits
 
+ 
+
 ## Co-authored-by de agentes IA (OBLIGATORIO — siempre)
 
-**Prohibido en todo commit** añadir `Co-authored-by` de Cursor, Copilot u otro agente, salvo petición **explícita** del usuario.
+ 
+
+**Prohibido en todo commit** añadir `Co-authored-by` o `Made with Cursor` de Cursor, Copilot u otro agente, salvo petición **explícita** del usuario.
+
+ 
 
 - No incluir esa línea en `git commit -m`, HEREDOC ni mensajes de amend/rebase.
+
 - Si el IDE la inyecta, reescribe el mensaje sin ella antes de push.
+
 - El hook `.githooks/prepare-commit-msg` la elimina al commitear; activar una vez: `npm run setup:githooks`.
+
+ 
 
 Ejemplos prohibidos:
 
+ 
+
 ```
+
 Co-authored-by: Cursor <cursoragent@cursor.com>
+
 Co-authored-by: GitHub Copilot <...>
+
 Co-authored-by: <cualquier agente IA> <agent@...>
+
+Made with Cursor
+
 ```
 
 Los commits deben listar solo autor(es) humano(s) previstos.
