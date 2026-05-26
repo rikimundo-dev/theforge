@@ -89,6 +89,7 @@ import {
   TooltipTrigger,
 } from "../components/ui";
 import { WorkshopFlowOrderModal } from "../components/WorkshopFlowOrderModal";
+import { WorkshopNewStageModal } from "../components/WorkshopNewStageModal";
 import {
   AiGenerationPanel,
   AiGenerativeDots,
@@ -914,9 +915,6 @@ export default function WorkshopView({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [flowOrderModalOpen, setFlowOrderModalOpen] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
-  const [newStageName, setNewStageName] = useState("");
-  /** `""` = MDD en blanco; si no vacío, copia desde esa etapa */
-  const [copyMddSourceStageId, setCopyMddSourceStageId] = useState<string>("");
   const initialPanelSetForProject = useRef<string | null>(null);
   /** Flujo legacy: descripción y respuestas locales antes de enviar */
   const [legacyDescriptionInput, setLegacyDescriptionInput] = useState("");
@@ -1581,11 +1579,7 @@ export default function WorkshopView({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <WorkshopHeaderIconButton
-                      onClick={() => {
-                        setNewStageName("");
-                        setCopyMddSourceStageId(activeStageId ?? "");
-                        setShowStageModal(true);
-                      }}
+                      onClick={() => setShowStageModal(true)}
                       aria-label="Nueva etapa"
                     >
                       <Plus className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
@@ -1744,75 +1738,13 @@ export default function WorkshopView({
         ) : null}
       </header>
 
-      {showStageModal && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="new-stage-title"
-        >
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-lg shadow-xl max-w-md w-full p-5 space-y-4">
-            <h2 id="new-stage-title" className="text-lg font-semibold text-[var(--primary)]">
-              Nueva etapa
-            </h2>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Se activará la nueva etapa (las demás pasan a SUPERSEDED). Puedes partir de un MDD en blanco o copiar uno de una etapa previa.
-            </p>
-            <div>
-              <label className="block text-xs text-[var(--foreground-subtle)] mb-1">Nombre</label>
-              <input
-                type="text"
-                value={newStageName}
-                onChange={(e) => setNewStageName(e.target.value)}
-                placeholder="Ej. Fase 2 — API"
-                className="w-full bg-[var(--background)] border border-[var(--border)] rounded px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label htmlFor="copy-mdd-from-stage" className="block text-xs text-[var(--foreground-subtle)] mb-1">
-                Copiar MDD desde
-              </label>
-              <select
-                id="copy-mdd-from-stage"
-                value={copyMddSourceStageId}
-                onChange={(e) => setCopyMddSourceStageId(e.target.value)}
-                className="w-full bg-[var(--background)] border border-[var(--border)] rounded px-3 py-2 text-sm text-[var(--foreground)]"
-              >
-                <option value="">Sin copiar (MDD vacío)</option>
-                {workshopStagesList.map((st) => (
-                  <option key={st.id} value={st.id}>
-                    #{st.ordinal} {st.name ?? st.key ?? st.id.slice(0, 8)}
-                    {st.id === activeStageId ? " (vista actual)" : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowStageModal(false)}
-                className="px-3 py-1.5 rounded text-[var(--muted-foreground)] hover:bg-[var(--muted)] text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  const res = await createWorkshopStage({
-                    name: newStageName.trim() || undefined,
-                    copyMddFromStageId: copyMddSourceStageId.trim() || undefined,
-                    copyLegacyChangeFromStageId: copyMddSourceStageId.trim() || undefined,
-                  });
-                  if (res) setShowStageModal(false);
-                }}
-                className="px-3 py-1.5 rounded bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] text-sm"
-              >
-                Crear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <WorkshopNewStageModal
+        open={showStageModal}
+        onOpenChange={setShowStageModal}
+        stages={workshopStagesList}
+        activeStageId={activeStageId}
+        onCreate={createWorkshopStage}
+      />
 
       <WorkshopHelpModal open={showHelpModal} onClose={() => setShowHelpModal(false)} />
       <WorkshopFlowOrderModal

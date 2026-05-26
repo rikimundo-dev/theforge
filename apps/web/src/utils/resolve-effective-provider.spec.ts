@@ -1,11 +1,30 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { resolveEffectiveProvider } from "./resolve-effective-provider.js";
+import {
+  resolveDisplayVisionModel,
+  resolveEffectiveProvider,
+  visionModelHint,
+} from "./resolve-effective-provider.js";
 import type {
+  ProviderCatalogEntry,
   ProviderInstanceSummary,
   UserAISettings,
   UserProviderConfigSummary,
 } from "@/types/user-providers";
+
+const openrouterCatalog: ProviderCatalogEntry = {
+  id: "openrouter",
+  label: "OpenRouter",
+  defaultChatModel: "nousresearch/hermes-3-llama-3.1-405b",
+  defaultEmbeddingModel: "openai/text-embedding-3-small",
+  defaultEmbeddingDimension: 1536,
+  defaultSttModel: "openai/whisper-1",
+  defaultVisionModel: "openai/gpt-4o",
+  defaultBaseUrl: "https://openrouter.ai/api/v1",
+  supportsEmbeddings: true,
+  supportsVision: true,
+  supportsStt: true,
+};
 
 const baseInstance = (
   overrides: Partial<ProviderInstanceSummary> & Pick<ProviderInstanceSummary, "id">,
@@ -90,5 +109,44 @@ describe("resolveEffectiveProvider", () => {
     const result = resolveEffectiveProvider([], settings, configs);
     assert.equal(result.source, "personal-byok");
     assert.equal(result.personalConfig?.provider, "openai");
+  });
+});
+
+describe("resolveDisplayVisionModel", () => {
+  it("uses catalog default when instance vision is empty", () => {
+    const result = resolveDisplayVisionModel(
+      "openrouter",
+      "openai/gpt-oss-120b:free",
+      null,
+      null,
+      openrouterCatalog,
+    );
+    assert.equal(result.supportsVision, true);
+    assert.equal(result.model, "openai/gpt-4o");
+    assert.equal(result.source, "catalog-default");
+    assert.equal(visionModelHint(result.source), "Predeterminado del catálogo");
+  });
+
+  it("prefers configured vision model", () => {
+    const result = resolveDisplayVisionModel(
+      "openrouter",
+      "openai/gpt-oss-120b:free",
+      "google/gemini-2.0-flash",
+      null,
+      openrouterCatalog,
+    );
+    assert.equal(result.model, "google/gemini-2.0-flash");
+    assert.equal(result.source, "configured");
+    assert.equal(visionModelHint(result.source), null);
+  });
+
+  it("returns unsupported for providers without vision", () => {
+    const result = resolveDisplayVisionModel("groq", "llama", null, null, {
+      ...openrouterCatalog,
+      id: "groq",
+      supportsVision: false,
+      defaultVisionModel: null,
+    });
+    assert.equal(result.supportsVision, false);
   });
 });
