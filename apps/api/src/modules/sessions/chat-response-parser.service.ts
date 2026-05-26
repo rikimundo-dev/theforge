@@ -44,6 +44,20 @@ export class ChatResponseParserService {
     return this.splitDocAndChat(response, "DBGA");
   }
 
+  splitPhase0AndChat(response: string): { docPart: string; chatPart: string } | null {
+    return this.splitDocAndChat(response, "PHASE0");
+  }
+
+  /** Full-replacement merge for Phase0 (documento completo, sin secciones numeradas). */
+  mergePhase0OrUseFull(currentPhase0: string | undefined, newPart: string): string {
+    const cleaned = newPart.trim();
+    if (!cleaned) return (currentPhase0 ?? "").trim();
+    const current = (currentPhase0 ?? "").trim();
+    const looksLikeFullDoc = cleaned.length >= 500;
+    if (looksLikeFullDoc) return cleaned;
+    return current || cleaned;
+  }
+
   /**
    * DBGA (Paso 0): el modelo suele mandar solo el fragmento nuevo + ---FIN_DBGA---.
    * Sin merge, eso reemplaza todo el benchmark y “borra” el documento.
@@ -217,7 +231,14 @@ export class ChatResponseParserService {
    */
   detectDocFallback(response: string, activeTab: string): { docPart: string; chatPart: string } | null {
     const trimmed = response?.trim();
-    if (!trimmed || trimmed.length < 200) return null;
+    if (!trimmed) return null;
+
+    if (activeTab === "benchmark") {
+      if (trimmed.length < 120) return null;
+      return this.detectBenchmarkDocFallback(trimmed);
+    }
+
+    if (trimmed.length < 200) return null;
 
     const HEADING_PATTERNS: Record<string, RegExp> = {
       architecture: /^#\s*(?:Arquitectura|Architecture)\b/im,
@@ -229,31 +250,94 @@ export class ChatResponseParserService {
       "logic-flows": /^#\s*(?:Flujos de L.gica|Logic Flows)\b/im,
       tasks: /^#\s*(?:Tareas|Tasks)\b/i,
       infra: /^#\s*(?:Infraestructura|Infrastructure|Infra(?![a-z]))(?:\s|$)/im,
-      benchmark: /^#\s*(?:Benchmark|Domain Benchmark|Análisis)\b/im,
       brd: /^#\s*(?:BRD|Business Requirements Document)\b/im,
+      phase0: /^#\s*(?:Fase 0|Phase 0|Especificador)/im,
+      mdd: /^#\s*(?:Master Design Document|MDD)\b/im,
     };
 
     const pattern = HEADING_PATTERNS[activeTab];
     if (!pattern) return null;
     const match = trimmed.match(pattern);
-    if (!match?.index) return null;
+    if (match?.index == null) return null;
 
-    const docStartIdx = match.index;
+    return this.splitDocSectionFromIndex(trimmed, match.index, activeTab);
+  }
+
+  /**
+   * DBGA / Fase 0: el modelo a veces omite ---FIN_DBGA--- o manda solo una sección nueva (## Integración).
+   */
+  detectBenchmarkDocFallback(trimmed: string): { docPart: string; chatPart: string } | null {
+    const titleRe =
+      /(?:^|\n)#\s*(?:Domain\s+Benchmark|Benchmark\s*&\s*Gap|Benchmark\b|Análisis)\b/i;
+    const titleMatch = trimmed.match(titleRe);
+    if (titleMatch?.index != null) {
+      const docStartIdx =
+        titleMatch.index + (titleMatch[0].startsWith("\n") ? 1 : 0);
+      return this.splitDocSectionFromIndex(trimmed, docStartIdx, "benchmark");
+    }
+
+    const sectionCount = (trimmed.match(/\n##\s+/g) ?? []).length;
+    const startsWithSection = /^##\s+/m.test(trimmed);
+    const integrationCue =
+      /\b(?:integraci[oó]n|OBP4?MO|tablas?\s+espejo|Gap\s+Analysis)\b/i.test(trimmed);
+    const minLen = integrationCue || startsWithSection ? 180 : 400;
+    const looksLikeDbgaBody =
+      trimmed.length >= minLen &&
+      (startsWithSection ||
+        sectionCount >= 2 ||
+        integrationCue);
+
+    if (!looksLikeDbgaBody) return null;
+
+    const { docPart, chatTail } = this.splitTrailingChatFromMarkdown(trimmed);
+    return {
+      docPart,
+      chatPart:
+        chatTail ||
+        "Benchmark actualizado. Revisa el panel de Fase 0 (DBGA).",
+    };
+  }
+
+  private splitTrailingChatFromMarkdown(text: string): { docPart: string; chatTail: string } {
+    const parts = text.split(/\n{2,}/);
+    if (parts.length < 2) return { docPart: text.trim(), chatTail: "" };
+    const last = parts[parts.length - 1]!.trim();
+    const looksLikeChat =
+      last.length > 0 &&
+      last.length <= 420 &&
+      !/^#{1,3}\s/m.test(last) &&
+      !/^[-*]\s/m.test(last) &&
+      !/^\|/.test(last);
+    if (!looksLikeChat) return { docPart: text.trim(), chatTail: "" };
+    const docPart = parts.slice(0, -1).join("\n\n").trim();
+    return docPart.length >= 200
+      ? { docPart, chatTail: last }
+      : { docPart: text.trim(), chatTail: "" };
+  }
+
+  private splitDocSectionFromIndex(
+    trimmed: string,
+    docStartIdx: number,
+    activeTab: string,
+  ): { docPart: string; chatPart: string } {
     const docSection = docStartIdx > 0 ? trimmed.slice(docStartIdx) : trimmed;
     const hrMatch = docSection.match(/\n\s*[-*_]{3,}\s*\n/);
-    const docPart = (hrMatch && hrMatch.index != null
-      ? docSection.slice(0, hrMatch.index)
-      : docSection
+    const docPart = (
+      hrMatch && hrMatch.index != null
+        ? docSection.slice(0, hrMatch.index)
+        : docSection
     ).trim();
 
-    const afterHr = hrMatch && hrMatch.index != null
-      ? docSection.slice(hrMatch.index + hrMatch[0].length).trim()
-      : "";
+    const afterHr =
+      hrMatch && hrMatch.index != null
+        ? docSection.slice(hrMatch.index + hrMatch[0].length).trim()
+        : "";
     const beforeDoc = docStartIdx > 0 ? trimmed.slice(0, docStartIdx).trim() : "";
     const label = activeTab.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    const chatPart = afterHr || beforeDoc
-      ? [beforeDoc, afterHr].filter(Boolean).join("\n\n")
-      : `${label} actualizado. Revisa el panel del documento.`;
+    const chatPart =
+      afterHr || beforeDoc
+        ? [beforeDoc, afterHr].filter(Boolean).join("\n\n")
+        : `${label} actualizado. Revisa el panel del documento.`;
 
     return { docPart, chatPart };
   }

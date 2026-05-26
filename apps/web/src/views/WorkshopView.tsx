@@ -76,6 +76,7 @@ import {
   WorkshopButtonIcon,
 } from "../components/WorkshopButtons";
 import { UxUiGuidePanel } from "../components/UxUiGuidePanel";
+import { Phase0InterviewPanel } from "../components/Phase0InterviewPanel";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { AdrsPanel } from "../components/AdrsPanel";
 import { useAutoSaveContent } from "../hooks/useAutoSaveContent";
@@ -290,6 +291,8 @@ export default function WorkshopView({
 
   const specContent = specContentField ?? project?.specContent ?? null;
   const dbgaContent = dbgaContentField ?? project?.dbgaContent ?? null;
+  /** Contenido visible en el panel Fase 0: usa dbgaContent o specContent legacy como fallback */
+  const fase0Content = dbgaContent ?? specContent ?? null;
   const blueprintContent = blueprintContentField ?? project?.blueprintContent ?? null;
   const apiContractsContent = apiContractsContentField ?? project?.apiContractsContent ?? null;
   const logicFlowsContent = logicFlowsContentField ?? project?.logicFlowsContent ?? null;
@@ -2663,6 +2666,14 @@ export default function WorkshopView({
                 />
 
                 {benchmarkPhaseTab === "fase0" ? (
+                  !dbgaContent?.trim() && !specContent?.trim() ? (
+                    <Phase0InterviewPanel
+                      projectId={projectId}
+                      onComplete={async () => {
+                        await useWorkshopStore.getState().fetchProject(projectId);
+                      }}
+                    />
+                  ) : (
                   <>
                     {loading && loadingReason === "phase0-deep-research" && (
                       <div className="shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] px-4 py-2 mb-2 text-sm text-[color-mix(in_oklch,var(--primary)_65%,var(--foreground))] flex items-center gap-2">
@@ -2697,7 +2708,7 @@ export default function WorkshopView({
                           <WorkshopButtonIcon icon={ArrowRight} tone="secondary" />
                           Ir a BRD (editar)
                         </WorkshopPanelButton>
-                        {dbgaContent != null && dbgaContent !== "" && (
+                        {dbgaContent != null && dbgaContent !== '' && (
                           <WorkshopPanelButton
                             tone="danger"
                             onClick={() => projectId && clearDbgaContent(projectId)}
@@ -2708,7 +2719,7 @@ export default function WorkshopView({
                           </WorkshopPanelButton>
                         )}
                       </div>
-                      {!dbgaContent?.trim() ? (
+                      {!dbgaContent?.trim() && !specContent?.trim() ? (
                         <p className="text-sm leading-relaxed text-[var(--foreground-subtle)]">
                           Escribe tu idea en el chat y pulsa <strong>Generar</strong> para crear el análisis DBGA.
                         </p>
@@ -2718,13 +2729,13 @@ export default function WorkshopView({
                     <div className="flex-1 flex flex-col min-h-0 border-t border-[var(--border)] pt-4">
                         <h3 className="shrink-0 text-sm font-medium text-[var(--muted-foreground)] mb-2">Análisis (DBGA) — Fase 0</h3>
                         <div className="flex-1 flex flex-col min-h-0">
-                          {benchmarkViewMode === "preview" && dbgaContent != null && dbgaContent !== "" ? (
+                          {benchmarkViewMode === "preview" && fase0Content != null && fase0Content !== "" ? (
                             <div className="flex-1 min-h-[200px] overflow-auto">
-                              <MddViewer content={dbgaContent} />
+                              <MddViewer content={fase0Content} />
                             </div>
                           ) : (
                             <textarea
-                              value={dbgaContent ?? ""}
+                              value={fase0Content ?? ""}
                               onChange={(e) => setDbgaContent(e.target.value)}
                               onBlur={handleBenchmarkBlur}
                               placeholder="# Domain Benchmark & Gap Analysis..."
@@ -2735,7 +2746,7 @@ export default function WorkshopView({
                         </div>
                       </div>
                   </>
-                ) : (
+                  )) : (
                   <>
                     {phase0SummaryViewMode === "preview" && !phase0SummaryContent?.trim() ? (
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col">

@@ -16,6 +16,7 @@ import { SddIngestorService } from "../ai-analysis/sdd-ingestor.service.js";
 import { AgentEvaluatorService } from "../agent-supervisor/agent-evaluator.service.js";
 import { EpisodicMemoryKind } from "@theforge/database";
 import { uxGuideLlmOptions } from "../ai/ux-guide-llm-context.js";
+import { AiService } from "../ai/ai.service.js";
 
 function filterChatByTab(log: ChatMessage[], tab: string): ChatMessage[] {
   return log.filter((m) => (m.tab ?? "mdd") === tab);
@@ -46,6 +47,7 @@ export class AiOrchestratorService {
     private readonly agentSupervisor: AgentSupervisorService,
     private readonly sddIngestor: SddIngestorService,
     private readonly agentEvaluator: AgentEvaluatorService,
+    private readonly ai: AiService,
   ) { }
 
   private scheduleSddIngest(projectId: string, ingestMdd: boolean): void {
@@ -203,12 +205,16 @@ export class AiOrchestratorService {
     let mddFromResponse: string | null | undefined;
     let uxUiGuideFromResponse: string | null | undefined;
     let dbgaFromResponse: string | null | undefined;
+    let phase0FromResponse: string | null | undefined;
     let brdFromResponse: string | null | undefined;
     try {
       const chatResult = await this.sessions.chat(session.id, message, {
         currentMddContent: currentMdd,
         currentDbgaContent: currentDbga,
         currentUxUiGuideContent: currentUxUiGuide,
+        currentPhase0SummaryContent: activeTab?.trim() === "phase0"
+          ? (dbgaContentFromClient ?? project.phase0SummaryContent ?? "").trim() || undefined
+          : undefined,
         currentBlueprintContent: (isUxUiGuide || activeTab?.trim() === "api-contracts") ? (project.blueprintContent ?? undefined) : undefined,
       currentBrdContent: activeTab?.trim() === "brd" ? currentBrd : undefined,
       activeTab,
@@ -222,6 +228,7 @@ export class AiOrchestratorService {
       mddFromResponse = chatResult.mddContent;
       uxUiGuideFromResponse = chatResult.uxUiGuideContent;
       dbgaFromResponse = chatResult.dbgaContent;
+      phase0FromResponse = chatResult.phase0SummaryContent;
       brdFromResponse = chatResult.brdContent;
     } catch (err) {
       const msg =
@@ -233,6 +240,35 @@ export class AiOrchestratorService {
       );
     }
     if (!updatedSession) throw new NotFoundException("Session not found after chat");
+
+    // Fallback: DBGA solo en chat (sin ---FIN_DBGA---)
+    if (dbgaFromResponse == null && activeTab?.trim() === "benchmark" && message.trim()) {
+      const log = (updatedSession.chatLog as ChatMessage[]) ?? [];
+      const lastAsst = [...log]
+        .reverse()
+        .find((m) => m.role === "assistant" && (m.tab ?? "mdd") === "benchmark");
+      if (lastAsst?.content?.trim()) {
+        const salvaged = this.sessions.salvageDbgaFromAssistantText(
+          lastAsst.content,
+          currentDbga,
+        );
+        if (salvaged) {
+          dbgaFromResponse = salvaged;
+          console.log("[Orchestrator] salvage DBGA desde chat, length:", salvaged.length);
+        }
+      }
+      if (dbgaFromResponse == null && lastAsst && lastAsst.content.length > 100) {
+        const fallbackDoc = await this.regenerateDbgaFromChatFallback(
+          message,
+          currentDbga,
+        );
+        if (fallbackDoc) {
+          dbgaFromResponse = fallbackDoc;
+          console.log("[Orchestrator] fallback regenero dbgaContent, length:", fallbackDoc.length);
+        }
+      }
+    }
+
     let updatedProject: Awaited<ReturnType<IOrchestratorProjectsPort["update"]>> | null = null;
     if (mddFromResponse != null && mddFromResponse.length > 0) {
       updatedProject = await this.projects.update(projectId, { mddContent: mddFromResponse, stageId: route.stageId });
@@ -244,6 +280,19 @@ export class AiOrchestratorService {
     if (dbgaFromResponse != null && dbgaFromResponse.length > 0) {
       console.log("[Orchestrator] persisting dbgaContent (Benchmark refinado) length:", dbgaFromResponse.length);
       updatedProject = await this.projects.update(projectId, { dbgaContent: dbgaFromResponse });
+      // Fase 0 es sub-tab de Benchmark — mirror a phase0SummaryContent para que el panel lo muestre
+      if (activeTab?.trim() === "benchmark" && !phase0FromResponse) {
+        console.log("[Orchestrator] mirroring dbgaContent to phase0SummaryContent (benchmark→Fase0)");
+        updatedProject = await this.projects.update(projectId, { phase0SummaryContent: dbgaFromResponse });
+      }
+    }
+    if (mddFromResponse == null && dbgaFromResponse == null) {
+      // Phase0 document from chat — persist if it came back
+      // (only when no higher-priority document was returned)
+    }
+    if (phase0FromResponse != null && phase0FromResponse.length > 0) {
+      console.log("[Orchestrator] persisting phase0SummaryContent length:", phase0FromResponse.length);
+      updatedProject = await this.projects.update(projectId, { phase0SummaryContent: phase0FromResponse });
     }
     if (brdFromResponse != null && brdFromResponse.length > 0) {
       await this.projects.patchStage(projectId, route.stageId, { brdContent: brdFromResponse });
@@ -291,6 +340,7 @@ export class AiOrchestratorService {
       activeTab?: string;
       uxUiGuideContentFromClient?: string;
       dbgaContentFromClient?: string;
+      phase0SummaryContentFromClient?: string;
       brdContentFromClient?: string;
       stageIdFromClient?: string;
     },
@@ -410,6 +460,9 @@ export class AiOrchestratorService {
       currentMddContent: currentMdd,
       currentDbgaContent: currentDbga,
       currentUxUiGuideContent: currentUxUiGuide,
+      currentPhase0SummaryContent: activeTab?.trim() === "phase0"
+        ? (specContentFromClient ?? (project as any).phase0SummaryContent ?? "").trim() || undefined
+        : undefined,
       currentBlueprintContent: (isUxUiGuide || activeTab?.trim() === "api-contracts") ? (project.blueprintContent ?? undefined) : undefined,
       currentSpecContent: activeTab?.trim() === "spec" ? currentSpec : undefined,
       currentBrdContent: activeTab?.trim() === "brd" ? currentBrdStream : undefined,
@@ -432,6 +485,29 @@ export class AiOrchestratorService {
       if (msg.type === "chunk") {
         yield { event: "chunk", data: { content: msg.content } };
       } else {
+        if ((msg as any).dbgaContent == null && activeTab?.trim() === "benchmark" && message.trim()) {
+          const log = ((msg as any).session?.chatLog ?? []) as ChatMessage[];
+          const lastAsst = [...log]
+            .reverse()
+            .find((m) => m.role === "assistant" && (m.tab ?? "mdd") === "benchmark");
+          if (lastAsst?.content?.trim()) {
+            const salvaged = this.sessions.salvageDbgaFromAssistantText(
+              lastAsst.content,
+              currentDbga,
+            );
+            if (salvaged) {
+              (msg as any).dbgaContent = salvaged;
+              console.log("[Orchestrator] salvage DBGA en stream, length:", salvaged.length);
+            }
+          }
+          if ((msg as any).dbgaContent == null && lastAsst && lastAsst.content.length > 100) {
+            const fallbackDoc = await this.regenerateDbgaFromChatFallback(message, currentDbga);
+            if (fallbackDoc) {
+              (msg as any).dbgaContent = fallbackDoc;
+              console.log("[Orchestrator] fallback regeneró dbgaContent en stream, length:", fallbackDoc.length);
+            }
+          }
+        }
         let updatedProject: Awaited<ReturnType<IOrchestratorProjectsPort["update"]>> | null = null;
         if (msg.mddContent != null && msg.mddContent.length > 0) {
           updatedProject = await this.projects.update(projectId, {
@@ -444,6 +520,10 @@ export class AiOrchestratorService {
         }
         if (msg.dbgaContent != null && msg.dbgaContent.length > 0) {
           updatedProject = await this.projects.update(projectId, { dbgaContent: msg.dbgaContent });
+          // Fase 0 sub-tab — mirror a phase0SummaryContent
+          if (activeTab?.trim() === "benchmark") {
+            updatedProject = await this.projects.update(projectId, { phase0SummaryContent: msg.dbgaContent });
+          }
         }
         if (msg.specContent != null && msg.specContent.length > 0) {
           updatedProject = await this.projects.update(projectId, { specContent: msg.specContent });
@@ -451,6 +531,9 @@ export class AiOrchestratorService {
         if (msg.brdContent != null && msg.brdContent.length > 0) {
           await this.projects.patchStage(projectId, routeStream.stageId, { brdContent: msg.brdContent });
           updatedProject = await this.projects.findOne(projectId);
+        }
+        if (msg.phase0SummaryContent != null && msg.phase0SummaryContent.length > 0) {
+          updatedProject = await this.projects.update(projectId, { phase0SummaryContent: msg.phase0SummaryContent });
         }
         if (msg.blueprintContent != null && msg.blueprintContent.length > 0) {
           updatedProject = await this.projects.update(projectId, { blueprintContent: msg.blueprintContent });
@@ -584,5 +667,48 @@ export class AiOrchestratorService {
       session: updatedSession,
       project: updatedProject ?? project,
     };
+  }
+
+  /**
+   * Fallback regeneración DBGA cuando el modelo principal (DeepSeek) responde
+   * conversacionalmente sin emitir ---FIN_DBGA---.
+   * Llama al mismo LLM con un prompt estricto que fuerza la salida del documento completo.
+   */
+  private async regenerateDbgaFromChatFallback(
+    userMessage: string,
+    currentDbga: string | undefined,
+  ): Promise<string | null> {
+    try {
+      const prompt = `El usuario pidió modificar el DBGA.
+
+Mensaje del usuario: "${userMessage.slice(0, 2000)}"
+
+INSTRUCCIÓN: Genera el DBGA COMPLETO actualizado aplicando los cambios solicitados.
+NO agregues saludos, ni explicaciones, ni "He añadido...".
+Devuelve SOLO el contenido del documento en markdown.
+TERMINA con ---FIN_DBGA---
+
+Documento DBGA actual:
+---
+${(currentDbga ?? "").trim().slice(0, 12000)}
+---`;
+
+      const response = await this.ai.generateResponse(prompt, [], {
+        systemPrompt: "Eres un generador de documentos preciso. Devuelve SOLO el documento completo actualizado. Termina con ---FIN_DBGA---. Sin conversación, sin saludos, sin explicaciones.",
+      });
+
+      const finIdx = response.indexOf("---FIN_DBGA---");
+      if (finIdx >= 0) {
+        return response.slice(0, finIdx).trim();
+      }
+      // Si no encontró el delimitador pero parece documento completo, devolverlo igual
+      if (response.length > 1000) {
+        return response.trim();
+      }
+      return null;
+    } catch (err) {
+      console.error("[Orchestrator] Fallback regeneration error:", err);
+      return null;
+    }
   }
 }

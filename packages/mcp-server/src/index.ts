@@ -1523,6 +1523,13 @@ async function main(): Promise<void> {
         return;
       }
 
+      const urlPath = (req.url ?? "/").split("?")[0] ?? "/";
+      if (req.method === "GET" && (urlPath === "/health" || urlPath === "/health/")) {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, service: "theforge-mcp" }));
+        return;
+      }
+
       if (req.method !== "POST") {
         res.writeHead(405, { "Content-Type": "text/plain" });
         res.end("Method Not Allowed");
@@ -1573,8 +1580,8 @@ async function main(): Promise<void> {
       }
     });
 
-    httpServer.listen(PORT, () => {
-      console.error(`[theforge-mcp] HTTP escuchando en puerto ${PORT}`);
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.error(`[theforge-mcp] HTTP escuchando en 0.0.0.0:${PORT}`);
     });
   } else {
     // ── Stdio Transport (JSON-RPC 2.0 over stdin/stdout) ──

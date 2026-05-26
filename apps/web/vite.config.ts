@@ -17,6 +17,22 @@ export default defineConfig({
         __dirname,
         "../../packages/shared-types/src/mdd-pipeline-limits.ts",
       ),
+      "@theforge/shared-types/markdown-table": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/markdown-table.ts",
+      ),
+      "@theforge/shared-types/mermaid": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/mermaid.ts",
+      ),
+      "@theforge/shared-types/format-document-markdown": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/format-document-markdown.ts",
+      ),
+      "@theforge/shared-types/dbga-document-structure": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/dbga-document-structure.ts",
+      ),
     },
   },
   server: {

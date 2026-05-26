@@ -127,7 +127,7 @@ En Dokploy: Environment del servicio **theforge-api** → una línea JSON → re
 | **2. Rotación correcta** | `"1"` vieja + `"2"` nueva, activa `2`, luego `pnpm run rotate-master-key` | Siguen OK con v1 hasta migrar; tras el script todo en v2 |
 | **3. Coexistencia v2 + v3** | `"2"` y `"3"` en JSON, activa `3` | v2 sigue descifrando; nuevos guardados en v3; migración opcional con el script |
 | **4. Solo subir versión activa** | Activas `3` pero no existe `"3"` en JSON | **Nuevos** fallan al cifrar; viejos OK si su versión sigue en el JSON |
-| **5. Reemplazar valor de la misma versión** | Mismo `"1"`, otro base64 | **Irrrecuperables** — hay que re-ingresar API keys en la UI |
+| **5. Reemplazar valor de la misma versión** | Mismo `"1"`, otro base64 | **Irrrecuperables** — re-ingresar API keys en la UI; o un deploy con `WIPE_BYOK_ON_START=1` (entrypoint) y luego **quitar** la variable |
 | **6. Quitar una versión del JSON** | Borras `"2"` sin migrar | Filas con `tokenKeyVersion=2` fallan al usar el proveedor |
 | **7. `TOKEN_MASTER_KEYS` vacío** | — | El API **no arranca** |
 

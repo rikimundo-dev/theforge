@@ -10,6 +10,7 @@ Frontend React (Vite) + Tailwind de TheForge.
 - **Responsive:** lista de proyectos y modales usable en móvil (`100dvh`, `viewport-fit=cover`, targets táctiles). Workshop: en `lg+` sigue el grid de 3 columnas; debajo, barra inferior Chat / Docs / Estado.
 - Proxy `/api` al backend en **dev** (`vite.config.ts`). En **prod (Dokploy)**, Traefik enruta `/api` al contenedor API; el nginx de la imagen web **solo** sirve estáticos + SPA (`nginx.conf`), sin `proxy_pass` a la API. Sin Traefik delante, las peticiones a `/api` no llegarían al Nest: usa el mismo patrón de routing o `VITE_API_URL` en build apuntando al API.
 - **Nginx (`nginx.conf`):** `/assets/*` no usa el fallback del SPA (`try_files` solo sirve ficheros reales) para que un chunk faltante no se sustituya por `index.html` (error de MIME `text/html` en módulos JS). `index.html` va con `Cache-Control: no-cache` para alinear shell y hashes tras cada deploy.
+- **Healthcheck (Docker/Dokploy):** en `docker-compose.yml`, `wget --spider http://theforge-web:80/` (DNS del servicio). No uses `127.0.0.1` en el health de Dokploy UI (es el host). Swarm: `http://localhost:80/`.
 - **Estimación MXN:** `src/utils/costCalculator.ts` delega en `@theforge/business-rules` (misma lógica que el API). Vite resuelve el paquete al **fuente** del monorepo (`vite.config.ts` + `tsconfig` paths) para que Rollup no falle con re-exports CJS del `dist`.
 
 `pnpm run dev:web` o `pnpm --filter @theforge/web dev` (desde la raíz) → http://localhost:5173

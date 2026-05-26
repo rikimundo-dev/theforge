@@ -308,6 +308,7 @@ export function normalizeAllTables(document: string): string {
       if (tableLines.length >= 2) {
         const normalized = normalizeTable(tableLines.join("\n"));
         result.push(normalized);
+        if (i < lines.length && lines[i]!.trim()) result.push("");
       } else {
         result.push(...tableLines);
       }

@@ -19,6 +19,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown, Rocket } from "lucide-react";
+import { apiFetch } from "../utils/apiClient";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
 import { apiFetch } from "../utils/apiClient";
@@ -47,6 +48,11 @@ import {
   MDD_SECTION_COMMANDS,
   resolveRegenerateSectionFromChatMessage,
 } from "../utils/mddSectionRegen";
+import {
+  FORMAT_DOCUMENT_COMMAND,
+  formatDocumentCommandFilter,
+  isFormatDocumentChatCommand,
+} from "../utils/documentFormatCommand";
 
 export type ActiveTab =
   | "benchmark"
@@ -107,10 +113,34 @@ const CHAT_COMPOSER_PLACEHOLDER: Record<ActiveTab, string> = {
   adrs: "Decisiones técnicas…",
 };
 
+const TABS_WITH_FORMAT_COMMAND: ReadonlySet<ActiveTab> = new Set([
+  "benchmark",
+  "mdd-inicial",
+  "legacy",
+  "spec",
+  "brd",
+  "mdd",
+  "ux-ui-guide",
+  "blueprint",
+  "tasks",
+  "api-contracts",
+  "logic-flows",
+  "architecture",
+  "use-cases",
+  "user-stories",
+  "infra",
+]);
+
 function getChatComposerPlaceholder(isBenchmarkFirstAction: boolean, activeTab: ActiveTab): string {
   if (isBenchmarkFirstAction) return "Dominio, idea y enlaces (opcional)…";
-  if (activeTab === "mdd") return "Mensaje o /sección…";
-  return CHAT_COMPOSER_PLACEHOLDER[activeTab];
+  const base =
+    activeTab === "mdd"
+      ? "Mensaje, /formatear o /sección…"
+      : CHAT_COMPOSER_PLACEHOLDER[activeTab];
+  if (TABS_WITH_FORMAT_COMMAND.has(activeTab) && !isBenchmarkFirstAction) {
+    return `${base} · /formatear`;
+  }
+  return base;
 }
 
 const ACCEPT_IMG = /^image\/(png|jpeg|jpg|gif|webp)$/i;
@@ -499,6 +529,7 @@ export default function ChatContainer({
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const recordingStartRef = useRef<number>(0);
 
   const stageNameForBadge = useMemo(() => {
     return (stageId: string | undefined) => {
@@ -614,7 +645,9 @@ export default function ChatContainer({
   useEffect(() => {
     (async () => {
       try {
-        const r = await apiFetch(`${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`);
+        const r = await apiFetch(
+          `${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`,
+        );
         if (r.ok) {
           const data: { sttModel: string | null } = await r.json();
           setSttModel(data.sttModel);
@@ -657,12 +690,11 @@ export default function ChatContainer({
         if (e.data.size > 0) chunks.push(e.data);
       };
       recorder.onstop = async () => {
-        // Release mic
         stream.getTracks().forEach((t) => t.stop());
+        const elapsed = Date.now() - recordingStartRef.current;
         const blob = new Blob(chunks, { type: mimeType });
-        if (blob.size < 100) return; // silence / too short
+        if (blob.size < 100 || elapsed < 1000) return;
 
-        // Send to backend
         try {
           const formData = new FormData();
           formData.append("audio", blob, "recording.webm");
@@ -677,17 +709,23 @@ export default function ChatContainer({
                 const sep = prev.trim() ? " " : "";
                 return prev + sep + data.text.trim();
               });
-              // Focus textarea after setting value
               requestAnimationFrame(() => chatInputRef.current?.focus());
             }
+          } else {
+            const err = await r.json().catch(() => ({ message: `Error ${r.status}` })) as { message?: string };
+            console.warn("[STT]", r.status, err);
+            setInputValue((prev) => prev || `⚠️ STT: ${(err as Record<string, unknown>).message ?? r.status}`);
           }
-        } catch { /* transcribe failed – silently */ }
+        } catch (e) {
+          console.warn("[STT] network error", e);
+        }
       };
       recorder.onerror = () => {
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
       };
       recorder.start();
+      recordingStartRef.current = Date.now();
       setRecording(true);
     } catch {
       // Permission denied or no mic
@@ -713,6 +751,11 @@ export default function ChatContainer({
       setInputValue("");
       return;
     }
+    if (isFormatDocumentChatCommand(msg) && !pendingFiles.length) {
+      setInputValue("");
+      await sendMessage(msg);
+      return;
+    }
     const section = activeTab === "mdd" ? resolveRegenerateSectionFromChatMessage(msg) : null;
     const imageParts = pendingFiles.length ? await readFilesAsChatParts(pendingFiles) : [];
     setPendingFiles([]);
@@ -726,13 +769,20 @@ export default function ChatContainer({
   };
 
   const slashFilter = inputValue.startsWith("/") ? inputValue.slice(1).toLowerCase() : "";
+  const showFormatSlash =
+    TABS_WITH_FORMAT_COMMAND.has(activeTab) &&
+    !isBenchmarkFirstAction &&
+    inputValue.startsWith("/") &&
+    !inputValue.includes(" ") &&
+    (inputValue === "/" || formatDocumentCommandFilter(inputValue));
   const filteredSlashCommands = slashFilter
     ? MDD_SECTION_COMMANDS.filter((c) => c.slug.startsWith(slashFilter) || String(c.section).startsWith(slashFilter))
     : MDD_SECTION_COMMANDS;
-  const showSlashCommands =
+  const showMddSectionSlash =
     activeTab === "mdd" &&
     (inputValue === "/" ||
       (inputValue.startsWith("/") && !inputValue.includes(" ") && filteredSlashCommands.length > 0));
+  const showSlashCommands = showFormatSlash || showMddSectionSlash;
 
   const showLongPasteMddWarn = activeTab === "mdd" && inputValue.length > MDD_LONG_PASTE_WARN_CHARS;
 
@@ -1145,23 +1195,46 @@ export default function ChatContainer({
             <p className="px-4 pb-2 text-sm text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]">{error}</p>
           )}
           {showSlashCommands && (
-            <div className="px-4 pt-2 border-t border-[var(--border)]/50 bg-[var(--card)]/30">
-              <p className="text-xs text-[var(--foreground-subtle)] mb-2">Regenerar sección del MDD (solo esta sección se reescribirá):</p>
-              <div className="flex flex-wrap gap-1.5">
-                {filteredSlashCommands.map((cmd) => (
+            <div className="px-4 pt-2 border-t border-[var(--border)]/50 bg-[var(--card)]/30 space-y-2">
+              {showFormatSlash && (
+                <div>
+                  <p className="text-xs text-[var(--foreground-subtle)] mb-2">
+                    Formatear documento del panel (fences, tablas, Mermaid — sin IA):
+                  </p>
                   <button
-                    key={cmd.section}
                     type="button"
                     onClick={() => {
                       setInputValue("");
-                      sendMessage(`/${cmd.slug}`, { regenerateSection: cmd.section });
+                      void sendMessage(FORMAT_DOCUMENT_COMMAND.label);
                     }}
                     className="px-2.5 py-1.5 rounded-md text-sm bg-[var(--muted)] hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--foreground)] hover:text-[color-mix(in_oklch,var(--primary)_72%,var(--foreground))] border border-[var(--border)] hover:border-[color-mix(in_oklch,var(--primary)_40%,var(--border))]"
                   >
-                    {cmd.label}
+                    {FORMAT_DOCUMENT_COMMAND.label} — {FORMAT_DOCUMENT_COMMAND.description} (DBGA, Spec y Benchmark si existen)
                   </button>
-                ))}
-              </div>
+                </div>
+              )}
+              {showMddSectionSlash && (
+                <div>
+                  <p className="text-xs text-[var(--foreground-subtle)] mb-2">
+                    Regenerar sección del MDD (solo esta sección se reescribirá):
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {filteredSlashCommands.map((cmd) => (
+                      <button
+                        key={cmd.section}
+                        type="button"
+                        onClick={() => {
+                          setInputValue("");
+                          sendMessage(`/${cmd.slug}`, { regenerateSection: cmd.section });
+                        }}
+                        className="px-2.5 py-1.5 rounded-md text-sm bg-[var(--muted)] hover:bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--foreground)] hover:text-[color-mix(in_oklch,var(--primary)_72%,var(--foreground))] border border-[var(--border)] hover:border-[color-mix(in_oklch,var(--primary)_40%,var(--border))]"
+                      >
+                        {cmd.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           <div className="p-4 border-t border-[var(--border)] flex flex-col gap-2 shrink-0">

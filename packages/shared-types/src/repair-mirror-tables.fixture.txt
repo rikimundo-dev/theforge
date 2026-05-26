@@ -1,0 +1,18 @@
+### Estrategia de espejo
+Texto.
+
+| Sistema | Estructura | Tablas espejo |
+| :------ | :--------- | :------------ |
+| OBP4MO  | Normalizada | `paises` |
+### Entidades espejo
+
+#### Para OBP4MO (estructura normalizada)
+
+| Tabla espejo | Sistema origen | Descripción |
+| :----------- | :------------- | :---------- |
+| `paises`     | OBP4MO         | Lista de países |
+#### Para OBP (estructura desnormalizada — pendiente de normalizar)
+
+| Tabla espejo      | Sistema origen | Descripción |
+| :---------------- | :------------- | :---------- |
+| `ubicaciones_obp` | OBP            | Entidad única |

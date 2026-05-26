@@ -123,6 +123,15 @@ export class AiService {
         }
       }
     }
+    // Design Reference: inyectar tokens de diseño seleccionado
+    const designRefSlug = options?.uxGuideDesignRef;
+    const designRefBlock = options?.uxGuideDesignRefPromptBlock;
+    if (designRefSlug && designRefBlock) {
+      s += `\n\n## [Design Reference activo: ${designRefSlug}]\n${designRefBlock}\n\n### Instrucciones para el Design Reference\n1. Los tokens anteriores son REFERENCIALES — adapta colores, tipografía y componentes al dominio del proyecto descrito en el MDD.\n2. No copies los valores exactos — transpórtalos al contexto del producto.\n3. Si el proyecto tiene un codebase existente (LEGACY), prioriza los tokens reales del código sobre los de referencia.\n4. Mantén la personalidad general del design system de referencia pero hazla propia del producto.\n5. Conserva obligatoriamente WCAG AA (contraste ≥4.5:1) en todos los componentes.`;
+    } else if (designRefSlug === "auto") {
+      // Matching automático: el LLM debe inferir el estilo del MDD
+      s += "\n\n**[Modo: Auto-match de diseño]** Analiza el MDD y el dominio del proyecto para seleccionar automáticamente una personalidad visual coherente. No generes una paleta genérica — busca una dirección de diseño específica que refleje el dominio (fintech → elegante, seguro; creativo → vibrante, expresivo; SaaS → limpio, profesional; salud → cálido, tranquilo).";
+    }
     return s;
   }
 
@@ -147,7 +156,7 @@ export class AiService {
       if (options?.activeTab?.trim()) {
         const at = options.activeTab.trim();
         const label = AiService.ACTIVE_TAB_LABELS[at] ?? at;
-        systemPrompt += `\n\n[Contexto de documento activo:] El usuario está trabajando en: **${label}**. Adapta tu respuesta a ese documento (preguntas, sugerencias o ediciones relevantes para ese contexto).\n\n**Desambiguación:** Si el usuario expresa una intención de cambio o modificación (ej. "agrega", "cambia", "modifica", "actualiza") o percibes ambigüedad entre una consulta y un cambio, PREGUNTA explícitamente: "¿Es una consulta o quieres que aplique el cambio al documento?". No asumas que quiere modificar el documento a menos que lo confirme.`;
+        systemPrompt += `\n\n[Contexto de documento activo:] El usuario está trabajando en: **${label}**. Adapta tu respuesta a ese documento (preguntas, sugerencias o ediciones relevantes para ese contexto).\n\n**INSTRUCCIÓN CRÍTICA — DETECCIÓN DE CAMBIOS:** Cualquier afirmación del usuario sobre lo que el proyecto **debe incluir, tener, usar o cambiar** (ej. "necesitamos X", "queremos Y", "falta Z", "usa W", "debe tener V", "agrega", "cambia", "modifica", "actualiza", "corrige", "elimina") es una **solicitud de modificación del documento actual**. **NO** preguntes si es consulta o cambio — el usuario ya lo dijo. Si hay ambigüedad genuina (que no sea sobre el documento actual), pregunta UNA VEZ. Cuando el usuario responda "sí", "dale", "aplica", "correcto" o similar a una pregunta tuya, **_DEBES_ devolver el documento actualizado con su delimitador ---FIN_TAG--- inmediatamente.** Nunca respondas solo "Hecho" o "MDD generado" sin el contenido del documento antes del delimitador.`;
 
         // Instrucción para delimitadores universales en el chat (aplicar cambios al documento)
         const tagMap: Record<string, string> = {
@@ -163,6 +172,7 @@ export class AiService {
           "logic-flows": "FLOWS",
           tasks: "TASKS",
           infra: "INFRA",
+          phase0: "PHASE0",
         };
         const tag = tagMap[at];
         if (tag && !options?.welcomeBrief) {
@@ -173,7 +183,7 @@ export class AiService {
           }
           if (at === "mdd") {
             systemPrompt +=
-              "\n\n**\u26a0\ufe0f REGLA ABSOLUTA \u2014 MDD:** Cada vez que el usuario pida **agregar, cambiar, modificar, actualizar, corregir o eliminar** algo del MDD (ej. \"agrega X\", \"cambia Y por Z\", \"falta W\", \"actualiza la secci\u00f3n N\"), **DEBES** devolver el **MDD COMPLETO ACTUALIZADO** (conservando TODO el contenido existente m\u00e1s los cambios) terminando con `---FIN_MDD---`. **NUNCA** respondas solo con un mensaje como \"MDD actualizado\" o \"Hecho\" \u2014 si lo haces, el sistema NO persiste ning\u00fan cambio y el usuario cree que se aplic\u00f3 cuando no es as\u00ed. Siempre incluye un mensaje breve resumiendo el cambio DESPU\u00c9S de `---FIN_MDD---`.";
+              "\n\n**\u26a0\ufe0f REGLA ABSOLUTA \u2014 MDD:\n1. **No eval\u00faes si un cambio es \"ya est\u00e1 cubierto\" o \"impacto m\u00ednimo\".** Si el usuario expresa un requisito expl\u00edcito (\"necesitamos X\", \"queremos Y\", \"usa Z\", \"agrega\", \"cambia\", \"modifica\", \"actualiza\", \"corrige\", \"elimina\"), es una orden, no una sugerencia. **El requerimiento del usuario siempre tiene prioridad sobre tu inferencia.**\n2. **NO respondas \"El MDD actual ya especifica...\" y te saltes el cambio.** Si el usuario pide algo, actualiza el documento para reflejarlo expl\u00edcitamente.\n3. Cada vez que el usuario pida agregar, cambiar, modificar, actualizar, corregir o eliminar algo del MDD, o cuando despu\u00e9s de preguntar confirme (\"s\u00ed\", \"dale\", \"aplica\", \"correcto\"), **DEBES** devolver el **MDD COMPLETO ACTUALIZADO** (conservando TODO el contenido existente m\u00e1s los cambios) terminando con `---FIN_MDD---`.\n4. **NUNCA** respondas solo con un mensaje como \"MDD actualizado\" o \"Hecho\" \u2014 si lo haces, el sistema NO persiste ning\u00fan cambio y el usuario cree que se aplic\u00f3 cuando no es as\u00ed. Siempre incluye un mensaje breve resumiendo el cambio DESPU\u00c9S de `---FIN_MDD---`.";
           }
           if (at === "spec") {
             systemPrompt +=
@@ -338,7 +348,7 @@ export class AiService {
         }
         if (at === "mdd") {
             systemPrompt +=
-              "\n\n**\u26a0\ufe0f REGLA ABSOLUTA \u2014 MDD:** Cada vez que el usuario pida **agregar, cambiar, modificar, actualizar, corregir o eliminar** algo del MDD (ej. \"agrega X\", \"cambia Y por Z\", \"falta W\", \"actualiza la secci\u00f3n N\"), **DEBES** devolver el **MDD COMPLETO ACTUALIZADO** (conservando TODO el contenido existente m\u00e1s los cambios) terminando con `---FIN_MDD---`. **NUNCA** respondas solo con un mensaje como \"MDD actualizado\" o \"Hecho\" \u2014 si lo haces, el sistema NO persiste ning\u00fan cambio y el usuario cree que se aplic\u00f3 cuando no es as\u00ed. Siempre incluye un mensaje breve resumiendo el cambio DESPU\u00c9S de `---FIN_MDD---`.";
+              "\n\n**\u26a0\ufe0f REGLA ABSOLUTA \u2014 MDD:\n1. **No eval\u00faes si un cambio es \"ya est\u00e1 cubierto\" o \"impacto m\u00ednimo\".** Si el usuario expresa un requisito expl\u00edcito (\"necesitamos X\", \"queremos Y\", \"usa Z\", \"agrega\", \"cambia\", \"modifica\", \"actualiza\", \"corrige\", \"elimina\"), es una orden, no una sugerencia. **El requerimiento del usuario siempre tiene prioridad sobre tu inferencia.**\n2. **NO respondas \"El MDD actual ya especifica...\" y te saltes el cambio.** Si el usuario pide algo, actualiza el documento para reflejarlo expl\u00edcitamente.\n3. Cada vez que el usuario pida agregar, cambiar, modificar, actualizar, corregir o eliminar algo del MDD, o cuando despu\u00e9s de preguntar confirme (\"s\u00ed\", \"dale\", \"aplica\", \"correcto\"), **DEBES** devolver el **MDD COMPLETO ACTUALIZADO** (conservando TODO el contenido existente m\u00e1s los cambios) terminando con `---FIN_MDD---`.\n4. **NUNCA** respondas solo con un mensaje como \"MDD actualizado\" o \"Hecho\" \u2014 si lo haces, el sistema NO persiste ning\u00fan cambio y el usuario cree que se aplic\u00f3 cuando no es as\u00ed. Siempre incluye un mensaje breve resumiendo el cambio DESPU\u00c9S de `---FIN_MDD---`.";
           }
         if (at === "spec") {
           systemPrompt +=

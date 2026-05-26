@@ -17,5 +17,8 @@ export * from "./mdd-pipeline-limits.js";
 export * from "./markdown-repair.js";
 export * from "./markdown-table.js";
 export * from "./mermaid.js";
+export * from "./format-document-markdown.js";
+export * from "./repair-pasted-markdown.js";
+export * from "./dbga-document-structure.js";
 export * from "./orchestrator.js";
 export * from "./legacy-codebase-doc.js";

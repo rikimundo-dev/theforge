@@ -13,7 +13,7 @@ Paquete **`packages/mcp-server`** del monorepo The Forge: servidor **MCP propio*
 | **Paquete** | `@theforge/mcp-server` (`pnpm --filter @theforge/mcp-server build`) |
 | **Binario** | `theforge-mcp` → `dist/index.js` |
 | **Modo stdio** | Por defecto (sin args): Cursor / Claude Desktop ejecutan el binario. |
-| **Modo HTTP** | `node dist/index.js --http` o `pnpm --filter @theforge/mcp-server start` — **Streamable HTTP**, puerto `PORT` (default **3100**; en algunos despliegues se mapea a **3000**). |
+| **Modo HTTP** | `0.0.0.0:$PORT` (default **3000**). `GET /health` sin auth. Healthcheck compose: `http://theforge-mcp:3000/health` (DNS servicio; **no** `127.0.0.1` en Dokploy UI — es el host). Swarm: `http://localhost:3000/health` dentro del task. `POST /` + `MCP_M2M_SECRET`. Traefik: `/mcp` → raíz. |
 | **Backend** | `THEFORGE_API_URL` (default `http://localhost:3000`) — misma API que el front. |
 
 ---

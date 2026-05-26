@@ -27,6 +27,7 @@ import { AdminModule } from "./modules/admin/admin.module.js";
 import { ChangeLogModule } from "./modules/change-log/change-log.module.js";
 import { CryptoModule } from "./modules/crypto/crypto.module.js";
 import { UserProvidersModule } from "./modules/user-providers/user-providers.module.js";
+import { DesignRefModule } from "./modules/design-ref/design-ref.module.js";
 
 @Module({
   controllers: [HealthController],
@@ -47,6 +48,7 @@ import { UserProvidersModule } from "./modules/user-providers/user-providers.mod
     AudioModule,
     AdminModule,
     ChangeLogModule,
+    DesignRefModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

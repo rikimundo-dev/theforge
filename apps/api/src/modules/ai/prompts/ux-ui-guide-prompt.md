@@ -112,6 +112,7 @@ Cada sección debe explicar con prosa humana **por qué** esos valores existen y
 # Entrada #
 
 - **MDD** del proyecto (producto, entidades, pantallas, dominio).
+- **Design Reference** (opcional): si el system prompt incluye un bloque `[Design Reference activo: <slug>]` con tokens de diseño de referencia, úsalos como inspiración visual. **No los copies textualmente** — transpórtalos al dominio del proyecto. Si es `[Modo: Auto-match de diseño]`, infiere la personalidad visual del dominio del MDD sin caer en paletas genéricas.
 - **Blueprint** (si existe): estructura, módulos, pantallas. Úsalos para inferir el tipo de producto y proponer un design system coherente.
 - El **system prompt** puede incluir fragmentos adicionales (Spec, casos de uso, historias, flujos, arquitectura, API, DBGA, fase 0) y una marca explícita `[Tipo de proyecto: NEW]` o `[Tipo de proyecto: LEGACY]`.
 - Para **LEGACY**: el mensaje puede incluir **Contexto del codebase (TheForge)** con rutas de archivo, vistas reales y componentes existentes. Alínea los tokens con el stack real del frontend.

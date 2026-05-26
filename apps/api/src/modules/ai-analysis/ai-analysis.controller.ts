@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, Res } from "@nestjs/common";
 import { Response } from "express";
 import { Readable } from "node:stream";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { AiAnalysisService } from "./ai-analysis.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
+import { Phase0InterviewService } from "./phase0/phase0-interview.service.js";
 import { parseChatImageAttachments } from "../ai/utils/chat-image-attachments.util.js";
 import { formatDbgaStreamError } from "./utils/dbga-stream-error.util.js";
 
@@ -12,6 +13,7 @@ export class AiAnalysisController {
   constructor(
     private readonly aiAnalysis: AiAnalysisService,
     private readonly estimationService: EstimationService,
+    private readonly phase0Interview: Phase0InterviewService,
     private readonly prisma: PrismaService,
   ) { }
 
@@ -422,5 +424,57 @@ export class AiAnalysisController {
       throw new BadRequestException("projectId is required");
     }
     return this.aiAnalysis.getProjectDecisions(id);
+  }
+
+  // ─── Fase 0 — Entrevista Interactiva ─────────────────────────────
+
+  /**
+   * Inicia la Fase 0: toma idea o documento externo, ejecuta prompt de arranque,
+   * devuelve borrador inicial + gaps.
+   */
+  @Post("phase0/start")
+  async startPhase0(@Body() body: { idea?: string; projectId?: string }) {
+    const idea = typeof body?.idea === "string" ? body.idea.trim() : "";
+    const projectId = typeof body?.projectId === "string" ? body.projectId.trim() : "";
+    if (!idea) throw new BadRequestException("idea is required");
+    if (!projectId) throw new BadRequestException("projectId is required");
+    return this.phase0Interview.start(idea, projectId);
+  }
+
+  /**
+   * Obtiene la siguiente pregunta del entrevistador.
+   */
+  @Get("phase0/question/:threadId")
+  async getPhase0Question(@Param("threadId") threadId: string) {
+    if (!threadId) throw new BadRequestException("threadId is required");
+    return this.phase0Interview.getQuestion(threadId);
+  }
+
+  /**
+   * Envía respuesta a la última pregunta y recibe borrador actualizado.
+   */
+  @Post("phase0/answer")
+  async answerPhase0(@Body() body: { threadId?: string; answer?: string }) {
+    const threadId = typeof body?.threadId === "string" ? body.threadId.trim() : "";
+    const answer = typeof body?.answer === "string" ? body.answer.trim() : "";
+    if (!threadId) throw new BadRequestException("threadId is required");
+    if (!answer) throw new BadRequestException("answer is required");
+    return this.phase0Interview.processAnswer(threadId, answer);
+  }
+
+  /**
+   * Obtiene el estado actual de la entrevista Fase 0.
+   */
+  @Get("phase0/state/:threadId")
+  async getPhase0State(@Param("threadId") threadId: string) {
+    const state = this.phase0Interview.getState(threadId);
+    if (!state) throw new BadRequestException("Thread no encontrado");
+    return {
+      status: state.status,
+      preguntasRealizadas: state.preguntasRealizadas,
+      maxPreguntas: state.maxPreguntas,
+      borrador: state.borrador,
+      gaps: state.gaps,
+    };
   }
 }

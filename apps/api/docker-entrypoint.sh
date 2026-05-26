@@ -41,6 +41,13 @@ npx prisma migrate deploy || {
   exit 1
 }
 
+# Opcional (una vez): tras rotar TOKEN_MASTER_KEYS sin la clave vieja. Idempotente; quitar env tras el deploy.
+if [ "${WIPE_BYOK_ON_START:-}" = "1" ]; then
+  echo "WIPE_BYOK_ON_START=1: wiping ProviderInstance and UserProviderConfig..."
+  npx prisma db execute --file /app/apps/api/scripts/wipe-byok-ciphertext.sql
+  echo "WIPE_BYOK_ON_START: done. Unset WIPE_BYOK_ON_START in Dokploy before the next redeploy."
+fi
+
 # Sincronizar schema: crea columnas/índices no cubiertos por migraciones versionadas
 # (ej. mcpSecret agregado directamente en schema.prisma sin generar migración)
 echo "Running prisma db push (schema sync)..."

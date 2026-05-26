@@ -28,6 +28,8 @@ export interface GenerateResponseOptions {
   currentUseCasesContent?: string;
   /** User Stories actuales del proyecto; tab `user-stories` */
   currentUserStoriesContent?: string;
+  /** Phase 0 (Especificador de Base) actual del proyecto; tab `phase0` */
+  currentPhase0SummaryContent?: string;
   /** API Contracts actual del proyecto; tab `api-contracts` */
   currentApiContractsContent?: string;
   /** Logic Flows actual del proyecto; tab `logic-flows` */
@@ -57,6 +59,10 @@ export interface GenerateResponseOptions {
       string
     >
   >;
+  /** Guía UX/UI: design reference seleccionado (slug del catálogo, "auto" para matching, o JSON para URL scan). */
+  uxGuideDesignRef?: string;
+  /** Guía UX/UI: bloque de tokens del design reference (generado por DesignRefService). */
+  uxGuideDesignRefPromptBlock?: string;
   /** Imágenes del turno actual del usuario (junto con `prompt`). */
   userMessageImages?: ChatImagePart[];
   /**

@@ -29,3 +29,41 @@ Endpoint Odoo para costos reales.`;
     assert.equal(merged, full.trim());
   });
 });
+
+describe("detectBenchmarkDocFallback", () => {
+  it("detecta DBGA cuando el título está en la primera línea (index 0)", () => {
+    const text = `# Domain Benchmark & Gap Analysis
+
+## Integración OBP / OBP4MO
+Tablas espejo y normalización.
+
+He añadido la sección de integración.`;
+    const split = parser.detectBenchmarkDocFallback(text);
+    assert.ok(split);
+    assert.ok(split!.docPart.includes("Integración OBP"));
+  });
+
+  it("detecta sección ## Integración sin título Domain Benchmark", () => {
+    const text = `## Integración con sistemas externos (OBP4MO y OBP)
+
+Tablas espejo en el microservicio para cálculos ágiles.
+OBP4MO normalizado (País → Estado → Ciudad); OBP con ubicación plana.
+Ciudad y Ubicación desprenden medios (Indoors, Outdoor, Camiones).
+El país define formatos de medio asociados a cada medio.`;
+    const split = parser.detectBenchmarkDocFallback(text);
+    assert.ok(split);
+    assert.ok(split!.docPart.includes("OBP4MO"));
+  });
+});
+
+describe("salvage path via detectDocFallback benchmark", () => {
+  it("ruta benchmark delega a detectBenchmarkDocFallback", () => {
+    const text = `# Domain Benchmark & Gap Analysis
+
+## Módulo 1
+Contenido de referencia de industria con suficiente extensión para superar el umbral mínimo de detección del parser en tests automatizados y validar la ruta detectDocFallback con tab benchmark.`;
+    const split = parser.detectDocFallback(text, "benchmark");
+    assert.ok(split);
+    assert.ok(split!.docPart.startsWith("# Domain Benchmark"));
+  });
+});
