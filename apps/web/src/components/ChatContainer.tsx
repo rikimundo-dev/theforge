@@ -1,4 +1,14 @@
-import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback, type ComponentPropsWithoutRef } from "react";
+import {
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useMemo,
+  useCallback,
+  type ComponentPropsWithoutRef,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import {
   LEGACY_CODEBASE_DOC_STEPS,
   LEGACY_MDD_STEPS,
@@ -11,6 +21,8 @@ import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown, Rocket } from "lucide-react";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
+import { apiFetch } from "../utils/apiClient";
+import { cn } from "@/lib/utils";
 import type { ChatImagePart } from "@theforge/shared-types";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
 import {
@@ -139,10 +151,13 @@ const CHAT_MARKDOWN_COMPONENTS = {
 const AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 420;
 
 const AI_COMPOSER_SHELL =
-  "flex w-full min-w-0 items-end gap-2 rounded-[1.25rem] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_92%,var(--muted))] px-2.5 py-2 shadow-sm transition-[border-color,background-color] focus-within:border-[color-mix(in_oklch,var(--primary)_30%,var(--border))] focus-within:bg-[color-mix(in_oklch,var(--card)_96%,var(--muted))] dark:bg-[color-mix(in_oklch,var(--card)_62%,var(--muted))] dark:focus-within:bg-[color-mix(in_oklch,var(--card)_72%,var(--muted))]";
+  "flex w-full min-w-0 flex-col gap-1 rounded-[1.25rem] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_92%,var(--muted))] px-3 py-2.5 shadow-sm transition-[border-color,background-color] focus-within:border-[color-mix(in_oklch,var(--primary)_30%,var(--border))] focus-within:bg-[color-mix(in_oklch,var(--card)_96%,var(--muted))] dark:bg-[color-mix(in_oklch,var(--card)_62%,var(--muted))] dark:focus-within:bg-[color-mix(in_oklch,var(--card)_72%,var(--muted))]";
 
 const AI_COMPOSER_TEXTAREA =
-  "min-h-[2.25rem] flex-1 resize-none border-0 bg-transparent px-0 py-1.5 text-base leading-6 text-[var(--foreground)] shadow-none outline-none ring-0 appearance-none break-words min-w-0 overflow-y-hidden overflow-x-hidden placeholder:text-[var(--muted-foreground)] focus:border-0 focus:shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+  "min-h-[1.75rem] w-full resize-none border-0 bg-transparent px-0 py-0.5 text-base leading-6 text-[var(--foreground)] shadow-none outline-none ring-0 appearance-none break-words overflow-y-hidden overflow-x-hidden placeholder:text-[var(--muted-foreground)] focus:border-0 focus:shadow-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0";
+
+const AI_COMPOSER_TOOLBAR =
+  "flex min-h-9 w-full shrink-0 items-center justify-between gap-2";
 
 const AI_COMPOSER_ATTACH_BTN =
   "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted-foreground)] transition-colors hover:bg-[var(--muted)] hover:text-[var(--primary)] disabled:pointer-events-none disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-0";
@@ -170,7 +185,7 @@ function ChatComposerSubmit({
         onClick={onGenerateBenchmark}
         disabled={disabled}
         loading={loading}
-        className="mb-0.5 shrink-0 self-end"
+        className="shrink-0"
         title="Generar Benchmark & Gap Analysis"
         aria-label="Generar Benchmark & Gap Analysis"
       >
@@ -195,6 +210,109 @@ function ChatComposerSubmit({
         <Send className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
       )}
     </button>
+  );
+}
+
+function ChatComposerBar({
+  chatInputRef,
+  inputValue,
+  onInputChange,
+  onKeyDown,
+  placeholder,
+  inputTitle,
+  loading,
+  isBenchmarkFirstAction,
+  showAttachTools,
+  imageInputRef,
+  pendingFilesCount,
+  sttMicDisabled,
+  sttMicTitle,
+  sttMicAriaLabel,
+  recording,
+  onMicClick,
+  submitDisabled,
+  onSend,
+  onGenerateBenchmark,
+}: {
+  chatInputRef: RefObject<HTMLTextAreaElement | null>;
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLTextAreaElement>) => void;
+  placeholder: string;
+  inputTitle?: string;
+  loading: boolean;
+  isBenchmarkFirstAction: boolean;
+  showAttachTools: boolean;
+  imageInputRef: RefObject<HTMLInputElement | null>;
+  pendingFilesCount: number;
+  sttMicDisabled: boolean;
+  sttMicTitle: string;
+  sttMicAriaLabel: string;
+  recording: boolean;
+  onMicClick: () => void;
+  submitDisabled: boolean;
+  onSend: () => void;
+  onGenerateBenchmark: () => void;
+}) {
+  return (
+    <div className={AI_COMPOSER_SHELL} role="group" aria-label="Mensaje al asistente">
+      <textarea
+        ref={chatInputRef}
+        value={inputValue}
+        onChange={(e) => onInputChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        title={inputTitle}
+        rows={1}
+        className={cn(AI_COMPOSER_TEXTAREA, "font-sans")}
+        spellCheck={false}
+        disabled={loading}
+      />
+      <div className={AI_COMPOSER_TOOLBAR}>
+        <div className="flex min-w-0 items-center gap-0.5">
+          {showAttachTools ? (
+            <>
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={loading || pendingFilesCount >= 6}
+                className={AI_COMPOSER_ATTACH_BTN}
+                title="Adjuntar imagen (máx. 6, PNG/JPEG/WebP/GIF)"
+                aria-label="Adjuntar imagen"
+              >
+                <ImagePlus className="h-[1.125rem] w-[1.125rem] shrink-0" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={onMicClick}
+                disabled={sttMicDisabled}
+                className={cn(
+                  AI_COMPOSER_ATTACH_BTN,
+                  recording && "text-[var(--destructive)] animate-pulse",
+                )}
+                title={sttMicTitle}
+                aria-label={sttMicAriaLabel}
+              >
+                <Mic
+                  className={cn(
+                    "h-[1.125rem] w-[1.125rem] shrink-0",
+                    recording && "text-[var(--destructive)]",
+                  )}
+                  aria-hidden
+                />
+              </button>
+            </>
+          ) : null}
+        </div>
+        <ChatComposerSubmit
+          isBenchmarkFirstAction={isBenchmarkFirstAction}
+          loading={loading}
+          disabled={submitDisabled}
+          onSend={onSend}
+          onGenerateBenchmark={onGenerateBenchmark}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -377,6 +495,7 @@ export default function ChatContainer({
 
   /** STT (speech‑to‑text) via mic */
   const [sttModel, setSttModel] = useState<string | null>(null);
+  const [sttConfigLoaded, setSttConfigLoaded] = useState(false);
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -495,18 +614,30 @@ export default function ChatContainer({
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(
-          `${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`,
-        );
+        const r = await apiFetch(`${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`);
         if (r.ok) {
           const data: { sttModel: string | null } = await r.json();
           setSttModel(data.sttModel);
         }
-      } catch { /* no STT */ }
+      } catch { /* no STT */ } finally {
+        setSttConfigLoaded(true);
+      }
     })();
   }, []);
 
+  const sttMicEnabled = !!sttModel;
+  const sttMicDisabled = loading || !sttConfigLoaded || !sttMicEnabled;
+  const sttMicTitle = recording
+    ? "Detener grabación"
+    : !sttConfigLoaded
+      ? "Comprobando transcripción de voz…"
+      : !sttMicEnabled
+        ? "Configura el modelo STT en Ajustes → Proveedores IA"
+        : "Grabar voz";
+  const sttMicAriaLabel = recording ? "Detener grabación" : sttMicTitle;
+
   const handleMicClick = async () => {
+    if (!sttMicEnabled) return;
     if (recording) {
       // Stop recording
       mediaRecorderRef.current?.stop();
@@ -535,7 +666,7 @@ export default function ChatContainer({
         try {
           const formData = new FormData();
           formData.append("audio", blob, "recording.webm");
-          const r = await fetch(
+          const r = await apiFetch(
             `${import.meta.env.VITE_API_URL ?? "/api"}/audio/transcribe`,
             { method: "POST", body: formData },
           );
@@ -677,63 +808,39 @@ export default function ChatContainer({
                 ))}
               </div>
             ) : null}
-            <div className={AI_COMPOSER_SHELL} role="group" aria-label="Mensaje al asistente">
-              {!isBenchmarkFirstAction ? (
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={loading || pendingFiles.length >= 6}
-                  className={AI_COMPOSER_ATTACH_BTN}
-                  title="Adjuntar imagen (máx. 6, PNG/JPEG/WebP/GIF)"
-                  aria-label="Adjuntar imagen"
-                >
-                  <ImagePlus className="h-[1.125rem] w-[1.125rem] shrink-0" aria-hidden />
-                </button>
-              ) : null}
-              {sttModel ? (
-                <button
-                  type="button"
-                  onClick={handleMicClick}
-                  disabled={loading}
-                  className={`${AI_COMPOSER_ATTACH_BTN} ${recording ? "text-[var(--destructive)] animate-pulse" : ""}`}
-                  title={recording ? "Detener grabación" : "Grabar voz"}
-                  aria-label={recording ? "Detener grabación" : "Grabar voz"}
-                >
-                  <Mic className={`h-[1.125rem] w-[1.125rem] shrink-0 ${recording ? "text-[var(--destructive)]" : ""}`} aria-hidden />
-                </button>
-              ) : null}
-              <textarea
-                ref={chatInputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter" || e.shiftKey) return;
-                  e.preventDefault();
-                  if (isBenchmarkFirstAction) void handleGenerateBenchmark();
-                  else void handleSend();
-                }}
-                placeholder={getChatComposerPlaceholder(isBenchmarkFirstAction, activeTab)}
-                title={
-                  isBenchmarkFirstAction
-                    ? "Puedes incluir URLs públicas; se usarán como referencia para el benchmark."
-                    : undefined
-                }
-                rows={1}
-                className={`${AI_COMPOSER_TEXTAREA} font-sans`}
-                spellCheck={false}
-                disabled={loading}
-              />
-              <ChatComposerSubmit
-                isBenchmarkFirstAction={isBenchmarkFirstAction}
-                loading={loading}
-                disabled={
-                  loading ||
-                  (isBenchmarkFirstAction ? !inputValue.trim() : !inputValue.trim() && !pendingFiles.length)
-                }
-                onSend={() => void handleSend()}
-                onGenerateBenchmark={() => void handleGenerateBenchmark()}
-              />
-            </div>
+            <ChatComposerBar
+              chatInputRef={chatInputRef}
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || e.shiftKey) return;
+                e.preventDefault();
+                if (isBenchmarkFirstAction) void handleGenerateBenchmark();
+                else void handleSend();
+              }}
+              placeholder={getChatComposerPlaceholder(isBenchmarkFirstAction, activeTab)}
+              inputTitle={
+                isBenchmarkFirstAction
+                  ? "Puedes incluir URLs públicas; se usarán como referencia para el benchmark."
+                  : undefined
+              }
+              loading={loading}
+              isBenchmarkFirstAction={isBenchmarkFirstAction}
+              showAttachTools={!isBenchmarkFirstAction}
+              imageInputRef={imageInputRef}
+              pendingFilesCount={pendingFiles.length}
+              sttMicDisabled={sttMicDisabled}
+              sttMicTitle={sttMicTitle}
+              sttMicAriaLabel={sttMicAriaLabel}
+              recording={recording}
+              onMicClick={() => void handleMicClick()}
+              submitDisabled={
+                loading ||
+                (isBenchmarkFirstAction ? !inputValue.trim() : !inputValue.trim() && !pendingFiles.length)
+              }
+              onSend={() => void handleSend()}
+              onGenerateBenchmark={() => void handleGenerateBenchmark()}
+            />
           </div>
         </div>
       ) : (
@@ -1097,63 +1204,39 @@ export default function ChatContainer({
                 ))}
               </div>
             ) : null}
-            <div className={AI_COMPOSER_SHELL} role="group" aria-label="Mensaje al asistente">
-              {!isBenchmarkFirstAction ? (
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  disabled={loading || pendingFiles.length >= 6}
-                  className={AI_COMPOSER_ATTACH_BTN}
-                  title="Adjuntar imagen (máx. 6, PNG/JPEG/WebP/GIF)"
-                  aria-label="Adjuntar imagen"
-                >
-                  <ImagePlus className="h-[1.125rem] w-[1.125rem] shrink-0" aria-hidden />
-                </button>
-              ) : null}
-              {sttModel ? (
-                <button
-                  type="button"
-                  onClick={handleMicClick}
-                  disabled={loading}
-                  className={`${AI_COMPOSER_ATTACH_BTN} ${recording ? "text-[var(--destructive)] animate-pulse" : ""}`}
-                  title={recording ? "Detener grabación" : "Grabar voz"}
-                  aria-label={recording ? "Detener grabación" : "Grabar voz"}
-                >
-                  <Mic className={`h-[1.125rem] w-[1.125rem] shrink-0 ${recording ? "text-[var(--destructive)]" : ""}`} aria-hidden />
-                </button>
-              ) : null}
-              <textarea
-                ref={chatInputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== "Enter" || e.shiftKey) return;
-                  e.preventDefault();
-                  if (isBenchmarkFirstAction) void handleGenerateBenchmark();
-                  else void handleSend();
-                }}
-                placeholder={getChatComposerPlaceholder(isBenchmarkFirstAction, activeTab)}
-                title={
-                  isBenchmarkFirstAction
-                    ? "Puedes incluir URLs públicas; se usarán como referencia para el benchmark."
-                    : undefined
-                }
-                rows={1}
-                className={AI_COMPOSER_TEXTAREA}
-                spellCheck={false}
-                disabled={loading}
-              />
-              <ChatComposerSubmit
-                isBenchmarkFirstAction={isBenchmarkFirstAction}
-                loading={loading}
-                disabled={
-                  loading ||
-                  (isBenchmarkFirstAction ? !inputValue.trim() : !inputValue.trim() && !pendingFiles.length)
-                }
-                onSend={() => void handleSend()}
-                onGenerateBenchmark={() => void handleGenerateBenchmark()}
-              />
-            </div>
+            <ChatComposerBar
+              chatInputRef={chatInputRef}
+              inputValue={inputValue}
+              onInputChange={setInputValue}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || e.shiftKey) return;
+                e.preventDefault();
+                if (isBenchmarkFirstAction) void handleGenerateBenchmark();
+                else void handleSend();
+              }}
+              placeholder={getChatComposerPlaceholder(isBenchmarkFirstAction, activeTab)}
+              inputTitle={
+                isBenchmarkFirstAction
+                  ? "Puedes incluir URLs públicas; se usarán como referencia para el benchmark."
+                  : undefined
+              }
+              loading={loading}
+              isBenchmarkFirstAction={isBenchmarkFirstAction}
+              showAttachTools={!isBenchmarkFirstAction}
+              imageInputRef={imageInputRef}
+              pendingFilesCount={pendingFiles.length}
+              sttMicDisabled={sttMicDisabled}
+              sttMicTitle={sttMicTitle}
+              sttMicAriaLabel={sttMicAriaLabel}
+              recording={recording}
+              onMicClick={() => void handleMicClick()}
+              submitDisabled={
+                loading ||
+                (isBenchmarkFirstAction ? !inputValue.trim() : !inputValue.trim() && !pendingFiles.length)
+              }
+              onSend={() => void handleSend()}
+              onGenerateBenchmark={() => void handleGenerateBenchmark()}
+            />
           </div>
         </>
       )}
