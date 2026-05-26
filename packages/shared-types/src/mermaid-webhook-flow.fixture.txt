@@ -1,0 +1,62 @@
+### Flujo de sincronización vía webhooks
+
+```mermaid
+flowchart TD
+  s0("")
+  s1("event — created ,")
+  s0 --> s1
+  s2("timestamp — 2026-05-20T10:00:00Z ,")
+  s1 --> s2
+  s3("tenant_id — uuid-del-tenant ,")
+  s2 --> s3
+  s4("data —")
+  s3 --> s4
+  s5("id — uuid ,")
+  s4 --> s5
+  s6("nombre — Ciudad de México ,")
+  s5 --> s6
+  s7("siglas — CDMX ,")
+  s6 --> s7
+  s8("estado_id — uuid-del-estado ,")
+  s7 --> s8
+  s9("audiencia — 9200000,")
+  s8 --> s9
+  s10("geolocalizacion —")
+  s9 --> s10
+  s11("lat — 19.4326,")
+  s10 --> s11
+  s12("lng — -99.1332")
+  s11 --> s12
+  s13("")
+  s12 --> s13
+  s14("")
+  s13 --> s14
+  s15("")
+  s14 --> s15
+  s16("Response 200:")
+  s15 --> s16
+  s17("")
+  s16 --> s17
+  s18("status — ok ,")
+  s17 --> s18
+  s19("entity — ciudades ,")
+  s18 --> s19
+  s20("action — upserted")
+  s19 --> s20
+  s21("")
+  s20 --> s21
+  s22("**Beneficios de las** tablas espejo")
+  s21 --> s22
+  s23("**Rendimiento — ** Los cálculos de márgenes y li")
+  s22 --> s23
+  s24("**Disponibilidad — ** Si el sistema origen está ")
+  s23 --> s24
+  s25("**Trazabilidad — ** Se mantiene un log de sincro")
+  s24 --> s25
+  s26("**Flexibilidad — ** Mientras OBP no se normalice")
+  s25 --> s26
+  s27("---")
+  s26 --> s27
+```
+
+### Beneficios de las tablas espejo

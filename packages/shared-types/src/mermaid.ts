@@ -621,12 +621,58 @@ export function normalizeMermaidDiagramBody(raw: string): string {
       return `${cleanId(p1)}_${cleanId(p2)}${p3}`;
     });
 
+    // Labels entre comillas: quitar markdown ** y recortar
+    line = line.replace(/"([^"]*)"/g, (_m, label: string) => {
+      const cleaned = label.replace(/\*\*/g, "").replace(/\s+/g, " ").trim().slice(0, 56);
+      return `"${cleaned}"`;
+    });
+
     out.push(line);
   }
 
   for (let i = 0; i < openBlocks; i++) out.push("  end");
 
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Diagrama lineal s0→s1→s2 al volcar JSON del webhook (no es un flujo legible). */
+export function looksLikeJsonFlattenFlowchart(body: string): boolean {
+  const t = body.trim();
+  if (!/^flowchart\s+TD/i.test(t)) return false;
+  const lines = t.split("\n").map((l) => l.trim()).filter(Boolean);
+  const slugNodes = lines.filter((l) => /^s\d+\s*\(/.test(l)).length;
+  if (slugNodes >= 8) return true;
+  const emptySlug = lines.some((l) => /^s\d+\s*\(\s*["']?\s*["']?\s*\)/.test(l));
+  const jsonFieldHits = (
+    t.match(
+      /\b(?:event|timestamp|tenant_id|estado_id|audiencia|geolocalizacion|siglas|nombre|data|status|entity|action)\s*—/gi,
+    ) ?? []
+  ).length;
+  const fieldCommaLabels = lines.filter((l) =>
+    /^s\d+\([^)]*—[^)]*,\s*["']?\)/.test(l),
+  ).length;
+  if (emptySlug && slugNodes >= 3 && jsonFieldHits >= 1) return true;
+  if (slugNodes >= 3 && jsonFieldHits >= 2) return true;
+  if (slugNodes >= 2 && fieldCommaLabels >= 2) return true;
+  return false;
+}
+
+export function webhookSyncFlowchartBody(): string {
+  return `flowchart TD
+  evt["Evento en sistema origen OBP u OBP4MO"]
+  post["POST /api/v1/webhooks/:sistema/:entidad"]
+  val["Validar payload y tenant_id"]
+  upsert["Upsert en tabla espejo"]
+  rsp["Response 200 status ok"]
+  evt --> post
+  post --> val
+  val --> upsert
+  upsert --> rsp`;
+}
+
+export function repairFlattenedWebhookFlowchart(body: string): string | null {
+  if (!looksLikeJsonFlattenFlowchart(body)) return null;
+  return webhookSyncFlowchartBody();
 }
 
 /** Un solo bloque ```mermaid … ``` (entrada puede incluir fences). */
@@ -645,7 +691,8 @@ export function normalizeMermaid(raw: string): string {
 export function normalizeMermaidInDocument(document: string): string {
   if (!document?.trim()) return document ?? "";
   return document.replace(/```mermaid\s*\n([\s\S]*?)```/gi, (_block, inner: string) => {
-    const body = normalizeMermaidDiagramBody(inner);
+    const body =
+      repairFlattenedWebhookFlowchart(inner) ?? normalizeMermaidDiagramBody(inner);
     return body ? `\`\`\`mermaid\n${body}\n\`\`\`` : "```mermaid\n```";
   });
 }

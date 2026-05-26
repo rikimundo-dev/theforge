@@ -2,6 +2,8 @@
  * Convierte secciones "Flujo de …" en diagramas Mermaid (flowchart).
  */
 
+import { normalizeMermaidDiagramBody, repairFlattenedWebhookFlowchart } from "./mermaid.js";
+
 const FLOW_HEADING = /^#{2,4}\s+Flujo de\s+/i;
 
 /** Etiquetas seguras para flowchart (sin {}, /, comillas rotas). */
@@ -95,6 +97,23 @@ export function odooCostFlowToMermaid(lines: string[]): string {
   return `${out.join("\n")}\n`;
 }
 
+function extractMermaidBlock(lines: string[], startIdx: number): { inner: string; endIdx: number } {
+  const innerLines: string[] = [];
+  let i = startIdx + 1;
+  while (i < lines.length && !/^```\s*$/.test(lines[i]!.trim())) {
+    innerLines.push(lines[i]!);
+    i++;
+  }
+  const endIdx = i < lines.length ? i + 1 : i;
+  return { inner: innerLines.join("\n"), endIdx };
+}
+
+function wrapMermaidBody(body: string): string {
+  const normalized = normalizeMermaidDiagramBody(body.trim());
+  if (!normalized) return "";
+  return ["```mermaid", normalized, "```"].join("\n");
+}
+
 export function repairFlowSectionsToMermaid(text: string): string {
   const lines = text.split("\n");
   const out: string[] = [];
@@ -106,36 +125,51 @@ export function repairFlowSectionsToMermaid(text: string): string {
     if (FLOW_HEADING.test(t)) {
       out.push(line);
       i++;
+      let existingMermaid: string | null = null;
       const body: string[] = [];
       while (i < lines.length) {
         const lt = lines[i]!.trim();
         if (/^#{1,4}\s/.test(lt) && !FLOW_HEADING.test(lt)) break;
         if (/^```mermaid/i.test(lt)) {
-          while (i < lines.length && !/^```\s*$/.test(lines[i]!.trim())) i++;
-          if (i < lines.length) i++;
+          const block = extractMermaidBlock(lines, i);
+          i = block.endIdx;
+          existingMermaid = block.inner;
           break;
         }
         body.push(lines[i]!);
         i++;
       }
-      const steps = body
-        .map((l) => l.trim())
-        .filter((l) => l && !l.startsWith("```") && !/^#{1,6}\s/.test(l));
-      const isOdoo = /procesamiento/i.test(t) && steps.some((s) => /Si existe:/i.test(s));
-      const bullets = steps
-        .filter((s) => !/^Si (no )?existe:/i.test(s))
-        .map((s) => (s.startsWith("- ") ? s : `- ${s.replace(/^[-*]\s+/, "")}`));
-      const mermaid = isOdoo ? odooCostFlowToMermaid(steps) : stepsToFlowchartMermaid(steps);
-      if (mermaid) {
-        out.push("");
-        out.push(mermaid.trimEnd());
-        out.push("");
-        if (bullets.length > 0) {
-          out.push(...bullets);
+
+      if (existingMermaid != null) {
+        const repaired =
+          repairFlattenedWebhookFlowchart(existingMermaid) ??
+          normalizeMermaidDiagramBody(existingMermaid);
+        const wrapped = repaired ? wrapMermaidBody(repaired) : "";
+        if (wrapped) {
+          out.push("");
+          out.push(wrapped);
           out.push("");
         }
       } else {
-        out.push(...body);
+        const steps = body
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith("```") && !/^#{1,6}\s/.test(l));
+        const isOdoo = /procesamiento/i.test(t) && steps.some((s) => /Si existe:/i.test(s));
+        const bullets = steps
+          .filter((s) => !/^Si (no )?existe:/i.test(s))
+          .map((s) => (s.startsWith("- ") ? s : `- ${s.replace(/^[-*]\s+/, "")}`));
+        const mermaid = isOdoo ? odooCostFlowToMermaid(steps) : stepsToFlowchartMermaid(steps);
+        if (mermaid) {
+          out.push("");
+          out.push(mermaid.trimEnd());
+          out.push("");
+          if (bullets.length > 0) {
+            out.push(...bullets);
+            out.push("");
+          }
+        } else {
+          out.push(...body);
+        }
       }
       continue;
     }
