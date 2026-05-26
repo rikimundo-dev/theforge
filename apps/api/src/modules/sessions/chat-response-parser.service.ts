@@ -16,7 +16,7 @@ export class ChatResponseParserService {
   splitDocAndChat(response: string, tag: string): { docPart: string; chatPart: string } | null {
     const trimmed = response.trim();
     const normalized = normalizeDashes(trimmed);
-    const regex = new RegExp(`-{1,}FIN_${tag}-{1,}`, "i");
+    const regex = new RegExp(`-{1,}\\s*FIN_${tag}\\s*-{1,}`, "i");
     const match = normalized.match(regex);
     if (match) {
       const idx = normalized.indexOf(match[0]);
@@ -68,9 +68,10 @@ export class ChatResponseParserService {
     const current = (currentDbga ?? "").trim();
     if (!current) return cleaned;
 
-    const hasBenchmarkTitle = /#\s*Domain\s+Benchmark|#\s*Benchmark\s*&\s*Gap/i.test(
-      cleaned,
-    );
+    const hasBenchmarkTitle =
+      /#\s*(?:Domain\s+Benchmark|Benchmark\s*&\s*Gap|Research\s+Report|Módulo\s+de\s+Costos)/i.test(
+        cleaned,
+      ) || /\bResearch\s+Report\b/i.test(cleaned);
     const looksLikeFullDbga =
       hasBenchmarkTitle &&
       cleaned.length >= Math.min(current.length * 0.5, 2000);
@@ -268,7 +269,7 @@ export class ChatResponseParserService {
    */
   detectBenchmarkDocFallback(trimmed: string): { docPart: string; chatPart: string } | null {
     const titleRe =
-      /(?:^|\n)#\s*(?:Domain\s+Benchmark|Benchmark\s*&\s*Gap|Benchmark\b|Análisis)\b/i;
+      /(?:^|\n)#\s*(?:Domain\s+Benchmark|Benchmark\s*&\s*Gap|Benchmark\b|Análisis|Research\s+Report|Módulo\s+de\s+Costos)\b/i;
     const titleMatch = trimmed.match(titleRe);
     if (titleMatch?.index != null) {
       const docStartIdx =
@@ -277,9 +278,11 @@ export class ChatResponseParserService {
     }
 
     const sectionCount = (trimmed.match(/\n##\s+/g) ?? []).length;
-    const startsWithSection = /^##\s+/m.test(trimmed);
+    const startsWithSection = /^#{2,3}\s+/m.test(trimmed);
     const integrationCue =
-      /\b(?:integraci[oó]n|OBP4?MO|tablas?\s+espejo|Gap\s+Analysis)\b/i.test(trimmed);
+      /\b(?:integraci[oó]n|OBP4?MO|tablas?\s+espejo|Gap\s+Analysis|tenant_id|multi-?tenant|catálogo\s+de\s+costos)\b/i.test(
+        trimmed,
+      );
     const minLen = integrationCue || startsWithSection ? 180 : 400;
     const looksLikeDbgaBody =
       trimmed.length >= minLen &&

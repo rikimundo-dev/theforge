@@ -19,6 +19,18 @@ import {
   formatVisionContextBlock,
   mergeUserTextWithVisionBlock,
 } from "../ai/utils/vision-context.util.js";
+import { llmMaxTokens } from "../ai/config/llm-config.js";
+import { normalizeDashes } from "./document-content.util.js";
+import {
+  BENCHMARK_CHAT_ACK,
+  dbgaReflectsUserEditIntent,
+  isDbgaContentNearlyIdentical,
+  isPartialBenchmarkDoc,
+  looksLikeDbgaEditRequest,
+  mergeBenchmarkPartialDoc,
+  parseBenchmarkResponse,
+  wouldShrinkDbgaDangerously,
+} from "./dbga-edit.util.js";
 
 function filterChatByTab(log: ChatMessage[], tab: string): ChatMessage[] {
   return log.filter((m) => (m.tab ?? "mdd") === tab);
@@ -415,9 +427,19 @@ export class SessionsService {
       }
     }
 
+    ({
+      hasDbga,
+      dbgaDocPart,
+      rawChat,
+    } = this.finalizeBenchmarkTurn(activeTab, safeResponse, userMessage, {
+      hasDbga,
+      dbgaDocPart,
+      rawChat,
+    }));
+
     const assistantContent = this.parser.stripChatLabel(rawChat);
 
-    const tab = options?.activeTab ?? "mdd";
+    const tab = activeTab;
     const stageId = options?.stageId?.trim();
     const userMsgBase = {
       role: "user" as const,
@@ -447,16 +469,16 @@ export class SessionsService {
     });
     const cleanedMddPart = hasMdd ? this.parser.cleanDocumentContent(mddSplit!.mddPart) : "";
     const finalMdd = hasMdd ? this.parser.mergeMddSectionOrUseFull(options?.currentMddContent, cleanedMddPart) : undefined;
+    const finalDbga = await this.resolveDbgaContentForReturn(
+      userMessage,
+      options,
+      dbgaDocPart,
+    );
     return {
       session: updatedSession,
       mddContent: finalMdd && finalMdd.length > 0 ? finalMdd : undefined,
       uxUiGuideContent: hasUx ? this.parser.mergeUxUiGuideSectionOrUseFull(options?.currentUxUiGuideContent, this.parser.cleanDocumentContent(uxDocPart!)) : undefined,
-      dbgaContent: dbgaDocPart
-        ? this.parser.mergeDbgaOrUseFull(
-            options?.currentDbgaContent,
-            this.parser.cleanDocumentContent(dbgaDocPart),
-          )
-        : undefined,
+      dbgaContent: finalDbga,
       phase0SummaryContent: hasPhase0
         ? this.parser.mergePhase0OrUseFull(
             undefined,
@@ -583,12 +605,13 @@ export class SessionsService {
       if (documentChunksDone) {
         // Already past the delimiter — yield normally
         yield { type: "chunk", content: chunk };
-      } else if (DOC_DELIMITER_RE.test(buffer)) {
+      } else if (DOC_DELIMITER_RE.test(normalizeDashes(buffer))) {
         // Delimiter found — stop buffering document content, yield chat part
         documentChunksDone = true;
-        const match = buffer.match(DOC_DELIMITER_RE);
+        const normBuffer = normalizeDashes(buffer);
+        const match = normBuffer.match(DOC_DELIMITER_RE);
         if (match) {
-          const idx = buffer.indexOf(match[0]);
+          const idx = normBuffer.indexOf(match[0]);
           const afterDelim = buffer.slice(idx + match[0].length);
           if (afterDelim.trim()) {
             yield { type: "chunk", content: afterDelim };
@@ -742,6 +765,16 @@ export class SessionsService {
       }
     }
 
+    ({
+      hasDbga,
+      dbgaDocPart,
+      rawChat,
+    } = this.finalizeBenchmarkTurn(tab, safeResponse, userMessage, {
+      hasDbga,
+      dbgaDocPart,
+      rawChat,
+    }));
+
     const assistantContent = this.parser.stripChatLabel(rawChat);
     const assistantEntry = stageId
       ? { role: "assistant" as const, content: assistantContent, tab, stageId }
@@ -757,17 +790,17 @@ export class SessionsService {
     });
     const cleanedMddPart = hasMdd ? this.parser.cleanDocumentContent(mddSplit!.mddPart) : "";
     const finalMdd = hasMdd ? this.parser.mergeMddSectionOrUseFull(options?.currentMddContent, cleanedMddPart) : undefined;
+    const finalDbga = await this.resolveDbgaContentForReturn(
+      userMessage,
+      options,
+      dbgaDocPart,
+    );
     yield {
       type: "done",
       session: updatedSession,
       mddContent: finalMdd && finalMdd.length > 0 ? finalMdd : undefined,
       uxUiGuideContent: hasUx ? this.parser.mergeUxUiGuideSectionOrUseFull(options?.currentUxUiGuideContent, this.parser.cleanDocumentContent(uxDocPart!)) : undefined,
-      dbgaContent: dbgaDocPart
-        ? this.parser.mergeDbgaOrUseFull(
-            options?.currentDbgaContent,
-            this.parser.cleanDocumentContent(dbgaDocPart),
-          )
-        : undefined,
+      dbgaContent: finalDbga,
       phase0SummaryContent: hasPhase0
         ? this.parser.mergePhase0OrUseFull(
             undefined,
@@ -1043,8 +1076,219 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
   }
 
   /**
-   * Recupera DBGA cuando el modelo lo dejó solo en el mensaje de chat (sin ---FIN_DBGA---).
+   * Separa documento vs chat en tab benchmark y evita persistir el DBGA entero en chatLog.
    */
+  private finalizeBenchmarkTurn(
+    tab: string,
+    safeResponse: string,
+    userMessage: string,
+    state: { hasDbga: boolean; dbgaDocPart?: string; rawChat: string },
+  ): { hasDbga: boolean; dbgaDocPart?: string; rawChat: string } {
+    if (tab.trim() !== "benchmark") return state;
+
+    const parsed = parseBenchmarkResponse(safeResponse);
+    if (parsed) {
+      return {
+        hasDbga: true,
+        dbgaDocPart: parsed.docPart,
+        rawChat: parsed.chatPart || BENCHMARK_CHAT_ACK,
+      };
+    }
+
+    if (state.hasDbga && state.dbgaDocPart?.trim()) {
+      const chat = state.rawChat.trim();
+      if (chat.length > 600 && state.dbgaDocPart.length > 400) {
+        return { ...state, rawChat: BENCHMARK_CHAT_ACK };
+      }
+      return state;
+    }
+
+    const fb = this.parser.detectBenchmarkDocFallback(safeResponse.trim());
+    if (fb?.docPart?.trim()) {
+      return {
+        hasDbga: true,
+        dbgaDocPart: fb.docPart,
+        rawChat: fb.chatPart || BENCHMARK_CHAT_ACK,
+      };
+    }
+
+    if (
+      safeResponse.length > 400 &&
+      (looksLikeDbgaEditRequest(userMessage) ||
+        /\btenant_id\b|multi-?tenant|###\s+Módulos del proyecto/i.test(safeResponse))
+    ) {
+      const fb2 = this.parser.detectBenchmarkDocFallback(safeResponse.trim());
+      if (fb2?.docPart?.trim()) {
+        return {
+          hasDbga: true,
+          dbgaDocPart: fb2.docPart,
+          rawChat: fb2.chatPart || BENCHMARK_CHAT_ACK,
+        };
+      }
+    }
+
+    return state;
+  }
+
+  /**
+   * Segunda pasada cuando el stream/chat no trajo `---FIN_DBGA---` pero el usuario pidió cambios.
+   * Usa el mismo prompt de refinado (BENCHMARK_REFINE) con el DBGA actual en system.
+   */
+  private async resolveDbgaContentForReturn(
+    userMessage: string,
+    options: { activeTab?: string; currentDbgaContent?: string } | undefined,
+    dbgaDocPart: string | undefined,
+  ): Promise<string | undefined> {
+    const tab = (options?.activeTab ?? "mdd").trim();
+    const current = options?.currentDbgaContent?.trim() ?? "";
+    const wantsEdit = looksLikeDbgaEditRequest(userMessage);
+
+    const cleanedPart = dbgaDocPart
+      ? this.parser.cleanDocumentContent(dbgaDocPart)
+      : undefined;
+
+    let merged = cleanedPart
+      ? tab === "benchmark" && isPartialBenchmarkDoc(cleanedPart, current)
+        ? this.parser.cleanDocumentContent(mergeBenchmarkPartialDoc(current, cleanedPart))
+        : this.parser.mergeDbgaOrUseFull(options?.currentDbgaContent, cleanedPart)
+      : undefined;
+
+    const needsRefine =
+      tab === "benchmark" &&
+      wantsEdit &&
+      current.length > 0 &&
+      (!merged ||
+        isDbgaContentNearlyIdentical(merged, current) ||
+        !dbgaReflectsUserEditIntent(merged, userMessage));
+
+    if (needsRefine) {
+      const refined = await this.refineDbgaFromUserRequest(userMessage, current);
+      if (refined) {
+        merged = refined;
+        console.log("[Sessions] refineDbgaFromUserRequest aplicado, length:", refined.length);
+      } else if (merged && isDbgaContentNearlyIdentical(merged, current)) {
+        console.warn(
+          "[Sessions] DBGA sin cambios tras refinado; el panel puede seguir igual que antes del mensaje.",
+        );
+        merged = undefined;
+      }
+    }
+
+    if (merged && current && wouldShrinkDbgaDangerously(current, merged)) {
+      console.warn(
+        "[Sessions] DBGA merge rechazado (reducción peligrosa); se conserva el documento anterior.",
+        { currentLen: current.length, mergedLen: merged.length },
+      );
+      merged = undefined;
+    }
+
+    return merged && merged.length > 0 ? merged : undefined;
+  }
+
+  /**
+   * Tras el chat/stream: devuelve `candidate` si ya refleja la petición; si no, segunda pasada de refinado.
+   */
+  async maybeRefineBenchmarkDbga(
+    userMessage: string,
+    currentDbga: string,
+    candidate: string | null | undefined,
+  ): Promise<string | null> {
+    const current = currentDbga.trim();
+    const c = candidate?.trim();
+    if (
+      c &&
+      !isDbgaContentNearlyIdentical(c, current) &&
+      dbgaReflectsUserEditIntent(c, userMessage)
+    ) {
+      return c;
+    }
+    return this.refineDbgaFromUserRequest(userMessage, current);
+  }
+
+  async refineDbgaFromUserRequest(
+    userMessage: string,
+    currentDbga: string,
+  ): Promise<string | null> {
+    const msg = userMessage.trim();
+    const current = currentDbga.trim();
+    if (!msg || !current) return null;
+
+    const refinePrompt = `Aplica OBLIGATORIAMENTE al documento completo los cambios que pide el usuario. No respondas solo en chat: devuelve el DBGA/Fase 0 COMPLETO en markdown y termina con la línea exacta ---FIN_DBGA---.
+
+Petición del usuario:
+---
+${msg}
+---`;
+
+    const llmOpts = {
+      activeTab: "benchmark" as const,
+      currentDbgaContent: current,
+      maxTokensOverride: llmMaxTokens(),
+    };
+
+    try {
+      let response = await this.ai.generateResponse(refinePrompt, [], llmOpts);
+      let merged = this.extractMergedDbgaFromModelResponse(response, current);
+
+      const unchanged =
+        merged != null && isDbgaContentNearlyIdentical(merged, current);
+      const missingIntent =
+        merged != null && !dbgaReflectsUserEditIntent(merged, userMessage);
+
+      if (merged && (unchanged || missingIntent)) {
+        console.warn(
+          `[Sessions] refineDbga retry (unchanged=${unchanged}, missingIntent=${missingIntent})`,
+        );
+        response = await this.ai.generateResponse(
+          `${refinePrompt}\n\nREINTENTO: la respuesta anterior NO aplicó los cambios. El documento debe reflejar explícitamente lo pedido (p. ej. tenant_id, multi-tenancy, catálogo por aplicación OBP/OBP4MO).`,
+          [],
+          llmOpts,
+        );
+        merged = this.extractMergedDbgaFromModelResponse(response, current);
+      }
+
+      if (!merged || isDbgaContentNearlyIdentical(merged, current)) return null;
+      if (!dbgaReflectsUserEditIntent(merged, userMessage)) return null;
+      return merged;
+    } catch (err) {
+      console.warn("[Sessions] refineDbgaFromUserRequest failed:", err);
+      return null;
+    }
+  }
+
+  private extractMergedDbgaFromModelResponse(
+    response: string,
+    currentDbga?: string,
+  ): string | null {
+    const trimmed = response?.trim() ?? "";
+    if (!trimmed) return null;
+
+    const finIdx = trimmed.indexOf("---FIN_DBGA---");
+    const withoutFin = finIdx >= 0 ? trimmed.slice(0, finIdx).trim() : trimmed;
+
+    const split =
+      parseBenchmarkResponse(trimmed) ??
+      this.parser.splitDbgaAndChat(trimmed) ??
+      this.parser.detectBenchmarkDocFallback(withoutFin) ??
+      this.parser.detectBenchmarkDocFallback(trimmed);
+
+    let docPart = split?.docPart?.trim();
+    if (!docPart && withoutFin.length >= 800) {
+      docPart = withoutFin;
+    }
+    if (!docPart) return null;
+
+    const cleaned = this.parser.cleanDocumentContent(docPart);
+    if (currentDbga?.trim() && isPartialBenchmarkDoc(docPart, currentDbga)) {
+      const partialMerged = this.parser.cleanDocumentContent(
+        mergeBenchmarkPartialDoc(currentDbga.trim(), cleaned),
+      );
+      return partialMerged.length > 0 ? partialMerged : null;
+    }
+    const merged = this.parser.mergeDbgaOrUseFull(currentDbga, cleaned);
+    return merged.length > 0 ? merged : null;
+  }
+
   salvageDbgaFromAssistantText(
     assistantText: string,
     currentDbga?: string,
@@ -1053,14 +1297,92 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
     if (trimmed.length < 200) return null;
 
     const split =
+      parseBenchmarkResponse(trimmed) ??
       this.parser.splitDbgaAndChat(trimmed) ??
       this.parser.detectBenchmarkDocFallback(trimmed);
     if (!split?.docPart?.trim()) return null;
 
-    const merged = this.parser.mergeDbgaOrUseFull(
-      currentDbga,
-      this.parser.cleanDocumentContent(split.docPart),
-    );
+    const docPart = split.docPart.trim();
+    const cleaned = this.parser.cleanDocumentContent(docPart);
+    if (currentDbga?.trim() && isPartialBenchmarkDoc(docPart, currentDbga)) {
+      const partialMerged = this.parser.cleanDocumentContent(
+        mergeBenchmarkPartialDoc(currentDbga.trim(), cleaned),
+      );
+      return partialMerged.length > 0 ? partialMerged : null;
+    }
+    const merged = this.parser.mergeDbgaOrUseFull(currentDbga, cleaned);
     return merged.length > 0 ? merged : null;
+  }
+
+  /**
+   * Recupera el DBGA más completo encontrado en mensajes assistant del tab benchmark
+   * y lo persiste de vuelta en el proyecto (panel Fase 0).
+   */
+  async salvageAndRestoreDbgaFromChat(projectId: string) {
+    const userId = getRequestUserId();
+    const project = await this.prisma.project.findFirst({
+      where: {
+        id: projectId,
+        OR: [{ userId }, { visibility: "SHARED" }],
+      },
+    });
+    if (!project) throw new NotFoundException("Project not found");
+
+    const sessions = await this.prisma.session.findMany({
+      where: { projectId, userId },
+      orderBy: { updatedAt: "desc" },
+    });
+
+    const currentDbga = (project.dbgaContent ?? "").trim();
+    let best: { content: string; len: number; sessionId: string } | null = null;
+
+    for (const session of sessions) {
+      const log = (session.chatLog as ChatMessage[]) ?? [];
+      for (const msg of log) {
+        if (msg.role !== "assistant" || (msg.tab ?? "mdd") !== "benchmark") continue;
+        const raw = msg.content?.trim() ?? "";
+        if (raw.length < 400) continue;
+        if (!/# Research Report|### Módulos del proyecto|Domain Benchmark/i.test(raw)) {
+          continue;
+        }
+
+        const parsed = parseBenchmarkResponse(raw);
+        const docRaw = parsed?.docPart?.trim() ?? raw;
+        let candidate =
+          this.salvageDbgaFromAssistantText(docRaw, currentDbga || undefined) ??
+          (currentDbga && isPartialBenchmarkDoc(docRaw, currentDbga)
+            ? this.parser.cleanDocumentContent(
+                mergeBenchmarkPartialDoc(currentDbga, docRaw),
+              )
+            : this.parser.cleanDocumentContent(docRaw));
+
+        if (!candidate?.trim()) continue;
+        if (currentDbga && wouldShrinkDbgaDangerously(currentDbga, candidate)) continue;
+
+        if (candidate.length > (best?.len ?? 0)) {
+          best = { content: candidate, len: candidate.length, sessionId: session.id };
+        }
+      }
+    }
+
+    if (!best) {
+      throw new NotFoundException(
+        "No se encontró un DBGA recuperable en el historial del chat (tab benchmark).",
+      );
+    }
+
+    await this.prisma.project.update({
+      where: { id: projectId },
+      data: {
+        dbgaContent: best.content,
+        phase0SummaryContent: best.content,
+      },
+    });
+
+    return {
+      dbgaContent: best.content,
+      recoveredFromSessionId: best.sessionId,
+      length: best.len,
+    };
   }
 }

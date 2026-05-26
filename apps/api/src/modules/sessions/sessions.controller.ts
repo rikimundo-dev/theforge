@@ -70,6 +70,11 @@ export class SessionsController {
     });
   }
 
+  @Post("project/:projectId/salvage-dbga")
+  salvageDbgaFromChat(@Param("projectId") projectId: string) {
+    return this.sessions.salvageAndRestoreDbgaFromChat(projectId);
+  }
+
   @Patch(":id/context")
   updateContextStep(
     @Param("id") id: string,

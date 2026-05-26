@@ -1,0 +1,23 @@
+Esquema SQL para tablas espejo (OBP4MO) con tenant_id
+
+-- Tabla espejo de países (desde OBP4MO) CREATE TABLE paises ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, nombre VARCHAR(255) NOT NULL, siglas VARCHAR(10), moneda VARCHAR(3) DEFAULT 'MXN', created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Tabla espejo de estados (desde OBP4MO) CREATE TABLE estados ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, pais_id UUID NOT NULL REFERENCES paises(id) ON DELETE CASCADE, nombre VARCHAR(255) NOT NULL, siglas VARCHAR(10), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Tabla espejo de ciudades (desde OBP4MO) CREATE TABLE ciudades ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, estado_id UUID NOT NULL REFERENCES estados(id) ON DELETE CASCADE, nombre VARCHAR(255) NOT NULL, siglas VARCHAR(10), audiencia BIGINT, geolocalizacion JSONB, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Tabla espejo de formatos de medio (desde OBP4MO) CREATE TABLE formatos_medio ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, pais_id UUID NOT NULL REFERENCES paises(id) ON DELETE CASCADE, nombre VARCHAR(255) NOT NULL, siglas VARCHAR(10), descripcion TEXT, tipo VARCHAR(50), -- 'INDOOR', 'OUTDOOR', 'CAMION' created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Tabla espejo de medios (desde OBP4MO) CREATE TABLE medios ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, ciudad_id UUID NOT NULL REFERENCES ciudades(id) ON DELETE CASCADE, formato_medio_id UUID NOT NULL REFERENCES formatos_medio(id) ON DELETE CASCADE, clave VARCHAR(100) NOT NULL, nombre VARCHAR(255) NOT NULL, audiencia BIGINT, geolocalizacion JSONB, flags JSONB, activo BOOLEAN DEFAULT TRUE, calificacion INTEGER CHECK (calificacion >= 1 AND calificacion <= 5), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Índices para consultas frecuentes en cálculo de márgenes CREATE INDEX idx_medios_ciudad ON medios(ciudad_id); CREATE INDEX idx_medios_formato ON medios(formato_medio_id); CREATE INDEX idx_ciudades_estado ON ciudades(estado_id); CREATE INDEX idx_estados_pais ON estados(pais_id); CREATE INDEX idx_formatos_medio_pais ON formatos_medio(pais_id); CREATE INDEX idx_paises_tenant ON paises(tenant_id); CREATE INDEX idx_estados_tenant ON estados(tenant_id); CREATE INDEX idx_ciudades_tenant ON ciudades(tenant_id); CREATE INDEX idx_formatos_medio_tenant ON formatos_medio(tenant_id); CREATE INDEX idx_medios_tenant ON medios(tenant_id);
+Esquema SQL para tablas espejo (OBP — estructura desnormalizada) con tenant_id
+
+-- Tabla espejo de ubicaciones (desde OBP — estructura plana) CREATE TABLE ubicaciones_obp ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, nombre VARCHAR(255) NOT NULL, siglas VARCHAR(10), audiencia BIGINT, geolocalizacion JSONB, tipo VARCHAR(50), -- 'PAIS', 'ESTADO', 'CIUDAD' (se infiere del contexto) pais_referencia VARCHAR(255), estado_referencia VARCHAR(255), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Tabla espejo de formatos de medio (desde OBP) CREATE TABLE formatos_medio_obp ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, nombre VARCHAR(255) NOT NULL, siglas VARCHAR(10), descripcion TEXT, ubicacion_id UUID REFERENCES ubicaciones_obp(id), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+
+-- Tabla espejo de medios (desde OBP) CREATE TABLE medios_obp ( id UUID PRIMARY KEY, tenant_id UUID NOT NULL, ubicacion_id UUID NOT NULL REFERENCES ubicaciones_obp(id) ON DELETE CASCADE, formato_medio_id UUID REFERENCES formatos_medio_obp(id), clave VARCHAR(100) NOT NULL, nombre VARCHAR(255) NOT NULL, audiencia BIGINT, geolocalizacion JSONB, flags JSONB, activo BOOLEAN DEFAULT TRUE, calificacion INTEGER CHECK (calificacion >= 1 AND calificacion <= 5), created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW() );
+CREATE INDEX idx_ubicaciones_obp_tenant ON ubicaciones_obp(tenant_id);
+
+CREATE INDEX idx_formatos_medio_obp_tenant ON formatos_medio_obp(tenant_id); CREATE INDEX idx_medios_obp_tenant ON medios_obp(tenant_id);

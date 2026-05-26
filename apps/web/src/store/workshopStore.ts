@@ -2031,7 +2031,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   mddContent: packed?.mddContent ?? get().mddContent,
                   workshopStages: nextStages && nextStages.length > 0 ? nextStages : get().workshopStages,
                   uxUiGuideContent: freshUx,
-                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null) ?? get().dbgaContent,
+                  dbgaContent:
+                    cleanDoc(
+                      (data.dbgaContent as string | null | undefined) ??
+                        proj?.dbgaContent ??
+                        null,
+                    ) ?? get().dbgaContent,
                   specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
                   architectureContent: cleanDoc(proj?.architectureContent ?? null) ?? get().architectureContent,
                   useCasesContent: cleanDoc(proj?.useCasesContent ?? null) ?? get().useCasesContent,
@@ -2094,7 +2099,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   mddContent: packed?.mddContent ?? get().mddContent,
                   workshopStages: nextStagesB && nextStagesB.length > 0 ? nextStagesB : get().workshopStages,
                   uxUiGuideContent: freshUx,
-                  dbgaContent: cleanDoc(proj?.dbgaContent ?? null) ?? get().dbgaContent,
+                  dbgaContent:
+                    cleanDoc(
+                      (data.dbgaContent as string | null | undefined) ??
+                        proj?.dbgaContent ??
+                        null,
+                    ) ?? get().dbgaContent,
                   specContent: cleanDoc(proj?.specContent ?? null) ?? get().specContent,
                   blueprintContent: cleanDoc(proj?.blueprintContent ?? null) ?? get().blueprintContent,
                   apiContractsContent: cleanDoc(proj?.apiContractsContent ?? null) ?? get().apiContractsContent,

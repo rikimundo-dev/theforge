@@ -2,7 +2,7 @@
  * Reparaciones heurísticas para markdown pegado desde Word/Excel/chat (sin LLM).
  */
 
-import { repairCollapsedSqlParagraphs } from "./repair-collapsed-sql.js";
+import { repairCollapsedSqlParagraphs, repairCollapsedSqlInsideFences } from "./repair-collapsed-sql.js";
 import { repairFlowSectionsToMermaid } from "./repair-flow-sections.js";
 
 const SQL_GLUE_REPLACEMENTS: Array<[RegExp, string]> = [
@@ -453,6 +453,7 @@ export function repairPastedMarkdown(text: string): string {
   out = repairPromoteBareSectionHeadings(out);
   out = repairDemoteFalseApiHeadings(out);
   out = repairCollapsedSqlParagraphs(out);
+  out = repairCollapsedSqlInsideFences(out);
   out = repairOrphanSqlBlocks(out);
   out = repairLooseJsonBlocks(out);
   out = repairJsonFenceIntegrity(out);

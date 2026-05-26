@@ -2,63 +2,137 @@
  * SQL pegado en una sola línea (chat/Word) → bloque ```sql multilínea.
  */
 
+const SQL_GLUE_REPLACEMENTS: Array<[RegExp, string]> = [
+  [/DEFAULT_NOW\(\)/gi, "DEFAULT NOW()"],
+  [/DEFAULT_gen_random_uuid\(\)/gi, "DEFAULT gen_random_uuid()"],
+  [/NOT_NULL_REFERENCES/gi, "NOT NULL REFERENCES"],
+  [/UUID\s+NOT\s+NULL_REFERENCES/gi, "UUID NOT NULL REFERENCES"],
+  [/UUID_REFERENCES/gi, "UUID REFERENCES"],
+  [/REFERENCES_([a-z_]+)/gi, "REFERENCES $1"],
+  [/([a-z])_(VARCHAR|TEXT|JSONB|BOOLEAN|INTEGER|BIGINT|DECIMAL|TIMESTAMPTZ|INET)\b/gi, "$1 $2"],
+  [/(?<![a-z])_(UUID)\b/g, " UUID"],
+  [/_(NOT\s+NULL)\b/gi, " $1"],
+  [/_(ON\s+DELETE)\b/gi, " $1"],
+  [/_(PRIMARY\s+KEY)\b/gi, " $1"],
+  [/_(REFERENCES)([a-z_])/gi, " REFERENCES$2"],
+  [/_(REFERENCES)\b/gi, " REFERENCES"],
+  [/([a-z_])_(ON|DEFAULT)\b/gi, "$1 $2"],
+  [/ON_([a-z_]+)\(/gi, "ON $1("],
+  [/^_(CREATE|INDEX)\b/gim, "$1"],
+];
+
+function normalizeGluedSqlTokens(sql: string): string {
+  let out = sql;
+  for (const [re, rep] of SQL_GLUE_REPLACEMENTS) {
+    out = out.replace(re, rep);
+  }
+  return out.replace(/idx_[a-z0-9_]+_ON_/gi, (m) => m.replace(/_ON_/, "_ON "));
+}
+
 export interface SqlCreateStatement {
   comment?: string;
   name: string;
   body: string;
 }
 
-/** Parte el interior de CREATE TABLE (…) respetando paréntesis en CHECK, etc. */
+const NEXT_COL_RE =
+  /^[a-z_][\w]*\s+(?:UUID|VARCHAR|TEXT|INTEGER|BOOLEAN|BIGINT|JSONB|TIMESTAMPTZ|DECIMAL|CHECK|REFERENCES|UNIQUE|PRIMARY|FOREIGN|CONSTRAINT)/i;
+
+function skipInlineSqlComment(inner: string, start: number, depth: number): number {
+  let i = start + 2;
+  while (i < inner.length) {
+    const ch = inner[i]!;
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (depth === 0) {
+      const rest = inner.slice(i + (ch === "," ? 1 : 0)).trimStart();
+      if (NEXT_COL_RE.test(rest)) {
+        return ch === "," ? i + 1 : i;
+      }
+    }
+    if (ch === "," && depth === 0) {
+      const rest = inner.slice(i + 1).trimStart();
+      if (NEXT_COL_RE.test(rest)) return i + 1;
+    }
+    i++;
+  }
+  return i;
+}
+
+/** Quita comentarios `--` inline antes de la siguiente columna. */
+export function stripInlineSqlComments(body: string): string {
+  let out = "";
+  let depth = 0;
+  let i = 0;
+  while (i < body.length) {
+    if (body.slice(i, i + 2) === "--" && depth === 0) {
+      i = skipInlineSqlComment(body, i, depth);
+      continue;
+    }
+    const ch = body[i]!;
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    out += ch;
+    i++;
+  }
+  return out.replace(/\s+/g, " ").trim();
+}
+
+/** Parte el interior de CREATE TABLE (…) respetando paréntesis y comentarios `--` inline. */
 export function splitSqlColumnDefs(inner: string): string[] {
+  const normalized = stripInlineSqlComments(inner);
   const cols: string[] = [];
   let depth = 0;
   let start = 0;
   let i = 0;
-  while (i < inner.length) {
-    if (inner.slice(i, i + 2) === "--") {
-      i += 2;
-      while (i < inner.length) {
-        if (inner[i] === "," && depth === 0) {
-          i++;
-          break;
-        }
-        if (inner[i] === "(") depth++;
-        else if (inner[i] === ")") depth--;
-        i++;
-      }
-      continue;
-    }
-    const ch = inner[i]!;
+  while (i < normalized.length) {
+    const ch = normalized[i]!;
     if (ch === "(") depth++;
     else if (ch === ")") depth--;
     else if (ch === "," && depth === 0) {
-      const part = inner.slice(start, i).trim();
+      const part = normalized.slice(start, i).trim();
       if (part) cols.push(part);
       start = i + 1;
     }
     i++;
   }
-  const last = inner.slice(start).trim();
+  const last = normalized.slice(start).trim();
   if (last) cols.push(last);
   return cols;
+}
+
+function readTableCommentBeforeCreate(before: string): string | undefined {
+  let lastIdx = -1;
+  for (const re of [/--\s*Tabla espejo/gi, /--\s*Índices/gi]) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(before)) !== null) {
+      lastIdx = m.index;
+    }
+  }
+  if (lastIdx < 0) return undefined;
+  let comment = before.slice(lastIdx + 2).trim();
+  const cut = comment.search(/\sCREATE (?:TABLE|INDEX)\s/i);
+  if (cut > 0) comment = comment.slice(0, cut).trim();
+  return comment || undefined;
+}
+
+function splitEmbeddedEsquemaSections(chunk: string): string[] {
+  const parts = chunk
+    .split(/\s+(?=Esquema SQL para tablas espejo)/i)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? parts : [chunk.trim()];
 }
 
 /** Extrae CREATE TABLE … ); de texto colapsado (espacios/newlines arbitrarios). */
 export function extractCreateStatements(sql: string): SqlCreateStatement[] {
   const s = sql.replace(/\s+/g, " ").trim();
   const results: SqlCreateStatement[] = [];
-  const re = /(?:--\s*(.*?)\s*)?CREATE TABLE\s+(\w+)\s*\(/gi;
-  const hits: { comment?: string; name: string; open: number }[] = [];
+  const createRe = /CREATE TABLE\s+(\w+)\s*\(/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) !== null) {
-    hits.push({
-      comment: m[1]?.trim() || undefined,
-      name: m[2]!,
-      open: m.index + m[0].length,
-    });
-  }
-  for (let h = 0; h < hits.length; h++) {
-    const { comment, name, open } = hits[h]!;
+  while ((m = createRe.exec(s)) !== null) {
+    const name = m[1]!;
+    const open = m.index + m[0].length;
     let depth = 1;
     let i = open;
     while (i < s.length && depth > 0) {
@@ -67,9 +141,23 @@ export function extractCreateStatements(sql: string): SqlCreateStatement[] {
       i++;
     }
     const body = s.slice(open, i - 1).trim();
+    const before = s.slice(0, m.index).trimEnd();
+    const comment = readTableCommentBeforeCreate(before);
     results.push({ comment, name, body });
   }
   return results;
+}
+
+export function extractCreateIndexStatements(sql: string): string[] {
+  const s = sql.replace(/\s+/g, " ").trim();
+  const re = /CREATE INDEX\s+(\S+)\s+ON\s+(\S+)\s*\([^)]+\)\s*;?/gi;
+  const lines: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) {
+    const stmt = m[0].trim();
+    lines.push(stmt.endsWith(";") ? stmt : `${stmt};`);
+  }
+  return lines;
 }
 
 export function formatCreateStatement(stmt: SqlCreateStatement): string {
@@ -86,20 +174,111 @@ export function formatCreateStatement(stmt: SqlCreateStatement): string {
 
 export function expandCollapsedSqlText(raw: string): string | null {
   if (!/CREATE TABLE/i.test(raw)) return null;
-  const stmts = extractCreateStatements(raw);
+  const normalized = normalizeGluedSqlTokens(raw.replace(/\s+/g, " ").trim());
+  const stmts = extractCreateStatements(normalized);
   if (stmts.length === 0) return null;
-  return stmts.map(formatCreateStatement).join("\n\n");
+  const blocks = stmts.map(formatCreateStatement);
+  const indexes = extractCreateIndexStatements(normalized);
+  if (indexes.length > 0) {
+    blocks.push(indexes.join("\n"));
+  }
+  return blocks.join("\n\n");
 }
 
-function lineLooksCollapsedSql(t: string): boolean {
+export function lineLooksCollapsedSql(t: string): boolean {
   if (!/CREATE TABLE/i.test(t)) return false;
   return (
     t.length > 100 ||
     /--\s*[^\n]*CREATE TABLE/i.test(t) ||
     (t.match(/CREATE TABLE/gi)?.length ?? 0) > 1 ||
     /\)\s*;\s*--/.test(t) ||
+    /CREATE INDEX\s+\S+\s+ON\s+\S+\([^)]+\)/i.test(t) ||
     /nombre_VARCHAR|NOT NULL_REFERENCES|REFERENCES_\w|DEFAULT_NOW/i.test(t)
   );
+}
+
+/** Separa título "Esquema SQL …" del SQL pegado en la misma línea. */
+export function splitEsquemaSqlHeadingFromPayload(line: string): {
+  heading: string;
+  rest: string;
+} | null {
+  const t = line.trim();
+  if (!/\bEsquema SQL\b/i.test(t)) return null;
+  const payloadIdx = t.search(
+    /\s+(?=(?:--\s*(?:Tabla espejo|Índices\b)|CREATE\s+(?:TABLE|INDEX)\b))/i,
+  );
+  if (payloadIdx <= 0) return null;
+  const heading = t.slice(0, payloadIdx).trim();
+  const rest = t.slice(payloadIdx).trim();
+  if (!/^Esquema SQL/i.test(heading.replace(/^#{1,4}\s+/, ""))) return null;
+  if (!rest || !/CREATE\s+(TABLE|INDEX)|--\s*Tabla/i.test(rest)) return null;
+  return { heading, rest };
+}
+
+function formatEsquemaHeading(heading: string): string {
+  const h = heading.trim();
+  return /^#{1,4}\s/.test(h) ? h : `### ${h}`;
+}
+
+function emitSqlChunk(out: string[], chunkParts: string[]): boolean {
+  if (chunkParts.length === 0) return false;
+  const joined = chunkParts.join(" ");
+  const sections = splitEmbeddedEsquemaSections(joined);
+  const expandedBlocks: string[] = [];
+  for (const section of sections) {
+    const expanded = expandCollapsedSqlText(section);
+    if (expanded) expandedBlocks.push(expanded);
+  }
+  if (expandedBlocks.length === 0) return false;
+  out.push("");
+  out.push("```sql");
+  out.push(expandedBlocks.join("\n\n"));
+  out.push("```");
+  out.push("");
+  return true;
+}
+
+function collectCollapsedSqlChunk(
+  lines: string[],
+  startIdx: number,
+): { chunk: string[]; nextIdx: number; nestedHeading?: string } {
+  const chunk: string[] = [];
+  let i = startIdx;
+  while (i < lines.length) {
+    const lt = lines[i]!.trim();
+    if (!lt) {
+      i++;
+      continue;
+    }
+    if (/^```/.test(lt)) break;
+
+    const innerSplit = splitEsquemaSqlHeadingFromPayload(lt);
+    if (innerSplit) {
+      if (chunk.length > 0) {
+        return { chunk, nextIdx: i, nestedHeading: innerSplit.heading };
+      }
+      return {
+        chunk: [innerSplit.rest],
+        nextIdx: i + 1,
+        nestedHeading: innerSplit.heading,
+      };
+    }
+
+    if (/^#{1,6}\s/.test(lt) && !/^Esquema SQL/i.test(lt)) break;
+    if (
+      lineLooksCollapsedSql(lt) ||
+      /^--\s*(?:Tabla espejo|Índices\b)/i.test(lt) ||
+      /^CREATE (TABLE|INDEX)\b/i.test(lt)
+    ) {
+      chunk.push(lt);
+      i++;
+    } else if (chunk.length > 0) {
+      break;
+    } else {
+      i++;
+    }
+  }
+  return { chunk, nextIdx: i };
 }
 
 /**
@@ -124,44 +303,68 @@ export function repairCollapsedSqlParagraphs(text: string): string {
       continue;
     }
 
+    const headingSplit = splitEsquemaSqlHeadingFromPayload(t);
     const isEsquemaHeading = /^(#{1,4}\s+)?Esquema SQL\b/i.test(t);
-    if (isEsquemaHeading || lineLooksCollapsedSql(t)) {
-      if (isEsquemaHeading) {
-        out.push(/^#{1,4}\s/.test(t) ? line : `### ${t}`);
-        i++;
-      }
+    const isCollapsed = lineLooksCollapsedSql(t);
 
-      const chunk: string[] = [];
-      while (i < lines.length) {
-        const lt = lines[i]!.trim();
-        if (!lt) {
-          i++;
-          continue;
+    if (!headingSplit && !isEsquemaHeading && !isCollapsed) {
+      out.push(line);
+      continue;
+    }
+
+    if (headingSplit) {
+      out.push(formatEsquemaHeading(headingSplit.heading));
+      let collected = collectCollapsedSqlChunk(lines, i + 1);
+      const chunk = [headingSplit.rest, ...collected.chunk];
+      if (!emitSqlChunk(out, chunk)) out.push(headingSplit.rest);
+      i = collected.nextIdx - 1;
+      while (collected.nestedHeading) {
+        out.push(formatEsquemaHeading(collected.nestedHeading));
+        collected = collectCollapsedSqlChunk(lines, i + 1);
+        if (!emitSqlChunk(out, collected.chunk) && collected.chunk.length > 0) {
+          out.push(...collected.chunk);
         }
-        if (/^```/.test(lt)) break;
-        if (/^#{1,6}\s/.test(lt) && !/^Esquema SQL/i.test(lt)) break;
-        if (lineLooksCollapsedSql(lt) || /^--\s*Tabla espejo/i.test(lt) || /^CREATE TABLE/i.test(lt)) {
-          chunk.push(lt);
-          i++;
-        } else if (chunk.length > 0) break;
-        else i++;
-      }
-
-      const expanded = expandCollapsedSqlText(chunk.join(" "));
-      if (expanded) {
-        out.push("");
-        out.push("```sql");
-        out.push(expanded);
-        out.push("```");
-        out.push("");
-      } else if (chunk.length > 0) {
-        out.push(...chunk);
+        i = collected.nextIdx - 1;
       }
       continue;
     }
 
-    out.push(line);
+    if (isEsquemaHeading) {
+      out.push(formatEsquemaHeading(t));
+      i++;
+      let collected = collectCollapsedSqlChunk(lines, i);
+      if (!emitSqlChunk(out, collected.chunk) && collected.chunk.length > 0) {
+        out.push(...collected.chunk);
+      }
+      i = collected.nextIdx - 1;
+      while (collected.nestedHeading) {
+        out.push(formatEsquemaHeading(collected.nestedHeading));
+        collected = collectCollapsedSqlChunk(lines, i + 1);
+        if (!emitSqlChunk(out, collected.chunk) && collected.chunk.length > 0) {
+          out.push(...collected.chunk);
+        }
+        i = collected.nextIdx - 1;
+      }
+      continue;
+    }
+
+    let collected = collectCollapsedSqlChunk(lines, i);
+    if (!emitSqlChunk(out, collected.chunk) && collected.chunk.length > 0) {
+      out.push(...collected.chunk);
+    }
+    i = collected.nextIdx - 1;
   }
 
   return out.join("\n");
+}
+
+/** Expande SQL colapsado dentro de bloques ```sql existentes. */
+export function repairCollapsedSqlInsideFences(text: string): string {
+  return text.replace(/```sql\n([\s\S]*?)```/gi, (match, body: string) => {
+    const collapsed = body.replace(/\s+/g, " ").trim();
+    if (!lineLooksCollapsedSql(collapsed)) return match;
+    const expanded = expandCollapsedSqlText(collapsed);
+    if (!expanded) return match;
+    return `\`\`\`sql\n${expanded}\n\`\`\``;
+  });
 }
