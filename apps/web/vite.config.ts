@@ -9,6 +9,10 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
       // Evita CJS re-exports con getters (Rollup no ve named exports estáticos en dist).
       "@theforge/business-rules": path.resolve(__dirname, "../../packages/business-rules/src/index.ts"),
+      "@theforge/shared-types/session": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/session.ts",
+      ),
       "@theforge/shared-types/markdown-repair": path.resolve(
         __dirname,
         "../../packages/shared-types/src/markdown-repair.ts",

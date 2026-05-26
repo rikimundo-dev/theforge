@@ -12,7 +12,8 @@ import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, R
 import { apiFetch } from "../utils/apiClient";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
-import { VISION_CONTEXT_HEADER, type ChatImagePart } from "@theforge/shared-types";
+import type { ChatImagePart } from "@theforge/shared-types";
+import { VISION_CONTEXT_HEADER } from "@theforge/shared-types/session";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
 import {
   Button,

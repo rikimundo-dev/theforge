@@ -1,9 +1,6 @@
 import { create } from "zustand";
-import {
-  contentIncludesVisionBlock,
-  type ChatImagePart,
-  type CodebaseDocResponseMode,
-} from "@theforge/shared-types";
+import type { ChatImagePart, CodebaseDocResponseMode } from "@theforge/shared-types";
+import { contentIncludesVisionBlock } from "@theforge/shared-types/session";
 import { isFormatDocumentChatCommand } from "../utils/documentFormatCommand";
 import {
   formatDbgaDocument,
