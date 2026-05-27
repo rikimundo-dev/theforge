@@ -1,7 +1,8 @@
 # Build stage — context = repo root
-FROM node:20-alpine AS builder
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
+FROM ${NODE_IMAGE} AS builder
 
-ARG BUILD_CACHE_BUST=92
+ARG BUILD_CACHE_BUST=93
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 WORKDIR /app
@@ -25,7 +26,8 @@ COPY apps/web apps/web
 RUN pnpm exec turbo run build --filter=@theforge/web
 
 # Production stage — Nginx
-FROM nginx:alpine AS runner
+ARG NGINX_IMAGE=public.ecr.aws/docker/library/nginx:alpine
+FROM ${NGINX_IMAGE} AS runner
 
 RUN apk add --no-cache wget
 

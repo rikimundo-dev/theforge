@@ -5,6 +5,10 @@
 # default con name evita que Compose cree una red *_default extra (reduce agotamiento de address pools)
 #
 # ⚙️ Dokploy Webhook: cada push a master dispara auto-deploy (2024-04-30)
+#
+# Imágenes base: por defecto ECR Public (Docker Library), no Docker Hub — evita
+# "TLS handshake timeout" al hacer build en VPS con Hub bloqueado/lento.
+# Override en Dokploy/.env: NODE_IMAGE, NGINX_IMAGE, POSTGRES_IMAGE, REDIS_IMAGE.
 
 networks:
   default:
@@ -15,7 +19,7 @@ networks:
 
 services:
   theforge-db:
-    image: postgres:15-alpine
+    image: ${POSTGRES_IMAGE:-public.ecr.aws/docker/library/postgres:15-alpine}
     container_name: theforge-db
     networks:
       - default
@@ -35,7 +39,7 @@ services:
   # Cola BullMQ (cascada generate-deliverables). Obligatorio en el stack Dokploy/compose oficial:
   # sin Redis de cola, REDIS_URL vacío fuerza modo síncrono y riesgo de timeouts en cascadas largas.
   theforge-redis-queue:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-public.ecr.aws/docker/library/redis:7-alpine}
     container_name: theforge-redis-queue
     networks:
       - default
@@ -67,7 +71,8 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-92}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-93}
+        NODE_IMAGE: ${NODE_IMAGE:-public.ecr.aws/docker/library/node:20-alpine}
     container_name: theforge-api
     # Carga THEFORGE_MCP_URL / MCP_* desde `.env` local sin pisar con "" si Compose no
     # tiene esas claves al interpolar `${VAR:-}`. En Dokploy: también inyecta por servicio
@@ -158,7 +163,9 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-92}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-93}
+        NODE_IMAGE: ${NODE_IMAGE:-public.ecr.aws/docker/library/node:20-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-public.ecr.aws/docker/library/nginx:alpine}
     container_name: theforge-web
     networks:
       - default
@@ -182,7 +189,8 @@ services:
       context: .
       dockerfile: packages/mcp-server/Dockerfile
       args:
-        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-92}
+        BUILD_CACHE_BUST: ${BUILD_CACHE_BUST:-93}
+        NODE_IMAGE: ${NODE_IMAGE:-public.ecr.aws/docker/library/node:20-alpine}
     container_name: theforge-mcp
     networks:
       - default

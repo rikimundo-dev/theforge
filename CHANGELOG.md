@@ -2,6 +2,16 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.11.2] — 2026-05-26
+
+### Fixed
+
+- **Deploy Dokploy — TLS timeout a Docker Hub:** Builds y servicios `postgres`/`redis` usan por defecto **ECR Public** (`public.ecr.aws/docker/library/...`) en lugar de `docker.io`. Args `NODE_IMAGE`, `NGINX_IMAGE`, `POSTGRES_IMAGE`, `REDIS_IMAGE` configurables en compose/.env.
+
+### Changed
+
+- **BUILD_CACHE_BUST**: 92 → 93
+
 ## [0.11.1] — 2026-05-26
 
 ### Added

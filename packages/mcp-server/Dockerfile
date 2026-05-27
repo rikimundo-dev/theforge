@@ -1,7 +1,8 @@
 # Build stage — context = repo root (necesario para resolver @theforge/shared-types workspace)
-FROM node:20-alpine AS builder
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
+FROM ${NODE_IMAGE} AS builder
 
-ARG BUILD_CACHE_BUST=92
+ARG BUILD_CACHE_BUST=93
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 WORKDIR /app
@@ -26,7 +27,8 @@ RUN pnpm exec turbo run build --filter=@theforge/config --filter=@theforge/share
 
 # Production stage — copia COMPLETA del builder (pnpm necesita 
 # node_modules hoisted con estructura de workspaces intacta)
-FROM node:20-alpine AS runner
+ARG NODE_IMAGE=public.ecr.aws/docker/library/node:20-alpine
+FROM ${NODE_IMAGE} AS runner
 
 WORKDIR /app
 
