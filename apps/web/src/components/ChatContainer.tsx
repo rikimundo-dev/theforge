@@ -187,6 +187,8 @@ const CHAT_MARKDOWN_COMPONENTS = {
 /** Single bordered “AI bar”: attach + textarea + send share one surface (Claude/ChatGPT-style unified chrome). */
 /** Máx. altura del textarea antes de scroll interno (solo pegas enormes); el shell crece hacia arriba con el contenido. */
 const AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 420;
+/** Una línea (min-h 1.75rem + py); evita inflar scrollHeight con input vacío. */
+const AI_COMPOSER_TEXTAREA_MIN_HEIGHT_PX = 28;
 
 const AI_COMPOSER_SHELL =
   "flex w-full min-w-0 flex-col gap-1 rounded-[1.25rem] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_92%,var(--muted))] px-3 py-2.5 shadow-sm transition-[border-color,background-color] focus-within:border-[color-mix(in_oklch,var(--primary)_30%,var(--border))] focus-within:bg-[color-mix(in_oklch,var(--card)_96%,var(--muted))] dark:bg-[color-mix(in_oklch,var(--card)_62%,var(--muted))] dark:focus-within:bg-[color-mix(in_oklch,var(--card)_72%,var(--muted))]";
@@ -593,20 +595,39 @@ export default function ChatContainer({
     function syncHeight() {
       const t = chatInputRef.current;
       if (!t) return;
-      t.style.height = "auto";
+
+      if (inputValue.trim().length === 0) {
+        t.style.height = "";
+        t.style.overflowY = "hidden";
+        return;
+      }
+
+      t.style.height = "0px";
       const viewportCap =
         typeof window !== "undefined"
           ? Math.floor(window.innerHeight * 0.45)
           : AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX;
       const maxH = Math.min(AI_COMPOSER_TEXTAREA_MAX_HEIGHT_PX, Math.max(160, viewportCap));
-      const next = Math.min(t.scrollHeight, maxH);
+      const scrollH = t.scrollHeight;
+      const next = Math.max(
+        AI_COMPOSER_TEXTAREA_MIN_HEIGHT_PX,
+        Math.min(scrollH, maxH),
+      );
       t.style.height = `${next}px`;
-      t.style.overflowY = t.scrollHeight > maxH ? "auto" : "hidden";
+      t.style.overflowY = scrollH > maxH ? "auto" : "hidden";
     }
     syncHeight();
-    window.addEventListener("resize", syncHeight);
-    return () => window.removeEventListener("resize", syncHeight);
-  }, [inputValue]);
+    let resizeRaf = 0;
+    const onWindowResize = () => {
+      cancelAnimationFrame(resizeRaf);
+      resizeRaf = requestAnimationFrame(() => syncHeight());
+    };
+    window.addEventListener("resize", onWindowResize);
+    return () => {
+      window.removeEventListener("resize", onWindowResize);
+      cancelAnimationFrame(resizeRaf);
+    };
+  }, [inputValue, activeTab]);
 
   const isBenchmarkFirstAction =
     activeTab === "benchmark" && !!benchmarkMode && !benchmarkMode.hasBenchmark;

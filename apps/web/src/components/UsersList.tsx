@@ -15,6 +15,14 @@ import {
 } from "lucide-react";
 import { apiFetch, API_BASE, getStoredUser } from "@/utils/apiClient";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
   Button,
   Dialog,
   DialogContent,
@@ -148,6 +156,9 @@ export function UsersList() {
   const [modelsActionError, setModelsActionError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; email: string } | null>(null);
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const me = getStoredUser();
   const myId = me?.id ?? "";
@@ -307,22 +318,53 @@ export function UsersList() {
     }
   };
 
-  const handleDelete = async (userId: string, email: string) => {
-    if (!confirm(`¿Eliminar usuario ${email}?`)) return;
+  const handleDeleteDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (deleting) return;
+      if (!open) {
+        setDeleteTarget(null);
+        setDeleteConfirmEmail("");
+      }
+    },
+    [deleting],
+  );
+
+  const openDeleteDialog = (userId: string, email: string) => {
+    setDeleteTarget({ id: userId, email });
+    setDeleteConfirmEmail("");
     setRoleActionError(null);
-    const r = await apiFetch(`${API_BASE}/users/${userId}`, { method: "DELETE" });
-    if (r.ok) {
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-      setSecrets((prev) => {
-        const next = { ...prev };
-        delete next[userId];
-        return next;
-      });
-      if (openSecretFor === userId) setOpenSecretFor(null);
-    } else {
-      const data = (await r.json().catch(() => ({}))) as { message?: string | string[] };
-      const msg = Array.isArray(data.message) ? data.message.join(", ") : data.message;
-      setRoleActionError(msg ?? "No se pudo eliminar el usuario");
+  };
+
+  const deleteEmailMatches =
+    deleteTarget !== null &&
+    deleteConfirmEmail.trim().toLowerCase() === deleteTarget.email.trim().toLowerCase();
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !deleteEmailMatches) return;
+    setDeleting(true);
+    setRoleActionError(null);
+    const { id: userId } = deleteTarget;
+    try {
+      const r = await apiFetch(`${API_BASE}/users/${userId}`, { method: "DELETE" });
+      if (r.ok) {
+        setUsers((prev) => prev.filter((u) => u.id !== userId));
+        setSecrets((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        if (openSecretFor === userId) setOpenSecretFor(null);
+        setDeleteTarget(null);
+        setDeleteConfirmEmail("");
+      } else {
+        const data = (await r.json().catch(() => ({}))) as { message?: string | string[] };
+        const msg = Array.isArray(data.message) ? data.message.join(", ") : data.message;
+        setRoleActionError(msg ?? "No se pudo eliminar el usuario");
+      }
+    } catch {
+      setRoleActionError("Error de conexión al eliminar el usuario");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -846,7 +888,7 @@ export function UsersList() {
                           <button
                             type="button"
                             className="flex min-h-[3.25rem] flex-col items-center justify-center gap-1 py-3 text-xs font-medium text-[var(--destructive)] transition-colors active:bg-[var(--destructive)]/10"
-                            onClick={() => void handleDelete(u.id, u.email)}
+                            onClick={() => openDeleteDialog(u.id, u.email)}
                           >
                             <Trash2 className="h-5 w-5" aria-hidden />
                             Eliminar
@@ -1085,7 +1127,7 @@ export function UsersList() {
                           ) : (
                             <ListRowIconButton
                               tooltip="Eliminar usuario"
-                              onClick={() => void handleDelete(u.id, u.email)}
+                              onClick={() => openDeleteDialog(u.id, u.email)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </ListRowIconButton>
@@ -1183,6 +1225,58 @@ export function UsersList() {
         </div>
       </div>
     </div>
+      <AlertDialog open={deleteTarget !== null} onOpenChange={handleDeleteDialogOpenChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar usuario</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-[var(--foreground-muted)]">
+                <p>
+                  Esta acción es <strong className="text-[var(--foreground)]">permanente</strong>.
+                  Se borrarán la cuenta, la API key MCP y los datos asociados del usuario.
+                </p>
+                {deleteTarget ? (
+                  <p>
+                    Usuario:{" "}
+                    <span className="font-mono text-[var(--foreground)]">{deleteTarget.email}</span>
+                  </p>
+                ) : null}
+                <p>
+                  Para confirmar, escribe el correo del usuario en el campo inferior.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <label htmlFor="delete-user-confirm-email" className="sr-only">
+              Confirmar correo del usuario a eliminar
+            </label>
+            <Input
+              id="delete-user-confirm-email"
+              type="email"
+              autoComplete="off"
+              placeholder={deleteTarget?.email ?? "correo@ejemplo.com"}
+              value={deleteConfirmEmail}
+              onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+              disabled={deleting}
+              aria-invalid={deleteConfirmEmail.length > 0 && !deleteEmailMatches}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmDelete();
+              }}
+              disabled={deleting || !deleteEmailMatches}
+              className="bg-[var(--destructive)] hover:bg-[var(--destructive)]/90"
+            >
+              {deleting ? "Eliminando…" : "Eliminar usuario"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TooltipProvider>
   );
 }

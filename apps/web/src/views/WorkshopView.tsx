@@ -60,6 +60,10 @@ import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
 import LegacyMcpDebugPanel from "../components/LegacyMcpDebugPanel/LegacyMcpDebugPanel";
 import { BrdStagePanel } from "../components/BrdStagePanel";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
+import {
+  collectDocumentStylesForPrint,
+  printDesignSystemDocument,
+} from "../utils/printDocument";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
 import { StandardDocPanel } from "../components/StandardDocPanel";
 import { DocEmptyState } from "../components/DocEmptyState";
@@ -1341,31 +1345,35 @@ export default function WorkshopView({
     });
   }, [projectId]);
 
-  /** Imprime el documento visible actual (encuentra .markdown-preview en el DOM). */
+  /** Prints the visible document (.design-system-preview or .markdown-preview). */
   const handlePrintDocument = useCallback(() => {
-    const preview = document.querySelector<HTMLElement>(".markdown-preview");
-    if (!preview) return;
-    const printContent = preview.cloneNode(true) as HTMLElement;
+    const useDesignSystemPrint =
+      centralPanel === "ux-ui-guide" && uxUiGuideViewMode === "design";
+
+    if (useDesignSystemPrint) {
+      const designPreview = document.querySelector<HTMLElement>(
+        "[data-design-system-print-root].design-system-preview, .design-system-preview",
+      );
+      if (!designPreview) return;
+      printDesignSystemDocument(designPreview);
+      return;
+    }
+
+    const mdPreview = document.querySelector<HTMLElement>(".markdown-preview");
+    if (!mdPreview) return;
+
+    const printContent = mdPreview.cloneNode(true) as HTMLElement;
     const printWin = window.open("", "_blank");
     if (!printWin) {
       document.body.classList.add("printing-md-content");
+      const cleanup = () => document.body.classList.remove("printing-md-content");
+      window.addEventListener("afterprint", cleanup, { once: true });
       window.print();
       return;
     }
-    const styles = Array.from(document.styleSheets)
-      .map((s) => {
-        try { return Array.from(s.cssRules || []).map((r) => r.cssText).join("\n"); }
-        catch { return ""; }
-      })
-      .join("\n");
-    printWin.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Imprimir documento</title>
-  <style>${styles}</style>
-  <style>
+
+    const styles = collectDocumentStylesForPrint();
+    const docStyles = `
     body { padding: 2rem; background: #fff; color: #111; }
     * { color: #111 !important; background: transparent !important; }
     .markdown-preview { max-width: 900px; margin: 0 auto; }
@@ -1375,7 +1383,15 @@ export default function WorkshopView({
     pre { overflow-x: auto; border: 1px solid #ddd; padding: 12px; background: #f5f5f5; }
     code { background: #f5f5f5; padding: 2px 4px; }
     @page { margin: 2cm; }
-  </style>
+  `;
+    printWin.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Imprimir documento</title>
+  <style>${styles}</style>
+  <style>${docStyles}</style>
 </head>
 <body>
   ${printContent.innerHTML}
@@ -1384,7 +1400,7 @@ export default function WorkshopView({
     printWin.document.close();
     printWin.focus();
     setTimeout(() => printWin.print(), 500);
-  }, []);
+  }, [centralPanel, uxUiGuideViewMode]);
 
   const mddDirty = (mddContent ?? "") !== (project?.mddContent ?? "");
   const uxUiGuideDirty = (uxUiGuideContent ?? "") !== (project?.uxUiGuideContent ?? "");
@@ -3282,8 +3298,9 @@ export default function WorkshopView({
             {/* Clip shows 2rem when closed (pleca only). Open on pleca hover; stay open over pleca + panel; close on leave. */}
             <div
               className={cn(
-                "pointer-events-auto overflow-hidden min-h-0 min-w-0 shrink-0 self-stretch max-h-[min(calc(100dvh-2.5rem),90dvh)]",
+                "overflow-hidden min-h-0 min-w-0 shrink-0 self-stretch max-h-[min(calc(100dvh-2.5rem),90dvh)]",
                 "transition-[max-width] duration-300 ease-[cubic-bezier(0.33,1,0.68,1)] will-change-[max-width]",
+                lgMetricsFlyoutOpen ? "pointer-events-auto" : "pointer-events-none",
                 lgMetricsFlyoutOpen
                   ? "max-w-[calc(2rem+min(40rem,calc(100vw-3rem)))]"
                   : "max-w-[2rem]",
@@ -3294,15 +3311,21 @@ export default function WorkshopView({
                 className={cn(
                   "flex max-h-[min(calc(100dvh-2.5rem),90dvh)] flex-row items-stretch gap-0",
                   lgMetricsFlyoutOpen && "w-max",
+                  !lgMetricsFlyoutOpen && "pointer-events-none",
                 )}
               >
-                <div className="flex shrink-0 flex-col justify-center py-2">
+                <div
+                  className={cn(
+                    "flex shrink-0 flex-col justify-center py-2",
+                    !lgMetricsFlyoutOpen && "pointer-events-none",
+                  )}
+                >
                   <button
                     type="button"
                     onMouseEnter={() => setLgMetricsFlyoutOpen(true)}
                     onFocus={() => setLgMetricsFlyoutOpen(true)}
                     className={cn(
-                      "group/pull-tab relative z-[2] flex w-[2rem] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 px-1 py-2",
+                      "pointer-events-auto group/pull-tab relative z-[2] flex w-[2rem] shrink-0 cursor-pointer flex-col items-center justify-center gap-1 px-1 py-2",
                       "rounded-l-xl rounded-r-none border border-[var(--border)] border-r-0 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
                       "text-[8px] font-semibold uppercase tracking-[0.14em] text-[color-mix(in_oklch,var(--foreground)_82%,var(--muted-foreground))]",
                       // Light: crisp outline via border only — ring+shadow stacks read as a dirty halo on cream UI.
@@ -3336,7 +3359,7 @@ export default function WorkshopView({
                   aria-hidden={!lgMetricsFlyoutOpen}
                   hidden={!lgMetricsFlyoutOpen}
                   className={cn(
-                    "flex min-h-0 min-w-[17.5rem] w-[min(40rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-xl",
+                    "pointer-events-auto flex min-h-0 min-w-[17.5rem] w-[min(40rem,calc(100vw-3rem))] shrink-0 flex-col overflow-hidden rounded-xl",
                     "border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
                     "shadow-[var(--shadow-lg)] ring-0 dark:shadow-[0_12px_40px_-8px_rgba(0,0,0,0.45)] dark:ring-1 dark:ring-[color-mix(in_oklch,var(--foreground)_8%,transparent)]",
                   )}
