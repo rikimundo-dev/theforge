@@ -383,9 +383,12 @@ export function DesignSystemCustomizer({
   const accentHex = hexValue(palette.primary, tokens);
   const grayHex = hexValue(palette.muted, tokens);
   return (
-    <div className="w-full bg-[var(--background)] text-[var(--foreground)]">
+    <div
+      data-design-system-print-root
+      className="design-system-preview w-full bg-[var(--background)] text-[var(--foreground)]"
+    >
       {/* App chrome header */}
-      <header className="border-b border-[var(--border)] bg-[var(--background)] px-4 py-6 text-center sm:px-6">
+      <header className="design-system-print-header border-b border-[var(--border)] bg-[var(--background)] px-4 py-6 text-center sm:px-6">
         <h1 className="text-lg font-semibold tracking-tight sm:text-xl">
           {title ?? "Design System"}
         </h1>
@@ -394,29 +397,29 @@ export function DesignSystemCustomizer({
             {description}
           </p>
         )}
-        <div className="mt-4 flex justify-center">
+        <div className="design-system-print-hide mt-4 flex justify-center">
           <ThemeToggle mode={previewMode} onChange={setPreviewMode} />
         </div>
       </header>
 
       {/* Themed preview canvas (Radix-style) */}
       <div
-        className="min-h-[480px] bg-[var(--ds-bg)] text-[var(--ds-fg)] transition-[background-color,color] duration-300 ease-out"
+        className="design-system-print-canvas min-h-[480px] bg-[var(--ds-bg)] text-[var(--ds-fg)] transition-[background-color,color] duration-300 ease-out print:min-h-0"
         style={previewTheme.cssVars as React.CSSProperties}
       >
         <div className="mx-auto max-w-5xl space-y-8 px-4 py-8 sm:px-6">
-          {/* Color inputs */}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <ColorInputReadonly label="Accent" hex={accentHex} />
-            <ColorInputReadonly label="Gray" hex={grayHex} />
-            <ColorInputReadonly label="Background" hex={previewTheme.background} />
-          </div>
+          {/* Colors — single print block (inputs, scales, brand swatches) */}
+          <div className="design-system-print-section space-y-8">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <ColorInputReadonly label="Accent" hex={accentHex} />
+              <ColorInputReadonly label="Gray" hex={grayHex} />
+              <ColorInputReadonly label="Background" hex={previewTheme.background} />
+            </div>
 
-          {/* Scales */}
-          <div className="space-y-8">
-            <ColorScaleStrip name="Accent scale" baseHex={accentHex} mode={previewMode} />
-            <ColorScaleStrip name="Neutral scale" baseHex={grayHex} mode={previewMode} />
-          </div>
+            <div className="space-y-8">
+              <ColorScaleStrip name="Accent scale" baseHex={accentHex} mode={previewMode} />
+              <ColorScaleStrip name="Neutral scale" baseHex={grayHex} mode={previewMode} />
+            </div>
 
           {/* Brand swatches */}
           {Object.keys(colors).length > 0 && (
@@ -447,9 +450,10 @@ export function DesignSystemCustomizer({
               </div>
             </div>
           )}
+          </div>
 
           {/* Token panels */}
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="design-system-print-section grid gap-4 md:grid-cols-2">
             {getTypographyScaleEntries(typography).length > 0 && (
               <div className="md:col-span-2">
                 <TokenPanel title="Typography" subtitle="Type scale — size, weight, line-height">
@@ -477,8 +481,8 @@ export function DesignSystemCustomizer({
           </div>
         </div>
 
-        {/* Playground — full canvas width, no card wrapper */}
-        <div className="flex w-full min-w-0 justify-center px-2 py-3 sm:px-4 sm:py-4">
+        {/* Playground — hidden when printing (interactive component demos only) */}
+        <div className="design-system-print-hide flex w-full min-w-0 justify-center px-2 py-3 sm:px-4 sm:py-4">
           <DesignSystemUIKit
             tokens={tokens}
             embedded

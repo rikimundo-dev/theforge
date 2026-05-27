@@ -159,3 +159,110 @@ body.printing-md-content .markdown-preview {
     margin: 2cm;
   }
 }
+
+/* ── Design System print (token structure only; no UI Kit playground) ─ */
+/* Preview is reparented to body before print — hide app chrome, not ancestors of preview. */
+html.printing-design-system,
+html.printing-design-system body {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  width: 100% !important;
+}
+body.printing-design-system > *:not(.design-system-preview) {
+  display: none !important;
+}
+body.printing-design-system .design-system-preview {
+  display: block !important;
+  position: static !important;
+  inset: auto !important;
+  z-index: auto !important;
+  overflow: visible !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #fff !important;
+  color: #111 !important;
+}
+body.printing-design-system .design-system-print-hide,
+body.printing-design-system .design-system-print-hide * {
+  display: none !important;
+}
+body.printing-design-system .design-system-print-canvas {
+  min-height: 0 !important;
+  background: #fff !important;
+  color: #111 !important;
+}
+body.printing-design-system .design-system-preview [style*="background"] {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  /* Popup / in-document print: normal flow (fixed + overflow:hidden on body → blank page) */
+  body:not(.printing-md-content):not(.printing-design-system) .design-system-preview {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body.printing-design-system .design-system-preview {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    z-index: auto !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body:not(.printing-md-content) .design-system-print-hide,
+  body.printing-design-system .design-system-print-hide,
+  body:not(.printing-md-content) .design-system-print-hide *,
+  body.printing-design-system .design-system-print-hide * {
+    display: none !important;
+  }
+
+  body:not(.printing-md-content) .design-system-print-canvas,
+  body.printing-design-system .design-system-print-canvas {
+    min-height: 0 !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body:not(.printing-md-content) .design-system-print-section,
+  body.printing-design-system .design-system-print-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  body:not(.printing-md-content) .design-system-print-section + .design-system-print-section,
+  body.printing-design-system .design-system-print-section + .design-system-print-section {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  body:not(.printing-md-content) .design-system-preview [style*="background"],
+  body.printing-design-system .design-system-preview [style*="background"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body:not(.printing-md-content) .design-system-preview .group:hover .opacity-0,
+  body.printing-design-system .design-system-preview .group:hover .opacity-0 {
+    opacity: 0 !important;
+  }
+}
