@@ -42,6 +42,10 @@ import {
   TooltipTrigger,
 } from "../components/ui";
 import { WorkshopChatToolbarIconButton, WorkshopButtonIcon, WorkshopPanelButton } from "@/components/WorkshopButtons";
+import {
+  WORKSHOP_COLUMN_HEADER_ICON,
+  WORKSHOP_COLUMN_HEADER_ICON_SLOT,
+} from "@/constants/workshopDocToolbar";
 import { ChatProviderInfoButton } from "@/components/ChatProviderInfoButton";
 import { AiGenerationChatBubble, AiGenerativeDots } from "./AiGenerationLoader";
 import {
@@ -927,11 +931,8 @@ export default function ChatContainer({
           <header className="shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_45%,var(--background))] px-3 py-2.5 sm:px-4 sm:py-3 lg:flex lg:h-16 lg:min-h-16 lg:max-h-16 lg:items-center lg:overflow-hidden lg:py-0 lg:pl-4 lg:pr-4">
             <div className="flex min-h-0 min-w-0 flex-1 items-start justify-between gap-4 lg:items-center">
               <div className="flex min-w-0 flex-1 items-start gap-2.5 lg:items-center">
-                <div
-                  className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--muted)] text-[var(--primary)] ring-1 ring-[color-mix(in_oklch,var(--border)_70%,transparent)] lg:mt-0"
-                  aria-hidden
-                >
-                  <MessageSquare className="h-4 w-4" strokeWidth={2} />
+                <div className={cn(WORKSHOP_COLUMN_HEADER_ICON_SLOT, "mt-0.5 lg:mt-0")} aria-hidden>
+                  <MessageSquare className={WORKSHOP_COLUMN_HEADER_ICON} strokeWidth={2} aria-hidden />
                 </div>
                 <div className="min-w-0 flex-1 pt-0.5 lg:pt-0">
                   <h2 className="text-sm font-semibold leading-tight tracking-tight text-[var(--foreground)]">

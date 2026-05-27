@@ -217,3 +217,122 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
 
   return items;
 }
+
+export interface WorkshopDocPanelHeaderMeta {
+  title: string;
+  subtitle?: string;
+  Icon: LucideIcon;
+}
+
+/**
+ * Full document title + icon for the workshop document column header (desktop).
+ */
+export function getWorkshopDocPanelHeader(
+  panel: string,
+  opts?: { benchmarkPhaseTab?: "fase0" | "benchmark" },
+): WorkshopDocPanelHeaderMeta {
+  if (panel === "benchmark") {
+    if (opts?.benchmarkPhaseTab === "benchmark") {
+      return {
+        title: "Benchmark & Deep Research",
+        subtitle: "Paso 0 — investigación y gap analysis",
+        Icon: Target,
+      };
+    }
+    return {
+      title: "Domain Benchmark & Gap Analysis",
+      subtitle: "Paso 0 — Fase 0 (DBGA)",
+      Icon: Target,
+    };
+  }
+
+  const byPanel: Record<string, WorkshopDocPanelHeaderMeta> = {
+    legacy: {
+      title: "Modificación",
+      subtitle: "AriadneSpecs → Master Design Document → entregables",
+      Icon: Edit3,
+    },
+    "mdd-inicial": {
+      title: "Initial Master Design Document",
+      subtitle: "Documentación AS-IS del codebase (partida)",
+      Icon: FileText,
+    },
+    brd: {
+      title: "Business Requirements Document",
+      subtitle: "Requisitos de negocio por etapa",
+      Icon: ClipboardList,
+    },
+    mdd: {
+      title: "Master Design Document",
+      subtitle: "Constitución del proyecto (7 secciones)",
+      Icon: FileText,
+    },
+    spec: {
+      title: "Project Specification",
+      subtitle: "Alcance funcional y técnico (qué y por qué)",
+      Icon: ListOrdered,
+    },
+    architecture: {
+      title: "Software Architecture",
+      subtitle: "Componentes, límites y decisiones estructurales",
+      Icon: GitBranch,
+    },
+    "use-cases": {
+      title: "Use Cases",
+      subtitle: "Flujos frente al Master Design Document",
+      Icon: ListOrdered,
+    },
+    "user-stories": {
+      title: "User Stories",
+      subtitle: "Historias priorizables para entrega",
+      Icon: Package,
+    },
+    blueprint: {
+      title: "Technical Blueprint",
+      subtitle: "Modelo de datos y servicios alineados al MDD",
+      Icon: LayoutTemplate,
+    },
+    "ux-ui-guide": {
+      title: "Design System",
+      subtitle: "Guía UX/UI y tokens (DESIGN.md)",
+      Icon: Palette,
+    },
+    aem: {
+      title: "Análisis y Estrategia de Mercado",
+      subtitle: "Contexto de negocio y mercado (opcional)",
+      Icon: FileText,
+    },
+    "api-contracts": {
+      title: "API Contracts",
+      subtitle: "Contratos de interfaz entre servicios",
+      Icon: FileCode,
+    },
+    "logic-flows": {
+      title: "Logic Flows",
+      subtitle: "Flujos de negocio y sistema",
+      Icon: GitBranch,
+    },
+    tasks: {
+      title: "Task Breakdown",
+      subtitle: "Desglose ejecutable desde MDD y Blueprint",
+      Icon: ListTodo,
+    },
+    infra: {
+      title: "Infrastructure",
+      subtitle: "Despliegue y operación",
+      Icon: Server,
+    },
+    adrs: {
+      title: "Architecture Decision Records",
+      subtitle: "Decisiones arquitectónicas guardadas",
+      Icon: Brain,
+    },
+  };
+
+  return (
+    byPanel[panel] ?? {
+      title: panel,
+      Icon: FileText,
+    }
+  );
+}

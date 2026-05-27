@@ -761,6 +761,12 @@ interface WorkshopState {
     opts: { userIdea?: string; urls?: string[]; includeBenchmark?: boolean },
   ) => Promise<Project | null>;
   clearPhase0SummaryContent: (projectId: string) => Promise<void>;
+  /** Clears the active workshop document tab content (PATCH null / empty). */
+  clearWorkshopDocumentContent: (
+    projectId: string,
+    panel: string,
+    options?: { benchmarkPhaseTab?: "fase0" | "benchmark"; stageId?: string },
+  ) => Promise<boolean>;
   /** Flujo legacy: documentación de partida (opcional); puede incluir `mcpDebugTrace` si el API tiene debug activo. */
   legacyGenerateCodebaseDoc: (
     projectId: string,
@@ -2907,6 +2913,90 @@ if (prog && prog.step && prog.step !== "done") {
       }
     } catch {
       // ignore
+    }
+  },
+
+  clearWorkshopDocumentContent: async (projectId, panel, options) => {
+    if (!projectId?.trim()) return false;
+    const pid = projectId.trim();
+
+    try {
+      if (panel === "benchmark") {
+        if (options?.benchmarkPhaseTab === "benchmark") {
+          await get().clearPhase0SummaryContent(pid);
+        } else {
+          await get().clearDbgaContent(pid);
+        }
+        return true;
+      }
+
+      if (panel === "brd") {
+        const stageId = options?.stageId?.trim() ?? get().activeStageId?.trim();
+        if (!stageId) return false;
+        const ok = await get().patchWorkshopStage(stageId, { brdContent: "" });
+        if (ok) set({ error: null });
+        return ok;
+      }
+
+      if (panel === "mdd-inicial") {
+        const ok = await get().legacyUpdateCodebaseDoc(pid, "");
+        if (ok) await get().fetchProject(pid);
+        return ok;
+      }
+
+      const fieldByPanel: Record<string, string> = {
+        spec: "specContent",
+        mdd: "mddContent",
+        "ux-ui-guide": "uxUiGuideContent",
+        blueprint: "blueprintContent",
+        "api-contracts": "apiContractsContent",
+        "logic-flows": "logicFlowsContent",
+        tasks: "tasksContent",
+        infra: "infraContent",
+        architecture: "architectureContent",
+        "use-cases": "useCasesContent",
+        "user-stories": "userStoriesContent",
+        aem: "aemContent",
+      };
+
+      const fieldName = fieldByPanel[panel];
+      if (!fieldName) return false;
+
+      if (panel === "mdd") {
+        const stageId = options?.stageId?.trim() ?? get().activeStageId?.trim();
+        const r = await apiFetch(`${API_BASE}/projects/${pid}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mddContent: "", ...(stageId ? { stageId } : {}) }),
+        });
+        if (!r.ok) return false;
+        const data: Project = await r.json();
+        set({
+          project: data,
+          mddContent: data.mddContent ?? "",
+          synced: true,
+          error: null,
+        });
+        return true;
+      }
+
+      const r = await apiFetch(`${API_BASE}/projects/${pid}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [fieldName]: null }),
+      });
+      if (!r.ok) return false;
+      const data: Project = await r.json();
+      set({
+        project: data,
+        [fieldName]: (data as unknown as Record<string, unknown>)[fieldName] ?? null,
+        synced: true,
+        error: null,
+      } as Partial<WorkshopState>);
+      return true;
+    } catch {
+      set({ error: "No se pudo limpiar el documento" });
+      return false;
     }
   },
 

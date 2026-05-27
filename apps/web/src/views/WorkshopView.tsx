@@ -4,6 +4,7 @@ import {
   CloudOff,
   AlertTriangle,
   Printer,
+  Download,
   FileText,
   Package,
   LayoutTemplate,
@@ -35,6 +36,7 @@ import {
   Lock,
   Pencil,
   Wrench,
+  BrushCleaning,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UnderlineTabs } from "@/components/ui/UnderlineTabs";
@@ -60,6 +62,13 @@ import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
 import LegacyMcpDebugPanel from "../components/LegacyMcpDebugPanel/LegacyMcpDebugPanel";
 import { BrdStagePanel } from "../components/BrdStagePanel";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
+import { downloadMarkdownFile } from "../utils/downloadMarkdownFile";
+import { resolveWorkshopActiveDocumentDownload } from "../utils/workshopActiveDocumentDownload";
+import {
+  WorkshopDocBubbleMenu,
+  type WorkshopDocBubbleMenuItem,
+} from "../components/WorkshopDocBubbleMenu";
+import { WorkshopDocPanelHeader } from "../components/WorkshopDocPanelHeader";
 import {
   collectDocumentStylesForPrint,
   printDesignSystemDocument,
@@ -412,6 +421,7 @@ export default function WorkshopView({
   const clearMddJustGeneratedFromBenchmark = useWorkshopStore((s) => s.clearMddJustGeneratedFromBenchmark);
   const phase0DeepResearch = useWorkshopStore((s) => s.phase0DeepResearch);
   const clearPhase0SummaryContent = useWorkshopStore((s) => s.clearPhase0SummaryContent);
+  const clearWorkshopDocumentContent = useWorkshopStore((s) => s.clearWorkshopDocumentContent);
   const setPhase0SummaryContent = useWorkshopStore((s) => s.setPhase0SummaryContent);
   const persistPhase0SummaryContent = useWorkshopStore((s) => s.persistPhase0SummaryContent);
   const legacyGenerateCodebaseDoc = useWorkshopStore((s) => s.legacyGenerateCodebaseDoc);
@@ -1402,6 +1412,352 @@ export default function WorkshopView({
     setTimeout(() => printWin.print(), 500);
   }, [centralPanel, uxUiGuideViewMode]);
 
+  const docBubbleMenuItems = useMemo((): WorkshopDocBubbleMenuItem[] => {
+    if (centralPanel === "legacy" || centralPanel === "adrs") return [];
+
+    const ordered: WorkshopDocBubbleMenuItem[] = [];
+    const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
+      mddViewMode,
+      mddInicialViewMode,
+      specViewMode,
+      architectureViewMode,
+      useCasesViewMode,
+      userStoriesViewMode,
+      uxUiGuideViewMode,
+      aemViewMode,
+      blueprintViewMode,
+      apiContractsViewMode,
+      logicFlowsViewMode,
+      brdDocViewMode,
+      infraViewMode,
+    });
+    const { Icon: DocToggleIcon, tooltip: docToggleTooltip } = workshopDocSourceTogglePresentation(
+      centralPanel,
+      activeDocViewMode,
+    );
+
+    const editableDocPanels = new Set([
+      "spec",
+      "mdd",
+      "ux-ui-guide",
+      "aem",
+      "blueprint",
+      "api-contracts",
+      "logic-flows",
+      "architecture",
+      "use-cases",
+      "user-stories",
+      "infra",
+      "brd",
+      "mdd-inicial",
+    ]);
+    const showDocEdit =
+      editableDocPanels.has(centralPanel) &&
+      (centralPanel === "spec" ||
+        centralPanel === "mdd" ||
+        centralPanel === "ux-ui-guide" ||
+        centralPanel === "aem" ||
+        (centralPanel === "blueprint" && blueprintContent) ||
+        (centralPanel === "api-contracts" && apiContractsContent) ||
+        (centralPanel === "architecture" && architectureContent) ||
+        (centralPanel === "use-cases" && useCasesContent) ||
+        (centralPanel === "user-stories" && userStoriesContent) ||
+        (centralPanel === "logic-flows" && logicFlowsContent) ||
+        (centralPanel === "infra" && infraContent) ||
+        (centralPanel === "mdd-inicial" && (activeLegacyState?.codebaseDoc || mddInicialLocalContent)) ||
+        (centralPanel === "brd" && !!activeStageId));
+
+    const showBenchmarkEdit = centralPanel === "benchmark";
+
+    const downloadPayload = resolveWorkshopActiveDocumentDownload({
+      panel: centralPanel,
+      benchmarkPhaseTab,
+      dbgaContent,
+      phase0SummaryContent,
+      specContent,
+      mddContent,
+      mddInicialContent: mddInicialLocalContent || activeLegacyState?.codebaseDoc || "",
+      brdContent: brdWorkshopDraft,
+      uxUiGuideContent,
+      blueprintContent,
+      apiContractsContent,
+      logicFlowsContent,
+      tasksContent,
+      infraContent,
+      architectureContent,
+      useCasesContent,
+      userStoriesContent,
+      aemContent,
+    });
+
+    let regenItem: WorkshopDocBubbleMenuItem | null = null;
+    if (centralPanel === "mdd") {
+      regenItem = {
+        id: "regen",
+        label: mddContent?.trim() ? "Regenerar MDD" : "Generar MDD",
+        icon: RefreshCw,
+        disabled: loading || !projectId,
+        onClick: () => {
+          void (isLegacyProject
+            ? legacyGenerateMdd(projectId, activeStageId ?? undefined)
+            : generateMddFromBenchmark(projectId));
+        },
+      };
+    } else if (centralPanel === "mdd-inicial" && !!(activeLegacyState?.codebaseDoc ?? mddInicialLocalContent ?? "").trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar documentación de partida",
+        icon: RefreshCw,
+        disabled: loading || !projectId,
+        onClick: () => void handleRegenerateLegacyCodebaseDoc(),
+      };
+    } else if (centralPanel === "spec" && !!specContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar Spec",
+        icon: RefreshCw,
+        disabled: loading || !projectId,
+        onClick: () => void generateSpec(projectId),
+      };
+    } else if (centralPanel === "architecture" && !!architectureContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar arquitectura",
+        icon: RefreshCw,
+        disabled: loading || !effectiveMddTrimmed || !projectId,
+        onClick: () => void generateArchitecture(projectId),
+      };
+    } else if (centralPanel === "use-cases" && !!useCasesContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar casos de uso",
+        icon: RefreshCw,
+        disabled: loading || !effectiveMddTrimmed || !projectId,
+        onClick: () => void generateUseCases(projectId),
+      };
+    } else if (centralPanel === "user-stories" && !!userStoriesContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar historias de usuario",
+        icon: RefreshCw,
+        disabled: loading || !effectiveMddTrimmed || !projectId,
+        onClick: () => void generateUserStories(projectId),
+      };
+    } else if (centralPanel === "blueprint" && !!blueprintContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar blueprint",
+        icon: RefreshCw,
+        disabled: loading || mddReviewing || !effectiveMddTrimmed || !projectId,
+        onClick: () => void generateBlueprint(projectId),
+      };
+    } else if (centralPanel === "api-contracts" && !!apiContractsContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: apiBlueprintDmBlocked ? apiBlueprintBlockedHint : "Regenerar contratos API",
+        icon: RefreshCw,
+        disabled: loading || mddReviewing || !effectiveMddTrimmed || apiBlueprintDmBlocked || !projectId,
+        onClick: () => void generateApiContracts(projectId),
+      };
+    } else if (centralPanel === "logic-flows" && !!logicFlowsContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar flujos de lógica",
+        icon: RefreshCw,
+        disabled: loading || mddReviewing || !effectiveMddTrimmed || !projectId,
+        onClick: () => void generateLogicFlows(projectId),
+      };
+    } else if (centralPanel === "infra" && !!infraContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar infraestructura",
+        icon: RefreshCw,
+        disabled: loading || mddReviewing || !effectiveMddTrimmed || !projectId,
+        onClick: () => void generateInfra(projectId),
+      };
+    } else if (centralPanel === "tasks" && !!tasksContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: "Regenerar tasks",
+        icon: RefreshCw,
+        disabled: loading || !effectiveMddTrimmed || !blueprintContent?.trim() || !projectId,
+        onClick: () => void generateTasks(projectId),
+      };
+    } else if (centralPanel === "ux-ui-guide" && !!uxUiGuideContent?.trim()) {
+      regenItem = {
+        id: "regen",
+        label: uxGenProgress ?? "Regenerar design system",
+        icon: RefreshCw,
+        disabled: uxGenerating || loading || !effectiveMddTrimmed || !blueprintContent?.trim() || !projectId,
+        onClick: () => void generateUxGuideSequential(),
+      };
+    }
+
+    const panelClearLabels: Record<string, string> = {
+      benchmark:
+        benchmarkPhaseTab === "fase0"
+          ? "Domain Benchmark & Gap Analysis"
+          : "Benchmark & Deep Research",
+      spec: "Project Specification",
+      mdd: "Master Design Document",
+      "mdd-inicial": "Initial Master Design Document",
+      brd: "Business Requirements Document",
+      "ux-ui-guide": "Design System",
+      blueprint: "Technical Blueprint",
+      "api-contracts": "API Contracts",
+      "logic-flows": "Logic Flows",
+      tasks: "Task Breakdown",
+      infra: "Infrastructure",
+      architecture: "Software Architecture",
+      "use-cases": "Use Cases",
+      "user-stories": "User Stories",
+      aem: "Análisis y Estrategia de Mercado",
+    };
+
+    if (downloadPayload && projectId && panelClearLabels[centralPanel]) {
+      const docLabel = panelClearLabels[centralPanel];
+      ordered.push({
+        id: "clear",
+        label: "Limpiar archivo",
+        icon: BrushCleaning,
+        variant: "danger",
+        requiresConfirmation: {
+          title: `¿Limpiar ${docLabel}?`,
+          description:
+            "Se borrará todo el contenido de este documento en el proyecto. Podrás volver a generarlo después. Esta acción no se puede deshacer.",
+          confirmLabel: "Sí, limpiar",
+        },
+        onClick: () => {
+          void clearWorkshopDocumentContent(projectId, centralPanel, {
+            benchmarkPhaseTab,
+            stageId: activeStageId ?? undefined,
+          });
+        },
+      });
+    }
+
+    if (effectiveComplexityForTabs === "HIGH") {
+      ordered.push({
+        id: "flow",
+        label: "Ver flujo completo",
+        icon: ListOrdered,
+        onClick: () => setFlowOrderModalOpen(true),
+      });
+    }
+
+    if (regenItem) ordered.push(regenItem);
+
+    ordered.push({
+      id: "download",
+      label: "Descargar documento",
+      icon: Download,
+      disabled: !downloadPayload,
+      onClick: () => {
+        if (downloadPayload) downloadMarkdownFile(downloadPayload.filename, downloadPayload.content);
+      },
+    });
+
+    ordered.push({
+      id: "print",
+      label: "Imprimir",
+      icon: Printer,
+      onClick: handlePrintDocument,
+    });
+
+    if (showDocEdit || showBenchmarkEdit) {
+      ordered.push({
+        id: "edit",
+        label: showBenchmarkEdit
+          ? workshopDocSourceTogglePresentation(
+              "mdd",
+              benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode,
+            ).tooltip
+          : docToggleTooltip,
+        icon: showBenchmarkEdit
+          ? workshopDocSourceTogglePresentation(
+              "mdd",
+              benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode,
+            ).Icon
+          : DocToggleIcon,
+        onClick: () => {
+          if (centralPanel === "benchmark") {
+            if (benchmarkPhaseTab === "fase0") {
+              setBenchmarkViewMode((m) => (m === "preview" ? "source" : "preview"));
+            } else {
+              setPhase0SummaryViewMode((m) => (m === "preview" ? "source" : "preview"));
+            }
+            return;
+          }
+          toggleDocViewMode(centralPanel);
+        },
+      });
+    }
+
+    return ordered;
+  }, [
+    centralPanel,
+    mddViewMode,
+    mddInicialViewMode,
+    specViewMode,
+    architectureViewMode,
+    useCasesViewMode,
+    userStoriesViewMode,
+    uxUiGuideViewMode,
+    aemViewMode,
+    blueprintViewMode,
+    apiContractsViewMode,
+    logicFlowsViewMode,
+    brdDocViewMode,
+    infraViewMode,
+    benchmarkPhaseTab,
+    benchmarkViewMode,
+    phase0SummaryViewMode,
+    blueprintContent,
+    apiContractsContent,
+    architectureContent,
+    useCasesContent,
+    userStoriesContent,
+    logicFlowsContent,
+    infraContent,
+    activeLegacyState?.codebaseDoc,
+    mddInicialLocalContent,
+    activeStageId,
+    handlePrintDocument,
+    dbgaContent,
+    phase0SummaryContent,
+    specContent,
+    mddContent,
+    brdWorkshopDraft,
+    uxUiGuideContent,
+    tasksContent,
+    aemContent,
+    isLegacyProject,
+    projectId,
+    loading,
+    effectiveMddTrimmed,
+    mddReviewing,
+    apiBlueprintDmBlocked,
+    apiBlueprintBlockedHint,
+    uxGenProgress,
+    uxGenerating,
+    effectiveComplexityForTabs,
+    generateMddFromBenchmark,
+    legacyGenerateMdd,
+    handleRegenerateLegacyCodebaseDoc,
+    toggleDocViewMode,
+    generateSpec,
+    generateArchitecture,
+    generateUseCases,
+    generateUserStories,
+    generateBlueprint,
+    generateApiContracts,
+    generateLogicFlows,
+    generateInfra,
+    generateTasks,
+    generateUxGuideSequential,
+    clearWorkshopDocumentContent,
+  ]);
+
   const mddDirty = (mddContent ?? "") !== (project?.mddContent ?? "");
   const uxUiGuideDirty = (uxUiGuideContent ?? "") !== (project?.uxUiGuideContent ?? "");
 
@@ -1910,7 +2266,7 @@ export default function WorkshopView({
         {/* Columna B: Contenido del tab (documento o Paso 0 = benchmark + deep research) */}
         <section
           className={cn(
-            "min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0 lg:flex-1",
+            "relative min-h-0 min-w-0 overflow-hidden border-r border-[var(--border)] lg:min-h-0 lg:flex-1 lg:overflow-visible",
             "flex flex-col",
             mobileWorkshopColumn === "workspace"
               ? "flex min-h-0 flex-1"
@@ -1919,31 +2275,19 @@ export default function WorkshopView({
         >
           <div className="flex shrink-0 border-b border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_45%,var(--background))] px-3 py-2.5 text-sm text-[var(--muted-foreground)] sm:px-4 sm:py-3 lg:h-16 lg:min-h-16 lg:max-h-16 lg:items-center lg:overflow-hidden lg:py-0 lg:pl-4 lg:pr-4">
             <TooltipProvider delayDuration={280}>
-            <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3 lg:flex-nowrap lg:items-center">
-              <WorkshopDocToolbarHint
-                tier={effectiveComplexityForTabs as WorkshopComplexityTier}
-                isLegacyProject={isLegacyProject}
+            <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-3 lg:flex-nowrap lg:items-center lg:justify-between">
+              <div className="min-w-0 flex-1 lg:hidden">
+                <WorkshopDocToolbarHint
+                  tier={effectiveComplexityForTabs as WorkshopComplexityTier}
+                  isLegacyProject={isLegacyProject}
+                />
+              </div>
+              <WorkshopDocPanelHeader
+                className="hidden lg:flex"
+                panel={centralPanel}
+                benchmarkPhaseTab={benchmarkPhaseTab}
               />
-              <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end sm:gap-2 sm:pt-0.5 lg:flex-nowrap lg:pt-0">
-                {isLgLayout && lgWorkshopChatCollapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className={WORKSHOP_DOC_TOOLBAR_ICON_BTN}
-                        aria-label="Mostrar conversación"
-                        onClick={() => handleSetLgWorkshopChatCollapsed(false)}
-                      >
-                        <MessageSquare className={WORKSHOP_DOC_TOOLBAR_ICON} strokeWidth={2} aria-hidden />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom" align="end" className="max-w-[14rem]">
-                      Mostrar panel de conversación
-                    </TooltipContent>
-                  </Tooltip>
-                ) : null}
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end sm:gap-2 sm:pt-0.5 lg:hidden">
                 {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd"] as const).includes(
                   centralPanel as any,
                 ) && (
@@ -2254,6 +2598,27 @@ export default function WorkshopView({
                   </Tooltip>
                 )}
               </div>
+              {isLgLayout && lgWorkshopChatCollapsed ? (
+                <div className="hidden shrink-0 lg:flex">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_BTN}
+                        aria-label="Mostrar conversación"
+                        onClick={() => handleSetLgWorkshopChatCollapsed(false)}
+                      >
+                        <MessageSquare className={WORKSHOP_DOC_TOOLBAR_ICON} strokeWidth={2} aria-hidden />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[14rem]">
+                      Mostrar panel de conversación
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              ) : null}
             </div>
             </TooltipProvider>
           </div>
@@ -3263,6 +3628,11 @@ export default function WorkshopView({
               />
             )}
           </div>
+          {isLgLayout ? (
+            <div className="pointer-events-none absolute inset-0 z-20 hidden overflow-visible lg:block">
+              <WorkshopDocBubbleMenu items={docBubbleMenuItems} />
+            </div>
+          ) : null}
         </section>
 
         {/* Columna C: métricas — solo móvil (panel completo). En lg la pestaña flota sobre el área de trabajo (sin tercera columna). */}

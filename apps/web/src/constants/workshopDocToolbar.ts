@@ -75,6 +75,15 @@ export const WORKSHOP_INVERSE_ICON_BTN_DANGER_HOVER = cn(
 /** Preview/source toggle, print, regen. */
 export const WORKSHOP_DOC_TOOLBAR_ICON_BTN = WORKSHOP_INVERSE_ICON_BTN;
 
+/** Icon slot in workshop column headers (chat, document) — flat muted tile + primary icon. */
+export const WORKSHOP_COLUMN_HEADER_ICON_SLOT = cn(
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+  "bg-[var(--muted)] text-[var(--primary)]",
+  "ring-1 ring-[color-mix(in_oklch,var(--border)_70%,transparent)]",
+);
+
+export const WORKSHOP_COLUMN_HEADER_ICON = cn(WORKSHOP_GROUP_ICON, "h-4 w-4 text-[var(--primary)]");
+
 /** Same chrome as `Button size="icon"` + `WORKSHOP_DOC_TOOLBAR_ICON_BTN` for native `<button>` triggers. */
 export const WORKSHOP_DOC_TOOLBAR_ICON_TRIGGER = cn(
   "inline-flex items-center justify-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:pointer-events-none disabled:opacity-50",
