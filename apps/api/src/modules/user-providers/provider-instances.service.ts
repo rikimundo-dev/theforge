@@ -281,6 +281,7 @@ export class ProviderInstancesService {
       displayName: string;
       chatModel: string;
       chatModelFallbacks: string[];
+      auditorChatModel: string | null;
       embeddingModel: string | null;
       embeddingDimension: number | null;
       sttModel: string | null;
