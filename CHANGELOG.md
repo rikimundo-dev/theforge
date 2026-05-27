@@ -2,11 +2,21 @@
 
 Todas las notas relevantes de este repositorio se documentan aquí. El formato sigue una variante orientada a release técnico (Added / Changed / Fixed / Architecture).
 
+## [0.11.3] — 2026-05-26
+
+### Fixed
+
+- **Deploy Dokploy — `failed to solve: base name (${NGINX_IMAGE})`:** `FROM` con imágenes ECR fijas en Dockerfiles (sin `ARG` en stage base); algunos builders no sustituyen build-args en el segundo stage.
+
+### Changed
+
+- **BUILD_CACHE_BUST**: 93 → 94
+
 ## [0.11.2] — 2026-05-26
 
 ### Fixed
 
-- **Deploy Dokploy — TLS timeout a Docker Hub:** Builds y servicios `postgres`/`redis` usan por defecto **ECR Public** (`public.ecr.aws/docker/library/...`) en lugar de `docker.io`. Args `NODE_IMAGE`, `NGINX_IMAGE`, `POSTGRES_IMAGE`, `REDIS_IMAGE` configurables en compose/.env.
+- **Deploy Dokploy — TLS timeout a Docker Hub:** Builds y servicios `postgres`/`redis` usan por defecto **ECR Public** (`public.ecr.aws/docker/library/...`) en lugar de `docker.io`. Override `POSTGRES_IMAGE` / `REDIS_IMAGE` en compose/.env.
 
 ### Changed
 
