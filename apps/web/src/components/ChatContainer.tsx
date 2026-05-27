@@ -264,7 +264,6 @@ function ChatComposerBar({
   isBenchmarkFirstAction,
   showAttachTools,
   imageInputRef,
-  pendingFilesCount,
   imageAttachDisabled,
   imageAttachTitle,
   imageAttachAriaLabel,
@@ -287,7 +286,6 @@ function ChatComposerBar({
   isBenchmarkFirstAction: boolean;
   showAttachTools: boolean;
   imageInputRef: RefObject<HTMLInputElement | null>;
-  pendingFilesCount: number;
   imageAttachDisabled: boolean;
   imageAttachTitle: string;
   imageAttachAriaLabel: string;
@@ -929,7 +927,6 @@ export default function ChatContainer({
               isBenchmarkFirstAction={isBenchmarkFirstAction}
               showAttachTools={!isBenchmarkFirstAction}
               imageInputRef={imageInputRef}
-              pendingFilesCount={pendingFiles.length}
               imageAttachDisabled={imageAttachDisabled}
               imageAttachTitle={imageAttachTitle}
               imageAttachAriaLabel={imageAttachAriaLabel}
@@ -1368,7 +1365,6 @@ export default function ChatContainer({
               isBenchmarkFirstAction={isBenchmarkFirstAction}
               showAttachTools={!isBenchmarkFirstAction}
               imageInputRef={imageInputRef}
-              pendingFilesCount={pendingFiles.length}
               imageAttachDisabled={imageAttachDisabled}
               imageAttachTitle={imageAttachTitle}
               imageAttachAriaLabel={imageAttachAriaLabel}
