@@ -504,8 +504,7 @@ export class UserProvidersService {
         `El proveedor activo «${runtime.providerId}» no soporta imágenes. Usa OpenRouter, OpenAI, Anthropic o Gemini.`,
       );
     }
-    const media = await this.resolveMediaFieldsFromEffectiveProvider(userId);
-    const visionModel = (media?.visionModel ?? runtime.visionModel)?.trim();
+    const visionModel = runtime.visionModel?.trim();
     if (!visionModel) {
       throw new BadRequestException(
         "Configura el modelo de visión en la instancia activa (Ajustes → Gestionar instancias → Modelo de visión).",
@@ -514,117 +513,38 @@ export class UserProvidersService {
     return { ...runtime, visionModel };
   }
 
-  /**
-   * STT y visión desde la instancia efectiva (activeTenantInstanceId → default tenant → BYOK).
-   * No depende de `resolveRuntime` (p. ej. modelo de chat no autorizado no oculta visión en UI).
-   */
+  /** STT y visión resueltos desde instancia tenant o BYOK (para UI del chat). */
   async getRuntimeMediaConfig(userId: string): Promise<{
     sttModel: string | null;
     visionModel: string | null;
     supportsVision: boolean;
     supportsStt: boolean;
-    activeInstanceId: string | null;
   }> {
-    const fields = await this.resolveMediaFieldsFromEffectiveProvider(userId);
-    return (
-      fields ?? {
+    try {
+      const runtime = await this.resolveRuntime(userId);
+      const catalog = PROVIDER_CATALOG[runtime.providerId];
+      let sttModel: string | null = null;
+      if (catalog.supportsStt) {
+        sttModel = runtime.sttModel?.trim() || catalog.defaultSttModel || null;
+      }
+      let visionModel: string | null = null;
+      if (catalog.supportsVision) {
+        visionModel = runtime.visionModel?.trim() || null;
+      }
+      return {
+        sttModel,
+        visionModel,
+        supportsVision: catalog.supportsVision,
+        supportsStt: catalog.supportsStt,
+      };
+    } catch {
+      return {
         sttModel: null,
         visionModel: null,
         supportsVision: false,
         supportsStt: false,
-        activeInstanceId: null,
-      }
-    );
-  }
-
-  /** Campos de media (STT/visión) leídos de la instancia activa o BYOK personal. */
-  private async resolveMediaFieldsFromEffectiveProvider(userId: string): Promise<{
-    sttModel: string | null;
-    visionModel: string | null;
-    supportsVision: boolean;
-    supportsStt: boolean;
-    activeInstanceId: string | null;
-  } | null> {
-    const instance = await this.resolveEffectiveTenantInstanceForUser(userId);
-    if (instance && isProviderId(instance.providerType)) {
-      return this.mediaFieldsFromProviderInstance(instance);
+      };
     }
-
-    try {
-      const provider = await this.activeProviderId(userId);
-      const cfg = await this.prisma.userProviderConfig.findUnique({
-        where: { userId_provider: { userId, provider } },
-      });
-      if (!cfg) return null;
-      return this.mediaFieldsFromUserConfig(provider, cfg);
-    } catch {
-      return null;
-    }
-  }
-
-  private mediaFieldsFromProviderInstance(instance: ProviderInstance): {
-    sttModel: string | null;
-    visionModel: string | null;
-    supportsVision: boolean;
-    supportsStt: boolean;
-    activeInstanceId: string | null;
-  } {
-    const provider = instance.providerType as ProviderId;
-    const catalog = PROVIDER_CATALOG[provider];
-    const extras = (instance.extras ?? {}) as Record<string, unknown>;
-    return {
-      activeInstanceId: instance.id,
-      supportsVision: catalog.supportsVision,
-      supportsStt: catalog.supportsStt,
-      sttModel: catalog.supportsStt
-        ? instance.sttModel?.trim() || catalog.defaultSttModel || null
-        : null,
-      visionModel: catalog.supportsVision
-        ? resolveVisionModelForRuntime({
-            visionModel: instance.visionModel,
-            chatModel: instance.chatModel,
-            extras,
-            catalogDefaultVisionModel: catalog.defaultVisionModel,
-            supportsVision: true,
-          }) || null
-        : null,
-    };
-  }
-
-  private mediaFieldsFromUserConfig(
-    provider: ProviderId,
-    cfg: {
-      chatModel: string;
-      sttModel: string | null;
-      visionModel: string | null;
-      extras: unknown;
-    },
-  ): {
-    sttModel: string | null;
-    visionModel: string | null;
-    supportsVision: boolean;
-    supportsStt: boolean;
-    activeInstanceId: string | null;
-  } {
-    const catalog = PROVIDER_CATALOG[provider];
-    const extras = (cfg.extras ?? {}) as Record<string, unknown>;
-    return {
-      activeInstanceId: null,
-      supportsVision: catalog.supportsVision,
-      supportsStt: catalog.supportsStt,
-      sttModel: catalog.supportsStt
-        ? cfg.sttModel?.trim() || catalog.defaultSttModel || null
-        : null,
-      visionModel: catalog.supportsVision
-        ? resolveVisionModelForRuntime({
-            visionModel: cfg.visionModel,
-            chatModel: cfg.chatModel,
-            extras,
-            catalogDefaultVisionModel: catalog.defaultVisionModel,
-            supportsVision: true,
-          }) || null
-        : null,
-    };
   }
 
   /** super_admin y admin: eligen proveedor activo sin restricción por grants de Usuarios. */

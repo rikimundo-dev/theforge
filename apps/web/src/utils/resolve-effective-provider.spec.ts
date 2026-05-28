@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import {
   resolveDisplayVisionModel,
   resolveEffectiveProvider,
-  resolveSttModelFromEffective,
   visionModelHint,
 } from "./resolve-effective-provider.js";
 import type {
@@ -149,16 +148,5 @@ describe("resolveDisplayVisionModel", () => {
       defaultVisionModel: null,
     });
     assert.equal(result.supportsVision, false);
-  });
-
-  it("resolveSttModelFromEffective — instancia activa", () => {
-    const info = resolveEffectiveProvider(
-      [baseInstance({ id: "i1", sttModel: "whisper-1" })],
-      { activeTenantInstanceId: "i1" } as UserAISettings,
-      [],
-      "user-1",
-    );
-    const stt = resolveSttModelFromEffective(info, [openrouterCatalog]);
-    assert.equal(stt, "whisper-1");
   });
 });

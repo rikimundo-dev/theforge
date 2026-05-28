@@ -65,19 +65,6 @@ export function resolveDisplayVisionModel(
   return { supportsVision: true, model: null, source: null };
 }
 
-/** STT desde instancia activa o BYOK (réplica cliente de media en API). */
-export function resolveSttModelFromEffective(
-  info: EffectiveProviderInfo,
-  catalog: ProviderCatalogEntry[],
-): string | null {
-  const providerType = info.instance?.providerType ?? info.personalConfig?.provider ?? null;
-  if (!providerType) return null;
-  const entry = catalog.find((c) => c.id === providerType);
-  if (!entry?.supportsStt) return null;
-  const configured = info.instance?.sttModel ?? info.personalConfig?.sttModel ?? null;
-  return configured?.trim() || entry.defaultSttModel || null;
-}
-
 export type EffectiveProviderSource =
   | "selected-instance"
   | "tenant-default"

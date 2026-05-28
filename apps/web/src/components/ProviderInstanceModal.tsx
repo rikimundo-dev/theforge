@@ -151,7 +151,7 @@ export function ProviderInstanceModal({
       setDisplayName(inst.displayName);
       setEnabledForUsers(inst.enabledForUsers);
       setIsTenantDefault(inst.isTenantDefault);
-      setSetAsActive(true);
+      setSetAsActive(activeInstanceId === inst.id);
       if (c) setConfigForm(configFormFromInstance(inst, c));
     } else {
       const type = cat[0]?.id ?? "openrouter";
@@ -161,7 +161,7 @@ export function ProviderInstanceModal({
       setDisplayName("");
       setEnabledForUsers(false);
       setIsTenantDefault(false);
-      setSetAsActive(true);
+      setSetAsActive(false);
       if (c) setConfigForm(createEmptyUserProviderForm(c));
     }
     setEmbeddingsEnabled(userSettings?.embeddingsEnabled ?? true);
@@ -508,12 +508,6 @@ export function ProviderInstanceModal({
                 />
                 Usar como instancia activa
               </label>
-              {isEditing && activeInstanceId && editing && activeInstanceId !== editing.id ? (
-                <p className="text-xs text-[var(--muted-foreground)]">
-                  Otra instancia está activa en el taller. Guarda con esta casilla marcada para
-                  aplicar el modelo de visión aquí.
-                </p>
-              ) : null}
               <label className="flex cursor-pointer items-center justify-between gap-3 text-sm">
                 <span>Habilitar embeddings en el grafo</span>
                 <button

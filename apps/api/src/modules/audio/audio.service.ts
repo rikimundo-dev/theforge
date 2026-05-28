@@ -116,7 +116,6 @@ export class AudioService {
     visionModel: string | null;
     supportsVision: boolean;
     supportsStt: boolean;
-    activeInstanceId: string | null;
   }> {
     return this.aiFactory.getRuntimeMediaConfig(userId);
   }
