@@ -21,7 +21,6 @@ import remarkGfm from "remark-gfm";
 import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown, Rocket } from "lucide-react";
 import { apiFetch } from "../utils/apiClient";
 import { useInterview } from "../hooks/useInterview";
-import { useRuntimeMediaConfig } from "../hooks/useRuntimeMediaConfig";
 import { useWorkshopStore } from "../store/workshopStore";
 import { cn } from "@/lib/utils";
 import type { ChatImagePart } from "@theforge/shared-types";
@@ -542,16 +541,11 @@ export default function ChatContainer({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const multiStageChat = workshopStages.length > 1;
 
-  /** STT y visión desde instancia activa (Ajustes → Gestionar instancias). */
-  const {
-    visionModel,
-    sttModel,
-    loading: mediaConfigLoading,
-    activeInstanceId,
-    reload: reloadMediaConfig,
-  } = useRuntimeMediaConfig();
-  const mediaConfigLoaded = !mediaConfigLoading;
-  const sttConfigLoaded = mediaConfigLoaded;
+  /** STT (speech‑to‑text) via mic */
+  const [sttModel, setSttModel] = useState<string | null>(null);
+  const [visionModel, setVisionModel] = useState<string | null>(null);
+  const [mediaConfigLoaded, setMediaConfigLoaded] = useState(false);
+  const [sttConfigLoaded, setSttConfigLoaded] = useState(false);
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -686,10 +680,27 @@ export default function ChatContainer({
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, [pendingFiles]);
 
-  /** Tras cambiar instancia activa en el store (p. ej. desde Ajustes en otra pestaña). */
+  /** STT y visión desde instancia activa (GET /audio/config). */
   useEffect(() => {
-    void reloadMediaConfig();
-  }, [activeInstanceId, reloadMediaConfig]);
+    (async () => {
+      try {
+        const r = await apiFetch(
+          `${import.meta.env.VITE_API_URL ?? "/api"}/audio/config`,
+        );
+        if (r.ok) {
+          const data = (await r.json()) as {
+            sttModel?: string | null;
+            visionModel?: string | null;
+          };
+          setSttModel(data.sttModel ?? null);
+          setVisionModel(data.visionModel ?? null);
+        }
+      } catch { /* sin media config */ } finally {
+        setSttConfigLoaded(true);
+        setMediaConfigLoaded(true);
+      }
+    })();
+  }, []);
 
   const sttMicEnabled = !!sttModel;
   const sttMicDisabled = loading || !sttConfigLoaded || !sttMicEnabled;
@@ -699,9 +710,7 @@ export default function ChatContainer({
   const imageAttachTitle = !mediaConfigLoaded
     ? "Comprobando modelo de visión…"
     : !imageAttachEnabled
-      ? activeInstanceId
-        ? "Configura el modelo de visión en la instancia activa (Ajustes → Gestionar instancias)"
-        : "Marca una instancia como activa y configura el modelo de visión en Ajustes"
+      ? "Configura el modelo de visión en Ajustes → Gestionar instancias"
       : "Adjuntar imagen (máx. 6, PNG/JPEG/WebP/GIF)";
   const imageAttachAriaLabel = imageAttachTitle;
   const sttMicTitle = recording
@@ -709,7 +718,7 @@ export default function ChatContainer({
     : !sttConfigLoaded
       ? "Comprobando transcripción de voz…"
       : !sttMicEnabled
-        ? "Configura el modelo STT en la instancia activa (Ajustes → Gestionar instancias)"
+        ? "Configura el modelo STT en Ajustes → Proveedores IA"
         : "Grabar voz";
   const sttMicAriaLabel = recording ? "Detener grabación" : sttMicTitle;
 
