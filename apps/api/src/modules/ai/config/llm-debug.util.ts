@@ -4,7 +4,7 @@ export function isLlmDebugEnabled(): boolean {
   return v === "1" || v === "true" || v === "yes";
 }
 
-export function llmDebug(scope: string, message: string, meta?: Record<string, unknown>): void {
+export function llmDebug(scope: string, message: string, meta?: object): void {
   if (!isLlmDebugEnabled()) return;
   const suffix =
     meta != null && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
@@ -12,7 +12,7 @@ export function llmDebug(scope: string, message: string, meta?: Record<string, u
 }
 
 /** Siempre visible: fallos de cadena de modelos (producción incluida). */
-export function llmWarn(scope: string, message: string, meta?: Record<string, unknown>): void {
+export function llmWarn(scope: string, message: string, meta?: object): void {
   const suffix =
     meta != null && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
   console.warn(`[LLM][${scope}] ${message}${suffix}`);
