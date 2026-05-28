@@ -582,7 +582,21 @@ export class UserProvidersService {
         `El proveedor activo «${runtime.providerId}» no soporta imágenes. Usa OpenRouter, OpenAI, Anthropic o Gemini.`,
       );
     }
-    const visionModel = runtime.visionModel?.trim();
+    const instance = await this.resolveEffectiveTenantInstanceForUser(userId);
+    let visionModel = runtime.visionModel?.trim() || "";
+    if (instance && isProviderId(instance.providerType)) {
+      const instCatalog = PROVIDER_CATALOG[instance.providerType];
+      const extras = (instance.extras ?? {}) as Record<string, unknown>;
+      visionModel =
+        resolveVisionModelForRuntime({
+          visionModel: instance.visionModel,
+          chatModel: instance.chatModel,
+          extras,
+          catalogDefaultVisionModel: instCatalog.defaultVisionModel,
+          supportsVision: instCatalog.supportsVision,
+        })?.trim() || visionModel;
+    }
+    visionModel = visionModel.trim();
     if (!visionModel) {
       throw new BadRequestException(
         "Configura el modelo de visión en la instancia activa (Ajustes → Gestionar instancias → Modelo de visión).",
@@ -597,21 +611,41 @@ export class UserProvidersService {
     visionModel: string | null;
     supportsVision: boolean;
     supportsStt: boolean;
+    activeInstanceId: string | null;
   }> {
     try {
+      const instance = await this.resolveEffectiveTenantInstanceForUser(userId);
+      if (instance && isProviderId(instance.providerType)) {
+        const catalog = PROVIDER_CATALOG[instance.providerType];
+        const extras = (instance.extras ?? {}) as Record<string, unknown>;
+        return {
+          activeInstanceId: instance.id,
+          supportsVision: catalog.supportsVision,
+          supportsStt: catalog.supportsStt,
+          sttModel: catalog.supportsStt
+            ? instance.sttModel?.trim() || catalog.defaultSttModel || null
+            : null,
+          visionModel: catalog.supportsVision
+            ? resolveVisionModelForRuntime({
+                visionModel: instance.visionModel,
+                chatModel: instance.chatModel,
+                extras,
+                catalogDefaultVisionModel: catalog.defaultVisionModel,
+                supportsVision: true,
+              }) || null
+            : null,
+        };
+      }
       const runtime = await this.resolveRuntime(userId);
       const catalog = PROVIDER_CATALOG[runtime.providerId];
-      let sttModel: string | null = null;
-      if (catalog.supportsStt) {
-        sttModel = runtime.sttModel?.trim() || catalog.defaultSttModel || null;
-      }
-      let visionModel: string | null = null;
-      if (catalog.supportsVision) {
-        visionModel = runtime.visionModel?.trim() || null;
-      }
       return {
-        sttModel,
-        visionModel,
+        activeInstanceId: null,
+        sttModel:
+          catalog.supportsStt
+            ? runtime.sttModel?.trim() || catalog.defaultSttModel || null
+            : null,
+        visionModel:
+          catalog.supportsVision ? runtime.visionModel?.trim() || null : null,
         supportsVision: catalog.supportsVision,
         supportsStt: catalog.supportsStt,
       };
@@ -621,6 +655,7 @@ export class UserProvidersService {
         visionModel: null,
         supportsVision: false,
         supportsStt: false,
+        activeInstanceId: null,
       };
     }
   }

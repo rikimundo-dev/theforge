@@ -41,9 +41,6 @@ function historyToOpenAiMessages(history: ChatMessage[]): OpenAI.Chat.ChatComple
     if (m.role === "assistant") {
       return { role: "assistant", content: m.content };
     }
-    if (m.images?.length) {
-      return buildOpenAiUserMessage(m.content, m.images);
-    }
     return { role: "user", content: m.content };
   });
 }
@@ -102,7 +99,7 @@ function chatModelChain(runtime: UserLLMRuntime): string[] {
 }
 
 function visionModelChain(runtime: UserLLMRuntime): string[] {
-  const primary = (runtime.visionModel?.trim() || runtime.chatModel?.trim() || "").trim();
+  const primary = runtime.visionModel?.trim() || "";
   if (!primary) return [];
   const vf =
     typeof runtime.extras?.visionModelFallback === "string"
@@ -110,10 +107,7 @@ function visionModelChain(runtime: UserLLMRuntime): string[] {
       : "";
   const dedupe = (models: string[]) =>
     models.filter((m, i, a) => Boolean(m) && a.indexOf(m) === i);
-  if (vf) return dedupe([primary, vf]);
-  const chain = chatModelChain(runtime);
-  if (chain.length > 1) return dedupe([primary, ...chain.slice(1)]);
-  return [primary];
+  return vf ? dedupe([primary, vf]) : [primary];
 }
 
 export class OpenAICompatibleAdapter implements LLMProvider {

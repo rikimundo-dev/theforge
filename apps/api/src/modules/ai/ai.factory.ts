@@ -56,6 +56,11 @@ export class AIFactory {
     return this.userProviders.resolveVisionRuntime(userId);
   }
 
+  async createForVisionUser(userId: string): Promise<LLMProvider> {
+    const runtime = await this.resolveVisionRuntime(userId);
+    return this.create(runtime);
+  }
+
   async getRuntimeMediaConfig(userId: string) {
     return this.userProviders.getRuntimeMediaConfig(userId);
   }

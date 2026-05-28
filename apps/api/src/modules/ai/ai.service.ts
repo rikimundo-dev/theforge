@@ -508,7 +508,8 @@ export class AiService {
     activeTab?: string,
   ): Promise<string> {
     if (!images.length) return "";
-    await this.aiFactory.resolveVisionRuntime(getRequestUserId());
+    const userId = getRequestUserId();
+    const visionProvider = await this.aiFactory.createForVisionUser(userId);
     const tab = (activeTab ?? "mdd").trim() || "mdd";
     const hint = (userText ?? "").trim().slice(0, 4000) || "(sin texto adicional)";
     const tabHint =
@@ -524,7 +525,7 @@ export class AiService {
         ? " Si es un ERD o diagrama relacional, lista tablas, columnas, PK/FK y jerarquía (país→estado→ciudad→colonia, etc.)."
         : "";
     const prompt = `El usuario trabaja en ${tabHint}. Mensaje o petición asociada:\n---\n${hint}\n---\n\nDescribe con precisión lo que muestran las imágenes (UI, diagramas, datos, flujos, stack, texto visible, etc.). Responde en español, en viñetas; indica partes ilegibles o ambiguas.${benchmarkExtra}`;
-    const out = await this.generateResponse(prompt, [], {
+    const out = await visionProvider.generateResponse(prompt, [], {
       systemPrompt:
         "Eres arquitecto de software: extrae solo información sustentada en las imágenes; no inventes.",
       userMessageImages: images,

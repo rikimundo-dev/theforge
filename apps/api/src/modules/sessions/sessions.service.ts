@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Logger } from "@nestjs/common";
 import type { Session } from "@theforge/database";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
@@ -39,16 +39,11 @@ function filterChatByTab(log: ChatMessage[], tab: string): ChatMessage[] {
   return log.filter((m) => (m.tab ?? "mdd") === tab);
 }
 
+/** Solo texto al LLM; las imágenes viven en el log para la UI y en el bloque de visión del content. */
 function sessionHistoryToLlm(history: ChatMessage[]): LlmChatMessage[] {
   return history.map((m) => ({
     role: m.role,
     content: m.content,
-    ...(m.role === "user" &&
-    m.images != null &&
-    m.images.length > 0 &&
-    !contentIncludesVisionBlock(m.content)
-      ? { images: m.images }
-      : {}),
   }));
 }
 
@@ -181,6 +176,9 @@ export class SessionsService {
       if (!block) return userMessage.trim() || "(Imagen adjunta)";
       return mergeUserTextWithVisionBlock(userMessage, block);
     } catch (err) {
+      if (err instanceof ModelsUnavailableError || err instanceof BadRequestException) {
+        throw err;
+      }
       console.warn("[Sessions] enrichUserContentWithVision failed:", err);
       return userMessage.trim() || "(Imagen adjunta)";
     }
