@@ -590,6 +590,61 @@ export function validateMermaid(raw: string): string[] {
 }
 
 /**
+ * Trunca cuerpo Mermaid cuando el LLM no cerró el fence y filtró markdown
+ * (TechnicalMetadata, encabezados ##, fences ```, viñetas con backticks).
+ */
+export function stripMarkdownLeakFromMermaidDiagramBody(raw: string): string {
+  if (!raw?.trim()) return raw ?? "";
+
+  const leakLineStart = (trimmed: string): boolean => {
+    if (!trimmed) return false;
+    if (/^```/.test(trimmed)) return true;
+    if (/^#{1,6}\s/.test(trimmed)) return true;
+    if (/^\*\*TechnicalMetadata\*\*/i.test(trimmed)) return true;
+    if (/^TechnicalMetadata\s*:?\s*$/i.test(trimmed)) return true;
+    if (/^-\s*`/.test(trimmed)) return true;
+    if (
+      /^\[(?:high_security|external_api|multi_tenant|cicd_pipeline|real_time|advanced_monitoring)\]/i.test(
+        trimmed,
+      )
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  const lines = raw.split("\n");
+  const out: string[] = [];
+  let seenDiagramStart = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (/\*\*TechnicalMetadata\*\*/i.test(trimmed) || /```TechnicalMetadata/i.test(trimmed)) {
+      const cut = trimmed.split(/\*\*TechnicalMetadata\*\*|```TechnicalMetadata/i)[0]?.trim();
+      if (cut && !leakLineStart(cut)) out.push(cut);
+      break;
+    }
+
+    if (
+      /^(erDiagram|flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|gantt|pie|gitGraph|mindmap|timeline)/i.test(
+        trimmed,
+      )
+    ) {
+      seenDiagramStart = true;
+      out.push(line);
+      continue;
+    }
+
+    if (seenDiagramStart && leakLineStart(trimmed)) break;
+
+    out.push(line);
+  }
+
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/**
  * Normaliza un diagrama Mermaid existente — corrige errores comunes:
  * - IDs con espacios → reemplazados por underscore
  * - Bloques sequence sin cerrar → agrega `end`
@@ -599,9 +654,10 @@ export function validateMermaid(raw: string): string[] {
  */
 /** Normaliza solo el cuerpo del diagrama (sin fences). */
 export function normalizeMermaidDiagramBody(raw: string): string {
-  if (!raw?.trim()) return "";
+  const stripped = stripMarkdownLeakFromMermaidDiagramBody(raw);
+  if (!stripped?.trim()) return "";
 
-  const lines = raw.trim().split("\n");
+  const lines = stripped.trim().split("\n");
   const out: string[] = [];
   let openBlocks = 0;
 

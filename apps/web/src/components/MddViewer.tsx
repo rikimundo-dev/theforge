@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { repairMarkdownFences } from "@theforge/shared-types/markdown-repair";
+import { stripMarkdownLeakFromMermaidDiagramBody } from "@theforge/shared-types/mermaid";
 import { parseMarkdownSections } from "../utils/markdownSections";
 
 /** Quita bloques ```mermaid vacíos para no intentar renderizarlos (evita SVG de error). */
@@ -120,6 +121,17 @@ function normalizeMermaidExpert(raw: string): string {
  * 5. Líneas sueltas sin arrow (ej. "DB OK") → se convierten a `Note over B: texto`.
  *    Si no se puede determinar el participante, se ignoran (mejor que error de parse).
  */
+function prepareMermaidForRender(content: string): string {
+  const stripped = stripMarkdownLeakFromMermaidDiagramBody(content);
+  const expertNormalized = normalizeMermaidExpert(stripped);
+  const sequenced = /sequenceDiagram/i.test(expertNormalized)
+    ? normalizeMermaidSequenceSyntax(expertNormalized)
+    : expertNormalized;
+  return /erDiagram/i.test(sequenced)
+    ? normalizeMermaidForRender(sequenced)
+    : normalizeMermaidFirstLineKeywords(normalizeMermaidContent(sequenced));
+}
+
 function normalizeMermaidSequenceSyntax(content: string): string {
   // Solo aplicar a sequence diagrams
   if (!/sequenceDiagram/i.test(content)) return content;
@@ -154,6 +166,11 @@ function normalizeMermaidSequenceSyntax(content: string): string {
 
     // Skip empty lines, comments, and keywords
     if (!trimmed) { out.push(raw); continue; }
+    if (
+      /^```|^#{1,6}\s|^\*\*TechnicalMetadata\*\*|^TechnicalMetadata\s*:?\s*$|^-\s*`/i.test(trimmed)
+    ) {
+      break;
+    }
     if (/^(sequenceDiagram|participant|actor|Note\s|alt|else|end|loop|opt|par|rect|critical|break)\b/i.test(trimmed)) {
       out.push(raw);
       continue;
@@ -312,10 +329,7 @@ function MermaidBlock({ content, blockKey }: { content: string; blockKey: string
 
     setError(null);
     let cancelled = false;
-    const expertNormalized = normalizeMermaidExpert(content);
-    const toRender = /erDiagram/i.test(expertNormalized)
-      ? normalizeMermaidForRender(expertNormalized)
-      : normalizeMermaidFirstLineKeywords(normalizeMermaidContent(expertNormalized));
+    const toRender = prepareMermaidForRender(content);
     if (!toRender) return;
 
     const doRender = async () => {
@@ -401,10 +415,7 @@ const MdSection = memo(function MdSection({ content }: { content: string }) {
             }
             if (looksLikeMermaidBlock(source, className) && source.trim()) {
               const trimmed = source.trim();
-              const expertNormalized = normalizeMermaidExpert(trimmed);
-              const normalized = /erDiagram/i.test(expertNormalized)
-                ? normalizeMermaidForRender(expertNormalized)
-                : normalizeMermaidFirstLineKeywords(normalizeMermaidSequenceSyntax(normalizeMermaidContent(expertNormalized)));
+              const normalized = prepareMermaidForRender(trimmed);
               const key = mermaidKey(normalized);
               return (
                 <MermaidBlockErrorBoundary content={normalized} blockKey={key}>

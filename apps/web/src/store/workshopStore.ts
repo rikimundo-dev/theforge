@@ -1131,8 +1131,9 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
 
   fetchWelcome: async (projectId, activeTab) => {
-    const { session } = get();
-    if (!projectId?.trim()) return;
+    const { session, projectId: storeProjectId } = get();
+    const pid = (projectId ?? storeProjectId ?? "").trim();
+    if (!pid) return;
     set({ loading: true, error: null });
     try {
       const stageWelcome = get().activeStageId;
@@ -1140,7 +1141,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          projectId,
+          projectId: pid,
           sessionId: session?.id,
           activeTab: activeTab ?? undefined,
           ...(stageWelcome ? { stageId: stageWelcome } : {}),

@@ -4,6 +4,8 @@ import {
   buildCloudflareBaseUrl,
   resolveCloudflareAccountId,
   resolveEmbeddingDimensionForModel,
+  resolveInstanceChatModelWhitelist,
+  isChatModelAllowedForTenantUser,
   PROVIDER_CATALOG,
   PROVIDER_IDS,
 } from "./provider-catalog.js";
@@ -69,4 +71,37 @@ test("PROVIDER_CATALOG — groq BYOK", () => {
   assert.equal(groq.defaultChatModel, "llama-3.3-70b-versatile");
   assert.ok(groq.chatModels?.includes("llama-3.1-8b-instant"));
   assert.equal(groq.defaultEmbeddingModel, null);
+});
+
+test("resolveInstanceChatModelWhitelist — modelos configurados sin lista explícita", () => {
+  const list = resolveInstanceChatModelWhitelist({
+    chatModel: "deepseek/deepseek-v4-flash",
+    chatModelFallbacks: ["minimax/minimax-m2.5:free"],
+    allowedChatModels: [],
+    auditorChatModel: null,
+    extras: null,
+  });
+  assert.deepEqual(list, ["deepseek/deepseek-v4-flash", "minimax/minimax-m2.5:free"]);
+});
+
+test("isChatModelAllowedForTenantUser — admin sin grants usa whitelist de instancia", () => {
+  const whitelist = resolveInstanceChatModelWhitelist({
+    chatModel: "deepseek/deepseek-v4-flash",
+    chatModelFallbacks: [],
+    allowedChatModels: [],
+  });
+  assert.equal(
+    isChatModelAllowedForTenantUser(
+      "deepseek/deepseek-v4-flash",
+      [],
+      "openrouter",
+      whitelist,
+      false,
+    ),
+    true,
+  );
+  assert.equal(
+    isChatModelAllowedForTenantUser("gpt-4o", [], "openrouter", whitelist, false),
+    false,
+  );
 });

@@ -1,7 +1,22 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeMermaidInDocument } from "./mermaid.js";
+import { normalizeMermaidInDocument, stripMarkdownLeakFromMermaidDiagramBody } from "./mermaid.js";
 import { formatDocumentMarkdown } from "./format-document-markdown.js";
+
+describe("stripMarkdownLeakFromMermaidDiagramBody", () => {
+  it("trunca TechnicalMetadata filtrado en sequenceDiagram", () => {
+    const body = `sequenceDiagram
+  participant API
+  participant DB
+  API->>DB: SELECT
+  DB-->>API: rows
+**TechnicalMetadata**- \`cicd_pipeline\`: pipeline CI`;
+    const out = stripMarkdownLeakFromMermaidDiagramBody(body);
+    assert.match(out, /DB-->>API: rows/);
+    assert.doesNotMatch(out, /TechnicalMetadata/);
+    assert.doesNotMatch(out, /cicd_pipeline/);
+  });
+});
 
 describe("normalizeMermaidInDocument", () => {
   it("no fusiona markdown tras el cierre del bloque mermaid", () => {

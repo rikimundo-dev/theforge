@@ -19,6 +19,7 @@ import {
   listProviderCatalog,
   parseChatModelList,
   resolveEmbeddingDimensionForModel,
+  resolveInstanceChatModelWhitelist,
   type ProviderId,
 } from "../ai/providers/provider-catalog.js";
 import { isSuperAdmin } from "../../common/roles.js";
@@ -736,19 +737,37 @@ export class UserProvidersService {
     const chatModel = opts?.chatModelOverride?.trim() || instance.chatModel;
     const modelRole = opts?.chatModelOverride ? "auditor" : "activo";
 
+    const apiKey = this.tokenCrypto.decrypt(instance.tokenCiphertext, instance.tokenKeyVersion);
+    const extras = (instance.extras ?? {}) as Record<string, unknown>;
+    const legacyFallbacks = extras.chatModelFallbacks;
+    const chatModelFallbacks =
+      instance.chatModelFallbacks.length > 0
+        ? instance.chatModelFallbacks
+        : Array.isArray(legacyFallbacks)
+          ? legacyFallbacks.filter((m): m is string => typeof m === "string" && m.length > 0)
+          : [];
+
+    const instanceModelWhitelist = resolveInstanceChatModelWhitelist({
+      chatModel: instance.chatModel,
+      chatModelFallbacks,
+      allowedChatModels: instance.allowedChatModels,
+      auditorChatModel: instance.auditorChatModel,
+      extras,
+    });
+
     if (
       !isChatModelAllowedForTenantUser(
         chatModel,
         userGrants,
         provider,
-        instance.allowedChatModels,
+        instanceModelWhitelist,
         bypass,
       )
     ) {
       const hint =
         userGrants.length > 0
           ? `Modelos permitidos para ti: ${userGrants.join(", ")}. Activa un proveedor cuyo modelo esté en esa lista.`
-          : `Pide al super_admin modelos en Usuarios o revisa el proveedor «${instance.displayName}».`;
+          : `Modelos de la instancia «${instance.displayName}»: ${instanceModelWhitelist.join(", ") || chatModel}. Pide al super_admin modelos en Usuarios si necesitas otro.`;
       throw new BadRequestException(
         `El modelo «${chatModel}» del proveedor ${modelRole} «${instance.displayName}» no está autorizado. ${hint}`,
       );
@@ -770,16 +789,6 @@ export class UserProvidersService {
       );
     }
 
-    const apiKey = this.tokenCrypto.decrypt(instance.tokenCiphertext, instance.tokenKeyVersion);
-    const extras = (instance.extras ?? {}) as Record<string, unknown>;
-    const legacyFallbacks = extras.chatModelFallbacks;
-    const chatModelFallbacks =
-      instance.chatModelFallbacks.length > 0
-        ? instance.chatModelFallbacks
-        : Array.isArray(legacyFallbacks)
-          ? legacyFallbacks.filter((m): m is string => typeof m === "string" && m.length > 0)
-          : [];
-
     const effectiveFallbacks =
       superAdmin || userGrants.length === 0
         ? chatModelFallbacks
@@ -797,6 +806,7 @@ export class UserProvidersService {
         effectiveFallbacks,
         userGrants,
         bypass,
+        instanceModelWhitelist,
       });
     }
 
@@ -806,7 +816,7 @@ export class UserProvidersService {
           fallbackModel,
           userGrants,
           provider,
-          instance.allowedChatModels,
+          instanceModelWhitelist,
           bypass,
         )
       ) {

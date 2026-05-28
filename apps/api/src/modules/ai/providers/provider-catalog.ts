@@ -293,6 +293,32 @@ export function tenantInstanceAssignableChatModels(instance: {
   ];
 }
 
+/** Whitelist efectiva al validar runtime: lista explícita de la instancia o modelos configurados en ella. */
+export function resolveInstanceChatModelWhitelist(instance: {
+  chatModel: string;
+  chatModelFallbacks: string[];
+  allowedChatModels: string[];
+  auditorChatModel?: string | null;
+  extras?: Record<string, unknown> | null;
+}): string[] {
+  if (instance.allowedChatModels.length > 0) {
+    return [...new Set(instance.allowedChatModels)];
+  }
+  const legacyFallbacks = instance.extras?.chatModelFallbacks;
+  const fallbacks =
+    instance.chatModelFallbacks.length > 0
+      ? instance.chatModelFallbacks
+      : Array.isArray(legacyFallbacks)
+        ? legacyFallbacks.filter((m): m is string => typeof m === "string" && m.length > 0)
+        : [];
+  const configured = [
+    instance.chatModel,
+    ...fallbacks,
+    ...(instance.auditorChatModel?.trim() ? [instance.auditorChatModel.trim()] : []),
+  ].filter((m): m is string => typeof m === "string" && m.trim().length > 0);
+  return [...new Set(configured)];
+}
+
 /** Unión instancia + grants por usuario para validar runtime. */
 export function mergedTenantChatModelWhitelist(
   instance: { allowedChatModels: string[] },
@@ -303,7 +329,7 @@ export function mergedTenantChatModelWhitelist(
 
 /**
  * Con grants del super_admin, solo cuenta la lista del usuario.
- * Sin grants, aplica whitelist de la instancia / catálogo.
+ * Sin grants, aplica whitelist de la instancia (modelos configurados o lista explícita).
  */
 export function isChatModelAllowedForTenantUser(
   model: string,
