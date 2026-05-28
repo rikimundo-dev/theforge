@@ -184,6 +184,23 @@ export class SessionsService {
     }
   }
 
+  /**
+   * Peticiones de edición al DBGA: refinado dedicado (BENCHMARK_REFINE) antes del chat genérico.
+   * Devuelve el DBGA persistible o null si debe seguir el flujo normal (stream/chat).
+   */
+  private async tryRefineBenchmarkDbgaFirst(
+    tab: string,
+    userMessage: string,
+    currentDbga: string | undefined,
+  ): Promise<string | null> {
+    const current = (currentDbga ?? "").trim();
+    const msg = userMessage.trim();
+    if (tab !== "benchmark" || !current || !msg || !looksLikeDbgaEditRequest(msg)) {
+      return null;
+    }
+    return this.refineDbgaFromUserRequest(msg, current);
+  }
+
   private async resolveUserTurnForLlm(
     userMessage: string,
     images: ChatImagePart[] | undefined,
@@ -263,6 +280,40 @@ export class SessionsService {
       options?.userImages,
       activeTab,
     );
+
+    const refinedDbgaEarly = await this.tryRefineBenchmarkDbgaFirst(
+      activeTab,
+      userTurn.promptForModel,
+      options?.currentDbgaContent,
+    );
+    if (refinedDbgaEarly) {
+      const tab = activeTab;
+      const stageId = options?.stageId?.trim();
+      const assistantContent = this.parser.stripChatLabel(
+        benchmarkAssistantChatMessage("", refinedDbgaEarly),
+      );
+      const userMsgBase = {
+        role: "user" as const,
+        content: userTurn.contentForLog,
+        tab,
+        ...(options?.userImages?.length ? { images: options.userImages } : {}),
+      };
+      const userMsg = stageId ? { ...userMsgBase, stageId } : userMsgBase;
+      const asstMsg = { role: "assistant" as const, content: assistantContent, tab };
+      const updated = [...fullLog, userMsg, stageId ? { ...asstMsg, stageId } : asstMsg];
+      await this.prisma.session.update({
+        where: { id: sessionId },
+        data: { chatLog: updated as object },
+      });
+      const updatedSession = await this.prisma.session.findFirst({
+        where: this.sessionScope(sessionId),
+      });
+      return {
+        session: updatedSession,
+        dbgaContent: refinedDbgaEarly,
+      };
+    }
+
     let response: string;
     try {
       response = await this.ai.generateResponse(userTurn.promptForModel, llmHistory, {
@@ -591,6 +642,35 @@ export class SessionsService {
       ...(options?.userImages?.length ? { images: options.userImages } : {}),
     };
     const userEntry = stageId ? { ...userEntryBase, stageId } : userEntryBase;
+
+    const refinedDbgaEarly = await this.tryRefineBenchmarkDbgaFirst(
+      tab,
+      userTurn.promptForModel,
+      options?.currentDbgaContent,
+    );
+    if (refinedDbgaEarly) {
+      const assistantContent = this.parser.stripChatLabel(
+        benchmarkAssistantChatMessage("", refinedDbgaEarly),
+      );
+      const assistantEntry = stageId
+        ? { role: "assistant" as const, content: assistantContent, tab, stageId }
+        : { role: "assistant" as const, content: assistantContent, tab };
+      const updated = [...fullLog, userEntry, assistantEntry];
+      await this.prisma.session.update({
+        where: { id: sessionId },
+        data: { chatLog: updated as object },
+      });
+      const updatedSession = await this.prisma.session.findFirst({
+        where: this.sessionScope(sessionId),
+      });
+      yield { type: "chunk", content: assistantContent };
+      yield {
+        type: "done",
+        session: updatedSession,
+        dbgaContent: refinedDbgaEarly,
+      };
+      return;
+    }
 
     const learningHistory = await this.preferences.getPreferencesForContext(session.projectId, 5);
     const llmHistory = sessionHistoryToLlm(history);
@@ -1270,12 +1350,16 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
     const current = currentDbga.trim();
     if (!msg || !current) return null;
 
+    const mirrorHint = /\bespejo\b|id\s+(de\s+)?origen|id\s+propio|tablas?\s+espejo/i.test(msg)
+      ? "\n\n**Tablas espejo (obligatorio si aplica):** En cada tabla espejo documenta `tenant_id`, el **id de origen** (clave en el sistema fuente / OBP u OBP4MO) y el **id propio** (PK de la fila en la tabla espejo). Refleja esto en SQL o tablas markdown del DBGA."
+      : "";
+
     const refinePrompt = `Aplica OBLIGATORIAMENTE al documento completo los cambios que pide el usuario. No respondas solo en chat: devuelve el DBGA/Fase 0 COMPLETO en markdown y termina con la línea exacta ---FIN_DBGA---.
 
 Petición del usuario:
 ---
 ${msg}
----`;
+---${mirrorHint}`;
 
     const llmOpts = {
       activeTab: "benchmark" as const,
@@ -1297,7 +1381,7 @@ ${msg}
           `[Sessions] refineDbga retry (unchanged=${unchanged}, missingIntent=${missingIntent})`,
         );
         response = await this.ai.generateResponse(
-          `${refinePrompt}\n\nREINTENTO: la respuesta anterior NO aplicó los cambios. El documento debe reflejar explícitamente lo pedido (p. ej. tenant_id, multi-tenancy, catálogo por aplicación OBP/OBP4MO).`,
+          `${refinePrompt}\n\nREINTENTO: la respuesta anterior NO aplicó los cambios. El documento debe reflejar explícitamente lo pedido (p. ej. tenant_id, tablas espejo con id de origen e id propio, catálogo OBP/OBP4MO).`,
           [],
           llmOpts,
         );
@@ -1305,7 +1389,20 @@ ${msg}
       }
 
       if (!merged || isDbgaContentNearlyIdentical(merged, current)) return null;
-      if (!dbgaReflectsUserEditIntent(merged, userMessage)) return null;
+      if (!dbgaReflectsUserEditIntent(merged, userMessage)) {
+        const grew = merged.length > current.length + 80;
+        const mirrorCols =
+          /\borigen_id\b|\bsource_id\b|\bid_origen\b|\bid_espejo\b|\bmirror_id\b|\bid_propio\b|\btenant_id\b/i;
+        if (
+          !(
+            grew &&
+            mirrorCols.test(merged) &&
+            /\bespejo|origen|propio/i.test(userMessage)
+          )
+        ) {
+          return null;
+        }
+      }
       return merged;
     } catch (err) {
       console.warn("[Sessions] refineDbgaFromUserRequest failed:", err);
@@ -1330,7 +1427,7 @@ ${msg}
       this.parser.detectBenchmarkDocFallback(trimmed);
 
     let docPart = split?.docPart?.trim();
-    if (!docPart && withoutFin.length >= 800) {
+    if (!docPart && withoutFin.length >= 400 && /^#\s/m.test(withoutFin)) {
       docPart = withoutFin;
     }
     if (!docPart) return null;
