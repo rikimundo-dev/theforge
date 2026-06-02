@@ -5,14 +5,17 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { withDocumentChangelogInstructions } from "./with-document-changelog-instructions.js";
 
 const PROMPT_PATH = join(__dirname, "phase0-benchmark-refine-prompt.md");
 
 function loadBenchmarkRefinePrompt(): string {
   try {
-    return readFileSync(PROMPT_PATH, "utf-8").trim();
+    return withDocumentChangelogInstructions(readFileSync(PROMPT_PATH, "utf-8").trim());
   } catch {
-    return "Eres consultor de dominio. El usuario tiene un Benchmark & Gap Analysis y pide cambios. Devuelve el documento completo actualizado en markdown y termina con ---FIN_DBGA---, luego un mensaje breve para el chat.";
+    return withDocumentChangelogInstructions(
+      "Eres consultor de dominio. El usuario tiene un Benchmark & Gap Analysis y pide cambios. Devuelve el documento completo actualizado en markdown y termina con ---FIN_DBGA---, luego un mensaje breve para el chat.",
+    );
   }
 }
 

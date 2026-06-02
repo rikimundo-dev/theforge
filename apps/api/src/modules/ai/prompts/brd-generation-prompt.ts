@@ -1,16 +1,17 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { withDocumentChangelogInstructions } from "./with-document-changelog-instructions.js";
 
 const PROMPT_PATH = join(__dirname, "brd-generation-prompt.md");
 
 function loadBrdGenerationSystemPrompt(): string {
   try {
-    return readFileSync(PROMPT_PATH, "utf-8").trim();
+    return withDocumentChangelogInstructions(readFileSync(PROMPT_PATH, "utf-8").trim());
   } catch {
-    return (
+    return withDocumentChangelogInstructions(
       "Eres analista de producto en español. Genera BRD completos en markdown desde el documento fuente, " +
-      "con requisitos funcionales, RNF, matriz de permisos, flujos críticos y contratos de datos preliminares. " +
-      "Usa «No aplica» con motivo para herramientas internas; «Por validar» solo con entrada en decision log."
+        "con requisitos funcionales, RNF, matriz de permisos, flujos críticos y contratos de datos preliminares. " +
+        "Usa «No aplica» con motivo para herramientas internas; «Por validar» solo con entrada en decision log.",
     );
   }
 }
@@ -74,7 +75,10 @@ Validaciones de captura, máscaras, mensajes de error, accesibilidad si aplica.
 ## Riesgos
 ## Métricas de éxito
 ## Pendientes de validación (decision log)
-| Tema | Estado | Dueño sugerido | Impacto | Plazo sugerido |`;
+| Tema | Estado | Dueño sugerido | Impacto | Plazo sugerido |
+
+## Registro de cambios del documento
+Tabla | Versión | Fecha | Descripción del cambio | — fila 1.0 en creación; filas incrementales en cada revisión material.`;
 
 export type BuildBrdUserPromptParams = {
   mode: BrdGenerationMode;

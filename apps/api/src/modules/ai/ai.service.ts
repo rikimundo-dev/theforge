@@ -26,6 +26,7 @@ import { USER_STORIES_PROMPT } from "./prompts/user-stories-prompt.js";
 import { TASKS_PROMPT } from "./prompts/tasks-prompt.js";
 import { VERIFY_DELIVERABLE_PROMPT } from "./prompts/verify-deliverable-prompt.js";
 import { CONFORMANCE_CHECK_PROMPT } from "./prompts/conformance-check-prompt.js";
+import { DOCUMENT_CHANGELOG_CHAT_INSTRUCTION } from "./prompts/with-document-changelog-instructions.js";
 
 /** Instrucción fija para que ningún documento generado use "militar" (se añade al system prompt en generación de docs). */
 const NO_MILITAR_INSTRUCTION =
@@ -175,6 +176,7 @@ export class AiService {
           tasks: "TASKS",
           infra: "INFRA",
           phase0: "PHASE0",
+          "ux-ui-guide": "UX_UI",
         };
         const tag = tagMap[at];
         if (tag && !options?.welcomeBrief) {
@@ -203,6 +205,7 @@ export class AiService {
             systemPrompt +=
               "\n\n**OBLIGATORIO - Guía UX/UI:** Cuando el usuario pida **agregar, modificar o regenerar** la Guía UX/UI, **debes** devolver la **Guía UX/UI completa actualizada** (conservando TODO el contenido existente) terminando con `---FIN_UX_UI---`. Si solo envías un fragmento sin el documento completo, el sistema ignora el cambio y el usuario no ve nada. **Siempre incluye la guía COMPLETA antes del delimitador.**";
           }
+          systemPrompt += `\n\n${DOCUMENT_CHANGELOG_CHAT_INSTRUCTION}`;
         }
       }
       if (!options?.welcomeBrief) {
@@ -340,6 +343,8 @@ export class AiService {
         "logic-flows": "FLOWS",
         tasks: "TASKS",
         infra: "INFRA",
+        phase0: "PHASE0",
+        "ux-ui-guide": "UX_UI",
       };
       const tag = tagMap[at];
       if (tag && !options?.welcomeBrief) {
@@ -364,6 +369,11 @@ export class AiService {
             systemPrompt +=
               "\n\n**OBLIGATORIO - Blueprint:** Cuando el usuario pida **agregar, modificar o eliminar** algo del Blueprint, **debes** devolver el **Blueprint completo actualizado** (conservando TODO el contenido existente) terminando con `---FIN_BLUEPRINT---`. Si solo envías una sección, el sistema la **fusiona** automáticamente con el contenido actual. Nunca respondas solo con un mensaje tipo \"El Blueprint ha sido actualizado\" — el sistema solo persiste cuando encuentra el contenido del documento seguido de `---FIN_BLUEPRINT---`.";
           }
+        if (at === "ux-ui-guide") {
+          systemPrompt +=
+            "\n\n**OBLIGATORIO - Guía UX/UI:** Devuelve la **Guía UX/UI completa** terminando con `---FIN_UX_UI---`.";
+        }
+        systemPrompt += `\n\n${DOCUMENT_CHANGELOG_CHAT_INSTRUCTION}`;
         }
     }
     if (!options?.welcomeBrief) {

@@ -3,7 +3,7 @@
  * (respuestas de chat con bloques ---FIN_MDD---, etc.). Sin Nest; `repairMarkdownFences` desde shared-types.
  */
 
-import { formatDocumentMarkdown } from "@theforge/shared-types";
+import { ensureDocumentChangelog, formatDocumentMarkdown } from "@theforge/shared-types";
 
 /** Normaliza guiones Unicode a ASCII '-' para que coincidan delimitadores como ---FIN_MDD---. */
 export function normalizeDashes(s: string): string {
@@ -19,5 +19,5 @@ export function stripChatLabel(text: string): string {
 
 /** Quita intros de chat y vallas de markdown (fences) de documentos generados por IA. */
 export function cleanDocumentContent(text: string): string {
-  return formatDocumentMarkdown(text);
+  return ensureDocumentChangelog(formatDocumentMarkdown(text));
 }

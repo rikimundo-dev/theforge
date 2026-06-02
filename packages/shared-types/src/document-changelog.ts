@@ -1,0 +1,227 @@
+/**
+ * Sección estándar «Registro de cambios del documento» para artefactos del Workshop.
+ */
+
+export const DOCUMENT_CHANGELOG_HEADING = "## Registro de cambios del documento";
+
+export const DOCUMENT_CHANGELOG_TABLE_HEADER =
+  "| Versión | Fecha | Descripción del cambio |\n| --- | --- | --- |";
+
+const CHANGELOG_HEADING_RE =
+  /^#{1,3}\s+Registro de cambios del documento\s*$/im;
+
+const VERSION_ROW_RE =
+  /^\|\s*(\d+(?:\.\d+)?)\s*\|\s*[^|]+\|\s*[^|]+\|\s*$/gm;
+
+const SPANISH_MONTHS = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+] as const;
+
+/** Fecha legible para filas del changelog (ej. «Mayo 2026»). */
+export function formatDocumentChangelogDate(date: Date = new Date()): string {
+  return `${SPANISH_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+export type DocumentChangelogEntry = {
+  version: string;
+  date: string;
+  description: string;
+};
+
+export type EnsureDocumentChangelogOptions = {
+  /** Texto de la fila 1.0 si la sección no existe (ej. «Creación inicial del DBGA»). */
+  initialDescription?: string;
+  /** Fecha de la fila inicial; por defecto mes/año actual. */
+  initialDate?: string;
+};
+
+/** Instrucciones para prompts LLM — misma regla en todos los artefactos generados. */
+export const DOCUMENT_CHANGELOG_LLM_INSTRUCTIONS = `# Registro de cambios (OBLIGATORIO en todo documento)
+
+Al **final** del markdown (después del contenido principal y **antes** de cualquier delimitador \`---FIN_*---\` si aplica), incluye siempre:
+
+${DOCUMENT_CHANGELOG_HEADING}
+
+${DOCUMENT_CHANGELOG_TABLE_HEADER}
+
+Reglas:
+- **Creación:** primera versión \`1.0\` con fecha mes/año en español (ej. «Mayo 2026») y descripción breve del artefacto (ej. «Creación inicial del DBGA»).
+- **Actualización:** conserva todas las filas anteriores y **añade una fila nueva** al final con versión incrementada (\`1.1\`, \`1.2\`, …; salto a \`2.0\` solo si reestructuras el documento de forma mayor).
+- **Descripción:** una línea clara del cambio material (qué se añadió, movió o eliminó).
+- **Nunca** elimines filas históricas ni dejes la sección vacía.`;
+
+export function hasDocumentChangelogSection(content: string): boolean {
+  return CHANGELOG_HEADING_RE.test(content.trim());
+}
+
+/** Última versión semver simple (major.minor) encontrada en la tabla, o null. */
+export function parseLatestDocumentVersion(content: string): string | null {
+  let latest: { major: number; minor: number; raw: string } | null = null;
+  for (const match of content.matchAll(VERSION_ROW_RE)) {
+    const raw = match[1] ?? "";
+    const parts = raw.split(".");
+    const major = Number.parseInt(parts[0] ?? "0", 10);
+    const minor = Number.parseInt(parts[1] ?? "0", 10);
+    if (Number.isNaN(major) || Number.isNaN(minor)) continue;
+    if (
+      !latest ||
+      major > latest.major ||
+      (major === latest.major && minor > latest.minor)
+    ) {
+      latest = { major, minor, raw };
+    }
+  }
+  return latest?.raw ?? null;
+}
+
+/** Incrementa patch (minor digit): 2.7 → 2.8, 1.0 → 1.1 */
+export function bumpDocumentPatchVersion(version: string): string {
+  const parts = version.split(".");
+  const major = Number.parseInt(parts[0] ?? "1", 10);
+  const minor = Number.parseInt(parts[1] ?? "0", 10);
+  if (Number.isNaN(major) || Number.isNaN(minor)) return "1.0";
+  return `${major}.${minor + 1}`;
+}
+
+/** Incrementa major y resetea minor: 1.9 → 2.0 */
+export function bumpDocumentMinorVersion(version: string): string {
+  const parts = version.split(".");
+  const major = Number.parseInt(parts[0] ?? "1", 10);
+  if (Number.isNaN(major)) return "2.0";
+  return `${major + 1}.0`;
+}
+
+function formatChangelogRow(entry: DocumentChangelogEntry): string {
+  return `| ${entry.version} | ${entry.date} | ${entry.description} |`;
+}
+
+function buildChangelogSection(rows: DocumentChangelogEntry[]): string {
+  const body = rows.map(formatChangelogRow).join("\n");
+  return `${DOCUMENT_CHANGELOG_HEADING}\n\n${DOCUMENT_CHANGELOG_TABLE_HEADER}\n${body}`;
+}
+
+function inferInitialDescription(content: string): string {
+  const head = content.slice(0, 800).toLowerCase();
+  if (head.includes("domain benchmark") || head.includes("dbga")) {
+    return "Creación inicial del DBGA";
+  }
+  if (head.includes("business requirements") || head.includes("brd")) {
+    return "Creación inicial del BRD";
+  }
+  if (head.includes("master design") || /\bmdd\b/.test(head)) {
+    return "Creación inicial del MDD";
+  }
+  if (head.includes("blueprint")) return "Creación inicial del Blueprint";
+  if (head.includes("spec") || head.includes("especificación")) {
+    return "Creación inicial del Spec";
+  }
+  if (head.includes("guía ux") || head.includes("ux/ui") || head.includes("design.md")) {
+    return "Creación inicial de la Guía UX/UI";
+  }
+  if (head.includes("contratos de api") || head.includes("api contract")) {
+    return "Creación inicial de Contratos API";
+  }
+  if (head.includes("flujos de lógica") || head.includes("logic flow")) {
+    return "Creación inicial de Flujos de lógica";
+  }
+  if (head.includes("historias de usuario") || head.includes("user stor")) {
+    return "Creación inicial de Historias de usuario";
+  }
+  if (head.includes("casos de uso") || head.includes("use case")) {
+    return "Creación inicial de Casos de uso";
+  }
+  if (head.includes("arquitectura del sistema") || head.includes("architecture")) {
+    return "Creación inicial del documento de Arquitectura";
+  }
+  if (head.includes("infraestructura") || head.includes("docker")) {
+    return "Creación inicial del documento de Infraestructura";
+  }
+  if (head.includes("tasks") || head.includes("backlog")) {
+    return "Creación inicial del documento de Tasks";
+  }
+  if (head.includes("deep research") || head.includes("research report")) {
+    return "Creación inicial del informe de Deep Research";
+  }
+  return "Creación inicial del documento";
+}
+
+/**
+ * Garantiza que el markdown termina con la sección de changelog.
+ * Si ya existe, no modifica filas (el LLM o el usuario las mantienen).
+ */
+export function ensureDocumentChangelog(
+  content: string,
+  options: EnsureDocumentChangelogOptions = {},
+): string {
+  const trimmed = content.trimEnd();
+  if (!trimmed) return buildChangelogSection([
+    {
+      version: "1.0",
+      date: options.initialDate ?? formatDocumentChangelogDate(),
+      description: options.initialDescription ?? "Creación inicial del documento",
+    },
+  ]);
+
+  if (hasDocumentChangelogSection(trimmed)) return trimmed;
+
+  const section = buildChangelogSection([
+    {
+      version: "1.0",
+      date: options.initialDate ?? formatDocumentChangelogDate(),
+      description:
+        options.initialDescription ?? inferInitialDescription(trimmed),
+    },
+  ]);
+
+  return `${trimmed}\n\n${section}`;
+}
+
+/** Añade una fila al final de la tabla de changelog existente. */
+export function appendDocumentChangelogEntry(
+  content: string,
+  entry: DocumentChangelogEntry,
+): string {
+  const trimmed = content.trimEnd();
+  if (!hasDocumentChangelogSection(trimmed)) {
+    return ensureDocumentChangelog(trimmed, {
+      initialDescription: entry.description,
+      initialDate: entry.date,
+    });
+  }
+
+  const headingMatch = CHANGELOG_HEADING_RE.exec(trimmed);
+  if (!headingMatch || headingMatch.index === undefined) {
+    return `${trimmed}\n\n${formatChangelogRow(entry)}`;
+  }
+
+  const before = trimmed.slice(0, headingMatch.index).trimEnd();
+  const fromHeading = trimmed.slice(headingMatch.index);
+  const lines = fromHeading.split("\n");
+  const tableLines: string[] = [];
+  let i = 0;
+  for (; i < lines.length; i++) {
+    tableLines.push(lines[i] ?? "");
+    if ((lines[i] ?? "").trim().startsWith("| ---")) break;
+  }
+  for (i++; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+    if (line.trim() === "") break;
+    if (line.trim().startsWith("|")) tableLines.push(line);
+    else break;
+  }
+  tableLines.push(formatChangelogRow(entry));
+  const rest = lines.slice(i).join("\n").trim();
+  const section = [tableLines.join("\n"), rest].filter(Boolean).join("\n\n");
+  return before ? `${before}\n\n${section}` : section;
+}

@@ -20,6 +20,7 @@ Prompts del módulo AI. Están estructurados según marcos de ingeniería de pro
 | **spec-prompt.md** | Spec what/why desde DBGA/alcance; pie **Proyecto legacy** (superficies reales del índice). |
 | **use-cases-prompt.md** | Casos de uso desde MDD+Spec; reglas anti-alucinación; pie **Proyecto legacy**. |
 | **api-contracts-prompt.md** | Contratos API al MDD; pie **Proyecto legacy** (handlers/rutas del MCP). |
+| **with-document-changelog-instructions.ts** | Helper `withDocumentChangelogInstructions()` — inyecta la sección obligatoria «Registro de cambios del documento» en todos los `*-prompt.ts` de generación. `cleanDocumentContent` en API añade fila 1.0 si falta al persistir. |
 | **complexity-inference-prompt.ts** | JSON `complexity` + `planSummary` + `reason` (HITL); MEDIUM incluye Historias de Usuario en el ejemplo de entregables. |
 
 El build copia `*.md` a `dist/modules/ai/prompts/` para que la API lea el archivo en runtime. El `AiService` usa `MASTER_PROMPT` por defecto al llamar a `generateResponse`.
