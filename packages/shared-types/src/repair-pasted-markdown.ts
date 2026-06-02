@@ -57,7 +57,13 @@ export function repairUnclosedCodeFences(text: string): string {
       out.push(line);
       continue;
     }
-    if (inFence && /^#{1,6}\s+\S/.test(trimmed)) {
+    if (
+      inFence &&
+      (/^#{1,6}\s+\S/.test(trimmed) ||
+        /^\*\*(?:Response\s+\d+|Beneficios de las|Headers?:|Request body|Backend\s*\(|Frontends\s+que)/i.test(
+          trimmed,
+        ))
+    ) {
       out.push("```");
       inFence = false;
       fenceLang = "";
@@ -192,6 +198,91 @@ export function repairGluedBoldFlowTitles(text: string): string {
     )
     .replace(/^\*\*Seguridad\*\*\s*\*\*API Key\*\*\s*(.+)$/gim, "### Seguridad\n\n- API Key $1")
     .replace(/^\*\*Beneficios de las\*\*\s*tablas espejo\s*$/gim, "### Beneficios de las tablas espejo");
+}
+
+/** Índice del `}` que cierra el primer objeto JSON `{...}` (respeta strings). */
+function findBalancedJsonObjectEnd(s: string): number {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let started = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === "\\") {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{") {
+      depth++;
+      started = true;
+    } else if (ch === "}") {
+      depth--;
+      if (started && depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Cierra ```json abiertos antes de **Response**, **Beneficios**, headings, etc. */
+export function repairCloseJsonBeforeContractMarkers(text: string): string {
+  return text.replace(
+    /```json\n([\s\S]*?)(?=\n\s*\*\*(?:Response\s+\d+|Beneficios de las|Headers?:|Request body)|\n#{1,4}\s+)/gi,
+    (full, inner: string) => {
+      if (/\n```/.test(inner)) return full;
+      const end = findBalancedJsonObjectEnd(inner);
+      if (end < 0) return full;
+      const json = inner.slice(0, end + 1).trimEnd();
+      const leak = inner.slice(end + 1).trim();
+      return `\`\`\`json\n${json}\n\`\`\`${leak ? `\n\n${leak}` : ""}`;
+    },
+  );
+}
+
+/** Contratos API (webhook, costos-reales, JWT, env): fences JSON/env rotos. */
+export function repairApiContractJsonFences(text: string): string {
+  let out = text.replace(/\r\n/g, "\n");
+  out = repairCloseJsonBeforeContractMarkers(out);
+  out = out.replace(
+    /(\*\*Response\s+\d+:\*\*)\s*\n+```\s*\n+```json/gi,
+    "$1\n\n```json",
+  );
+  out = out.replace(
+    /(\*\*Response\s+\d+:\*\*)\s*\n+(?!\s*```json)(\{)/gi,
+    "$1\n\n```json\n$2",
+  );
+  out = out.replace(
+    /(\*\*Request body[^*]*\*\*)\s*\n+(?!\s*```json)(\{)/gi,
+    "$1\n\n```json\n$2",
+  );
+  out = out.replace(
+    /```json\n([\s\S]*?)(\n\s*\*\*Beneficios de las)/gi,
+    (full, inner: string, marker: string) => {
+      if (/\n```/.test(inner)) return full;
+      const end = findBalancedJsonObjectEnd(inner);
+      if (end < 0) return full;
+      const json = inner.slice(0, end + 1).trimEnd();
+      return `\`\`\`json\n${json}\n\`\`\`\n${marker}`;
+    },
+  );
+  out = out.replace(/^(#{1,4}\s+Variables de entorno)\s*\n\}\s*\n/gm, "$1\n\n");
+  out = out.replace(/^\*\*Beneficios de las tablas espejo\*\*\s*$/gim, "### Beneficios de las tablas espejo");
+  out = out.replace(
+    /(\*\*Backend\s*\(NestJS\):\*\*|\*\*Frontends que consuman[^\n]*\*\*)\s*\n+```\s*\n+```env/gi,
+    "$1\n\n```env",
+  );
+  return out;
 }
 
 /** ` ``` ` sueltos antes de ```json / ```env y fences duplicados. */
@@ -427,7 +518,7 @@ export function repairAsciiDiagramBlocks(text: string): string {
 /** Quita ### erróneos en subtítulos de contrato API / Odoo. */
 export function repairDemoteFalseApiHeadings(text: string): string {
   let out = text.replace(
-    /^### (Headers?:|Request body \(ejemplo|Response \d+|Recibe eventos|Content-Type:|API Key|Odoo genera|Beneficios de las|Donde:|OBP4MO \(normalizado\):|OBP \(desnormalizado\):)\s*/gim,
+    /^### (Headers?:|Request body \(ejemplo|Response \d+|Recibe eventos|Content-Type:|API Key|Odoo genera|Donde:|OBP4MO \(normalizado\):|OBP \(desnormalizado\):)\s*/gim,
     "**$1** ",
   );
   out = out.replace(/^### (Este microservicio[^\n]+)/gim, "$1");
@@ -499,6 +590,7 @@ export function repairPastedMarkdown(text: string): string {
   let out = text.replace(/\r\n/g, "\n");
   out = repairMetadataCoverTable(out);
   out = repairGluedBoldFlowTitles(out);
+  out = repairApiContractJsonFences(out);
   out = repairStackedCodeFences(out);
   out = repairSplitJsonFragments(out);
   out = repairJsonFenceIntegrity(out);
@@ -512,6 +604,10 @@ export function repairPastedMarkdown(text: string): string {
   out = repairLooseJsonBlocks(out);
   out = repairJsonFenceIntegrity(out);
   out = repairGluedSqlTokens(out);
+  out = repairApiContractJsonFences(out);
+  out = repairStackedCodeFences(out);
+  out = repairSplitJsonFragments(out);
+  out = repairJsonFenceIntegrity(out);
   out = repairUnclosedCodeFences(out);
   out = repairStrayCodeFences(out);
   out = repairAsciiDiagramBlocks(out);
@@ -522,7 +618,11 @@ export function repairPastedMarkdown(text: string): string {
   out = repairIndentedProseBlocks(out);
   out = repairFlowSectionsToMermaid(out);
   out = repairTableBoundaries(out);
+  out = repairApiContractJsonFences(out);
+  out = repairStackedCodeFences(out);
   out = repairSplitJsonFragments(out);
+  out = repairJsonFenceIntegrity(out);
+  out = repairStrayCodeFences(out);
   out = out.replace(/\n(🔴|🟡|🟢)/g, "\n\n$1");
   out = out.replace(/\n-{3,}\n/g, "\n\n---\n\n");
   return out;
