@@ -57,6 +57,23 @@ flowchart TD
     assert.doesNotMatch(out, /s1\("Paso dos"\)\n- Evento/);
     assert.doesNotMatch(out, /--> s1- Evento/);
   });
+
+  it("saca viñetas numeradas del fence de sincronización webhook", () => {
+    const doc = `### Flujo de sincronización vía webhooks
+
+\`\`\`mermaid
+flowchart TD
+  s0 --> s1
+  s1 --> s2
+- 1. **Evento en sistema origen:** texto
+- 2. **Endpoint receptor:** POST
+\`\`\`
+
+### Endpoint receptor`;
+    const out = normalizeMermaidInDocument(doc);
+    assert.doesNotMatch(out, /s1 --> s2\n- 1\./);
+    assert.match(out, /```\n\n- 1\. \*\*Evento/);
+  });
 });
 
 describe("formatDocumentMarkdown + mermaid", () => {

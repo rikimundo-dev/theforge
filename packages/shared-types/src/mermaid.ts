@@ -600,6 +600,8 @@ function mermaidMarkdownLeakLine(trimmed: string): boolean {
     return true;
   }
   if (/^[-*]\s+Usuario\s*→/i.test(trimmed)) return true;
+  if (/^[-*]\s+→\s+/i.test(trimmed)) return true;
+  if (/^[-*]\s+\d+\.\s+\*\*/.test(trimmed)) return true;
   if (/^[-*]\s+(El usuario|Al cargar|Tras retorno|Logout:)/i.test(trimmed)) return true;
   if (/^\*\*Comportamiento requerido/i.test(trimmed)) return true;
   if (
