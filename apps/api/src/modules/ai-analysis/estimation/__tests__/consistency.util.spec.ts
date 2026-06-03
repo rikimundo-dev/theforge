@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import {
   computeCrossDocumentConsistency,
   extractBrdBusinessConcepts,
+  extractBrdTraceabilityItems,
   extractMddTraceabilityCorpus,
 } from "../consistency.util.js";
 
-describe("extractBrdBusinessConcepts", () => {
-  it("extrae capacidades y UAT, no ruido estructural", () => {
+describe("extractBrdTraceabilityItems", () => {
+  it("extrae capacidades y UAT, no títulos plantilla H3", () => {
     const brd = `## 1. Contexto y Objetivos
 ### Problema de negocio
 Texto.
@@ -18,14 +19,36 @@ Texto.
 - Mantener historial auditable de costos
 
 ## 5. Reglas de Negocio, Políticas y Fórmulas
+### Definición de entidades de negocio
+- **Costo Base**: costo de referencia antes de ajustes comerciales
+- **Margen Teórico**: porcentaje mínimo exigido por política corporativa
+
+### Fórmulas y umbrales
+- Precio de venta = costo ÷ (1 − margen mínimo)
+- Bloqueo automático si margen < 15%
+
 ### Criterios de aceptación de negocio (UAT)
 - Dado un vendedor sin nivel 5, cuando cotice bajo margen mínimo, entonces el sistema bloquea hasta autorización
 `;
+    const items = extractBrdTraceabilityItems(brd);
+    assert.ok(items.some((i) => i.label.includes("sincronización") || i.label.includes("costos reales")));
+    assert.ok(items.some((i) => i.kind === "entity" && i.label.includes("Costo Base")));
+    assert.ok(items.some((i) => i.kind === "formula" && i.label.includes("Precio de venta")));
+    assert.ok(items.some((i) => i.kind === "uat" && i.label.includes("vendedor")));
+    assert.equal(items.some((i) => i.label === "Definición de entidades de negocio"), false);
+    assert.equal(items.some((i) => i.label === "Fórmulas y umbrales"), false);
+  });
+});
+
+describe("extractBrdBusinessConcepts", () => {
+  it("compat: devuelve labels de ítems trazables", () => {
+    const brd = `## 3. Capacidades Funcionales del Producto
+### Cotización con control de margen mínimo
+- El comercial no puede cotizar por debajo del margen sin autorización de gerencia
+`;
     const concepts = extractBrdBusinessConcepts(brd);
-    assert.ok(concepts.some((c) => c.includes("sincronización") || c.includes("costos reales")));
-    assert.ok(concepts.some((c) => c.includes("vendedor") || c.includes("margen")));
+    assert.ok(concepts.some((c) => c.includes("comercial") || c.includes("margen")));
     assert.equal(concepts.includes("necesidad"), false);
-    assert.equal(concepts.includes("problema de negocio"), false);
   });
 });
 
@@ -57,7 +80,7 @@ Si margen < umbral, bloquear hasta autorización de gerencia.
     assert.ok(r.gaps.every((g) => g.to === "MDD" || g.to === "Spec"));
   });
 
-  it("marca gap cuando el MDD no refleja la capacidad del BRD", () => {
+  it("marca gap con hint explícito cuando el MDD no refleja la capacidad", () => {
     const docs = {
       brdContent: `## 3. Capacidades Funcionales del Producto
 ### Soporte multi-moneda en listas de precios
@@ -74,7 +97,10 @@ Validación de margen.
 `,
     };
     const r = computeCrossDocumentConsistency(docs);
-    assert.ok(r.gaps.some((g) => g.concept.includes("multi-moneda") || g.concept.includes("usd")));
+    const gap = r.gaps.find((g) => g.concept.includes("multi-moneda") || g.concept.includes("USD"));
+    assert.ok(gap, `gaps=${JSON.stringify(r.gaps.map((g) => g.concept))}`);
+    assert.ok(gap!.hint, `hint missing for ${gap!.concept}`);
+    assert.match(gap!.hint!, /§1 Contexto|§4 Contratos|§5 Lógica/i, gap!.hint);
   });
 
   it("extractMddTraceabilityCorpus prioriza secciones 1, 4 y 5", () => {

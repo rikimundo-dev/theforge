@@ -1159,10 +1159,7 @@ export class EstimationService {
       // 6. Hints separados: MDD vs trazabilidad BRD→MDD
       traceabilityHints =
         consistency.gaps.length > 0
-          ? consistency.gaps.slice(0, 5).map(
-              (g) =>
-                `[BRD→${g.to}] ${g.concept}: ${g.severity === "missing" ? "sin reflejo en MDD" : "cobertura parcial"}`,
-            )
+          ? consistency.gaps.slice(0, 8).map((g) => g.hint ?? `[BRD→${g.to}] ${g.concept}`)
           : [];
       crossDocumentGaps = consistency.gaps;
 

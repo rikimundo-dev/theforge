@@ -320,6 +320,11 @@ export interface CrossDocumentGap {
   to: string;
   concept: string;
   severity: "missing" | "partial" | "contradiction";
+  brdSection?: string;
+  brdSubsection?: string;
+  kind?: "capability" | "rule" | "entity" | "formula" | "uat" | "permission" | "flow";
+  missingTerms?: string[];
+  hint?: string;
 }
 
 /** Resultado de conformance (Blueprint/Infra vs MDD). */

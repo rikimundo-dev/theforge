@@ -177,12 +177,31 @@ export type DocumentCompleteness = {
   [K in keyof PlanningDocumentFields]: number;
 } & { overall: number };
 
+/** Ítem trazable extraído del BRD (capacidad, regla, entidad, UAT…). */
+export type BrdTraceabilityItem = {
+  label: string;
+  brdSection: string;
+  brdSubsection?: string;
+  kind: "capability" | "rule" | "entity" | "formula" | "uat" | "permission" | "flow";
+};
+
 /** Gap de consistencia entre dos documentos. */
 export type CrossDocumentGap = {
   from: string;
   to: string;
+  /** Texto del ítem de negocio en el BRD. */
   concept: string;
   severity: "missing" | "partial" | "contradiction";
+  /** Sección H2 del BRD (ej. «5. Reglas de Negocio…»). */
+  brdSection?: string;
+  /** Subsección H3 (ej. «Fórmulas y umbrales»). */
+  brdSubsection?: string;
+  /** Tipo de ítem de negocio. */
+  kind?: BrdTraceabilityItem["kind"];
+  /** Palabras clave del BRD no encontradas en §1/§4/§5 del MDD. */
+  missingTerms?: string[];
+  /** Mensaje explícito para UI (qué falta y dónde revisar). */
+  hint?: string;
 };
 
 /** Longitud mínima para considerar un documento "completo" (caracteres). */

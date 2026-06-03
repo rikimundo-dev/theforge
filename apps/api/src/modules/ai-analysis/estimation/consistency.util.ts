@@ -1,6 +1,15 @@
-import { PlanningDocumentFields, CrossDocumentGap } from "./estimation.types";
+import {
+  BrdTraceabilityItem,
+  CrossDocumentGap,
+  PlanningDocumentFields,
+} from "./estimation.types.js";
 
-/** @deprecated Usar {@link extractBrdBusinessConcepts} para trazabilidad BRD→MDD. */
+/** @deprecated Usar {@link extractBrdTraceabilityItems}. */
+export function extractBrdBusinessConcepts(brdText: string): string[] {
+  return extractBrdTraceabilityItems(brdText).map((i) => i.label);
+}
+
+/** @deprecated Usar {@link extractBrdTraceabilityItems}. */
 export function extractConcepts(text: string): Set<string> {
   return new Set(extractBrdBusinessConcepts(text));
 }
@@ -40,13 +49,26 @@ const NOISE_WORDS = new Set([
   "tabla",
   "sección",
   "seccion",
+  "capacidad",
+  "negocio",
+  "nivel",
+  "acceso",
+  "notas",
+  "definición",
+  "definicion",
 ]);
 
 const SKIP_H2 =
-  /^(?:\d+\.\s*)?(?:contexto|pain points|problema y objetivos|usuarios y casos|l[ií]mites del alcance|fuera de alcance|supuestos|riesgos|m[eé]tricas|pendientes de validaci|registro de cambios|decision log|validaci[oó]n de demanda|impacto financiero|dentro del alcance)/i;
+  /^(?:\d+\.\s*)?(?:contexto|pain points|problema y objetivos|usuarios y casos|l[ií]mites del alcance|fuera de alcance|supuestos|riesgos|m[eé]tricas|pendientes de validaci|registro de cambios|decision log|validaci[oó]n de demanda|impacto financiero|dentro del alcance|requisitos de experiencia)/i;
 
 const RELEVANT_H2 =
   /^(?:\d+\.\s*)?(?:capacidades funcional|reglas de negocio|requisitos funcionales|flujos de negocio|definici[oó]n de entidades|criterios de aceptaci|matriz de permisos|requisitos de experiencia|pol[ií]ticas)/i;
+
+/** H3 plantilla del outline BRD — no son ítems trazables por sí solos. */
+const STRUCTURAL_H3 =
+  /^(?:definici[oó]n de entidades(?: de negocio)?|f[óo]rmulas y umbrales|reglas de operaci[oó]n|matriz de permisos|flujos de negocio cr[ií]ticos|criterios de aceptaci[oó]n(?: de negocio)?(?: \(uat\))?|roles de negocio|casos de uso clave|objetivos comerciales|dentro del alcance|fuera del alcance|riesgos|m[eé]tricas de [ée]xito|validaci[oó]n de demanda|impacto financiero)/i;
+
+const MDD_TRACE_SECTIONS = "§1 Contexto, §4 Contratos API y §5 Lógica";
 
 function normalizeConcept(raw: string): string {
   return raw
@@ -54,8 +76,11 @@ function normalizeConcept(raw: string): string {
     .replace(/^\d+\.\s*/, "")
     .replace(/^[-*]\s*/, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+    .trim();
+}
+
+function normalizeKey(raw: string): string {
+  return normalizeConcept(raw).toLowerCase();
 }
 
 function isNoiseConcept(concept: string): boolean {
@@ -67,26 +92,67 @@ function isNoiseConcept(concept: string): boolean {
   const words = t.split(/\s+/).filter((w) => w.length > 2);
   if (words.length === 0) return true;
   if (words.length === 1 && words[0]!.length < 10) return true;
+  if (STRUCTURAL_H3.test(t)) return true;
   return false;
 }
 
+function subsectionKind(sub: string): BrdTraceabilityItem["kind"] {
+  const s = sub.toLowerCase();
+  if (/entidades/.test(s)) return "entity";
+  if (/f[óo]rmulas|umbrales/.test(s)) return "formula";
+  if (/uat|criterios de aceptaci/.test(s)) return "uat";
+  if (/permisos/.test(s)) return "permission";
+  if (/flujos/.test(s)) return "flow";
+  if (/reglas|pol[ií]ticas/.test(s)) return "rule";
+  return "capability";
+}
+
+function parseEntityLabel(line: string): string | null {
+  const bold = line.match(/^[-*]\s+\*\*([^*]+)\*\*/);
+  if (bold?.[1]) return normalizeConcept(bold[1]);
+  const plain = line.match(/^[-*]\s+([^:—|]+?)\s*[:\—–|]/);
+  if (plain?.[1]) return normalizeConcept(plain[1]);
+  const table = line.match(/^\|\s*\*?\*?([^*|]+?)\*?\*?\s*\|/);
+  if (table?.[1] && !/^(?:entidad|concepto|definici)/i.test(table[1])) {
+    return normalizeConcept(table[1]);
+  }
+  return null;
+}
+
+function pushItem(
+  items: BrdTraceabilityItem[],
+  seen: Set<string>,
+  item: BrdTraceabilityItem,
+): void {
+  const key = `${item.kind}|${normalizeKey(item.label)}`;
+  if (seen.has(key) || isNoiseConcept(item.label)) return;
+  seen.add(key);
+  items.push(item);
+}
+
 /**
- * Extrae capacidades, reglas, UAT y entidades de negocio del BRD (sin ruido estructural).
+ * Extrae ítems concretos del BRD: capacidades, entidades, fórmulas, UAT…
+ * Ignora títulos H3 plantilla vacíos («Definición de entidades», «Fórmulas y umbrales»).
  */
-export function extractBrdBusinessConcepts(brdText: string): string[] {
-  const concepts: string[] = [];
+export function extractBrdTraceabilityItems(brdText: string): BrdTraceabilityItem[] {
+  const items: BrdTraceabilityItem[] = [];
+  const seen = new Set<string>();
   const lines = (brdText ?? "").split("\n");
+  let currentH2 = "";
+  let currentH3 = "";
   let inRelevant = false;
+  let currentKind: BrdTraceabilityItem["kind"] = "capability";
 
   for (const line of lines) {
     const h2 = line.match(/^##\s+(.+)/);
     if (h2) {
-      const title = h2[1] ?? "";
-      if (SKIP_H2.test(title)) {
+      currentH2 = normalizeConcept(h2[1] ?? "");
+      currentH3 = "";
+      if (SKIP_H2.test(currentH2)) {
         inRelevant = false;
         continue;
       }
-      inRelevant = RELEVANT_H2.test(title);
+      inRelevant = RELEVANT_H2.test(currentH2);
       continue;
     }
 
@@ -94,32 +160,76 @@ export function extractBrdBusinessConcepts(brdText: string): string[] {
 
     const h3 = line.match(/^###\s+(.+)/);
     if (h3) {
-      const c = normalizeConcept(h3[1] ?? "");
-      if (!isNoiseConcept(c)) concepts.push(c);
+      const title = normalizeConcept(h3[1] ?? "");
+      currentH3 = title;
+      currentKind = subsectionKind(title);
+      if (!STRUCTURAL_H3.test(title) && !isNoiseConcept(title)) {
+        pushItem(items, seen, {
+          label: title.slice(0, 120),
+          brdSection: currentH2,
+          brdSubsection: title,
+          kind: currentKind,
+        });
+      }
       continue;
     }
 
     if (/^(?:-\s*)?(?:dado|cuando|entonces)\s+/i.test(line)) {
       const c = normalizeConcept(line);
-      if (!isNoiseConcept(c) && c.length >= 20) concepts.push(c.slice(0, 120));
+      if (!isNoiseConcept(c) && c.length >= 20) {
+        pushItem(items, seen, {
+          label: c.slice(0, 140),
+          brdSection: currentH2,
+          brdSubsection: currentH3 || undefined,
+          kind: "uat",
+        });
+      }
       continue;
+    }
+
+    if (currentKind === "entity") {
+      const entity = parseEntityLabel(line);
+      if (entity && !isNoiseConcept(entity)) {
+        pushItem(items, seen, {
+          label: entity.slice(0, 80),
+          brdSection: currentH2,
+          brdSubsection: currentH3 || undefined,
+          kind: "entity",
+        });
+        continue;
+      }
     }
 
     const bullet = line.match(/^[-*]\s+(.+)/);
     if (bullet) {
-      const c = normalizeConcept(bullet[1] ?? "");
-      if (!isNoiseConcept(c)) concepts.push(c.slice(0, 100));
+      const raw = bullet[1] ?? "";
+      const c = normalizeConcept(raw);
+      if (!isNoiseConcept(c)) {
+        pushItem(items, seen, {
+          label: c.slice(0, 140),
+          brdSection: currentH2,
+          brdSubsection: currentH3 || undefined,
+          kind: currentKind,
+        });
+      }
+      continue;
+    }
+
+    const tableRow = line.match(/^\|\s*(.+?)\s*\|/);
+    if (tableRow && currentKind === "permission") {
+      const cells = line.split("|").map((c) => c.trim()).filter(Boolean);
+      if (cells.length >= 2 && !/^(?:capacidad|rol|nivel)/i.test(cells[0]!)) {
+        pushItem(items, seen, {
+          label: `${cells[0]} → ${cells.slice(1, 3).join(" / ")}`.slice(0, 120),
+          brdSection: currentH2,
+          brdSubsection: currentH3 || undefined,
+          kind: "permission",
+        });
+      }
     }
   }
 
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const c of concepts) {
-    if (seen.has(c)) continue;
-    seen.add(c);
-    out.push(c);
-  }
-  return out.slice(0, 35);
+  return items.slice(0, 40);
 }
 
 function extractMddSection(md: string, headingRe: RegExp): string {
@@ -144,21 +254,78 @@ export function extractMddTraceabilityCorpus(mddText: string): string {
   return parts.length > 0 ? parts.join("\n\n") : md;
 }
 
-function conceptCoverage(concept: string, targetText: string): number {
-  const words = concept
+function extractKeywords(text: string): string[] {
+  const lower = text.toLowerCase();
+  const acronyms = lower.match(/\b[a-z]{2,4}\b/g)?.filter((w) => /^(?:usd|mxn|eur|erp|uat|iva|roi|kpi)$/.test(w)) ?? [];
+  const words = lower
     .split(/\s+/)
     .map((w) => w.replace(/^[^a-záéíóúñ0-9]+|[^a-záéíóúñ0-9]+$/gi, ""))
     .filter((w) => w.length > 3 && !NOISE_WORDS.has(w));
+  return [...new Set([...words, ...acronyms])];
+}
 
-  if (words.length === 0) return 0;
+function conceptCoverageDetail(
+  concept: string,
+  targetText: string,
+): { ratio: number; matched: string[]; missing: string[] } {
+  const words = extractKeywords(concept);
+  if (words.length === 0) return { ratio: 0, matched: [], missing: [] };
   const tgt = targetText.toLowerCase();
-  const matches = words.filter((w) => tgt.includes(w)).length;
-  return matches / words.length;
+  const matched: string[] = [];
+  const missing: string[] = [];
+  for (const w of words) {
+    if (tgt.includes(w)) matched.push(w);
+    else missing.push(w);
+  }
+  return { ratio: matched.length / words.length, matched, missing };
+}
+
+const KIND_LABEL: Record<BrdTraceabilityItem["kind"], string> = {
+  capability: "Capacidad",
+  rule: "Regla",
+  entity: "Entidad",
+  formula: "Fórmula/umbral",
+  uat: "UAT",
+  permission: "Permiso",
+  flow: "Flujo",
+};
+
+function brdLocation(item: BrdTraceabilityItem): string {
+  if (item.brdSubsection) return `${item.brdSubsection} (${item.brdSection})`;
+  return item.brdSection;
+}
+
+function buildGapHint(
+  item: BrdTraceabilityItem,
+  severity: CrossDocumentGap["severity"],
+  target: string,
+  missing: string[],
+  matched: string[],
+): string {
+  const kind = KIND_LABEL[item.kind];
+  const loc = brdLocation(item);
+  const quote = item.label.length > 90 ? `${item.label.slice(0, 87)}…` : item.label;
+  const missingStr = missing.slice(0, 6).join(", ");
+  const matchedStr = matched.slice(0, 4).join(", ");
+
+  if (severity === "missing") {
+    return (
+      `${kind} «${quote}» (BRD: ${loc}) no aparece en ${MDD_TRACE_SECTIONS} del MDD` +
+      (missingStr ? `. Términos sin match: ${missingStr}` : ".") +
+      `. Añádelo en §1 (contexto), §4 (API) o §5 (lógica).`
+    );
+  }
+
+  return (
+    `${kind} «${quote}» (BRD: ${loc}) tiene cobertura parcial en ${target}` +
+    (missingStr ? `. Aún falta reflejar: ${missingStr}` : "") +
+    (matchedStr ? ` (parcial: ${matchedStr})` : "") +
+    `. Revisa ${MDD_TRACE_SECTIONS}.`
+  );
 }
 
 /**
  * Trazabilidad BRD (negocio) → MDD / Spec (técnico).
- * Ya no compara BRD con Arquitectura/API por keywords sueltos.
  */
 export function computeCrossDocumentConsistency(
   docs: PlanningDocumentFields,
@@ -171,8 +338,8 @@ export function computeCrossDocumentConsistency(
     return { score: 50, gaps: [] };
   }
 
-  const concepts = extractBrdBusinessConcepts(brd);
-  if (concepts.length === 0) {
+  const items = extractBrdTraceabilityItems(brd);
+  if (items.length === 0) {
     return { score: 50, gaps: [] };
   }
 
@@ -192,34 +359,37 @@ export function computeCrossDocumentConsistency(
   let totalChecks = 0;
   let coveredChecks = 0;
 
-  for (const concept of concepts) {
+  for (const item of items) {
     totalChecks++;
     let bestTarget = targets[0]!.name;
     let bestRatio = 0;
+    let bestMatched: string[] = [];
+    let bestMissing: string[] = [];
 
     for (const tgt of targets) {
-      const r = conceptCoverage(concept, tgt.content);
-      if (r > bestRatio) {
-        bestRatio = r;
+      const detail = conceptCoverageDetail(item.label, tgt.content);
+      if (detail.ratio > bestRatio) {
+        bestRatio = detail.ratio;
         bestTarget = tgt.name;
+        bestMatched = detail.matched;
+        bestMissing = detail.missing;
       }
     }
 
     if (bestRatio >= 0.4) {
       coveredChecks++;
-    } else if (bestRatio >= 0.2) {
+    } else {
+      const severity: CrossDocumentGap["severity"] = bestRatio >= 0.2 ? "partial" : "missing";
       gaps.push({
         from: "BRD",
         to: bestTarget,
-        concept: concept.slice(0, 80),
-        severity: "partial",
-      });
-    } else {
-      gaps.push({
-        from: "BRD",
-        to: bestRatio > 0 ? bestTarget : "MDD",
-        concept: concept.slice(0, 80),
-        severity: "missing",
+        concept: item.label.slice(0, 120),
+        severity,
+        brdSection: item.brdSection,
+        brdSubsection: item.brdSubsection,
+        kind: item.kind,
+        missingTerms: bestMissing.slice(0, 8),
+        hint: buildGapHint(item, severity, bestTarget, bestMissing, bestMatched),
       });
     }
   }
@@ -229,7 +399,7 @@ export function computeCrossDocumentConsistency(
   const seen = new Set<string>();
   const deduped: CrossDocumentGap[] = [];
   for (const g of gaps) {
-    const key = `${g.from}|${g.to}|${g.concept}`;
+    const key = `${g.kind}|${g.concept}`;
     if (!seen.has(key)) {
       seen.add(key);
       deduped.push(g);

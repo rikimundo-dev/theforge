@@ -712,31 +712,37 @@ export function WorkshopMetricsColumnInner({
                       <AlertTriangle className="h-3 w-3" aria-hidden />
                       Trazabilidad BRD → MDD ({crossDocumentGaps.length})
                     </p>
-                    <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-[color-mix(in_oklch,var(--warning)_35%,var(--border))] bg-[color-mix(in_oklch,var(--warning)_10%,var(--card))] p-2 text-[11px] leading-snug">
-                      {crossDocumentGaps.slice(0, 5).map((gap, i) => (
+                    <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-[color-mix(in_oklch,var(--warning)_35%,var(--border))] bg-[color-mix(in_oklch,var(--warning)_10%,var(--card))] p-2 text-[11px] leading-snug">
+                      {crossDocumentGaps.slice(0, 8).map((gap, i) => (
                         <div key={i} className="flex items-start gap-1.5">
                           <span className="shrink-0 text-[var(--primary)]" aria-hidden>
                             ⚠
                           </span>
                           <span className="min-w-0 text-[color-mix(in_oklch,var(--muted-foreground)_98%,var(--foreground))]">
-                            <strong className="text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]">{gap.concept}</strong>{" "}
-                            <span className="text-[10px] opacity-90">
-                              {gap.from}→{gap.to}
-                            </span>{" "}
-                            <span
-                              className={
-                                gap.severity === "missing"
-                                  ? "text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
-                                  : "text-[var(--primary)]"
-                              }
-                            >
-                              ({gap.severity === "missing" ? "falta" : "parcial"})
-                            </span>
+                            {gap.hint ? (
+                              <span className="leading-snug">{gap.hint}</span>
+                            ) : (
+                              <>
+                                <strong className="text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]">{gap.concept}</strong>{" "}
+                                <span className="text-[10px] opacity-90">
+                                  {gap.from}→{gap.to}
+                                </span>{" "}
+                                <span
+                                  className={
+                                    gap.severity === "missing"
+                                      ? "text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
+                                      : "text-[var(--primary)]"
+                                  }
+                                >
+                                  ({gap.severity === "missing" ? "falta" : "parcial"})
+                                </span>
+                              </>
+                            )}
                           </span>
                         </div>
                       ))}
-                      {crossDocumentGaps.length > 5 && (
-                        <p className="text-[10px] text-[var(--foreground-subtle)]">+{crossDocumentGaps.length - 5} más</p>
+                      {crossDocumentGaps.length > 8 && (
+                        <p className="text-[10px] text-[var(--foreground-subtle)]">+{crossDocumentGaps.length - 8} más</p>
                       )}
                     </div>
                   </div>
