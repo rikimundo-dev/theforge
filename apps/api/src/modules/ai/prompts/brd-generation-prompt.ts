@@ -9,8 +9,8 @@ function loadBrdGenerationSystemPrompt(): string {
     return withDocumentChangelogInstructions(readFileSync(PROMPT_PATH, "utf-8").trim());
   } catch {
     return withDocumentChangelogInstructions(
-      "Eres analista de producto en español. Genera BRD completos en markdown desde el documento fuente, " +
-        "con requisitos funcionales, RNF, matriz de permisos, flujos críticos y contratos de datos preliminares. " +
+      "Eres Lead Product Manager senior. Genera BRD 100 % de negocio en markdown desde el documento fuente. " +
+        "Prohibido HTTP, endpoints, JSON, tablas SQL e infraestructura. Traduce lo técnico a lenguaje corporativo. " +
         "Usa «No aplica» con motivo para herramientas internas; «Por validar» solo con entrada en decision log.",
     );
   }
@@ -20,60 +20,89 @@ export const BRD_GENERATION_SYSTEM = loadBrdGenerationSystemPrompt();
 
 export type BrdGenerationMode = "greenfield-from-dbga" | "legacy-as-is" | "legacy-change";
 
+export const BRD_CHAT_REFINE_BUSINESS_RULES =
+  "**BRD 100 % negocio:** Prohibido métodos HTTP, rutas `/api/...`, payloads JSON, tipos SQL, nombres de tablas, tokens M2M/JWKS y detalle de infra. " +
+  "Traduce lo técnico a lenguaje corporativo (procesos, políticas, entidades de negocio, UAT). " +
+  "Estructura: Contexto y Objetivos → Usuarios y Casos de Uso → Capacidades Funcionales → Alcance In/Out → Reglas y Políticas → Experiencia y Operación → Riesgos y Métricas.";
+
 const BRD_DELIMITERS =
   "Responde **solo** con este formato exacto (delimitadores literales):\n" +
   "<<<BRD>>>\n(markdown BRD completo)\n<<<END_BRD>>>\n";
 
-/** Plantilla de secciones — agnóstica al dominio; el LLM adapta títulos de módulos al fuente. */
+/** Plantilla de secciones — BRD orientado a negocio; sin detalle técnico. */
 export const BRD_SECTION_OUTLINE = `## Estructura obligatoria del BRD (usa estos títulos en español)
 
 # BRD — [nombre del producto o iniciativa]
 
-## Pain Points & Problem Statement
-### Mapa de dolores
-Tabla: | Dolor | Quién lo siente | Frecuencia/impacto | Workaround actual | Gap |
+## 1. Contexto y Objetivos
+
+### Problema de negocio
+Qué dolor resuelve la iniciativa; quién lo sufre; frecuencia e impacto. Tabla opcional: | Dolor | Quién lo siente | Impacto | Workaround actual |
+
+### Objetivos comerciales
+Qué debe lograr el producto en términos de negocio (KPIs, eficiencia comercial, control de márgenes, etc.).
+
+### Impacto financiero — Costo de la inacción
+Estimado mensual/anual de pérdida o ineficiencia si no se construye; si no hay dato, supuesto numerado + «Por validar» en decision log.
+
 ### Validación de demanda
 Señales de mercado o **No aplica — [motivo]** si es desarrollo interno.
-### Perfil del cliente / usuarios objetivo
-Tamaño de organización, roles, concurrencia estimada (usuarios simultáneos por rol si se puede inferir).
-### Costo de la inacción
-Estimado mensual/anual de pérdida o ineficiencia (tiempo, dinero, riesgo); si no hay dato, supuesto numerado + «Por validar» en decision log.
 
-## Problema y objetivos de negocio
-## Alcance del producto (MVP)
-Lista de capacidades incluidas (vincula módulos del fuente).
-## Fuera de alcance
+## 2. Usuarios y Casos de Uso
 
-## Personas y casos de uso clave
-2–4 personas; 1–3 casos de uso por capacidad crítica (formato breve: actor, disparador, resultado).
+### Roles de negocio
+Perfiles (comercial, trade, gerencia, operaciones, finanzas, admin); tamaño de organización; concurrencia estimada en lenguaje de negocio (usuarios simultáneos por rol).
 
-## Requisitos funcionales por capacidad
-Por cada módulo/capacidad del fuente: reglas de negocio, excepciones, integraciones. Usa subsecciones ### [nombre módulo].
+### Casos de uso clave
+2–4 personas; 1–3 casos por capacidad crítica: **Actor → Necesidad → Resultado de negocio** (sin mencionar pantallas técnicas salvo que el fuente lo exija como flujo comercial).
 
-## Matriz de permisos
-Tabla: | Módulo / capacidad | [roles del fuente] | Notas de confidencialidad (ej. costo real oculto a comercial) |
+## 3. Capacidades Funcionales del Producto
 
-## Flujos de negocio críticos
-Por cada flujo (autorizaciones, sincronización, cotización, etc.):
-- Origen → Estados → Notificaciones → Resolución (aprobado/rechazado) → Efecto en sistema origen
+Describir **qué puede hacer el sistema** como **procesos de negocio** (cotizar, calcular precio, solicitar autorización, sincronizar costos desde ERP, auditar decisiones). Subsecciones ### por capacidad. **Prohibido** nombrar módulos de software, endpoints o tablas.
 
-## Reglas de negocio y fórmulas
-Fórmulas explícitas; umbrales (%, montos, niveles de aprobación).
+## 4. Límites del Alcance (In / Out of Scope)
 
-## Requisitos no funcionales
-### Seguridad y confidencialidad (cifrado, auditoría, SSO/M2M si aplica)
-### Rendimiento y disponibilidad (SLA/latencia p99 objetivo)
-### Volumetría (registros/mes, RPS pico, retención)
+### Dentro del alcance (MVP)
+Lista de capacidades comerciales incluidas.
 
-## Contratos de datos e integraciones (preliminar)
-Por webhook/API: campos obligatorios, tipos, idempotencia, errores HTTP esperados.
+### Fuera de alcance
+Explícito: qué NO se construye en esta fase (evita scope creep).
 
-## Requisitos UX/UI transversales
-Validaciones de captura, máscaras, mensajes de error, accesibilidad si aplica.
+## 5. Reglas de Negocio, Políticas y Fórmulas
+
+### Reglas de operación y políticas comerciales
+Jerarquías de precios, lógicas de márgenes, niveles de aprobación, quién autoriza qué, qué queda bloqueado hasta resolución.
+
+### Definición de entidades de negocio
+Glosario corporativo: qué es Costo Base, Costo Real, Margen Teórico, Lista de Precios Dinámica, etc. para la empresa — **sin** nombres de tablas ni campos.
+
+### Fórmulas y umbrales
+Fórmulas conceptuales (ej. precio de venta = costo ÷ (1 − margen)); variables, unidades y excepciones comerciales.
+
+### Matriz de permisos
+Tabla: | Capacidad de negocio | [roles] | Nivel de acceso | Notas de confidencialidad |
+
+### Flujos de negocio críticos
+Por cada flujo (autorizaciones, sincronización de costos, cotización): Origen → Estados comerciales → Notificaciones → Resolución → Efecto en operación (sin HTTP ni webhooks).
+
+### Criterios de aceptación de negocio (UAT)
+Escenarios verificables por negocio antes de dar por cerrada la funcionalidad (formato: Dado / Cuando / Entonces en lenguaje comercial).
+
+## 6. Requisitos de Experiencia y Operación
+
+Reglas de visualización financiera (máscaras, separadores, confirmaciones ante variaciones), reportería para roles comerciales, trazabilidad de auditoría (quién tomó qué decisión comercial y cuándo). Accesibilidad si aplica.
+
+## 7. Riesgos de Negocio y Métricas de Éxito
+
+### Riesgos
+Riesgos comerciales, operativos y de adopción (no riesgos técnicos de infraestructura).
+
+### Métricas de éxito
+Cómo medir que el producto cumple objetivos comerciales.
 
 ## Supuestos y dependencias
-## Riesgos
-## Métricas de éxito
+Dependencias de negocio (ERP, políticas corporativas, datos maestros); sin detalle de integración técnica.
+
 ## Pendientes de validación (decision log)
 | Tema | Estado | Dueño sugerido | Impacto | Plazo sugerido |
 
@@ -91,20 +120,20 @@ function modePreamble(mode: BrdGenerationMode): string {
   switch (mode) {
     case "greenfield-from-dbga":
       return (
-        "A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente, genera **solo el BRD**.\n\n" +
-        "Extrae módulos, webhooks, roles SSO, tablas espejo y reglas del DBGA. " +
-        "El Pain Points debe reflejar los hallazgos críticos del discovery (dolores, validaciones, gaps).\n\n"
+        "A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente, genera **solo el BRD de negocio**.\n\n" +
+        "Extrae capacidades, roles, reglas comerciales, integraciones y políticas del DBGA. **Traduce** todo detalle técnico (APIs, tablas, crons, webhooks) a lenguaje corporativo según las reglas del system prompt. " +
+        "El contexto y objetivos deben reflejar los hallazgos críticos del discovery (dolores, gaps, validaciones comerciales).\n\n"
       );
     case "legacy-as-is":
       return (
         "A partir del **MDD inicial / documentación del codebase** siguiente, genera el **BRD del sistema actual** (no es documento de cambio).\n\n" +
-        "Refleja fielmente lo documentado: módulos, usuarios, integraciones. " +
-        "Pain Points: dolores que el sistema actual resuelve y los que aún persisten según el doc.\n\n"
+        "Refleja fielmente las capacidades de negocio documentadas: usuarios, procesos, integraciones en términos comerciales. " +
+        "Pain Points: dolores que el sistema resuelve y los que aún persisten. **No copies** endpoints ni esquemas del MDD al BRD.\n\n"
       );
     case "legacy-change":
       return (
-        "A partir del documento siguiente (evidencia del codebase), genera el **BRD de cambio** (solo lo que cambia).\n\n" +
-        "No redescribas el sistema completo. Pain Points centrados en el delta. Cita rutas/módulos tocados.\n\n"
+        "A partir del documento siguiente (evidencia del codebase), genera el **BRD de cambio** (solo lo que cambia en negocio).\n\n" +
+        "No redescribas el sistema completo. Centra el delta comercial; cita procesos o capacidades afectadas, no rutas de código.\n\n"
       );
   }
 }
