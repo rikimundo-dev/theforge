@@ -70,8 +70,8 @@ import {
 } from "../components/WorkshopDocBubbleMenu";
 import { WorkshopDocPanelHeader } from "../components/WorkshopDocPanelHeader";
 import {
-  collectDocumentStylesForPrint,
   printDesignSystemDocument,
+  printMarkdownDocument,
 } from "../utils/printDocument";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
 import { StandardDocPanel } from "../components/StandardDocPanel";
@@ -1377,44 +1377,13 @@ export default function WorkshopView({
     const mdPreview = document.querySelector<HTMLElement>(".markdown-preview");
     if (!mdPreview) return;
 
-    const printContent = mdPreview.cloneNode(true) as HTMLElement;
-    const printWin = window.open("", "_blank");
-    if (!printWin) {
-      document.body.classList.add("printing-md-content");
-      const cleanup = () => document.body.classList.remove("printing-md-content");
-      window.addEventListener("afterprint", cleanup, { once: true });
-      window.print();
-      return;
-    }
-
-    const styles = collectDocumentStylesForPrint();
-    const docStyles = `
-    body { padding: 2rem; background: #fff; color: #111; }
-    * { color: #111 !important; background: transparent !important; }
-    .markdown-preview { max-width: 900px; margin: 0 auto; }
-    img { max-width: 100%; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ccc; padding: 8px; }
-    pre { overflow-x: auto; border: 1px solid #ddd; padding: 12px; background: #f5f5f5; }
-    code { background: #f5f5f5; padding: 2px 4px; }
-    @page { margin: 2cm; }
-  `;
-    printWin.document.write(`<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Imprimir documento</title>
-  <style>${styles}</style>
-  <style>${docStyles}</style>
-</head>
-<body>
-  ${printContent.innerHTML}
-</body>
-</html>`);
-    printWin.document.close();
-    printWin.focus();
-    setTimeout(() => printWin.print(), 500);
+    const docTitle =
+      centralPanel === "mdd"
+        ? "Master Design Document"
+        : centralPanel === "brd"
+          ? "Business Requirements Document"
+          : "Documento";
+    printMarkdownDocument(mdPreview, { title: docTitle });
   }, [centralPanel, uxUiGuideViewMode]);
 
   const docBubbleMenuItems = useMemo((): WorkshopDocBubbleMenuItem[] => {
