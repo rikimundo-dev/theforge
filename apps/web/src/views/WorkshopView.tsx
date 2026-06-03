@@ -368,7 +368,15 @@ export default function WorkshopView({
 
   const precisionBreakdownRaw = useWorkshopStore((s) => s.precisionBreakdown);
   const precisionBreakdown = useMemo(() => precisionBreakdownRaw, [precisionBreakdownRaw]);
-  const readinessHints = useMemo(() => liveMetrics?.readinessHints ?? null, [liveMetrics?.readinessHints]);
+  const mddReadinessHints = useMemo(
+    () => liveMetrics?.mddReadinessHints ?? liveMetrics?.readinessHints ?? null,
+    [liveMetrics?.mddReadinessHints, liveMetrics?.readinessHints],
+  );
+  const traceabilityHints = useMemo(
+    () => liveMetrics?.traceabilityHints ?? null,
+    [liveMetrics?.traceabilityHints],
+  );
+  const consistencyScore = useWorkshopStore((s) => s.consistencyScore);
 
   const auditTrailRaw = useWorkshopStore((s) => s.auditTrail);
   const auditTrail = useMemo(() => auditTrailRaw || [], [auditTrailRaw]);
@@ -3940,16 +3948,21 @@ export default function WorkshopView({
                 <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)] shrink-0">
                   <h2 className="text-lg font-semibold text-[var(--foreground)] flex items-center gap-2">
                     <FileText className="w-5 h-5 text-[var(--primary)]" />
-                    Detalles de Auditoría
+                    Detalles de Auditoría MDD
                   </h2>
                   <button onClick={() => setShowAuditModal(false)} className="text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
                 <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                  {/* Sección Desglose */}
+                  {/* Sección Desglose MDD */}
                   <div>
-                    <h3 className="text-sm font-medium text-[var(--muted-foreground)] mb-3 uppercase tracking-wider">Desglose de Calificación</h3>
+                    <h3 className="text-sm font-medium text-[var(--muted-foreground)] mb-1 uppercase tracking-wider">
+                      Calidad MDD (Constitución)
+                    </h3>
+                    <p className="text-xs text-[var(--foreground-subtle)] mb-3">
+                      Evalúa §1 Contexto, §3 Modelo, §4 API, §6 Seguridad y §7 Integración del Master Design Document.
+                    </p>
                     {precisionBreakdown ? (
                       <div className="overflow-x-auto -mx-2 px-2 sm:mx-0 sm:px-0 rounded-lg border border-[var(--border)]">
                         <table className="w-full text-sm text-left">
@@ -3990,17 +4003,41 @@ export default function WorkshopView({
                       <p className="text-[var(--foreground-subtle)] italic">No hay desglose disponible aún.</p>
                     )}
 
-                    {/* Siguientes pasos / readiness hints */}
-                    {readinessHints && readinessHints.length > 0 && (
+                    {mddReadinessHints && mddReadinessHints.length > 0 && (
                       <div className="mt-4">
                         <h4 className="text-sm font-medium text-[var(--primary)] mb-2 flex items-center gap-2">
                           <Target className="w-3.5 h-3.5" />
-                          Pendiente para llegar a 100%
+                          Pendientes MDD
                         </h4>
                         <ul className="space-y-1.5">
-                          {readinessHints.map((hint: string, i: number) => (
+                          {mddReadinessHints.map((hint: string, i: number) => (
                             <li key={i} className="flex items-start gap-2 text-xs text-[var(--muted-foreground)]">
                               <span className="text-[var(--primary)] mt-0.5 shrink-0">▶</span>
+                              <span>{hint}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {traceabilityHints && traceabilityHints.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))] mb-2 flex items-center gap-2">
+                          <Target className="w-3.5 h-3.5" />
+                          Trazabilidad BRD → MDD
+                          {consistencyScore != null && (
+                            <span className="text-[10px] font-normal text-[var(--foreground-subtle)]">
+                              ({consistencyScore}% cubierto)
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[10px] text-[var(--foreground-subtle)] mb-2">
+                          Capacidades de negocio del BRD que aún no se reflejan en §1, §4 o §5 del MDD.
+                        </p>
+                        <ul className="space-y-1.5">
+                          {traceabilityHints.map((hint: string, i: number) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-[var(--muted-foreground)]">
+                              <span className="text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))] mt-0.5 shrink-0">▶</span>
                               <span>{hint}</span>
                             </li>
                           ))}
@@ -4022,7 +4059,9 @@ export default function WorkshopView({
                         </pre>
                       </div>
                     ) : (
-                      <p className="text-[var(--foreground-subtle)] italic">No hay logs de auditoría disponibles aún.</p>
+                      <p className="text-[var(--foreground-subtle)] italic">
+                        No hay logs de auditoría disponibles aún. Ejecuta el pipeline MDD (Manager) o recarga tras generar el documento.
+                      </p>
                     )}
                   </div>
                 </div>

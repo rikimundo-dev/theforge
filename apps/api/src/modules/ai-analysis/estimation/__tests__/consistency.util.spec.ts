@@ -1,68 +1,102 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { computeCrossDocumentConsistency, extractConcepts } from "../consistency.util.js";
+import {
+  computeCrossDocumentConsistency,
+  extractBrdBusinessConcepts,
+  extractMddTraceabilityCorpus,
+} from "../consistency.util.js";
 
-describe("extractConcepts", () => {
-  it("extracts H2 titles", () => {
-    const s = extractConcepts("## Módulo de Pagos\n## Facturación Electrónica");
-    assert.equal(s.has("módulo de pagos"), true);
-    assert.equal(s.has("facturación electrónica"), true);
-  });
+describe("extractBrdBusinessConcepts", () => {
+  it("extrae capacidades y UAT, no ruido estructural", () => {
+    const brd = `## 1. Contexto y Objetivos
+### Problema de negocio
+Texto.
 
-  it("extracts bold phrases", () => {
-    const s = extractConcepts("El sistema **generará facturas** automáticamente.");
-    assert.equal(s.has("generará facturas"), true);
-  });
+## 3. Capacidades Funcionales del Producto
+### Sincronización de costos reales desde ERP
+- Recibir costos reales desde Odoo de forma automática
+- Mantener historial auditable de costos
 
-  it("returns empty for no concepts", () => {
-    const s = extractConcepts("Esto es un texto corto.");
-    assert.equal(s.size, 0);
+## 5. Reglas de Negocio, Políticas y Fórmulas
+### Criterios de aceptación de negocio (UAT)
+- Dado un vendedor sin nivel 5, cuando cotice bajo margen mínimo, entonces el sistema bloquea hasta autorización
+`;
+    const concepts = extractBrdBusinessConcepts(brd);
+    assert.ok(concepts.some((c) => c.includes("sincronización") || c.includes("costos reales")));
+    assert.ok(concepts.some((c) => c.includes("vendedor") || c.includes("margen")));
+    assert.equal(concepts.includes("necesidad"), false);
+    assert.equal(concepts.includes("problema de negocio"), false);
   });
 });
 
 describe("computeCrossDocumentConsistency", () => {
-  it("returns score 50 when no source or target docs", () => {
-    const r = computeCrossDocumentConsistency({});
-    assert.equal(r.score, 50);
-    assert.equal(r.gaps.length, 0);
+  it("retorna score 50 sin BRD o sin MDD destino", () => {
+    assert.equal(computeCrossDocumentConsistency({}).score, 50);
+    assert.equal(computeCrossDocumentConsistency({ brdContent: "## Cap\n**x**" }).score, 50);
   });
 
-  it("detects covered concept between BRD and Architecture", () => {
+  it("detecta cobertura BRD→MDD en §1/§4/§5", () => {
     const docs = {
-      brdContent: "## Módulo de Pagos\nEl sistema procesará **pagos con tarjeta**.\n",
-      architectureContent: "## Pagos\nLa arquitectura soporta pagos con tarjeta y Paypal.\n",
+      brdContent: `## 3. Capacidades Funcionales del Producto
+### Cotización con control de margen mínimo
+- El comercial no puede cotizar por debajo del margen sin autorización de gerencia
+`,
+      mddContent: `## 1. Contexto y alcance
+Sistema de cotización con control de margen mínimo para comerciales.
+
+## 4. Contratos de API
+POST /quotes — crear cotización con validación de margen
+
+## 5. Lógica y Edge Cases
+Si margen < umbral, bloquear hasta autorización de gerencia.
+`,
     };
     const r = computeCrossDocumentConsistency(docs);
     assert.ok(r.score >= 50);
+    assert.ok(r.gaps.every((g) => g.from === "BRD"));
+    assert.ok(r.gaps.every((g) => g.to === "MDD" || g.to === "Spec"));
   });
 
-  it("detects missing concept gap", () => {
+  it("marca gap cuando el MDD no refleja la capacidad del BRD", () => {
     const docs = {
-      brdContent: "## Módulo de Facturación\n**Generación de facturas** automática.\n",
-      architectureContent: "## Gestión de Usuarios\nSolo maneja registro y login.\n",
+      brdContent: `## 3. Capacidades Funcionales del Producto
+### Soporte multi-moneda en listas de precios
+- Cotizar en USD, MXN y EUR con tipo de cambio diario
+`,
+      mddContent: `## 1. Contexto
+Sistema de cotización monolítico en pesos mexicanos.
+
+## 4. Contratos de API
+POST /quotes
+
+## 5. Lógica
+Validación de margen.
+`,
     };
     const r = computeCrossDocumentConsistency(docs);
-    assert.ok(r.gaps.length > 0);
-    assert.ok(r.score < 50);
+    assert.ok(r.gaps.some((g) => g.concept.includes("multi-moneda") || g.concept.includes("usd")));
   });
 
-  it("returns 100 when all concepts are covered across all targets", () => {
-    const docs = {
-      brdContent: "## Usuarios\n**Registro de usuarios** con email.\n## Pagos\n**Pagos recurrentes** mensuales.\n",
-      architectureContent: "## Usuarios\nRegistro con email y autenticación.\n## Pagos\nSuscripciones y pagos recurrentes.\n",
-      apiContractsContent: "POST /users registro con email\nPOST /payments pagos recurrentes\n",
-      logicFlowsContent: "Flujo de registro y flujo de pago recurrente.\n",
-    };
-    const r = computeCrossDocumentConsistency(docs);
-    assert.ok(r.score >= 80);
-  });
+  it("extractMddTraceabilityCorpus prioriza secciones 1, 4 y 5", () => {
+    const mdd = `## 1. Contexto
+Negocio de márgenes.
 
-  it("handles empty or partial doc sets gracefully", () => {
-    const docs = {
-      brdContent: "## Solo BRD\n**Sin nada técnico** que no esté.\n",
-    };
-    const r = computeCrossDocumentConsistency(docs);
-    assert.equal(r.score, 50);
-    assert.equal(r.gaps.length, 0);
+## 2. Arquitectura
+NestJS
+
+## 4. Contratos de API
+POST /x
+
+## 5. Lógica
+Reglas
+
+## 7. Infra
+Docker
+`;
+    const corpus = extractMddTraceabilityCorpus(mdd);
+    assert.match(corpus, /contexto/i);
+    assert.match(corpus, /contratos/i);
+    assert.match(corpus, /l[oó]gica/i);
+    assert.doesNotMatch(corpus, /docker/i);
   });
 });

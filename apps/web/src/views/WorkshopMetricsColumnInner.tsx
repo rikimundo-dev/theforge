@@ -710,7 +710,7 @@ export function WorkshopMetricsColumnInner({
                   <div>
                     <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--warning)]">
                       <AlertTriangle className="h-3 w-3" aria-hidden />
-                      Brechas ({crossDocumentGaps.length})
+                      Trazabilidad BRD → MDD ({crossDocumentGaps.length})
                     </p>
                     <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-[color-mix(in_oklch,var(--warning)_35%,var(--border))] bg-[color-mix(in_oklch,var(--warning)_10%,var(--card))] p-2 text-[11px] leading-snug">
                       {crossDocumentGaps.slice(0, 5).map((gap, i) => (
