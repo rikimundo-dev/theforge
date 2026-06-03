@@ -15,6 +15,7 @@ import {
 import { CheckpointerService } from "./checkpoint/checkpointer.service.js";
 import { NodeCacheService } from "./checkpoint/node-cache.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
+import type { AuditorGaps } from "./estimation/estimation.types.js";
 import { stateToMarkdown, getAgentLabel } from "./state/state-to-markdown.js";
 import {
   extractContextSectionBody,
@@ -491,6 +492,7 @@ export class AiAnalysisService {
     ];
 
     let lastState: MDDState = initialState;
+    const auditTrail: string[] = [];
 
     try {
       const stream = await graph.stream(initialState, {
@@ -501,8 +503,16 @@ export class AiAnalysisService {
       for await (const raw of stream) {
         const [mode, data] = Array.isArray(raw) ? (raw as [string, unknown]) : ["values", raw];
         if (mode === "updates" && data && typeof data === "object" && !Array.isArray(data)) {
-          const nodeName = Object.keys(data as Record<string, unknown>)[0];
+          const dataRecord = data as Record<string, unknown>;
+          const nodeName = Object.keys(dataRecord)[0];
           if (nodeName) {
+            const nodeData = dataRecord[nodeName] as Partial<MDDState> | undefined;
+            const draftLen = nodeData?.mddDraft?.length;
+            const scopeLen = nodeData?.clarifiedScope?.length;
+            const extra: string[] = [];
+            if (draftLen) extra.push(`draft=${draftLen}`);
+            if (scopeLen) extra.push(`scope=${scopeLen}`);
+            auditTrail.push(`${nodeName}(${extra.join(" ")})`);
             const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : getAgentLabel(nodeName);
             yield { type: "progress", agent: label, message: entry?.message ?? nodeName };
@@ -529,7 +539,23 @@ export class AiAnalysisService {
       this.logger.log(`[MDD:PersistCheck] markdown post-prepare len=${markdown.length} first200=${JSON.stringify(markdown.slice(0, 200))}`);
       logSection3Debug("final (stream done)", markdown);
       if (projectId?.trim()) this.estimationService.clearLiveDraft(projectId.trim(), estimationStage);
-      yield { type: "done", markdown };
+      const estOptsDone = estimationOpts(projectId, estimationStage, lastState);
+      const metrics = this.estimationService.calculateLiveMetrics(markdown, estOptsDone);
+      const precisionBreakdown = this.estimationService.getPrecisionBreakdown(markdown, estOptsDone);
+      this.persistMddAuditSnapshot(projectId, estimationStage, {
+        auditTrail,
+        precisionBreakdown,
+        auditorGaps: lastState.auditorGaps ?? undefined,
+      });
+      yield {
+        type: "done",
+        markdown,
+        precision: metrics.precision,
+        status: metrics.status,
+        auditorFeedback: lastState.auditorFeedback?.trim() || undefined,
+        precisionBreakdown,
+        auditTrail,
+      };
     } catch (err) {
       if (projectId?.trim()) this.estimationService.clearLiveDraft(projectId.trim(), estimationStage);
       const formatted = formatDbgaStreamError(err);
@@ -728,6 +754,11 @@ export class AiAnalysisService {
             if (reply && /Estamos al \d+%/.test(reply)) {
               reply = reply.replace(/\bEstamos al \d+%/, `Estamos al ${metrics.precision}%`);
             }
+            this.persistMddAuditSnapshot(projectId, estimationStageId, {
+              auditTrail,
+              precisionBreakdown,
+              auditorGaps: lastState?.auditorGaps ?? undefined,
+            });
             this.logger.log(`[MDD stream/manager] interrupt (from stream) reply=${reply ? "(presente)" : "(no)"} questions=${questions?.length ?? 0} plan=${plan?.length ?? 0} markdownLen=${draftOnInterrupt.length}`);
             yield {
               type: "interrupt",
@@ -792,6 +823,11 @@ export class AiAnalysisService {
       const metrics = this.estimationService.calculateLiveMetrics(markdown, estOptsDone);
       const precisionBreakdown = this.estimationService.getPrecisionBreakdown(markdown, estOptsDone);
       this.logger.log(`[MDD stream/manager] done markdownLen=${markdown.length} finalDraftLen=${finalDraft.length} lastNonEmptyLen=${lastNonEmptyDraft.length} auditTrail=${auditTrail.length}`);
+      this.persistMddAuditSnapshot(projectId, estimationStageId, {
+        auditTrail,
+        precisionBreakdown,
+        auditorGaps: lastState?.auditorGaps ?? undefined,
+      });
       yield {
         type: "done",
         markdown,
@@ -1149,6 +1185,11 @@ export class AiAnalysisService {
         const precisionBreakdown = this.estimationService.getPrecisionBreakdown(markdown, estOptsResumeDone);
         this.logger.log(`[MDD stream/resume] done markdownLen=${markdown.length} finalDraftLen=${finalDraft.length}`);
         this.logger.log(`[MDD stream/resume] Audit Trail: ${auditTrail.join(" -> ")}`);
+        this.persistMddAuditSnapshot(projectId, estimationStage, {
+          auditTrail,
+          precisionBreakdown,
+          auditorGaps: lastState?.auditorGaps ?? undefined,
+        });
         yield {
           type: "done",
           markdown,
@@ -1416,5 +1457,24 @@ export class AiAnalysisService {
    */
   async getProjectDecisions(projectId: string) {
     return this.graphMemory.getDecisionsByProject(projectId);
+  }
+
+  /** Persiste trail/breakdown/gaps del pipeline MDD para rehidratar el modal tras recargar. */
+  private persistMddAuditSnapshot(
+    projectId: string | undefined,
+    stageId: string | null | undefined,
+    payload: {
+      auditTrail?: string[];
+      precisionBreakdown?: PrecisionBreakdown;
+      auditorGaps?: AuditorGaps;
+    },
+  ): void {
+    const pid = projectId?.trim();
+    if (!pid) return;
+    void this.estimationService.saveMddAuditSnapshot(pid, stageId, payload).catch((err) => {
+      this.logger.warn(
+        `[MDD audit] persist snapshot failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 }

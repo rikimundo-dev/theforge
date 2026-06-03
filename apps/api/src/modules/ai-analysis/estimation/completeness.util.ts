@@ -1,5 +1,6 @@
 import { PlanningDocumentFields, DocumentCompleteness, DOC_COMPLETE_MIN_LENGTH, DOC_PARTIAL_MIN_LENGTH } from "./estimation.types";
 const DOC_WEIGHTS: Record<keyof PlanningDocumentFields, number> = {
+  mddContent: 0,
   brdContent: 0.22,
   specContent: 0.14,
   architectureContent: 0.14,

@@ -97,9 +97,25 @@ export interface LiveMetricsResult {
   status: SemaphoreStatusLive;
   /** Costo estimado de generación con IA (USD → MXN ~ $20/USD). */
   totalMXNIA: number;
-  /** Pistas breves para preparar documentos y mejorar efectividad con IA (OpenRouter / cascadas). */
+  /** Pistas breves para preparar el MDD (calidad técnica). */
   readinessHints: string[];
+  /** Igual que readinessHints — calidad del MDD / Constitución. */
+  mddReadinessHints: string[];
+  /** Brechas BRD (negocio) → MDD/Spec sin reflejo técnico. */
+  traceabilityHints: string[];
+  /** Score 0–100 de trazabilidad BRD→MDD. */
+  consistencyScore?: number;
+  /** Gaps estructurados BRD→MDD. */
+  crossDocumentGaps?: CrossDocumentGap[];
 }
+
+/** Snapshot persistido del último pipeline MDD (audit trail + auditor LLM). */
+export type MddAuditSnapshot = {
+  auditTrail?: string[];
+  precisionBreakdown?: PrecisionBreakdown;
+  auditorGaps?: AuditorGaps;
+  updatedAt?: string;
+};
 
 /** Tasa interna (Costo Empresa 2026): $21k netos × 1.4 carga social ÷ 160 h/mes ≈ $29,400/mes → $185 MXN/hr. */
 export const BASE_SALARY_NET_MONTH = 21_000;
@@ -142,6 +158,8 @@ export const RISK_PRECISION_THRESHOLD = 85;
 
 /** Campos de contenido de documento para el planificador integral. */
 export type PlanningDocumentFields = {
+  /** MDD de la etapa — destino principal de trazabilidad desde BRD. */
+  mddContent?: string;
   brdContent?: string;
   specContent?: string;
   architectureContent?: string;

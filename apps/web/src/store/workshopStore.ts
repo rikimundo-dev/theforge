@@ -278,7 +278,12 @@ export interface LiveMetricsResult {
   roles: Record<string, number>;
   rolesHours: Record<string, number>;
   status: "red" | "yellow" | "green";
+  /** @deprecated Usar mddReadinessHints */
   readinessHints?: string[];
+  mddReadinessHints?: string[];
+  traceabilityHints?: string[];
+  consistencyScore?: number;
+  crossDocumentGaps?: CrossDocumentGap[];
 }
 
 /** Calificación por sección/agente (0–100) en el evento done del stream MDD. */
@@ -2911,14 +2916,29 @@ if (prog && prog.step && prog.step !== "done") {
         }),
       });
       if (!r.ok) return null;
-      const data = (await r.json()) as LiveMetricsResult & { precisionBreakdown?: PrecisionBreakdown; completeness?: DocumentCompleteness; crossDocumentGaps?: CrossDocumentGap[]; consistencyScore?: number };
-      const { precisionBreakdown, completeness, crossDocumentGaps, consistencyScore, ...metrics } = data;
+      const data = (await r.json()) as LiveMetricsResult & {
+        precisionBreakdown?: PrecisionBreakdown;
+        completeness?: DocumentCompleteness;
+        crossDocumentGaps?: CrossDocumentGap[];
+        consistencyScore?: number;
+        auditTrail?: string[];
+        lastAuditAt?: string;
+      };
+      const {
+        precisionBreakdown,
+        completeness,
+        crossDocumentGaps,
+        consistencyScore,
+        auditTrail,
+        ...metrics
+      } = data;
       set({
         liveMetrics: metrics,
         ...(precisionBreakdown != null ? { precisionBreakdown } : {}),
         ...(completeness != null ? { documentCompleteness: completeness } : {}),
         ...(crossDocumentGaps != null ? { crossDocumentGaps } : {}),
         ...(consistencyScore != null ? { consistencyScore } : {}),
+        ...(auditTrail?.length ? { auditTrail } : {}),
       });
       return metrics;
     } catch {

@@ -34,11 +34,17 @@ export class AiAnalysisController {
     const sid = typeof stageId === "string" ? stageId.trim() || undefined : undefined;
     const metrics = await this.estimationService.getLiveMetricsForProject(id, undefined, sid);
     const mddContent = await this.estimationService.getMddContentForProject(id, sid);
+    const snapshot = await this.estimationService.getMddAuditSnapshot(id, sid);
     const precisionBreakdown =
       mddContent && mddContent.trim().length > 80
         ? this.estimationService.getPrecisionBreakdown(mddContent, { projectId: id, stageId: sid ?? null })
-        : undefined;
-    return { ...metrics, precisionBreakdown };
+        : snapshot?.precisionBreakdown;
+    return {
+      ...metrics,
+      precisionBreakdown,
+      auditTrail: snapshot?.auditTrail,
+      lastAuditAt: snapshot?.updatedAt,
+    };
   }
 
   @Post("estimation")
@@ -53,11 +59,17 @@ export class AiAnalysisController {
     const metrics = await this.estimationService.getLiveMetricsForProject(id, mddContent, sid);
     const contentForBreakdown =
       mddContent ?? (await this.estimationService.getMddContentForProject(id, sid));
+    const snapshot = await this.estimationService.getMddAuditSnapshot(id, sid);
     const precisionBreakdown =
       contentForBreakdown && contentForBreakdown.trim().length > 80
         ? this.estimationService.getPrecisionBreakdown(contentForBreakdown, { projectId: id, stageId: sid ?? null })
-        : undefined;
-    return { ...metrics, precisionBreakdown };
+        : snapshot?.precisionBreakdown;
+    return {
+      ...metrics,
+      precisionBreakdown,
+      auditTrail: snapshot?.auditTrail,
+      lastAuditAt: snapshot?.updatedAt,
+    };
   }
 
   /**
