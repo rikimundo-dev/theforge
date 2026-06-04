@@ -235,8 +235,8 @@ async function persistField(
       }),
     });
     if (r.ok) {
-      const data = (await r.json()) as Record<string, unknown>;
-      const serverRaw = (data[fieldName] as string) ?? cleaned;
+      const data = (await r.json()) as Project & { mddGovernancePatternsReverted?: boolean };
+      const serverRaw = (data[fieldName as keyof Project] as string | undefined) ?? cleaned;
       const serverCleaned = cleanDoc(serverRaw) ?? serverRaw ?? "";
       const patternsReverted =
         fieldName === "mddContent" && data.mddGovernancePatternsReverted === true;
@@ -245,7 +245,7 @@ async function persistField(
           "",
       );
       const patch: Partial<WorkshopState> = {
-        project: data as Project,
+        project: data,
         synced: true,
         error: patternsReverted
           ? "Patrones SSOT restaurados: solo puedes cambiarlos con «Editar patrones (SSOT)»."
