@@ -42,6 +42,16 @@ import {
 import { cn } from "@/lib/utils";
 import { UnderlineTabs } from "@/components/ui/UnderlineTabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/AlertDialog";
+import {
   WORKSHOP_DOC_TOOLBAR_ICON,
   WORKSHOP_DOC_TOOLBAR_ICON_BTN,
 } from "../constants/workshopDocToolbar";
@@ -288,6 +298,7 @@ export default function WorkshopView({
   const generateMddFromBenchmark = useWorkshopStore((s) => s.generateMddFromBenchmark);
   const persistMddContent = useWorkshopStore((s) => s.persistMddContent);
   const [mddPatternsWizardOpen, setMddPatternsWizardOpen] = useState(false);
+  const [clearMddConfirmOpen, setClearMddConfirmOpen] = useState(false);
   const [mddPatternsWizardMode, setMddPatternsWizardMode] =
     useState<MddPatternsWizardMode>("initial");
   const [patternsWizardAnalyzing, setPatternsWizardAnalyzing] = useState(false);
@@ -3454,14 +3465,7 @@ export default function WorkshopView({
                             tone="secondary"
                             onClick={() => {
                               if (!projectId?.trim()) return;
-                              if (
-                                !window.confirm(
-                                  "¿Vaciar todo el MDD? Se borra el documento y la sección de patrones sin validación.",
-                                )
-                              ) {
-                                return;
-                              }
-                              void clearMddContentCompletely(projectId);
+                              setClearMddConfirmOpen(true);
                             }}
                             disabled={loading || mddReviewing}
                             className="w-full justify-center lg:w-auto"
@@ -4232,6 +4236,28 @@ export default function WorkshopView({
             </div>
           )
         }
+      <AlertDialog open={clearMddConfirmOpen} onOpenChange={setClearMddConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Vaciar todo el MDD?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borra el documento completo y la sección de patrones. No se valida contra ER ni otros
+              artefactos del proyecto.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[var(--destructive)] hover:bg-[var(--destructive-hover)]"
+              onClick={() => {
+                if (projectId?.trim()) void clearMddContentCompletely(projectId);
+              }}
+            >
+              Limpiar MDD
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <MddPatternsWizardDialog
         open={mddPatternsWizardOpen}
         onOpenChange={setMddPatternsWizardOpen}
