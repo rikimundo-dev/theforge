@@ -19,7 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui";
-import { UnderlineTabs, type UnderlineTabItem } from "@/components/ui/UnderlineTabs";
 import { cn } from "@/lib/utils";
 
 export type MddPatternsWizardMode = "initial" | "edit";
@@ -39,31 +38,9 @@ export interface MddPatternsWizardDialogProps {
   onConfirm: (markdown: string, selectedIds: ReadonlySet<string>) => void | Promise<void>;
 }
 
-function parseGovernanceGroupTab(group: string, index: number): { id: string; label: string; shortLabel: string } {
+function groupTabId(group: string, index: number): string {
   const num = group.match(/(\d+)\./)?.[1] ?? String(index + 1);
-  const title = group.replace(/^[\s\S]*?\d+\.\s*/, "").trim();
-  const simplified = title
-    .replace(/^PATRONES DE /i, "")
-    .replace(/^PATRONES /i, "")
-    .split(":")[0]!
-    .trim()
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-  const shortMap: Record<string, string> = {
-    "1": "Arq.",
-    "2": "Crea.",
-    "3": "Estr.",
-    "4": "Comp.",
-    "5": "Pers.",
-    "6": "Integ.",
-  };
-
-  return {
-    id: `g-${num}`,
-    label: simplified,
-    shortLabel: shortMap[num] ?? num,
-  };
+  return `g-${num}`;
 }
 
 function PatternOptionList({
@@ -132,7 +109,12 @@ export function MddPatternsWizardDialog({
   }, [options]);
 
   const groupTabs = useMemo(
-    () => grouped.map(([group, items], index) => ({ ...parseGovernanceGroupTab(group, index), group, items })),
+    () =>
+      grouped.map(([group, items], index) => ({
+        id: groupTabId(group, index),
+        label: group,
+        items,
+      })),
     [grouped],
   );
 
@@ -163,28 +145,6 @@ export function MddPatternsWizardDialog({
     return counts;
   }, [groupTabs, selected]);
 
-  const tabItems: UnderlineTabItem<string>[] = useMemo(
-    () =>
-      groupTabs.map(({ id, label, shortLabel }) => {
-        const count = selectedCountByGroup.get(id) ?? 0;
-        return {
-          id,
-          label: (
-            <span className="inline-flex items-center gap-1.5">
-              {label}
-              {count > 0 ? (
-                <span className="rounded-full bg-primary/15 px-1.5 text-xs font-semibold text-primary">
-                  {count}
-                </span>
-              ) : null}
-            </span>
-          ),
-          shortLabel,
-        };
-      }),
-    [groupTabs, selectedCountByGroup],
-  );
-
   const activeGroup = groupTabs.find((t) => t.id === activeGroupId) ?? groupTabs[0];
 
   const toggle = useCallback((id: string) => {
@@ -209,7 +169,7 @@ export function MddPatternsWizardDialog({
 
   return (
     <Dialog open={open} onOpenChange={loading || analyzing ? undefined : onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-2xl flex flex-col gap-0 p-0">
+      <DialogContent className="max-h-[90vh] max-w-4xl flex flex-col gap-0 p-0">
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>
             {isEdit ? "Editar patrones de desarrollo (SSOT)" : "Patrones de desarrollo (SSOT)"}
@@ -241,35 +201,65 @@ export function MddPatternsWizardDialog({
             </p>
           </div>
         ) : (
-          <>
-            <UnderlineTabs
-              className="px-6 shrink-0"
-              idPrefix="mdd-patterns"
-              ariaLabel="Categorías de patrones"
-              tabs={tabItems}
-              value={activeGroupId}
-              onValueChange={setActiveGroupId}
-            />
-            <div
-              className="flex-1 overflow-y-auto px-6 py-3 min-h-0"
-              role="tabpanel"
-              id={`mdd-patterns-panel-${activeGroupId}`}
-              aria-labelledby={`mdd-patterns-tab-${activeGroupId}`}
+          <div className="flex flex-1 min-h-0 border-t border-border/60">
+            <nav
+              className="flex w-[13.5rem] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border/60 px-2 py-3 sm:w-[15.5rem]"
+              role="tablist"
+              aria-label="Categorías de patrones"
             >
-              {activeGroup ? (
-                <PatternOptionList
-                  items={activeGroup.items}
-                  selected={selected}
-                  onToggle={toggle}
-                />
-              ) : null}
+              {groupTabs.map(({ id, label }) => {
+                const selected = activeGroupId === id;
+                const count = selectedCountByGroup.get(id) ?? 0;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    id={`mdd-patterns-tab-${id}`}
+                    aria-selected={selected}
+                    aria-controls={`mdd-patterns-panel-${id}`}
+                    onClick={() => setActiveGroupId(id)}
+                    className={cn(
+                      "rounded-md px-2.5 py-2 text-left text-xs leading-snug transition-colors sm:text-[13px]",
+                      selected
+                        ? "border-l-2 border-primary bg-primary/10 font-semibold text-foreground pl-[calc(0.625rem-2px)]"
+                        : "border-l-2 border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    )}
+                  >
+                    <span className="flex items-start gap-1.5">
+                      <span className="min-w-0 flex-1">{label}</span>
+                      {count > 0 ? (
+                        <span className="shrink-0 rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary tabular-nums">
+                          {count}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </nav>
+            <div className="flex min-w-0 flex-1 flex-col min-h-0">
+              <div
+                className="flex-1 overflow-y-auto px-4 py-3 sm:px-5 min-h-0"
+                role="tabpanel"
+                id={`mdd-patterns-panel-${activeGroupId}`}
+                aria-labelledby={`mdd-patterns-tab-${activeGroupId}`}
+              >
+                {activeGroup ? (
+                  <PatternOptionList
+                    items={activeGroup.items}
+                    selected={selected}
+                    onToggle={toggle}
+                  />
+                ) : null}
+              </div>
+              <p className="px-4 pb-2 text-xs text-muted-foreground shrink-0 sm:px-5">
+                {selected.size === 0
+                  ? "Ningún patrón seleccionado."
+                  : `${selected.size} patrón${selected.size === 1 ? "" : "es"} seleccionado${selected.size === 1 ? "" : "s"} en total.`}
+              </p>
             </div>
-            <p className="px-6 pb-1 text-xs text-muted-foreground shrink-0">
-              {selected.size === 0
-                ? "Ningún patrón seleccionado."
-                : `${selected.size} patrón${selected.size === 1 ? "" : "es"} seleccionado${selected.size === 1 ? "" : "s"} en total.`}
-            </p>
-          </>
+          </div>
         )}
         <DialogFooter className="px-6 py-4 shrink-0 border-t border-border/60">
           <Button
