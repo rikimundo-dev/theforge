@@ -5,14 +5,23 @@ import type { AuditorGapsState, MDDAuditorDecision, MddPlanStep } from "./mdd-st
 /**
  * Combina actualizaciones concurrentes de mddDraft en el mismo paso del grafo.
  * Evita INVALID_CONCURRENT_GRAPH_UPDATE (LastValue) cuando resume + nodo escriben el borrador.
- * Prefiere el texto más largo (suele ser el documento completo vs. fragmento).
+ * Prefiere la actualización más reciente (right); solo conserva left si right parece fragmento roto.
  */
 export function reduceMddDraft(left: string, right: string): string {
   const a = (left ?? "").trim();
   const b = (right ?? "").trim();
   if (!b) return a;
   if (!a) return b;
-  return b.length >= a.length ? b : a;
+  if (b.length >= a.length) return b;
+
+  const looksLikeFullMdd =
+    /^#\s*Master\s+Design\s+Document/i.test(b) && /##\s*1\.\s*Contexto/i.test(b);
+  if (looksLikeFullMdd) return b;
+
+  if (b.length < a.length * 0.2) return a;
+
+  // Fragmento sin estructura MDD completa.
+  return b;
 }
 
 /** Fusiona escrituras concurrentes de escalares (p. ej. projectId en Command.update + nodo reanudado). */

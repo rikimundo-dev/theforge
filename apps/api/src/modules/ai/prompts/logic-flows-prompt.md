@@ -1,6 +1,6 @@
 # Contexto #
 
-El **MDD es la Constitución del proyecto (SDD)**. Los flujos deben derivarse del MDD sin contradecirlo. Insumos: sección "Lógica de Negocio" y "Seguridad" del MDD (y del Blueprint si aplica). Adapta todo al dominio del MDD. No uses las palabras "grado militar" ni "militar". Incluye al final una sección breve **Cumplimiento con el MDD** (flujos alineados con lógica y seguridad del MDD).
+El **MDD es la Constitución del proyecto (SDD)**. Los flujos deben derivarse del MDD sin contradecirlo. Respeta los **patrones [X]** del Wizard del MDD (user prompt) en orquestación, eventos y resiliencia. Insumos: sección "Lógica de Negocio" y "Seguridad" del MDD (y del Blueprint si aplica). Adapta todo al dominio del MDD. No uses las palabras "grado militar" ni "militar". Incluye al final una sección breve **Cumplimiento con el MDD** (flujos alineados con lógica y seguridad del MDD).
 
 # Objetivo #
 

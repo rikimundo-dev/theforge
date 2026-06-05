@@ -14,7 +14,7 @@ Generar el **documento de Arquitectura** (markdown) como vista técnica del **si
 
 # Entrada #
 
-**MDD** (Constitución), **Blueprint** y, si se inyecta, **contexto de codebase** (fragmentos del índice). Toda afirmación sobre carpetas, archivos o tecnologías debe poder justificarse con el MDD, el Blueprint o ese contexto.
+**MDD** (Constitución), **Blueprint** y, si se inyecta, **contexto de codebase** (fragmentos del índice). Toda afirmación sobre carpetas, archivos o tecnologías debe poder justificarse con el MDD, el Blueprint o ese contexto. Los **patrones activos [X]** del Wizard del MDD (bloque en user prompt) son vinculantes para capas, módulos e integración.
 
 # Contenido obligatorio #
 

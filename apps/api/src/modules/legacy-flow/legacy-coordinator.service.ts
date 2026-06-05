@@ -53,6 +53,10 @@ import {
   type BrdExtractFailure,
 } from "../ai/utils/brd-extract.util.js";
 import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.util.js";
+import {
+  BRD_GENERATION_SYSTEM,
+  buildBrdUserPrompt,
+} from "../ai/prompts/brd-generation-prompt.js";
 import { AIFactory } from "../ai/ai.factory.js";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { UX_UI_GUIDE_PROMPT } from "../ai/prompts/ux-ui-guide-prompt.js";
@@ -673,37 +677,15 @@ export class LegacyCoordinatorService {
       } catch { /* non-critical */ }
     }
     const isInitialLegacyStage = !baselineBrdBlock;
-    const basePrompt = isInitialLegacyStage
-      ? "Eres analista de negocio. A partir del **MDD inicial** (documentación del codebase existente a continuación), " +
-        "deriva un borrador en español, en markdown, que refleje fielmente el sistema documentado.\n\n" +
-        "IMPORTANTE: Este NO es un documento de cambio. Debes **reflejar el sistema existente** descrito en el MDD inicial.\n\n"
-      : "Eres analista de negocio. A partir del documento siguiente (índice / evidencia del codebase vía Ariadne), " +
-        "redacta un borrador en español, en markdown, como documento de cambio.\n\n" +
-        "IMPORTANTE: Este es un **documento de cambio**, no una descripción del sistema completo. Céntrate en qué cambia, qué se agrega y qué se modifica.\n\n";
-
     const { text: codebaseChunk, truncated: sourceTruncated } =
       truncateSourceDocForBrdPrompt(codebaseDoc);
 
-    const brdPromptBase =
-      basePrompt +
-      (isInitialLegacyStage
-        ? "Genera el **BRD (sistema actual):** El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»**:\n" +
-          "1. **Mapa de dolores** — tabla con: dolor que resuelve el sistema, quién lo siente, qué usaban antes (workaround), gap.\n" +
-          "2. **Validación de demanda** — señales de mercado del dominio del sistema.\n" +
-          "3. **Perfil del cliente objetivo** — tipo de usuario/empresa que usa el sistema.\n" +
-          "4. **Consecuencias de no actuar** — qué pasaba antes del sistema.\n\n" +
-          "Luego continúa con: problema de negocio que resuelve el sistema existente, alcance actual, usuarios, supuestos y riesgos identificados. Cita módulos o rutas del MDD inicial.\n\n"
-        : "Genera el **BRD de cambio:** El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»**:\n" +
-          "1. **Mapa de dolores** — tabla con: dolor que resuelve este cambio, quién lo siente, qué usan hoy (workaround), gap.\n" +
-          "2. **Validación de demanda** — por qué este cambio es necesario.\n" +
-          "3. **Perfil del cliente/usuario impactado** — quién se beneficia del cambio.\n" +
-          "4. **Consecuencias de no implementar** — qué sigue doliendo sin este cambio.\n\n" +
-          "Luego continúa con: problema que resuelve este cambio, alcance del cambio, supuestos, riesgos; cita rutas o módulos del documento fuente que este cambio toca.\n\n") +
-      baselineBrdBlock +
-      "Responde **solo** con este formato exacto (delimitadores literales):\n" +
-      "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n\n" +
-      "--- DOCUMENTO ---\n\n" +
-      codebaseChunk;
+    const brdPromptBase = buildBrdUserPrompt({
+      mode: isInitialLegacyStage ? "legacy-as-is" : "legacy-change",
+      sourceLabel: "DOCUMENTO",
+      sourceDocument: codebaseChunk,
+      baselineBrdBlock: baselineBrdBlock || undefined,
+    });
 
     let brd = "";
     let lastFailure: BrdExtractFailure = "no_delimiter";
@@ -714,7 +696,7 @@ export class LegacyCoordinatorService {
           ? "\n\n**IMPORTANTE:** El intento anterior no siguió el formato. Responde ÚNICAMENTE con:\n<<<BRD>>>\n(markdown BRD completo)\n<<<END_BRD>>>\nSin texto antes ni después de los delimitadores."
           : "";
       const raw = await this.ai.generateResponse(brdPromptBase + formatReminder, [], {
-        systemPrompt: COORDINATOR_SYSTEM,
+        systemPrompt: BRD_GENERATION_SYSTEM,
       });
       lastRawLength = (raw ?? "").length;
       const extracted = extractBrdFromLlmResponse(raw ?? "");

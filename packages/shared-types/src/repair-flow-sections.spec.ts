@@ -75,6 +75,27 @@ flowchart TD
     assert.match(out, /```mermaid[\s\S]*?upsert --> rsp[\s\S]*?```/);
     assert.doesNotMatch(out, /\bs27\b/);
   });
+
+  it("reemplaza diagrama webhook erróneo en Flujo de autenticación por bullets SSO", () => {
+    const raw = `#### Flujo de autenticación (frontend)
+
+\`\`\`mermaid
+flowchart TD
+  evt["Evento en sistema origen OBP u OBP4MO"]
+  post["POST /api/v1/webhooks/:sistema/:entidad"]
+  evt --> post
+\`\`\`
+
+- Usuario → Frontend sin token
+- Redirect SSO login
+- Frontend guarda Bearer token
+
+#### Integración backend`;
+    const out = repairFlowSectionsToMermaid(raw);
+    assert.doesNotMatch(out, /autenticaci[oó]n[\s\S]*?POST \/api\/v1\/webhooks/);
+    assert.match(out, /```mermaid[\s\S]*?Usuario[\s\S]*?```/);
+    assert.match(out, /#### Integración backend/);
+  });
 });
 
 describe("repairJsonFenceIntegrity", () => {

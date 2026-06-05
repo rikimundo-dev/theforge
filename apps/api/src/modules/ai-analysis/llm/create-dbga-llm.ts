@@ -24,10 +24,13 @@ function chatModelChain(runtime: UserLLMRuntime): string[] {
   });
 }
 
-function buildChatOpenAI(runtime: UserLLMRuntime, model: string): ChatOpenAI {
+/** Opciones de creación del LLM (p. ej. temperature baja para nodos estructurales del MDD). */
+export type CreateDbgaLLMOptions = { temperature?: number };
+
+function buildChatOpenAI(runtime: UserLLMRuntime, model: string, temperatureOverride?: number): ChatOpenAI {
   return new ChatOpenAI({
     model,
-    temperature: resolveLangChainChatTemperature(),
+    temperature: resolveLangChainChatTemperature(temperatureOverride),
     maxTokens: llmMaxTokens(),
     timeout: LLM_TIMEOUT_MS,
     openAIApiKey: runtime.apiKey,
@@ -35,8 +38,8 @@ function buildChatOpenAI(runtime: UserLLMRuntime, model: string): ChatOpenAI {
   });
 }
 
-function buildLangChainChat(runtime: UserLLMRuntime, model: string): BaseChatModel {
-  const temperature = resolveLangChainChatTemperature();
+function buildLangChainChat(runtime: UserLLMRuntime, model: string, temperatureOverride?: number): BaseChatModel {
+  const temperature = resolveLangChainChatTemperature(temperatureOverride);
   switch (runtime.providerId as ProviderId) {
     case "anthropic":
       return new ChatAnthropic({
@@ -57,7 +60,7 @@ function buildLangChainChat(runtime: UserLLMRuntime, model: string): BaseChatMod
     case "cloudflare":
     case "groq":
     default:
-      return buildChatOpenAI(runtime, model);
+      return buildChatOpenAI(runtime, model, temperatureOverride);
   }
 }
 
@@ -65,6 +68,7 @@ function buildWithFallbacks(
   runtime: UserLLMRuntime,
   models: string[],
   build: (model: string) => BaseChatModel,
+  temperatureOverride?: number,
 ): BaseChatModel {
   if (models.length <= 1) {
     return build(models[0]!);
@@ -76,24 +80,25 @@ function buildWithFallbacks(
     runtime.providerId === "groq"
   ) {
     return new OpenRouterFallbackChatModel(
-      (model) => buildChatOpenAI(runtime, model),
+      (model) => buildChatOpenAI(runtime, model, temperatureOverride),
       models,
     );
   }
   return new ChainedFallbackChatModel(build, models);
 }
 
-export function createDbgaLLMFromRuntime(runtime: UserLLMRuntime): BaseChatModel {
+export function createDbgaLLMFromRuntime(runtime: UserLLMRuntime, opts?: CreateDbgaLLMOptions): BaseChatModel {
   const models = chatModelChain(runtime);
-  return buildWithFallbacks(runtime, models, (model) => buildLangChainChat(runtime, model));
+  return buildWithFallbacks(runtime, models, (model) => buildLangChainChat(runtime, model, opts?.temperature), opts?.temperature);
 }
 
 /**
  * Factory for DBGA / MDD graphs: runtime BYOK del usuario (todos los proveedores del catálogo).
+ * `opts.temperature` baja la temperatura (p. ej. 0.2 para nodos estructurales del MDD → reproducibilidad).
  */
-export async function createDbgaLLM(aiFactory: AIFactory, userId: string): Promise<BaseChatModel> {
+export async function createDbgaLLM(aiFactory: AIFactory, userId: string, opts?: CreateDbgaLLMOptions): Promise<BaseChatModel> {
   const runtime = await aiFactory.resolveRuntime(userId);
-  return createDbgaLLMFromRuntime(runtime);
+  return createDbgaLLMFromRuntime(runtime, opts);
 }
 
 /** LLM del nodo Auditor MDD: instancia dedicada en Ajustes o el proveedor activo. */

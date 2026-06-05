@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@theforge/database";
@@ -18,6 +19,7 @@ import {
   listProviderCatalog,
   parseChatModelList,
   resolveEmbeddingDimensionForModel,
+  resolveInstanceChatModelWhitelist,
   type ProviderId,
 } from "../ai/providers/provider-catalog.js";
 import { isSuperAdmin } from "../../common/roles.js";
@@ -31,6 +33,20 @@ import {
   resolveRuntimeBaseUrl,
   resolveVisionModelForRuntime,
 } from "./provider-config.helpers.js";
+import { isLlmDebugEnabled, llmDebug, summarizeRuntimeForLog } from "../ai/config/llm-debug.util.js";
+
+export interface ProviderStatusResult {
+  usable: boolean;
+  configured: boolean;
+  resolveError?: string;
+  runtime?: {
+    providerId: string;
+    chatModel: string;
+    fallbacks: string[];
+    source: "tenant" | "byok";
+    instanceName?: string;
+  };
+}
 
 export interface UpsertProviderConfigDto {
   apiKey: string;
@@ -55,6 +71,8 @@ export interface UpdateAISettingsDto {
 
 @Injectable()
 export class UserProvidersService {
+  private readonly logger = new Logger(UserProvidersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenCrypto: TokenCryptoService,
@@ -202,12 +220,13 @@ export class UserProvidersService {
         );
       }
     }
+    const superAdmin = isSuperAdmin(user?.role ?? "developer");
     for (const instanceId of [dto.activeTenantInstanceId]) {
       if (instanceId === undefined || instanceId === null) continue;
       const inst = await this.prisma.providerInstance.findFirst({
         where: {
           id: instanceId,
-          ...this.instanceAccessibleByUser(userId),
+          ...(superAdmin ? {} : this.instanceAccessibleByUser(userId)),
         },
       });
       if (!inst) {
@@ -392,23 +411,83 @@ export class UserProvidersService {
     return { ok: true };
   }
 
-  /** Indica si el usuario tiene proveedor usable (tenant o BYOK personal). */
-  async hasUsableProvider(userId: string): Promise<boolean> {
-    try {
-      await this.resolveRuntime(userId);
-      return true;
-    } catch {
-      return false;
+  /** Indica si el usuario tiene proveedor configurado y si el runtime resuelve. */
+  async getProviderStatus(userId: string): Promise<ProviderStatusResult> {
+    const configured = await this.hasProviderConfiguration(userId);
+    if (!configured) {
+      this.logger.debug(`[ProviderStatus] userId=${userId} sin instancia tenant ni BYOK`);
+      return { usable: false, configured: false };
     }
+    try {
+      const tenant = await this.resolveTenantInstanceForUser(userId);
+      const runtime = tenant
+        ? await this.runtimeFromTenantInstance(userId, tenant)
+        : await this.resolveRuntimeForProvider(userId, await this.activeProviderId(userId));
+      const result: ProviderStatusResult = {
+        usable: true,
+        configured: true,
+        runtime: {
+          providerId: runtime.providerId,
+          chatModel: runtime.chatModel,
+          fallbacks: runtime.chatModelFallbacks ?? [],
+          source: tenant ? "tenant" : "byok",
+          instanceName: tenant?.displayName,
+        },
+      };
+      this.logger.debug(
+        `[ProviderStatus] OK userId=${userId} ${JSON.stringify(result.runtime)}`,
+      );
+      llmDebug("UserProviders", "getProviderStatus OK", { userId, ...result.runtime });
+      return result;
+    } catch (err) {
+      const resolveError = err instanceof Error ? err.message : String(err);
+      this.logger.warn(
+        `[ProviderStatus] userId=${userId} configurado pero resolveRuntime falló: ${resolveError}`,
+      );
+      llmDebug("UserProviders", "getProviderStatus resolveRuntime error", { userId, resolveError });
+      // Hay configuración: no mostrar banner «configura proveedor» por un fallo de modelo/permiso.
+      return { usable: false, configured: true, resolveError };
+    }
+  }
+
+  /** @deprecated Usar getProviderStatus. Mantenido por compatibilidad interna. */
+  async hasUsableProvider(userId: string): Promise<boolean> {
+    const status = await this.getProviderStatus(userId);
+    return status.configured;
+  }
+
+  private async hasProviderConfiguration(userId: string): Promise<boolean> {
+    const tenant = await this.resolveEffectiveTenantInstanceForUser(userId);
+    if (tenant) return true;
+    const count = await this.prisma.userProviderConfig.count({ where: { userId } });
+    return count > 0;
   }
 
   /** Runtime para chat/visión: tenant primero, luego BYOK personal. */
   async resolveRuntime(userId: string): Promise<UserLLMRuntime> {
+    llmDebug("UserProviders", "resolveRuntime inicio", { userId });
     const tenant = await this.resolveTenantInstanceForUser(userId);
     if (tenant) {
-      return this.runtimeFromTenantInstance(userId, tenant);
+      this.logger.debug(
+        `[resolveRuntime] userId=${userId} tenant=${tenant.displayName} (${tenant.id}) chatModel=${tenant.chatModel} fallbacks=[${tenant.chatModelFallbacks.join(",")}]`,
+      );
+      const runtime = await this.runtimeFromTenantInstance(userId, tenant);
+      llmDebug("UserProviders", "resolveRuntime tenant OK", {
+        userId,
+        instanceId: tenant.id,
+        instanceName: tenant.displayName,
+        ...summarizeRuntimeForLog(runtime),
+      });
+      return runtime;
     }
-    return this.resolveRuntimeForProvider(userId, await this.activeProviderId(userId));
+    const provider = await this.activeProviderId(userId);
+    this.logger.debug(`[resolveRuntime] userId=${userId} BYOK provider=${provider}`);
+    const runtime = await this.resolveRuntimeForProvider(userId, provider);
+    llmDebug("UserProviders", "resolveRuntime BYOK OK", {
+      userId,
+      ...summarizeRuntimeForLog(runtime),
+    });
+    return runtime;
   }
 
   /**
@@ -504,7 +583,21 @@ export class UserProvidersService {
         `El proveedor activo «${runtime.providerId}» no soporta imágenes. Usa OpenRouter, OpenAI, Anthropic o Gemini.`,
       );
     }
-    const visionModel = runtime.visionModel?.trim();
+    const instance = await this.resolveEffectiveTenantInstanceForUser(userId);
+    let visionModel = runtime.visionModel?.trim() || "";
+    if (instance && isProviderId(instance.providerType)) {
+      const instCatalog = PROVIDER_CATALOG[instance.providerType];
+      const extras = (instance.extras ?? {}) as Record<string, unknown>;
+      visionModel =
+        resolveVisionModelForRuntime({
+          visionModel: instance.visionModel,
+          chatModel: instance.chatModel,
+          extras,
+          catalogDefaultVisionModel: instCatalog.defaultVisionModel,
+          supportsVision: instCatalog.supportsVision,
+        })?.trim() || visionModel;
+    }
+    visionModel = visionModel.trim();
     if (!visionModel) {
       throw new BadRequestException(
         "Configura el modelo de visión en la instancia activa (Ajustes → Gestionar instancias → Modelo de visión).",
@@ -519,21 +612,41 @@ export class UserProvidersService {
     visionModel: string | null;
     supportsVision: boolean;
     supportsStt: boolean;
+    activeInstanceId: string | null;
   }> {
     try {
+      const instance = await this.resolveEffectiveTenantInstanceForUser(userId);
+      if (instance && isProviderId(instance.providerType)) {
+        const catalog = PROVIDER_CATALOG[instance.providerType];
+        const extras = (instance.extras ?? {}) as Record<string, unknown>;
+        return {
+          activeInstanceId: instance.id,
+          supportsVision: catalog.supportsVision,
+          supportsStt: catalog.supportsStt,
+          sttModel: catalog.supportsStt
+            ? instance.sttModel?.trim() || catalog.defaultSttModel || null
+            : null,
+          visionModel: catalog.supportsVision
+            ? resolveVisionModelForRuntime({
+                visionModel: instance.visionModel,
+                chatModel: instance.chatModel,
+                extras,
+                catalogDefaultVisionModel: catalog.defaultVisionModel,
+                supportsVision: true,
+              }) || null
+            : null,
+        };
+      }
       const runtime = await this.resolveRuntime(userId);
       const catalog = PROVIDER_CATALOG[runtime.providerId];
-      let sttModel: string | null = null;
-      if (catalog.supportsStt) {
-        sttModel = runtime.sttModel?.trim() || catalog.defaultSttModel || null;
-      }
-      let visionModel: string | null = null;
-      if (catalog.supportsVision) {
-        visionModel = runtime.visionModel?.trim() || null;
-      }
       return {
-        sttModel,
-        visionModel,
+        activeInstanceId: null,
+        sttModel:
+          catalog.supportsStt
+            ? runtime.sttModel?.trim() || catalog.defaultSttModel || null
+            : null,
+        visionModel:
+          catalog.supportsVision ? runtime.visionModel?.trim() || null : null,
         supportsVision: catalog.supportsVision,
         supportsStt: catalog.supportsStt,
       };
@@ -543,18 +656,22 @@ export class UserProvidersService {
         visionModel: null,
         supportsVision: false,
         supportsStt: false,
+        activeInstanceId: null,
       };
     }
   }
 
-  /** super_admin y admin: eligen proveedor activo sin restricción por grants de Usuarios. */
+  /** super_admin: sin límites de grants, whitelist ni filtrado de respaldos. */
   private async userBypassesModelPolicy(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true },
     });
-    const role = user?.role ?? "developer";
-    return role === "super_admin" || role === "admin";
+    return isSuperAdmin(user?.role ?? "developer");
+  }
+
+  private async isSuperAdminUser(userId: string): Promise<boolean> {
+    return this.userBypassesModelPolicy(userId);
   }
 
   private instanceAccessibleByUser(userId: string): Prisma.ProviderInstanceWhereInput {
@@ -575,7 +692,8 @@ export class UserProvidersService {
    */
   async resolveEffectiveTenantInstanceForUser(userId: string): Promise<ProviderInstance | null> {
     const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
-    const access = this.instanceAccessibleByUser(userId);
+    const superAdmin = await this.isSuperAdminUser(userId);
+    const access = superAdmin ? {} : this.instanceAccessibleByUser(userId);
     if (settings?.activeTenantInstanceId) {
       const chosen = await this.prisma.providerInstance.findFirst({
         where: { id: settings.activeTenantInstanceId, ...access },
@@ -605,31 +723,51 @@ export class UserProvidersService {
       throw new BadRequestException("Instancia tenant con tipo de proveedor no válido");
     }
     const provider = instance.providerType;
-    const bypass = await this.userBypassesModelPolicy(userId);
-    const catalog = PROVIDER_CATALOG[provider];
-    const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { role: true },
     });
+    const role = user?.role ?? "developer";
+    const superAdmin = isSuperAdmin(role);
+    const bypass = superAdmin;
+    const catalog = PROVIDER_CATALOG[provider];
+    const settings = await this.prisma.userAISettings.findUnique({ where: { userId } });
     const userGrants =
-      user?.role === "developer" ? [] : (settings?.allowedChatModels ?? []);
+      superAdmin || role === "developer" ? [] : (settings?.allowedChatModels ?? []);
     const chatModel = opts?.chatModelOverride?.trim() || instance.chatModel;
     const modelRole = opts?.chatModelOverride ? "auditor" : "activo";
+
+    const apiKey = this.tokenCrypto.decrypt(instance.tokenCiphertext, instance.tokenKeyVersion);
+    const extras = (instance.extras ?? {}) as Record<string, unknown>;
+    const legacyFallbacks = extras.chatModelFallbacks;
+    const chatModelFallbacks =
+      instance.chatModelFallbacks.length > 0
+        ? instance.chatModelFallbacks
+        : Array.isArray(legacyFallbacks)
+          ? legacyFallbacks.filter((m): m is string => typeof m === "string" && m.length > 0)
+          : [];
+
+    const instanceModelWhitelist = resolveInstanceChatModelWhitelist({
+      chatModel: instance.chatModel,
+      chatModelFallbacks,
+      allowedChatModels: instance.allowedChatModels,
+      auditorChatModel: instance.auditorChatModel,
+      extras,
+    });
 
     if (
       !isChatModelAllowedForTenantUser(
         chatModel,
         userGrants,
         provider,
-        instance.allowedChatModels,
+        instanceModelWhitelist,
         bypass,
       )
     ) {
       const hint =
         userGrants.length > 0
           ? `Modelos permitidos para ti: ${userGrants.join(", ")}. Activa un proveedor cuyo modelo esté en esa lista.`
-          : `Pide al super_admin modelos en Usuarios o revisa el proveedor «${instance.displayName}».`;
+          : `Modelos de la instancia «${instance.displayName}»: ${instanceModelWhitelist.join(", ") || chatModel}. Pide al super_admin modelos en Usuarios si necesitas otro.`;
       throw new BadRequestException(
         `El modelo «${chatModel}» del proveedor ${modelRole} «${instance.displayName}» no está autorizado. ${hint}`,
       );
@@ -651,27 +789,34 @@ export class UserProvidersService {
       );
     }
 
-    const apiKey = this.tokenCrypto.decrypt(instance.tokenCiphertext, instance.tokenKeyVersion);
-    const extras = (instance.extras ?? {}) as Record<string, unknown>;
-    const legacyFallbacks = extras.chatModelFallbacks;
-    const chatModelFallbacks =
-      instance.chatModelFallbacks.length > 0
-        ? instance.chatModelFallbacks
-        : Array.isArray(legacyFallbacks)
-          ? legacyFallbacks.filter((m): m is string => typeof m === "string" && m.length > 0)
-          : [];
-
     const effectiveFallbacks =
-      userGrants.length > 0
-        ? chatModelFallbacks.filter((m) => userGrants.includes(m))
-        : chatModelFallbacks;
+      superAdmin || userGrants.length === 0
+        ? chatModelFallbacks
+        : chatModelFallbacks.filter((m) => userGrants.includes(m));
+
+    if (isLlmDebugEnabled()) {
+      llmDebug("UserProviders", "runtimeFromTenantInstance", {
+        userId,
+        instanceId: instance.id,
+        instanceName: instance.displayName,
+        role,
+        superAdmin,
+        chatModel,
+        chatModelFallbacks,
+        effectiveFallbacks,
+        userGrants,
+        bypass,
+        instanceModelWhitelist,
+      });
+    }
+
     for (const fallbackModel of effectiveFallbacks) {
       if (
         !isChatModelAllowedForTenantUser(
           fallbackModel,
           userGrants,
           provider,
-          instance.allowedChatModels,
+          instanceModelWhitelist,
           bypass,
         )
       ) {

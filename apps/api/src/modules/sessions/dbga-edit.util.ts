@@ -2,7 +2,7 @@
 export function looksLikeDbgaEditRequest(message: string): boolean {
   const m = message.trim();
   if (!m) return false;
-  return /\b(modific|actualiz|añad|agreg|quitar|cambiar|hay que|debe|necesit|incorpor|espej|tenant|multi-?tenant|catálogo|mantenimiento|obp4?mo)\b/i.test(
+  return /\b(modific|actualiz|añad|agreg|quitar|cambiar|ajustes?|hay que|debe|necesit|incorpor|espej|tenant|multi-?tenant|catálogo|mantenimiento|obp4?mo)\b/i.test(
     m,
   );
 }
@@ -42,6 +42,14 @@ export function dbgaReflectsUserEditIntent(doc: string, userMessage: string): bo
 
   if (/módulo\s*0?1|modulo\s*0?1/.test(u) && /aplicacion|aplicaciones|obp/.test(u)) {
     if (!/módulo\s*0?1|modulo\s*0?1|catálogo de costos/.test(d)) return false;
+  }
+
+  if (/\bespejo\b|tablas?\s+espejo|id\s+(de\s+)?origen|id\s+propio/i.test(u)) {
+    const mirrorCols =
+      /\borigen_id\b|\bsource_id\b|\bid_origen\b|\bid_fuente\b|\bid_espejo\b|\bmirror_id\b|\bid_propio\b|\bexternal_id\b|\btenant_id\b|CREATE\s+TABLE/i;
+    if (!mirrorCols.test(d)) return false;
+    if (/\borigen\b/i.test(u) && !/\borigen|origin|source|fuente|external/i.test(d)) return false;
+    if (/\bpropio\b/i.test(u) && !/\bpropio|mirror_id|id_espejo|PRIMARY/i.test(d)) return false;
   }
 
   const geoMirror =

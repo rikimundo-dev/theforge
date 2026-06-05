@@ -43,7 +43,8 @@ import type { TheForgeUser } from "@/utils/apiClient";
 import { useTheme, type ThemePreference } from "@/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 import { getProjectMonogram } from "@/utils/projectMonogram";
-import { useWorkshopStore } from "../store/workshopStore";
+import { selectWorkshopAgentsBusy, useWorkshopStore } from "../store/workshopStore";
+import { WORKSHOP_EXIT_BLOCKED_TITLE } from "@/utils/workshopAgentsBusy";
 import { buildWorkshopDocNavItems, workshopTabDocHasContent } from "../utils/workshopDocNav";
 
 /** Project row shown under the dashboard “Proyectos” menu group. */
@@ -378,6 +379,7 @@ export function DashboardSidebar({
   const tasksContent = useWorkshopStore((s) => s.tasksContent);
   const infraContent = useWorkshopStore((s) => s.infraContent);
   const adrs = useWorkshopStore((s) => s.adrs);
+  const workshopAgentsBusy = useWorkshopStore(selectWorkshopAgentsBusy);
 
   const activeWorkshopStageForNav = useMemo(() => {
     const stages = workshopStages.length > 0 ? workshopStages : (storeProject?.stages ?? []);
@@ -480,9 +482,10 @@ export function DashboardSidebar({
   );
 
   const handleExitWorkshopNav = useCallback(() => {
+    if (workshopAgentsBusy) return;
     closeMobileNav();
     onExitWorkshop?.();
-  }, [closeMobileNav, onExitWorkshop]);
+  }, [closeMobileNav, onExitWorkshop, workshopAgentsBusy]);
 
   return (
     <div className="relative flex w-full shrink-0 flex-col lg:z-40 lg:h-full lg:min-h-0 lg:w-auto lg:shrink-0">
@@ -659,13 +662,21 @@ export function DashboardSidebar({
 
           {inWorkshop ? (
             <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-              <CollapsedRailHint rail={rail} label="Volver al panel de proyectos">
+              <CollapsedRailHint
+                rail={rail}
+                label={workshopAgentsBusy ? WORKSHOP_EXIT_BLOCKED_TITLE : "Volver al panel de proyectos"}
+              >
                 <button
                   type="button"
                   onClick={handleExitWorkshopNav}
-                  title="Volver al panel de proyectos"
+                  disabled={workshopAgentsBusy}
+                  aria-disabled={workshopAgentsBusy}
+                  title={workshopAgentsBusy ? WORKSHOP_EXIT_BLOCKED_TITLE : "Volver al panel de proyectos"}
                   className={cn(
-                    "flex shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
+                    "flex shrink-0 items-center gap-3 rounded-[var(--radius-lg)] px-3 py-2.5 text-left text-sm font-medium text-[var(--muted-foreground)] transition-colors",
+                    workshopAgentsBusy
+                      ? "cursor-not-allowed opacity-45"
+                      : "hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
                     rail ? railControlClass("mx-auto text-[var(--sidebar-foreground)]") : "w-full",
                   )}
                 >

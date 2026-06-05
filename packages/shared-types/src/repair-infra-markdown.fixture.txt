@@ -1,0 +1,95 @@
+## 1. Dockerfile multietapa
+
+### Backend (NestJS)
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+CMD ["node", "dist/main.js"]
+```
+
+**Características:**
+
+- Imagen base mínima.
+
+### Frontend Admin (React + Vite)
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+RUN npm run build
+FROM nginx:alpine AS runtime
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
+**Configuración de nginx (nginx.conf):**
+
+```
+```nginx
+server {
+    listen 80;
+    location /api/ {
+        proxy_pass http://api:3000;
+    }
+
+---
+
+## 2. docker-compose.yml
+
+```yaml
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+volumes:
+postgres_data:/var/lib/postgresql/data
+  healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+    restart: unless-stopped
+
+    redis:
+      image: redis:7-alpine
+          api:
+            build:
+              context: ./backend
+                ports:
+                  "3000:3000"
+                  depends_on:
+                  postgres:
+                    condition: service_healthy
+
+**Notas:**
+
+Los servicios postgres y redis no exponen puertos.
+```
+
+---
+
+## 3. Variables de entorno (`.env.example`)
+
+```dockerfile
+NODE_ENV=development
+DATABASE_URL=postgresql://user:pass@postgres:5432/db
+JWT_SECRET=secret
+```
+
+---
+
+## 4. Volúmenes y persistencia
+
+```yaml
+volumes:
+  postgres_data:
+    driver: local
+```
+
+- **postgres_data:** Almacena datos de PostgreSQL.
+
+---
+
+## Cumplimiento con el MDD
+
+| Aspecto | Implementación |

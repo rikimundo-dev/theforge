@@ -9,6 +9,10 @@ import { enrichBlueprintWithUiDesignSystem } from "../engine/blueprint-enrich-ui
 import { MddUpdatePipelineService } from "../engine/mdd-update-pipeline.service.js";
 import { SemaphoreService, type SemaphoreEvaluationInput } from "../engine/semaphore.service.js";
 import { normalizeMddContent } from "../engine/mdd-markdown-parser.js";
+import {
+  enforceMddGovernancePatternsOnPersist,
+  mddHasSubstantialBody,
+} from "@theforge/shared-types/mdd-governance-patterns";
 import { ProjectEstimationRecalcService } from "./project-estimation-recalc.service.js";
 import type { ApiConformanceResult, ConformanceResult } from "../engine/conformance.service.js";
 import {
@@ -55,9 +59,10 @@ import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.u
 
 import { flattenStageDeliverables, pickPrimaryStage } from "./stage-helpers.js";
 
-/** System prompt para sintetizar BRD/To-Be desde DBGA (greenfield); más ligero que el coordinador legacy + KNOWLEDGE. */
-const DBGA_BRD_TOBE_SUGGEST_SYSTEM =
-  "Eres analista de producto y arquitecto de soluciones en español. Produces BRD en markdown coherentes con el benchmark de dominio (DBGA). El BRD DEBE incluir la sección «Pain Points & Problem Statement» al inicio, detallando dolores del cliente, soluciones actuales y validación de demanda. No inventes requisitos que contradigan el texto; usa «no consta» cuando falte evidencia.";
+import {
+  BRD_GENERATION_SYSTEM,
+  buildBrdUserPrompt,
+} from "../ai/prompts/brd-generation-prompt.js";
 
 type StageWithEst = Stage & { estimation: Estimation | null };
 
@@ -334,6 +339,9 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     const {
       mddContent: parsedMdd,
       stageId: parsedStageId,
+      allowGovernancePatternChange,
+      clearMddCompletely,
+      mddGovernanceSeedOnly,
       clearComplexityPending,
       complexityPending: cpInput,
       ...rest
@@ -353,6 +361,21 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       (parsedStageId?.trim() && existingRaw.stages.find((s) => s.id === parsedStageId.trim())) ||
       pickPrimaryStage(existingRaw.stages);
     if (!targetStage) throw new BadRequestException("El proyecto no tiene etapas");
+
+    let mddGovernancePatternsReverted = false;
+    let mddForPipeline: string | null | undefined = parsedMdd;
+    if (parsedMdd !== undefined && parsedMdd !== null) {
+      const enforced = enforceMddGovernancePatternsOnPersist(
+        parsedMdd,
+        targetStage.mddContent,
+        {
+          allowPatternChange: allowGovernancePatternChange === true,
+          clearMddCompletely: clearMddCompletely === true,
+        },
+      );
+      mddForPipeline = enforced.markdown;
+      mddGovernancePatternsReverted = enforced.patternsReverted;
+    }
 
     const mergedForSemaphore = this.mergeProjectForSemaphore(existingRaw, rest);
 
@@ -378,39 +401,55 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     const infraContentForRecalc = rest.infraContent ?? existing.infraContent ?? null;
 
     let pipelineResult: { sanitizedMdd: string; status: Status; precisionScore: number } | null = null;
-    if (parsedMdd !== undefined && parsedMdd !== null) {
-      const result = await this.mddUpdatePipeline.process(
-        parsedMdd,
-        this.buildSemaphoreBase(mergedForSemaphore),
-        { projectId: id, stageId: targetStage.id },
-      );
-      if (!result.ok) {
-        throw new BadRequestException({
-          code: result.code,
-          message: result.message,
+    if (mddForPipeline !== undefined && mddForPipeline !== null) {
+      const skipPipelineForSeed =
+        clearMddCompletely === true ||
+        (mddGovernanceSeedOnly === true && !mddHasSubstantialBody(mddForPipeline));
+      if (skipPipelineForSeed) {
+        await this.prisma.stage.update({
+          where: { id: targetStage.id },
+          data: { mddContent: mddForPipeline },
         });
-      }
-      pipelineResult = {
-        sanitizedMdd: result.sanitizedMdd,
-        status: result.status,
-        precisionScore: result.precisionScore,
-      };
-      await this.prisma.stage.update({
-        where: { id: targetStage.id },
-        data: {
-          mddContent: result.sanitizedMdd,
+        await this.changeLog.log(id, "mddContent", mddForPipeline);
+        pipelineResult = {
+          sanitizedMdd: mddForPipeline,
+          status: targetStage.status,
+          precisionScore: targetStage.precisionScore,
+        };
+      } else {
+        const result = await this.mddUpdatePipeline.process(
+          mddForPipeline,
+          this.buildSemaphoreBase(mergedForSemaphore),
+          { projectId: id, stageId: targetStage.id },
+        );
+        if (!result.ok) {
+          throw new BadRequestException({
+            code: result.code,
+            message: result.message,
+          });
+        }
+        pipelineResult = {
+          sanitizedMdd: result.sanitizedMdd,
           status: result.status,
           precisionScore: result.precisionScore,
-        },
-      });
-      await this.changeLog.log(id, "mddContent", result.sanitizedMdd);
+        };
+        await this.prisma.stage.update({
+          where: { id: targetStage.id },
+          data: {
+            mddContent: result.sanitizedMdd,
+            status: result.status,
+            precisionScore: result.precisionScore,
+          },
+        });
+        await this.changeLog.log(id, "mddContent", result.sanitizedMdd);
+      }
     }
 
     const mddForRecalc =
       pipelineResult?.sanitizedMdd ?? targetStage.mddContent ?? null;
     const statusForRecalc = pipelineResult?.status ?? targetStage.status;
 
-    if (mddForRecalc != null && (parsedMdd !== undefined || rest.infraContent !== undefined)) {
+    if (mddForRecalc != null && (mddForPipeline !== undefined || rest.infraContent !== undefined)) {
       await this.estimationRecalc.recalcAndUpsert(targetStage.id, {
         mddContent: mddForRecalc,
         infraContent: infraContentForRecalc,
@@ -442,7 +481,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     }
 
     const shouldRefreshSemaphoreWithoutMdd =
-      (parsedMdd === undefined || parsedMdd === null) &&
+      (mddForPipeline === undefined || mddForPipeline === null) &&
       (rest.complexity !== undefined ||
         rest.hasUxTeam !== undefined ||
         rest.figmaMapping !== undefined ||
@@ -459,7 +498,11 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       await this.refreshStageSemaphoreFromProject(id);
     }
 
-    return this.findOne(id);
+    const project = await this.findOne(id);
+    if (mddGovernancePatternsReverted) {
+      return { ...project, mddGovernancePatternsReverted: true as const };
+    }
+    return project;
   }
 
   async remove(id: string) {
@@ -1589,20 +1632,11 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
     }
     const { text: dbgaForPrompt, truncated: dbgaTruncated } = truncateSourceDocForBrdPrompt(effectiveDbga);
 
-    const brdPromptBase =
-      "Eres analista de negocio. A partir del **Domain Benchmark / guía de dominio (DBGA)** siguiente, " +
-      "genera **solo el BRD** en español, en markdown.\n\n" +
-      "El BRD DEBE comenzar con la sección **«Pain Points & Problem Statement»** que incluya:\n" +
-      "1. **Mapa de dolores** — tabla con: dolor, quién lo siente, frecuencia/impacto, solución actual (workaround), gap/precio.\n" +
-      "2. **Validación de demanda** — señales de mercado, menciones en comunidades, competidores directos.\n" +
-      "3. **Perfil del cliente objetivo** — tamaño de empresa, stack, presupuesto mensual estimado.\n" +
-      "4. **Consecuencias de no actuar** — qué pierde el cliente si no existe esta solución, cuánto gasta hoy en workarounds.\n\n" +
-      "Luego continúa con: problema, alcance de producto, supuestos, riesgos y métricas de éxito alineadas con el DBGA.\n" +
-      "Extrae la información de Pain Points del DBGA; si algún dato no está disponible, indícalo como «Por validar».\n\n" +
-      "Responde **solo** con este formato exacto (delimitadores literales):\n" +
-      "<<<BRD>>>\n(markdown BRD)\n<<<END_BRD>>>\n\n" +
-      "--- DBGA ---\n\n" +
-      dbgaForPrompt;
+    const brdPromptBase = buildBrdUserPrompt({
+      mode: "greenfield-from-dbga",
+      sourceLabel: "DBGA",
+      sourceDocument: dbgaForPrompt,
+    });
 
     let brd = "";
     let lastFailure: BrdExtractFailure = "no_delimiter";
@@ -1613,7 +1647,7 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
           ? "\n\n**IMPORTANTE:** El intento anterior no siguió el formato. Responde ÚNICAMENTE con:\n<<<BRD>>>\n(markdown BRD completo)\n<<<END_BRD>>>\nSin texto antes ni después de los delimitadores."
           : "";
       const raw = await this.ai.generateResponse(brdPromptBase + formatReminder, [], {
-        systemPrompt: DBGA_BRD_TOBE_SUGGEST_SYSTEM,
+        systemPrompt: BRD_GENERATION_SYSTEM,
       });
       lastRawLength = (raw ?? "").length;
       const extracted = extractBrdFromLlmResponse(raw ?? "");

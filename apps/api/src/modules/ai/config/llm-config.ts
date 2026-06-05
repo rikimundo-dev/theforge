@@ -30,7 +30,10 @@ export function resolveEmbeddingDimension(runtimeDim?: number | null): number {
 /**
  * LangChain / ChatOpenAI: temperatura fija coherente con el workshop.
  */
-export function resolveLangChainChatTemperature(): number {
+export function resolveLangChainChatTemperature(override?: number): number {
+  if (typeof override === "number" && Number.isFinite(override) && override >= 0) {
+    return override;
+  }
   return 0.5;
 }
 

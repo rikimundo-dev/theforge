@@ -42,6 +42,25 @@ describe("dbgaReflectsUserEditIntent", () => {
       "diagrama con paises, estados, ciudades; debemos tener espejo con tenant_id";
     assert.equal(dbgaReflectsUserEditIntent(doc, user), false);
   });
+
+  it("pasa si piden id de origen e id propio en tablas espejo", () => {
+    const doc = `### Tablas espejo
+| tabla | tenant_id | origin_id | id_espejo |
+| paises_espejo | uuid | int origen | bigint PK |`;
+    const user =
+      "En todas las tablas espejo necesitamos el id de origen y el id propio de la tabla espejo";
+    assert.equal(dbgaReflectsUserEditIntent(doc, user), true);
+  });
+});
+
+describe("looksLikeDbgaEditRequest — ajustes", () => {
+  it("detecta «haz los ajustes»", () => {
+    assert.ok(
+      looksLikeDbgaEditRequest(
+        "En todas las tablas espejo necesitamos el id de origen y el id propio, haz los ajustes",
+      ),
+    );
+  });
 });
 
 describe("benchmarkAssistantChatMessage", () => {

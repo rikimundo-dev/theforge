@@ -6,7 +6,7 @@
  * @license Apache-2.0
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useWorkshopStore } from "./store/workshopStore";
+import { selectWorkshopAgentsBusy, useWorkshopStore } from "./store/workshopStore";
 import {
   AlertTriangle,
   FolderGit2,
@@ -384,7 +384,10 @@ export default function App() {
   }, []);
 
   const handleExitWorkshop = useCallback(() => {
-    useWorkshopStore.getState().setWorkshopActiveDocPanel("mdd");
+    const store = useWorkshopStore.getState();
+    if (selectWorkshopAgentsBusy(store)) return;
+    store.reset();
+    store.setWorkshopActiveDocPanel("mdd");
     setWorkshopProject(null);
     setUsersViewOpen(false);
     setSettingsViewOpen(false);

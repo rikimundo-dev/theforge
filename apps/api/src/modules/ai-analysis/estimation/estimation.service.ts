@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@theforge/database";
 import { PrismaService } from "../../../prisma/prisma.service.js";
 import { pickPrimaryStage } from "../../projects/stage-helpers.js";
 import type {
@@ -6,6 +7,7 @@ import type {
   EstimationComplexity,
   LiveMetricsResult,
   MDDContext,
+  MddAuditSnapshot,
   PlanningDocumentFields,
   PrecisionBreakdown,
   SemaphoreStatusLive,
@@ -841,6 +843,68 @@ export class EstimationService {
     else this.auditorGapsByProject.set(key, gaps);
   }
 
+  /** Persiste audit trail / breakdown / gaps del último pipeline MDD en `Stage.shortTermContext`. */
+  async saveMddAuditSnapshot(
+    projectId: string,
+    stageId: string | null | undefined,
+    snapshot: Omit<MddAuditSnapshot, "updatedAt">,
+  ): Promise<void> {
+    const sid = await this.resolveStageId(projectId, stageId);
+    if (!sid) return;
+    const stage = await this.prisma.stage.findUnique({
+      where: { id: sid },
+      select: { shortTermContext: true },
+    });
+    const prev =
+      stage?.shortTermContext && typeof stage.shortTermContext === "object" && !Array.isArray(stage.shortTermContext)
+        ? (stage.shortTermContext as Record<string, unknown>)
+        : {};
+    await this.prisma.stage.update({
+      where: { id: sid },
+      data: {
+        shortTermContext: {
+          ...prev,
+          mddAuditSnapshot: {
+            ...snapshot,
+            updatedAt: new Date().toISOString(),
+          },
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
+  /** Recupera el último snapshot de auditoría MDD persistido. */
+  async getMddAuditSnapshot(
+    projectId: string,
+    stageId?: string | null,
+  ): Promise<MddAuditSnapshot | null> {
+    const sid = await this.resolveStageId(projectId, stageId);
+    if (!sid) return null;
+    const stage = await this.prisma.stage.findUnique({
+      where: { id: sid },
+      select: { shortTermContext: true },
+    });
+    const ctx = stage?.shortTermContext;
+    if (!ctx || typeof ctx !== "object" || Array.isArray(ctx)) return null;
+    const snap = (ctx as Record<string, unknown>).mddAuditSnapshot;
+    if (!snap || typeof snap !== "object" || Array.isArray(snap)) return null;
+    return snap as MddAuditSnapshot;
+  }
+
+  private async resolveStageId(
+    projectId: string,
+    stageId?: string | null,
+  ): Promise<string | null> {
+    const pid = projectId?.trim();
+    if (!pid) return null;
+    if (stageId?.trim()) return stageId.trim();
+    const project = await this.prisma.project.findUnique({
+      where: { id: pid },
+      include: { stages: { orderBy: { ordinal: "asc" } } },
+    });
+    return pickPrimaryStage(project?.stages ?? [])?.id ?? null;
+  }
+
   clearLiveDraft(projectId: string, stageId?: string | null): void {
     if (!projectId?.trim()) return;
     this.liveDraftByProject.delete(this.draftKey(projectId, stageId));
@@ -887,11 +951,15 @@ export class EstimationService {
       !mddContentOverride &&
       !useStoredGaps &&
       this.auditorGapsByProject.has(projectId?.trim() ?? "");
-    const auditorGaps = useStoredGaps
+    let auditorGaps = useStoredGaps
       ? this.auditorGapsByProject.get(key)
       : useLegacyGaps
         ? this.auditorGapsByProject.get(projectId!.trim())
         : undefined;
+    if (!auditorGaps) {
+      const snap = await this.getMddAuditSnapshot(projectId, stageId);
+      auditorGaps = snap?.auditorGaps;
+    }
     const proj = await this.prisma.project.findUnique({
       where: { id: projectId.trim() },
       select: { complexity: true },
@@ -931,22 +999,37 @@ export class EstimationService {
         },
       });
       if (projectRec) {
-        // Merge project-level docs (don't override stage-level)
         documents = {
           ...documents,
-          specContent: (projectRec as any).specContent ?? documents.specContent,
-          architectureContent: (projectRec as any).architectureContent ?? documents.architectureContent,
-          useCasesContent: (projectRec as any).useCasesContent ?? documents.useCasesContent,
-          userStoriesContent: (projectRec as any).userStoriesContent ?? documents.userStoriesContent,
-          blueprintContent: (projectRec as any).blueprintContent ?? documents.blueprintContent,
-          apiContractsContent: (projectRec as any).apiContractsContent ?? documents.apiContractsContent,
-          logicFlowsContent: (projectRec as any).logicFlowsContent ?? documents.logicFlowsContent,
-          infraContent: (projectRec as any).infraContent ?? documents.infraContent,
-          tasksContent: (projectRec as any).tasksContent ?? documents.tasksContent,
+          mddContent: content || undefined,
+          specContent: (projectRec as { specContent?: string | null }).specContent ?? documents.specContent,
+          architectureContent:
+            (projectRec as { architectureContent?: string | null }).architectureContent ??
+            documents.architectureContent,
+          useCasesContent:
+            (projectRec as { useCasesContent?: string | null }).useCasesContent ?? documents.useCasesContent,
+          userStoriesContent:
+            (projectRec as { userStoriesContent?: string | null }).userStoriesContent ??
+            documents.userStoriesContent,
+          blueprintContent:
+            (projectRec as { blueprintContent?: string | null }).blueprintContent ?? documents.blueprintContent,
+          apiContractsContent:
+            (projectRec as { apiContractsContent?: string | null }).apiContractsContent ??
+            documents.apiContractsContent,
+          logicFlowsContent:
+            (projectRec as { logicFlowsContent?: string | null }).logicFlowsContent ??
+            documents.logicFlowsContent,
+          infraContent:
+            (projectRec as { infraContent?: string | null }).infraContent ?? documents.infraContent,
+          tasksContent:
+            (projectRec as { tasksContent?: string | null }).tasksContent ?? documents.tasksContent,
         };
       }
     } catch {
       // no-op
+    }
+    if (!documents.mddContent && content) {
+      documents = { ...documents, mddContent: content };
     }
 
     return this.calculateLiveMetrics(content, {
@@ -1025,7 +1108,10 @@ export class EstimationService {
 
     let precision: number;
     let status: SemaphoreStatusLive;
-    let readinessHints: string[];
+    let mddReadinessHints: string[];
+    let traceabilityHints: string[] = [];
+    let crossDocumentGaps: LiveMetricsResult["crossDocumentGaps"];
+    let consistencyScore: number | undefined;
 
     if (hasDocs) {
       // ── Métrica integral ──────────────────────────────────
@@ -1054,9 +1140,9 @@ export class EstimationService {
       const completeness = computeDocumentCompleteness(docs!);
       const completenessScore = completeness.overall;
 
-      // 3. Consistencia transversal
+      // 3. Consistencia transversal BRD→MDD
       const consistency = computeCrossDocumentConsistency(docs!);
-      const consistencyScore = consistency.score;
+      consistencyScore = consistency.score;
 
       // 4. Fórmula ponderada
       precision = Math.round(
@@ -1070,23 +1156,20 @@ export class EstimationService {
       const hasGreenCriteria = precision >= PRECISION_GREEN_MIN && gapCount === 0;
       status = hasGreenCriteria ? "green" : precision >= PRECISION_RED_MAX ? "yellow" : "red";
 
-      // 6. Hints incluyen gaps de consistencia
-      readinessHints = [];
-      if (consistency.gaps.length > 0) {
-        readinessHints.push(
-          ...consistency.gaps.slice(0, 3).map(
-            (g) => `[${g.from}→${g.to}] ${g.concept}: ${g.severity === "missing" ? "no cubierto" : "parcial"}`
-          )
-        );
-      }
-      // Añadir MDD hints si no hay suficientes hints de consistencia
-      if (readinessHints.length < 3) {
-        try {
-          const dummySections = { db: 0, endpoints: 0, endpointsWithPayloads: false, security: 0, securitySubstantive: false, infra: 0 };
-          const dummyGaps = { scopeDataGap: 0, contradictionGap: 0, securityCompletenessGap: 0, missingManifest: 0, dataIntegrityGap: 0, apiSchemaGap: 0, mermaidParityGap: 0, infraStackGap: 0, securityEdgeCaseGap: 0 };
-          const mddHints = buildReadinessHints(md, mddQuality, dummySections, dummyGaps, cx);
-          readinessHints.push(...mddHints.slice(0, 3 - readinessHints.length));
-        } catch { /* no-op */ }
+      // 6. Hints separados: MDD vs trazabilidad BRD→MDD
+      traceabilityHints =
+        consistency.gaps.length > 0
+          ? consistency.gaps.slice(0, 8).map((g) => g.hint ?? `[BRD→${g.to}] ${g.concept}`)
+          : [];
+      crossDocumentGaps = consistency.gaps;
+
+      mddReadinessHints = [];
+      try {
+        const sections = detectReferenceSections(md);
+        const gaps = adjustGapsForEstimationComplexity(computeConsistencyGaps(md), cx);
+        mddReadinessHints = buildReadinessHints(md, mddQuality, sections, gaps, cx).slice(0, 5);
+      } catch {
+        mddReadinessHints = [];
       }
 
     } else if (options?.auditorGaps) {
@@ -1097,7 +1180,7 @@ export class EstimationService {
         ? precision >= PRECISION_GREEN_MIN && g.infrastructure_ready && g.critical_gaps.length === 0
         : precision >= PRECISION_GREEN_MIN && g.critical_gaps.length === 0;
       status = hasGreenCriteria ? "green" : precision >= PRECISION_RED_MAX ? "yellow" : "red";
-      readinessHints =
+      mddReadinessHints =
         g.critical_gaps.length > 0
           ? g.critical_gaps
               .slice(0, 5)
@@ -1106,9 +1189,10 @@ export class EstimationService {
             ? (g.syntax_errors ?? []).slice(0, 4)
             : [
                 g.infrastructure_ready
-                  ? "Auditoría sin gaps críticos estructurados: activa conformance con IA para cruzar entregables con el MDD."
-                  : "Alinea §7 Infra con el stack de §2 (p. ej. Docker/Node) para marcar infra lista y subir confianza en cascadas.",
+                  ? "Auditoría MDD sin gaps críticos: activa conformance con IA para cruzar entregables."
+                  : "Alinea §7 Infra con el stack de §2 (p. ej. Docker/Node) para marcar infra lista.",
               ];
+      traceabilityHints = [];
     } else {
       const sections = detectReferenceSections(md);
       const gaps = adjustGapsForEstimationComplexity(computeConsistencyGaps(md), cx);
@@ -1137,8 +1221,11 @@ export class EstimationService {
           : precision >= PRECISION_RED_MAX
             ? "yellow"
             : "red";
-      readinessHints = buildReadinessHints(md, precision, sections, gaps, cx);
+      mddReadinessHints = buildReadinessHints(md, precision, sections, gaps, cx);
+      traceabilityHints = [];
     }
+
+    const readinessHints = mddReadinessHints;
 
     const { entityCount, screenCount, extraEndpointCount } = parseCountsFromMarkdown(md);
     const metaTags = extractTechnicalMetadataTags(md);
@@ -1184,6 +1271,10 @@ export class EstimationService {
       rolesHours,
       status,
       readinessHints,
+      mddReadinessHints,
+      traceabilityHints,
+      ...(consistencyScore != null ? { consistencyScore } : {}),
+      ...(crossDocumentGaps != null ? { crossDocumentGaps } : {}),
     };
   }
 

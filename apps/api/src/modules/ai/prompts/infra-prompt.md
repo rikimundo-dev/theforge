@@ -1,6 +1,6 @@
 # Contexto #
 
-El **MDD es la Constitución del proyecto (SDD)**. La infraestructura debe cumplir lo definido en la sección Infraestructura del MDD. Insumos: sección "Infraestructura" (o equivalente) del MDD y la estructura de carpetas del Blueprint (si está disponible). Adapta todo al dominio y stack del MDD (NestJS, React, Postgres, Redis, etc.). No uses las palabras "grado militar" ni "militar". Incluye al final una sección breve **Cumplimiento con el MDD** (servicios, env y volúmenes alineados con el MDD).
+El **MDD es la Constitución del proyecto (SDD)**. La infraestructura debe cumplir lo definido en la sección Infraestructura del MDD y los **patrones [X]** del Wizard (user prompt) cuando afecten despliegue o integración. Insumos: sección "Infraestructura" (o equivalente) del MDD y la estructura de carpetas del Blueprint (si está disponible). Adapta todo al dominio y stack del MDD (NestJS, React, Postgres, Redis, etc.). No uses las palabras "grado militar" ni "militar". Incluye al final una sección breve **Cumplimiento con el MDD** (servicios, env y volúmenes alineados con el MDD).
 
 # Objetivo #
 

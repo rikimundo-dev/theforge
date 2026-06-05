@@ -3,16 +3,22 @@ import { mddStructuredToMarkdown } from "../render/mdd-structured-to-markdown.js
 import { injectMddDiagrams, suggestMddDiagrams } from "./mdd-diagram-suggestions.js";
 import {
   extractSection3Body,
+  finalizeMddDeliverable,
   getSection6Or7Range,
   hydrateStructuredFromDraft,
+  mddHasDuplicateSectionHeadings,
   normalizeMddFormat,
   replaceContextWhenOnlyMetadata,
   replaceSection6Or7InDraft,
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
 } from "./mdd-sanitize.js";
-import { enrichMddWithUiUxDesignIntent } from "./mdd-enrich-uiux-intent.js";
+import {
+  enrichMddWithUiUxDesignIntent,
+  reconcileUiUxDesignIntent,
+} from "./mdd-enrich-uiux-intent.js";
 import { isPlaceholderSeguridad } from "./mdd-security-parse.js";
+import { ensureMddGovernanceSection, extractGovernanceSection } from "@theforge/shared-types/mdd-governance-patterns";
 
 export function hasStructuredContent(mdd: MddStructured | null | undefined): boolean {
   if (!mdd || typeof mdd !== "object") return false;
@@ -87,6 +93,8 @@ export function draftHasSection6Heading(draft: string): boolean {
  * Restaura desde el borrador pre-normalize si desaparecieron.
  */
 function restoreSections6And7AfterNormalize(source: string, normalized: string): string {
+  // No reinyectar desde un borrador con §5/§6/§7 repetidas (evita reintroducir el bucle de duplicación).
+  if (mddHasDuplicateSectionHeadings(source)) return normalized;
   let out = normalized;
   for (const section of [6, 7] as const) {
     const srcRange = getSection6Or7Range(source, section);
@@ -102,8 +110,14 @@ function restoreSections6And7AfterNormalize(source: string, normalized: string):
  * Fuente del markdown a enviar. Se prefiere mddDraft cuando es sustancial para no reconstruir desde
  * mddStructured (que podría tener §3 desactualizado o solo §6). Luego sanitize, normalize e inyección.
  */
+export type PrepareMddForOutputOptions = {
+  /** Sección inmutable del wizard; si no se pasa, se extrae del borrador de entrada. */
+  preservedGovernance?: string | null;
+};
+
 export function prepareMddForOutput(
   input: { mddStructured?: MddStructured; mddDraft?: string } | string,
+  options?: PrepareMddForOutputOptions,
 ): string {
   let raw: string;
   if (typeof input === "string") {
@@ -119,9 +133,15 @@ export function prepareMddForOutput(
       raw = draft;
     }
   }
+  const preserved =
+    options?.preservedGovernance?.trim() ||
+    extractGovernanceSection(raw) ||
+    null;
   const sanitized =
     replaceContextWhenOnlyMetadata(sanitizeContextKeyValueAndObject(sanitizeContextSection(raw)));
   const normalized = restoreSections6And7AfterNormalize(raw, normalizeMddFormat(sanitized));
   const withDiagrams = injectMddDiagrams(normalized, suggestMddDiagrams(normalized));
-  return enrichMddWithUiUxDesignIntent(withDiagrams);
+  const enriched = enrichMddWithUiUxDesignIntent(withDiagrams);
+  const withGovernance = ensureMddGovernanceSection(enriched, preserved);
+  return reconcileUiUxDesignIntent(finalizeMddDeliverable(withGovernance));
 }

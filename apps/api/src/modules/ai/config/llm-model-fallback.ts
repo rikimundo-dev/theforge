@@ -4,6 +4,7 @@ import {
   APIConnectionError,
 } from "openai/error";
 import { isChatFallbackOn429Enabled } from "./llm-config.js";
+import { llmDebug, llmWarn } from "./llm-debug.util.js";
 
 /** Máximo de reintentos transitorios por modelo (429, 5xx, red). */
 export const DEFAULT_RETRIES_PER_MODEL = 3;
@@ -33,19 +34,71 @@ function errorMessage(err: unknown): string {
   return String(err).toLowerCase();
 }
 
+function rawErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    const nested =
+      err != null &&
+      typeof err === "object" &&
+      "error" in err &&
+      (err as { error?: { message?: string } }).error?.message;
+    if (typeof nested === "string" && nested.trim()) {
+      return `${err.message} — ${nested}`;
+    }
+    return err.message;
+  }
+  return String(err);
+}
+
 export const MODELS_UNAVAILABLE_CODE = "MODELS_UNAVAILABLE" as const;
 
 export const MODELS_UNAVAILABLE_MESSAGE =
   "No hay un modelo disponible configurado. Revisa el modelo principal y los respaldos en Ajustes → Gestionar instancias.";
 
+export interface ModelsUnavailableDetails {
+  modelsChain: string[];
+  failedModel: string;
+  cause: string;
+  statusCode?: number;
+  label?: string;
+}
+
+export function formatModelsUnavailableMessage(details: ModelsUnavailableDetails): string {
+  const chain =
+    details.modelsChain.length > 0 ? details.modelsChain.join(" → ") : details.failedModel;
+  const status = details.statusCode != null ? ` (HTTP ${details.statusCode})` : "";
+  return (
+    `No hay modelo LLM disponible. Falló «${details.failedModel}»${status}: ${details.cause}. ` +
+    `Cadena probada: [${chain}]. Revisa el modelo principal y los respaldos en Ajustes → Gestionar instancias.`
+  );
+}
+
 /** Todos los modelos de la cadena fallaron (inválidos, agotados o no encontrados). */
 export class ModelsUnavailableError extends Error {
   readonly code = MODELS_UNAVAILABLE_CODE;
+  readonly details?: ModelsUnavailableDetails;
 
-  constructor(message = MODELS_UNAVAILABLE_MESSAGE) {
-    super(message);
+  constructor(details?: ModelsUnavailableDetails, message?: string) {
+    super(message ?? (details ? formatModelsUnavailableMessage(details) : MODELS_UNAVAILABLE_MESSAGE));
     this.name = "ModelsUnavailableError";
+    this.details = details;
   }
+}
+
+function buildModelsUnavailableError(
+  models: string[],
+  failedModel: string,
+  err: unknown,
+  label: string,
+): ModelsUnavailableError {
+  const details: ModelsUnavailableDetails = {
+    modelsChain: models,
+    failedModel,
+    cause: rawErrorMessage(err),
+    statusCode: errorStatus(err),
+    label,
+  };
+  llmWarn("ModelFallback", "cadena agotada", details);
+  return new ModelsUnavailableError(details);
 }
 
 /**
@@ -181,10 +234,11 @@ async function withTransientRetry<T>(
       }
       const after = retryAfterSeconds(err);
       const delayMs = backoffDelay(attempt, after);
-      console.warn(
-        `[${label}] intento ${attempt + 1}/${maxRetries} falló, reintentando en ${Math.round(delayMs / 1000)}s:`,
-        err instanceof Error ? err.message : String(err),
-      );
+      llmWarn(label, `reintento transitorio ${attempt + 1}/${maxRetries}`, {
+        delayMs,
+        error: rawErrorMessage(err),
+        statusCode: errorStatus(err),
+      });
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
@@ -208,15 +262,26 @@ export async function runWithModelFallback<T>({
   retriesPerModel = DEFAULT_RETRIES_PER_MODEL,
   label = "OpenRouterAdapter",
 }: RunWithModelFallbackOptions<T>): Promise<T> {
+  llmDebug("ModelFallback", "inicio cadena", { label, models, retriesPerModel });
+
   if (models.length === 0) {
     throw new Error(`${label}: models chain is empty`);
   }
   if (models.length === 1) {
+    const model = models[0]!;
+    llmDebug("ModelFallback", "probando único modelo", { label, model });
     try {
-      return await withTransientRetry(() => run(models[0]!), label, retriesPerModel);
+      return await withTransientRetry(() => run(model), label, retriesPerModel);
     } catch (err) {
+      llmWarn("ModelFallback", "único modelo falló", {
+        label,
+        model,
+        statusCode: errorStatus(err),
+        error: rawErrorMessage(err),
+        exhaustion: isModelExhaustionError(err),
+      });
       if (isModelExhaustionError(err)) {
-        throw new ModelsUnavailableError();
+        throw buildModelsUnavailableError(models, model, err, label);
       }
       throw err;
     }
@@ -226,26 +291,34 @@ export async function runWithModelFallback<T>({
   for (let i = 0; i < models.length; i++) {
     const model = models[i]!;
     const modelLabel = `${label}[${model}]`;
+    llmDebug("ModelFallback", "probando modelo", {
+      label,
+      model,
+      index: i + 1,
+      total: models.length,
+    });
     try {
       return await withTransientRetry(() => run(model), modelLabel, retriesPerModel);
     } catch (err) {
       lastErr = err;
       const hasNext = i < models.length - 1;
+      llmWarn("ModelFallback", hasNext ? "modelo falló, siguiente en cadena" : "último modelo falló", {
+        label,
+        model,
+        statusCode: errorStatus(err),
+        error: rawErrorMessage(err),
+        exhaustion: isModelExhaustionError(err),
+        nextModel: hasNext ? models[i + 1] : undefined,
+      });
       if (!hasNext) {
         if (isModelExhaustionError(err)) {
-          console.warn(`${label} — cadena de modelos agotada sin alternativa usable`);
-          throw new ModelsUnavailableError();
+          throw buildModelsUnavailableError(models, model, err, label);
         }
-        console.error(`${label} — error no recuperable o agotada la cadena de modelos:`, err);
         throw err;
       }
       if (!isModelExhaustionError(err)) {
-        console.error(`${label} — error no recuperable o agotada la cadena de modelos:`, err);
         throw err;
       }
-      console.warn(
-        `${label} — modelo ${model} agotado (${err instanceof Error ? err.message : String(err)}), probando ${models[i + 1]}`,
-      );
     }
   }
   throw lastErr;

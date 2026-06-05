@@ -1,17 +1,16 @@
 # TheForge — Ejecución en local
 
-Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para la base de datos (no hace falta instalar PostgreSQL).
+Pasos para desarrollar en tu máquina. Se asume **Docker** instalado para infraestructura (no hace falta instalar PostgreSQL en el host).
 
 ## Requisitos
 
 - **Node** ≥20  
 - **pnpm** 9 (`corepack enable`; `packageManager` en `package.json`)  
-- **Colima** (runtime de contenedores en Mac; si no está corriendo, `dev:local` ejecuta `colima start --cpu 2 --memory 4`)  
-- **Docker** CLI (para Postgres; Colima lo provee)
+- **Docker** (Docker Desktop, Colima en Mac, etc.)
 
 ---
 
-## Opción A: Postgres en Docker + app en local (recomendado)
+## Opción A: Postgres + infra en Docker + app nativa (recomendado)
 
 ### 1. Dependencias
 
@@ -29,32 +28,41 @@ pnpm install
 
 No mezcles **npm** y **pnpm** en la misma raíz: usa solo `pnpm-lock.yaml`.
 
-### 2. Levantar solo Postgres
+### 2. Infraestructura (automática)
 
-```bash
-docker run -d --name theforge-db \
-  -e POSTGRES_USER=theforge \
-  -e POSTGRES_PASSWORD=theforge \
-  -e POSTGRES_DB=theforge \
-  -p 5432:5432 \
-  postgres:15-alpine
-```
+`pnpm run dev:local` ejecuta `scripts/ensure-infra.js`, que levanta si hace falta:
+
+| Contenedor | Puerto host | Uso |
+|------------|-------------|-----|
+| `theforge-db` | 5432 | PostgreSQL |
+| `theforge-falkor-sdd` | 6379 | Grafo SDD (FalkorDB) |
+| `theforge-redis-queue` | 6381 | Cola BullMQ (`REDIS_URL`) |
+
+En Mac sin Docker Desktop, el script intenta arrancar **Colima** (`brew install colima`).
 
 ### 3. Variables de entorno
 
-En la raíz del repo (o en `apps/api`), crea `.env` (plantilla comentada con todas las variables: **`.env.example`** en la raíz).
+En la raíz del repo, crea `.env` (plantilla: **`.env.example`**).
+
+**Mínimo local (Opción A):**
 
 ```env
 DATABASE_URL=postgresql://theforge:theforge@localhost:5432/theforge
+FALKORDB_SDD_URL=redis://localhost:6379
+FALKORDB_URL=redis://localhost:6379
+REDIS_URL=redis://localhost:6381
+JWT_SECRET=local-dev-jwt-secret
+TOKEN_MASTER_KEYS={"1":"<openssl rand -base64 32>"}
+TOKEN_ACTIVE_KEY_VERSION=1
 ```
 
 Opcional (chat con IA vía **OpenRouter**):
 
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...
-# o alias: AI_API_KEY / OPENAI_API_KEY
-# OPENROUTER_CHAT_MODEL=nousresearch/hermes-3-llama-3.1-405b   # default en código
 ```
+
+Sin `REDIS_URL`, la API usa cascadas de entregables en modo **síncrono** (timeouts en proyectos grandes).
 
 ### 4. Crear tablas (Prisma)
 
@@ -65,73 +73,52 @@ pnpm run db:push
 
 ### 5. Arrancar API y Web
 
-**Todo en una sola terminal (recomendado si no necesitas separar logs):**
-
-Levanta Postgres si no está y luego API + Web:
+**Todo en una sola terminal:**
 
 ```bash
 pnpm run dev:local
 ```
 
-O solo API + Web (Postgres ya levantado):
+O solo API + Web (infra ya levantada):
 
 ```bash
 pnpm run dev
 ```
 
-**Back y front en terminales separadas**
-
-Útil para ver logs de cada uno por separado o depurar solo uno.
-
-1. Asegura Postgres (solo la primera vez o si lo paraste):
-
-   ```bash
-   node scripts/ensure-postgres.js
-   ```
-
-2. **Terminal 1 — Backend (API):** (incluye Colima + Postgres si no están)
-
-   Desde la raíz:
-
-   ```bash
-   pnpm run dev:api
-   ```
-
-3. **Terminal 2 — Frontend (Web):**
-
-   Desde la raíz:
-
-   ```bash
-   pnpm run dev:web
-   ```
+**Terminales separadas:** `pnpm run dev:api` y `pnpm run dev:web`.
 
 - **Web:** http://localhost:5173  
-- **API:** http://localhost:3000 (el proxy `/api` en la web apunta aquí)
+- **API:** http://localhost:3000 (Vite proxy `/api` → API)
 
-### Parar Postgres
+### Parar contenedores de infra
 
 ```bash
-docker stop theforge-db
-docker rm theforge-db   # si quieres borrar el contenedor (los datos se pierden)
+docker stop theforge-db theforge-falkor-sdd theforge-redis-queue
 ```
-
-Para conservar datos, solo `docker stop theforge-db`; al volver a hacer `docker run ...` usa otro nombre o el mismo si ya lo borraste.
 
 ---
 
-## Opción B: Todo con Docker (un solo contenedor)
+## Opción B: Stack completo en Docker (sin Dokploy)
 
-Mismo contenedor que en Dokploy: Postgres + API + Web.
+Usa el compose base + override **local** (nginx con proxy `/api`, sin red `dokploy-network`):
 
 ```bash
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
 ```
 
-- **App:** http://localhost:80  
-- **Contenedor:** `theforge-db`  
-- **Datos:** volumen `theforge_db_data`
+Atajo:
 
-Útil para probar el despliegue o si no quieres tener Node/npm en local.
+```bash
+pnpm run compose:local
+```
+
+| URL | Servicio |
+|-----|----------|
+| http://localhost:8080 | App (web + `/api` vía nginx) |
+| http://localhost:3000 | API directa (debug) |
+| http://localhost:8081 | Adminer |
+
+El override monta `apps/web/nginx.local.conf` (proxy a `theforge-api:3000`).
 
 ---
 
@@ -139,14 +126,11 @@ docker compose up --build
 
 Si tienes PostgreSQL 15 en local:
 
-1. Crea la base de datos `theforge` y un usuario/contraseña.
-2. En `.env`:
+1. Crea la base `theforge` y usuario/contraseña.
+2. Ajusta `DATABASE_URL` en `.env`.
+3. `pnpm install` → `db:generate` → `db:push` → `pnpm run dev`.
 
-   ```env
-   DATABASE_URL=postgresql://USUARIO:PASSWORD@localhost:5432/theforge
-   ```
-
-3. Luego: `pnpm install` → `pnpm run db:generate` → `pnpm run db:push` → `pnpm run dev`.
+Sigue necesitando Falkor y Redis de cola para paridad con prod (vía `ensure-infra.js` o contenedores manuales).
 
 ---
 
@@ -154,11 +138,16 @@ Si tienes PostgreSQL 15 en local:
 
 ```bash
 pnpm install
-echo "DATABASE_URL=postgresql://theforge:theforge@localhost:5432/theforge" > .env
+cp .env.example .env   # editar DATABASE_URL, TOKEN_MASTER_KEYS, REDIS_URL, etc.
 pnpm run db:generate && pnpm run db:push
 pnpm run dev:local
 ```
 
-`dev:local` levanta Postgres en Docker si no existe o está parado; luego arranca API y Web. Si prefieres levantar Postgres a mano, usa el comando `docker run ...` del paso 2 y luego `pnpm run dev`.
+Abre http://localhost:5173.
 
-Abre http://localhost:5173 y crea un proyecto para comprobar que todo va bien.
+---
+
+## Otros despliegues
+
+- **Dokploy (prod actual):** `docker-compose.yml` — ver [README.md](./README.md).
+- **Coolify:** [docs/DEPLOY-COOLIFY.md](./docs/DEPLOY-COOLIFY.md).

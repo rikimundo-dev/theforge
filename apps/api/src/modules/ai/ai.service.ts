@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import type {
   GenerateResponseOptions,
   ChatMessage as LlmChatMessage,
@@ -26,6 +26,9 @@ import { USER_STORIES_PROMPT } from "./prompts/user-stories-prompt.js";
 import { TASKS_PROMPT } from "./prompts/tasks-prompt.js";
 import { VERIFY_DELIVERABLE_PROMPT } from "./prompts/verify-deliverable-prompt.js";
 import { CONFORMANCE_CHECK_PROMPT } from "./prompts/conformance-check-prompt.js";
+import { DOCUMENT_CHANGELOG_CHAT_INSTRUCTION } from "./prompts/with-document-changelog-instructions.js";
+import { BRD_CHAT_REFINE_BUSINESS_RULES } from "./prompts/brd-generation-prompt.js";
+import { appendMddGovernancePatternsToPrompt } from "./utils/mdd-governance-prompt.util.js";
 
 /** Instrucción fija para que ningún documento generado use "militar" (se añade al system prompt en generación de docs). */
 const NO_MILITAR_INSTRUCTION =
@@ -65,6 +68,8 @@ function prependTheForgePrompt(prompt: string, theforgeContext: string): string 
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
+
   constructor(private readonly aiFactory: AIFactory) {}
 
   private async provider() {
@@ -173,6 +178,7 @@ export class AiService {
           tasks: "TASKS",
           infra: "INFRA",
           phase0: "PHASE0",
+          "ux-ui-guide": "UX_UI",
         };
         const tag = tagMap[at];
         if (tag && !options?.welcomeBrief) {
@@ -191,7 +197,9 @@ export class AiService {
           }
           if (at === "brd") {
             systemPrompt +=
-              "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
+              "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n" +
+              BRD_CHAT_REFINE_BUSINESS_RULES +
+              "\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# BRD — Gestión de Márgenes y Costos\n\n## 5. Reglas de Negocio, Políticas y Fórmulas\n### Criterios de aceptación de negocio (UAT)\n- Dado un vendedor sin nivel 5, cuando cotice bajo margen mínimo, entonces el sistema bloquea hasta autorización de gerencia.\n---FIN_BRD---\nAñadido criterio UAT de autorización de margen.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
           }
           if (at === "blueprint") {
             systemPrompt +=
@@ -201,6 +209,7 @@ export class AiService {
             systemPrompt +=
               "\n\n**OBLIGATORIO - Guía UX/UI:** Cuando el usuario pida **agregar, modificar o regenerar** la Guía UX/UI, **debes** devolver la **Guía UX/UI completa actualizada** (conservando TODO el contenido existente) terminando con `---FIN_UX_UI---`. Si solo envías un fragmento sin el documento completo, el sistema ignora el cambio y el usuario no ve nada. **Siempre incluye la guía COMPLETA antes del delimitador.**";
           }
+          systemPrompt += `\n\n${DOCUMENT_CHANGELOG_CHAT_INSTRUCTION}`;
         }
       }
       if (!options?.welcomeBrief) {
@@ -338,6 +347,8 @@ export class AiService {
         "logic-flows": "FLOWS",
         tasks: "TASKS",
         infra: "INFRA",
+        phase0: "PHASE0",
+        "ux-ui-guide": "UX_UI",
       };
       const tag = tagMap[at];
       if (tag && !options?.welcomeBrief) {
@@ -356,12 +367,19 @@ export class AiService {
         }
         if (at === "brd") {
           systemPrompt +=
-            "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# Business Requirements Document: CRM Inmobiliario\n\n## Alcance\n### Funcional\nRF-1: ...\nRF-15: ...\n---FIN_BRD---\nAgregado RF-15 al alcance.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
+            "\n\n**OBLIGATORIO - BRD (formato exacto obligatorio):**\n\n" +
+            BRD_CHAT_REFINE_BUSINESS_RULES +
+            "\n\n**NO preguntes ni pidas confirmaci\u00f3n**. Cuando el usuario pida agregar, modificar o eliminar algo del BRD, **Aplica el cambio inmediatamente** siguiendo este formato:\n\n```\n[BRD completo actualizado con el cambio incorporado, conservando TODO el contenido existente]\n---FIN_BRD---\n[breve mensaje de chat resumiendo lo que cambiaste]\n```\n\nEJEMPLO:\n```\n# BRD — Gestión de Márgenes y Costos\n\n## 5. Reglas de Negocio, Políticas y Fórmulas\n### Criterios de aceptación de negocio (UAT)\n- Dado un vendedor sin nivel 5, cuando cotice bajo margen mínimo, entonces el sistema bloquea hasta autorización de gerencia.\n---FIN_BRD---\nAñadido criterio UAT de autorización de margen.\n```\n\n**IMPORTANTE:** Sin ``---FIN_BRD---`` no se persiste NADA. El contenido del BRD va ANTES del delimitador. El mensaje de chat va DESPU\u00c9S.";
         }
           if (at === "blueprint") {
             systemPrompt +=
               "\n\n**OBLIGATORIO - Blueprint:** Cuando el usuario pida **agregar, modificar o eliminar** algo del Blueprint, **debes** devolver el **Blueprint completo actualizado** (conservando TODO el contenido existente) terminando con `---FIN_BLUEPRINT---`. Si solo envías una sección, el sistema la **fusiona** automáticamente con el contenido actual. Nunca respondas solo con un mensaje tipo \"El Blueprint ha sido actualizado\" — el sistema solo persiste cuando encuentra el contenido del documento seguido de `---FIN_BLUEPRINT---`.";
           }
+        if (at === "ux-ui-guide") {
+          systemPrompt +=
+            "\n\n**OBLIGATORIO - Guía UX/UI:** Devuelve la **Guía UX/UI completa** terminando con `---FIN_UX_UI---`.";
+        }
+        systemPrompt += `\n\n${DOCUMENT_CHANGELOG_CHAT_INSTRUCTION}`;
         }
     }
     if (!options?.welcomeBrief) {
@@ -483,6 +501,17 @@ export class AiService {
           "\n\n**MDD no destructivo (obligatorio si ya hay MDD en contexto):** El bloque \"Contenido actual del MDD\" incluye **todas** las secciones. Si el usuario pide revisar, alinear o ampliar (p. ej. tras un diagrama), **no sustituyas el proyecto por un solo fragmento**: devuelve el **MDD completo** actualizado (copia el contenido existente y aplica cambios), terminando con `---FIN_MDD---`. Si optas por enviar **solo una sección**, debe empezar por el **mismo patrón de encabezado** que ya usa el documento para esa sección (`## N.` recomendado, mismo `N` que corresponda). Nunca envíes solo tablas o JSON sueltos sin el título de sección reconocible.";
       }
     }
+    const userId = getRequestUserId();
+    try {
+      const runtime = await this.aiFactory.resolveRuntime(userId);
+      this.logger.debug(
+        `[generateResponseStream] userId=${userId} tab=${options?.activeTab ?? "mdd"} provider=${runtime.providerId} model=${runtime.chatModel} fallbacks=[${(runtime.chatModelFallbacks ?? []).join(",")}]`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `[generateResponseStream] resolveRuntime falló userId=${userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
     return (await this.provider()).generateResponseStream(prompt, history, { ...options, systemPrompt });
   }
 
@@ -495,7 +524,8 @@ export class AiService {
     activeTab?: string,
   ): Promise<string> {
     if (!images.length) return "";
-    await this.aiFactory.resolveVisionRuntime(getRequestUserId());
+    const userId = getRequestUserId();
+    const visionProvider = await this.aiFactory.createForVisionUser(userId);
     const tab = (activeTab ?? "mdd").trim() || "mdd";
     const hint = (userText ?? "").trim().slice(0, 4000) || "(sin texto adicional)";
     const tabHint =
@@ -511,7 +541,7 @@ export class AiService {
         ? " Si es un ERD o diagrama relacional, lista tablas, columnas, PK/FK y jerarquía (país→estado→ciudad→colonia, etc.)."
         : "";
     const prompt = `El usuario trabaja en ${tabHint}. Mensaje o petición asociada:\n---\n${hint}\n---\n\nDescribe con precisión lo que muestran las imágenes (UI, diagramas, datos, flujos, stack, texto visible, etc.). Responde en español, en viñetas; indica partes ilegibles o ambiguas.${benchmarkExtra}`;
-    const out = await this.generateResponse(prompt, [], {
+    const out = await visionProvider.generateResponse(prompt, [], {
       systemPrompt:
         "Eres arquitecto de software: extrae solo información sustentada en las imágenes; no inventes.",
       userMessageImages: images,
@@ -555,6 +585,9 @@ export class AiService {
           (phase0 ? `\n\nResumen fase 0 / alcance:\n---\n${phase0}\n---` : "")
         : "No hay Benchmark ni MDD. Genera un Spec genérico (objetivos, alcance, criterios de éxito, user journeys) en markdown.";
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (source === "mdd" && content.length > 0) {
+      prompt = appendMddGovernancePatternsToPrompt(prompt, content);
+    }
     return this.generateResponse(prompt, [], { systemPrompt: SPEC_PROMPT });
   }
 
@@ -576,6 +609,7 @@ export class AiService {
       prompt += "\n\n## Mapa de Navegación del Proyecto\n\n" + navMap;
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], { systemPrompt: TASKS_PROMPT + NO_MILITAR_INSTRUCTION });
   }
 
@@ -590,6 +624,7 @@ export class AiService {
         (blueprint ? "Blueprint:\n---\n" + blueprint + "\n---" : "")
         : "No hay MDD. Genera un documento breve de arquitectura genérica (capas, trade-offs) sin inventar dominio ni agentes.";
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], { systemPrompt: ARCHITECTURE_PROMPT + NO_MILITAR_INSTRUCTION });
   }
 
@@ -612,6 +647,7 @@ export class AiService {
       "\n---\n\n" +
       (spec ? "Spec (what/why):\n---\n" + spec + "\n---" : "");
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], { systemPrompt: USE_CASES_PROMPT });
   }
 
@@ -637,6 +673,7 @@ export class AiService {
         "# Historias de Usuario y un párrafo indicando que se requiere el MDD (y opcionalmente Spec y Casos de Uso) para derivar historias de usuario alineadas al alcance del proyecto.";
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], { systemPrompt: USER_STORIES_PROMPT });
   }
 
@@ -654,6 +691,9 @@ export class AiService {
     if (gapsFeedback?.trim()) {
       prompt +=
         "\n\n**Los siguientes puntos deben corregirse o incorporarse:**\n---\n" + gapsFeedback.trim() + "\n---";
+    }
+    if (mddContent.trim().length > 0) {
+      prompt = appendMddGovernancePatternsToPrompt(prompt, mddContent);
     }
     if (options?.theforgeContext?.trim()) {
       prompt = prependTheForgePrompt(prompt, options.theforgeContext);
@@ -696,6 +736,7 @@ export class AiService {
         specsBlock +
         "\n---";
     }
+    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], {
       systemPrompt: API_CONTRACTS_PROMPT + NO_MILITAR_INSTRUCTION,
     });
@@ -718,6 +759,7 @@ export class AiService {
         "\n\n**Los siguientes puntos deben corregirse o incorporarse:**\n---\n" + gapsFeedback.trim() + "\n---";
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], {
       systemPrompt: LOGIC_FLOWS_PROMPT + NO_MILITAR_INSTRUCTION,
     });
@@ -742,6 +784,7 @@ export class AiService {
         "\n\n**Los siguientes puntos deben corregirse o incorporarse:**\n---\n" + gapsFeedback.trim() + "\n---";
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     return this.generateResponse(prompt, [], {
       systemPrompt: INFRA_PROMPT + NO_MILITAR_INSTRUCTION,
     });

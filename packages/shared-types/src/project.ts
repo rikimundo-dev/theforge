@@ -58,6 +58,12 @@ export const updateProjectSchema = z.object({
   useCasesContent: z.string().optional().nullable(),
   userStoriesContent: z.string().optional().nullable(),
   mddContent: z.string().optional().nullable(),
+  /** true solo al guardar desde el wizard «Editar patrones (SSOT)»; si no, el backend restaura la selección [X] previa. */
+  allowGovernancePatternChange: z.boolean().optional(),
+  /** Vacía el MDD por completo (sin reinyectar wizard de patrones). */
+  clearMddCompletely: z.boolean().optional(),
+  /** Semilla SSOT sin §1–§7: omite pipeline de validación al persistir. */
+  mddGovernanceSeedOnly: z.boolean().optional(),
   blueprintContent: z.string().optional().nullable(),
   tasksContent: z.string().optional().nullable(),
   apiContractsContent: z.string().optional().nullable(),

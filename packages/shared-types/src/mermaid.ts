@@ -589,6 +589,216 @@ export function validateMermaid(raw: string): string[] {
   return errors;
 }
 
+/** Línea markdown fuera del fence que en realidad es sintaxis sequenceDiagram. */
+function sequenceLineCore(trimmed: string): string {
+  return trimmed.replace(/^#{1,6}\s+/, "").replace(/^[-*]\s+/, "").trim();
+}
+
+export function isOrphanSequenceDiagramLine(trimmed: string): boolean {
+  if (!trimmed) return false;
+  if (/^```/.test(trimmed)) return false;
+  if (/^#{1,2}\s+\d+\.\s/.test(trimmed)) return false;
+  if (/^#{1,6}\s+\d+\.\d+\s/.test(trimmed)) return false;
+  if (/^\|/.test(trimmed)) return false;
+  if (/^---+\s*$/.test(trimmed)) return false;
+
+  const core = sequenceLineCore(trimmed);
+  if (!core) return false;
+  if (/^sequenceDiagram\b/i.test(core)) return false;
+
+  if (/^(participant|actor)\s/i.test(core)) return true;
+  if (/^Note over\b/i.test(core)) return true;
+  if (/^(alt|opt|loop|par|critical|break|rect|else|and|end)\b/i.test(core)) return true;
+  if (/(-+>>|->>|--x|-x>)/.test(core)) return true;
+  return false;
+}
+
+function normalizeOrphanSequenceDiagramLine(line: string): string {
+  let s = line.replace(/^(\s*)#{1,6}\s+/, "$1");
+  if (/^(\s*)[-*]\s+/.test(s) && /(-+>>|->>|--x|-x>)/.test(s)) {
+    s = s.replace(/^(\s*)[-*]\s+/, "$1    ");
+  }
+  return s;
+}
+
+/**
+ * Fusiona líneas sequenceDiagram rotas fuera del fence (### Foo->>Bar, viñetas con flechas)
+ * en el bloque ```mermaid precedente.
+ */
+export function repairFragmentedSequenceMermaidInDocument(document: string): string {
+  if (!document?.trim()) return document ?? "";
+
+  const lines = document.split("\n");
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (!/^```mermaid\s*$/i.test(line.trim())) {
+      out.push(line);
+      i++;
+      continue;
+    }
+
+    out.push(line);
+    i++;
+    const bodyLines: string[] = [];
+    while (i < lines.length && !/^```\s*$/.test(lines[i]!.trim())) {
+      bodyLines.push(lines[i]!);
+      i++;
+    }
+
+    if (i >= lines.length) {
+      out.push(...bodyLines);
+      break;
+    }
+
+    const bodyText = bodyLines.join("\n");
+    const isSequence = /sequenceDiagram/i.test(bodyText);
+
+    if (isSequence) {
+      i++;
+      while (i < lines.length) {
+        const trimmed = lines[i]!.trim();
+        if (!trimmed) {
+          let j = i + 1;
+          while (j < lines.length && !lines[j]!.trim()) j++;
+          if (j < lines.length && isOrphanSequenceDiagramLine(lines[j]!.trim())) {
+            i++;
+            continue;
+          }
+          break;
+        }
+        if (!isOrphanSequenceDiagramLine(trimmed)) break;
+        bodyLines.push(normalizeOrphanSequenceDiagramLine(lines[i]!));
+        i++;
+      }
+    } else {
+      i++;
+    }
+
+    out.push(...bodyLines);
+    out.push("```");
+  }
+
+  return out.join("\n");
+}
+
+function mermaidMarkdownLeakLine(trimmed: string): boolean {
+  if (!trimmed) return false;
+  if (/^```/.test(trimmed)) return true;
+  if (/^#{1,6}\s/.test(trimmed)) {
+    if (isOrphanSequenceDiagramLine(trimmed)) return false;
+    return true;
+  }
+  if (/^\*\*TechnicalMetadata\*\*/i.test(trimmed)) return true;
+  if (/^TechnicalMetadata\s*:?\s*$/i.test(trimmed)) return true;
+  if (/^-\s*`/.test(trimmed)) return true;
+  if (/^[-*]\s+\S/.test(trimmed)) {
+    if (isOrphanSequenceDiagramLine(trimmed)) return false;
+    if (!/^\s*[a-zA-Z0-9_]+\s*(-->|---)/.test(trimmed)) {
+      return true;
+    }
+  }
+  if (/^[-*]\s+Usuario\s*→/i.test(trimmed)) return true;
+  if (/^[-*]\s+→\s+/i.test(trimmed)) return true;
+  if (/^[-*]\s+\d+\.\s+\*\*/.test(trimmed)) return true;
+  if (/^[-*]\s+(El usuario|Al cargar|Tras retorno|Logout:)/i.test(trimmed)) return true;
+  if (/^\*\*Comportamiento requerido/i.test(trimmed)) return true;
+  if (
+    /^\[(?:high_security|external_api|multi_tenant|cicd_pipeline|real_time|advanced_monitoring)\]/i.test(
+      trimmed,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Trunca cuerpo Mermaid cuando el LLM no cerró el fence y filtró markdown
+ * (TechnicalMetadata, encabezados ##, fences ```, viñetas con backticks).
+ */
+export function stripMarkdownLeakFromMermaidDiagramBody(raw: string): string {
+  if (!raw?.trim()) return raw ?? "";
+
+  const lines = raw.split("\n");
+  const out: string[] = [];
+  let seenDiagramStart = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (/\*\*TechnicalMetadata\*\*/i.test(trimmed) || /```TechnicalMetadata/i.test(trimmed)) {
+      const cut = trimmed.split(/\*\*TechnicalMetadata\*\*|```TechnicalMetadata/i)[0]?.trim();
+      if (cut && !mermaidMarkdownLeakLine(cut)) out.push(cut);
+      break;
+    }
+
+    if (
+      /^(erDiagram|flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|gantt|pie|gitGraph|mindmap|timeline)/i.test(
+        trimmed,
+      )
+    ) {
+      seenDiagramStart = true;
+      out.push(line);
+      continue;
+    }
+
+    if (seenDiagramStart && mermaidMarkdownLeakLine(trimmed)) break;
+
+    out.push(line);
+  }
+
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Separa diagrama Mermaid válido del markdown pegado dentro del mismo fence. */
+export function splitMermaidBodyAndTrailingProse(inner: string): {
+  diagram: string;
+  trailing: string;
+} {
+  if (!inner?.trim()) return { diagram: "", trailing: "" };
+
+  const lines = inner.split("\n");
+  const diagramLines: string[] = [];
+  const trailingLines: string[] = [];
+  let seenDiagramStart = false;
+  let inTrailing = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    if (/\*\*TechnicalMetadata\*\*/i.test(trimmed) || /```TechnicalMetadata/i.test(trimmed)) {
+      inTrailing = true;
+      trailingLines.push(line);
+      continue;
+    }
+
+    if (
+      /^(erDiagram|flowchart|graph|sequenceDiagram|stateDiagram|classDiagram|gantt|pie|gitGraph|mindmap|timeline)/i.test(
+        trimmed,
+      )
+    ) {
+      seenDiagramStart = true;
+      diagramLines.push(line);
+      continue;
+    }
+
+    if (seenDiagramStart && mermaidMarkdownLeakLine(trimmed)) {
+      inTrailing = true;
+    }
+
+    if (inTrailing) trailingLines.push(line);
+    else diagramLines.push(line);
+  }
+
+  return {
+    diagram: diagramLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+    trailing: trailingLines.join("\n").replace(/\n{3,}/g, "\n\n").trim(),
+  };
+}
+
 /**
  * Normaliza un diagrama Mermaid existente — corrige errores comunes:
  * - IDs con espacios → reemplazados por underscore
@@ -599,14 +809,22 @@ export function validateMermaid(raw: string): string[] {
  */
 /** Normaliza solo el cuerpo del diagrama (sin fences). */
 export function normalizeMermaidDiagramBody(raw: string): string {
-  if (!raw?.trim()) return "";
+  const stripped = stripMarkdownLeakFromMermaidDiagramBody(raw);
+  if (!stripped?.trim()) return "";
 
-  const lines = raw.trim().split("\n");
+  const lines = stripped.trim().split("\n");
   const out: string[] = [];
   let openBlocks = 0;
 
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i]!;
+    const trimmed = line.trim();
+
+    if (/^#{1,6}\s+/.test(trimmed) && isOrphanSequenceDiagramLine(trimmed)) {
+      line = normalizeOrphanSequenceDiagramLine(line);
+    } else if (/^[-*]\s+/.test(trimmed) && isOrphanSequenceDiagramLine(trimmed)) {
+      line = normalizeOrphanSequenceDiagramLine(line);
+    }
 
     if (/^(graph|flowchart)\s/i.test(line.trim())) {
       out.push(line);
@@ -690,9 +908,13 @@ export function normalizeMermaid(raw: string): string {
 /** Normaliza cada bloque mermaid del documento sin tocar el resto del markdown. */
 export function normalizeMermaidInDocument(document: string): string {
   if (!document?.trim()) return document ?? "";
-  return document.replace(/```mermaid\s*\n([\s\S]*?)```/gi, (_block, inner: string) => {
+  const merged = repairFragmentedSequenceMermaidInDocument(document);
+  return merged.replace(/```mermaid\s*\n([\s\S]*?)```/gi, (_block, inner: string) => {
+    const { diagram: rawDiagram, trailing } = splitMermaidBodyAndTrailingProse(inner);
     const body =
-      repairFlattenedWebhookFlowchart(inner) ?? normalizeMermaidDiagramBody(inner);
-    return body ? `\`\`\`mermaid\n${body}\n\`\`\`` : "```mermaid\n```";
+      repairFlattenedWebhookFlowchart(rawDiagram) ?? normalizeMermaidDiagramBody(rawDiagram);
+    if (!body) return trailing ? `${trailing}\n` : "```mermaid\n```";
+    const fence = `\`\`\`mermaid\n${body}\n\`\`\``;
+    return trailing ? `${fence}\n\n${trailing}` : fence;
   });
 }

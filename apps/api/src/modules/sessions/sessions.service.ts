@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Logger } from "@nestjs/common";
 import type { Session } from "@theforge/database";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
@@ -32,21 +32,18 @@ import {
   parseBenchmarkResponse,
   wouldShrinkDbgaDangerously,
 } from "./dbga-edit.util.js";
+import { llmDebug, llmWarn } from "../ai/config/llm-debug.util.js";
+import { ModelsUnavailableError } from "../ai/config/llm-model-fallback.js";
 
 function filterChatByTab(log: ChatMessage[], tab: string): ChatMessage[] {
   return log.filter((m) => (m.tab ?? "mdd") === tab);
 }
 
+/** Solo texto al LLM; las imágenes viven en el log para la UI y en el bloque de visión del content. */
 function sessionHistoryToLlm(history: ChatMessage[]): LlmChatMessage[] {
   return history.map((m) => ({
     role: m.role,
     content: m.content,
-    ...(m.role === "user" &&
-    m.images != null &&
-    m.images.length > 0 &&
-    !contentIncludesVisionBlock(m.content)
-      ? { images: m.images }
-      : {}),
   }));
 }
 
@@ -65,6 +62,8 @@ function isGeminiRateLimitError(err: unknown): boolean {
 
 @Injectable()
 export class SessionsService {
+  private readonly logger = new Logger(SessionsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
@@ -76,13 +75,23 @@ export class SessionsService {
     return { id: sessionId, userId: getRequestUserId() };
   }
 
+  /** Misma regla que ProjectsService.assertProjectAccess: owner o SHARED. */
+  private async assertProjectAccess(projectId: string): Promise<void> {
+    const userId = getRequestUserId();
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId },
+      select: { userId: true, visibility: true },
+    });
+    if (!project) throw new NotFoundException("Project not found");
+    const isOwner = project.userId === userId;
+    const isShared = project.visibility === "SHARED";
+    if (!isOwner && !isShared) throw new NotFoundException("Project not found");
+  }
+
   async create(data: { projectId: string; contextStep?: string; chatLog?: ChatMessage[] }) {
     const parsed = createSessionSchema.parse(data);
     const userId = getRequestUserId();
-    const project = await this.prisma.project.findFirst({
-      where: { id: parsed.projectId, userId },
-    });
-    if (!project) throw new NotFoundException("Project not found");
+    await this.assertProjectAccess(parsed.projectId);
     return this.prisma.session.create({
       data: {
         userId,
@@ -167,9 +176,29 @@ export class SessionsService {
       if (!block) return userMessage.trim() || "(Imagen adjunta)";
       return mergeUserTextWithVisionBlock(userMessage, block);
     } catch (err) {
+      if (err instanceof ModelsUnavailableError || err instanceof BadRequestException) {
+        throw err;
+      }
       console.warn("[Sessions] enrichUserContentWithVision failed:", err);
       return userMessage.trim() || "(Imagen adjunta)";
     }
+  }
+
+  /**
+   * Peticiones de edición al DBGA: refinado dedicado (BENCHMARK_REFINE) antes del chat genérico.
+   * Devuelve el DBGA persistible o null si debe seguir el flujo normal (stream/chat).
+   */
+  private async tryRefineBenchmarkDbgaFirst(
+    tab: string,
+    userMessage: string,
+    currentDbga: string | undefined,
+  ): Promise<string | null> {
+    const current = (currentDbga ?? "").trim();
+    const msg = userMessage.trim();
+    if (tab !== "benchmark" || !current || !msg || !looksLikeDbgaEditRequest(msg)) {
+      return null;
+    }
+    return this.refineDbgaFromUserRequest(msg, current);
   }
 
   private async resolveUserTurnForLlm(
@@ -251,6 +280,40 @@ export class SessionsService {
       options?.userImages,
       activeTab,
     );
+
+    const refinedDbgaEarly = await this.tryRefineBenchmarkDbgaFirst(
+      activeTab,
+      userTurn.promptForModel,
+      options?.currentDbgaContent,
+    );
+    if (refinedDbgaEarly) {
+      const tab = activeTab;
+      const stageId = options?.stageId?.trim();
+      const assistantContent = this.parser.stripChatLabel(
+        benchmarkAssistantChatMessage("", refinedDbgaEarly),
+      );
+      const userMsgBase = {
+        role: "user" as const,
+        content: userTurn.contentForLog,
+        tab,
+        ...(options?.userImages?.length ? { images: options.userImages } : {}),
+      };
+      const userMsg = stageId ? { ...userMsgBase, stageId } : userMsgBase;
+      const asstMsg = { role: "assistant" as const, content: assistantContent, tab };
+      const updated = [...fullLog, userMsg, stageId ? { ...asstMsg, stageId } : asstMsg];
+      await this.prisma.session.update({
+        where: { id: sessionId },
+        data: { chatLog: updated as object },
+      });
+      const updatedSession = await this.prisma.session.findFirst({
+        where: this.sessionScope(sessionId),
+      });
+      return {
+        session: updatedSession,
+        dbgaContent: refinedDbgaEarly,
+      };
+    }
+
     let response: string;
     try {
       response = await this.ai.generateResponse(userTurn.promptForModel, llmHistory, {
@@ -580,8 +643,44 @@ export class SessionsService {
     };
     const userEntry = stageId ? { ...userEntryBase, stageId } : userEntryBase;
 
+    const refinedDbgaEarly = await this.tryRefineBenchmarkDbgaFirst(
+      tab,
+      userTurn.promptForModel,
+      options?.currentDbgaContent,
+    );
+    if (refinedDbgaEarly) {
+      const assistantContent = this.parser.stripChatLabel(
+        benchmarkAssistantChatMessage("", refinedDbgaEarly),
+      );
+      const assistantEntry = stageId
+        ? { role: "assistant" as const, content: assistantContent, tab, stageId }
+        : { role: "assistant" as const, content: assistantContent, tab };
+      const updated = [...fullLog, userEntry, assistantEntry];
+      await this.prisma.session.update({
+        where: { id: sessionId },
+        data: { chatLog: updated as object },
+      });
+      const updatedSession = await this.prisma.session.findFirst({
+        where: this.sessionScope(sessionId),
+      });
+      yield { type: "chunk", content: assistantContent };
+      yield {
+        type: "done",
+        session: updatedSession,
+        dbgaContent: refinedDbgaEarly,
+      };
+      return;
+    }
+
     const learningHistory = await this.preferences.getPreferencesForContext(session.projectId, 5);
     const llmHistory = sessionHistoryToLlm(history);
+    llmDebug("ChatStream", "inicio generateResponseStream", {
+      sessionId,
+      projectId: session.projectId,
+      activeTab: options?.activeTab ?? "mdd",
+      userId: getRequestUserId(),
+      historyTurns: llmHistory.length,
+    });
     let stream: AsyncIterable<string>;
     try {
       stream = await this.ai.generateResponseStream(userTurn.promptForModel, llmHistory, {
@@ -601,7 +700,23 @@ export class SessionsService {
         userMessageImages: userTurn.imagesForLlm,
       });
     } catch (err) {
-      console.error("[ChatStream] ai.generateResponseStream error:", err);
+      if (err instanceof ModelsUnavailableError) {
+        llmWarn("ChatStream", "ModelsUnavailableError", {
+          sessionId,
+          projectId: session.projectId,
+          activeTab: options?.activeTab ?? "mdd",
+          message: err.message,
+          details: err.details,
+        });
+      } else {
+        llmWarn("ChatStream", "generateResponseStream error", {
+          sessionId,
+          projectId: session.projectId,
+          activeTab: options?.activeTab ?? "mdd",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      this.logger.error("[ChatStream] ai.generateResponseStream error:", err);
       throw err;
     }
 
@@ -1235,12 +1350,16 @@ Según tu rol (INICIO DE SESIÓN en tus instrucciones): saluda al usuario y lanz
     const current = currentDbga.trim();
     if (!msg || !current) return null;
 
+    const mirrorHint = /\bespejo\b|id\s+(de\s+)?origen|id\s+propio|tablas?\s+espejo/i.test(msg)
+      ? "\n\n**Tablas espejo (obligatorio si aplica):** En cada tabla espejo documenta `tenant_id`, el **id de origen** (clave en el sistema fuente / OBP u OBP4MO) y el **id propio** (PK de la fila en la tabla espejo). Refleja esto en SQL o tablas markdown del DBGA."
+      : "";
+
     const refinePrompt = `Aplica OBLIGATORIAMENTE al documento completo los cambios que pide el usuario. No respondas solo en chat: devuelve el DBGA/Fase 0 COMPLETO en markdown y termina con la línea exacta ---FIN_DBGA---.
 
 Petición del usuario:
 ---
 ${msg}
----`;
+---${mirrorHint}`;
 
     const llmOpts = {
       activeTab: "benchmark" as const,
@@ -1262,7 +1381,7 @@ ${msg}
           `[Sessions] refineDbga retry (unchanged=${unchanged}, missingIntent=${missingIntent})`,
         );
         response = await this.ai.generateResponse(
-          `${refinePrompt}\n\nREINTENTO: la respuesta anterior NO aplicó los cambios. El documento debe reflejar explícitamente lo pedido (p. ej. tenant_id, multi-tenancy, catálogo por aplicación OBP/OBP4MO).`,
+          `${refinePrompt}\n\nREINTENTO: la respuesta anterior NO aplicó los cambios. El documento debe reflejar explícitamente lo pedido (p. ej. tenant_id, tablas espejo con id de origen e id propio, catálogo OBP/OBP4MO).`,
           [],
           llmOpts,
         );
@@ -1270,7 +1389,20 @@ ${msg}
       }
 
       if (!merged || isDbgaContentNearlyIdentical(merged, current)) return null;
-      if (!dbgaReflectsUserEditIntent(merged, userMessage)) return null;
+      if (!dbgaReflectsUserEditIntent(merged, userMessage)) {
+        const grew = merged.length > current.length + 80;
+        const mirrorCols =
+          /\borigen_id\b|\bsource_id\b|\bid_origen\b|\bid_espejo\b|\bmirror_id\b|\bid_propio\b|\btenant_id\b/i;
+        if (
+          !(
+            grew &&
+            mirrorCols.test(merged) &&
+            /\bespejo|origen|propio/i.test(userMessage)
+          )
+        ) {
+          return null;
+        }
+      }
       return merged;
     } catch (err) {
       console.warn("[Sessions] refineDbgaFromUserRequest failed:", err);
@@ -1295,7 +1427,7 @@ ${msg}
       this.parser.detectBenchmarkDocFallback(trimmed);
 
     let docPart = split?.docPart?.trim();
-    if (!docPart && withoutFin.length >= 800) {
+    if (!docPart && withoutFin.length >= 400 && /^#\s/m.test(withoutFin)) {
       docPart = withoutFin;
     }
     if (!docPart) return null;

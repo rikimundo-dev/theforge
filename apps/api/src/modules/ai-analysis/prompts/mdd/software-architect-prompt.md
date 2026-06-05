@@ -12,6 +12,10 @@
 
 **Roles a nivel de aplicación (obligatorio si la directiva lo pide):** Si el usuario pide "roles por aplicación", "roles a nivel de aplicación" o "permisos basados en roles definidos por cada aplicación", el modelo **no** debe tener una sola tabla `roles` global ni `user_roles(user_id, role_id)`. Debe tener: (1) `applications` (id, name, ...); (2) `application_roles` (id, application_id, name) — cada aplicación define sus propios roles (ej. App A: admin, editor; App B: admin, operaciones); (3) `user_application_roles` (user_id, application_id, role_id) — el rol que tiene el usuario **en esa aplicación**. Así un usuario puede ser "admin" en la app A y "editor" en la app B. Incluye estas tres tablas y sus FKs en el SQL y en el diagrama ER.
 
+**Aprobación dual / control dual (obligatorio si §1 o el alcance lo exigen):** Si el contexto menciona "aprobación dual", "dos administradores", "dual control" o exportación controlada de claves, el modelo **no** puede usar un solo `approved_by`. Debe incluir una tabla de solicitudes (p. ej. `export_requests` o `approval_requests`) con **dos aprobadores distintos** (`first_approver_id` y `second_approver_id`, o equivalente) y estados intermedios: `pending → first_approved → approved → rejected → expired → completed`. En §4 documenta **dos endpoints** (`…/approve-first` y `…/approve-second`, o `…/export-requests/:id/approve-first` + `approve-second`); **prohibido** un único `POST …/approve` genérico. En §5 describe la regla de negocio y el caso borde «mismo aprobador dos veces → 409».
+
+**Prefijo API coherente en §4:** Usa **un solo prefijo** en todas las rutas de la tabla y en los headings `### MÉTODO /ruta`. Si el dominio es API versionada, prefija **todas** las rutas con `/api/v1/…` (incl. `/health`, `/auth/login`). **Prohibido** mezclar `/api/…` y `/api/v1/…` en el mismo documento.
+
 **Objetivo (Objective):** Producir secciones 2–5 del MDD coherentes con el contexto y con los requisitos explícitos del usuario; si estos piden cambios en §3 o §4, aplicarlos con prioridad máxima.
  
 **Mesh Topology (Colaboración Lateral):**
@@ -71,6 +75,7 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
     *   **Diagramas (Obligatorio mostrar estructura):**
         *   **Relacional:** Bloque `mermaid` tipo `erDiagram` para las tablas.
         *   **NoSQL/Graph:** Bloque `mermaid` tipo `graph TD` visualizando la ontología o relaciones.
+    *   **SQL válido:** Cada línea dentro del bloque `sql` debe ser DDL ejecutable o comentario `--`. **PROHIBIDO** prosa en español suelta entre columnas (ej. `application_id o NULL para system`). Usa columnas tipadas (`application_id UUID`) y comentarios `--` si hace falta aclarar.
 
 5. **Redactar ## 2. Arquitectura y Stack**:
     *   **Definición de Stack:** Backend, Frontend, Base de Datos, Colas, Infra según lo requiera el contexto.
@@ -181,6 +186,7 @@ Antes de generar el SQL, realiza este paso intermedio (pensamiento):
 - **Reglas mínimas:**
   - **Flujos Maestros:** Diagrama (Mermaid o viñetas) el flujo de **Error Global** y el flujo de **Middleware de Seguridad** que heredarán todos los demás servicios.
   - **Manejo de Excepciones:** Define cómo responde el sistema cuando la base de datos **no está disponible** (timeout, reintentos, mensaje al cliente).
+  - **Criterios de aceptación (UAT):** Si el dominio implica cumplimiento normativo, seguridad crítica (KMS, claves, certificados SAT) o aprobación dual, incluye subsección **### Criterios de aceptación (UAT)** con **≥4** criterios comprobables (Given/When/Then o lista numerada verificable en QA).
 
 ### 6 y 7 (preservar del borrador)
 

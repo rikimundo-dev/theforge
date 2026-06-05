@@ -34,7 +34,7 @@ const Card = forwardRef<
       <div
         ref={ref}
         className={cn(
-          "rounded-[var(--radius)] transition-all duration-[var(--transition-base)] overflow-hidden",
+          "rounded-[var(--radius)] transition-all duration-base overflow-hidden",
           variantStyles[variant],
           hoverStyles,
           className

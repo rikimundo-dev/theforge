@@ -217,8 +217,9 @@ test("UserProvidersService.resolveSttRuntime — openai con sttModel", async () 
 
 test("UserProvidersService.resolveVisionRuntime — instancia con visionModel", async () => {
   const prisma = mockPrisma();
-  const store = (prisma as { __store: { instances: Map<string, Record<string, unknown>> } })
+  const store = (prisma as { __store: { instances: Map<string, Record<string, unknown>>; userRole: string } })
     .__store;
+  store.userRole = "super_admin";
   store.instances.set("vision-inst", {
     id: "vision-inst",
     providerType: "openrouter",
@@ -572,6 +573,57 @@ test("UserProvidersService.resolveRuntime — grant de usuario fuera del catálo
   const svc = new UserProvidersService(prisma, mockCrypto());
   const runtime = await svc.resolveRuntime(USER_ID);
   assert.equal(runtime.chatModel, "minimax/minimax-m2.5");
+});
+
+test("UserProvidersService.resolveRuntime — admin usa modelos de instancia fuera del catálogo", async () => {
+  const prisma = mockPrisma();
+  const store = (
+    prisma as {
+      __store: {
+        userRole: string;
+        settings: {
+          userId: string;
+          activeProvider: string;
+          activeTenantInstanceId: string | null;
+          embeddingProvider: string | null;
+          embeddingsEnabled: boolean;
+          allowedChatModels: string[];
+        } | null;
+        instances: Map<string, Record<string, unknown>>;
+      };
+    }
+  ).__store;
+  store.userRole = "admin";
+  store.instances.set("openrouter-imj", {
+    id: "openrouter-imj",
+    providerType: "openrouter",
+    displayName: "OpenRouter IMJ",
+    enabledForUsers: true,
+    isTenantDefault: false,
+    tokenCiphertext: "enc:sk-tenant-key-12345678",
+    tokenKeyVersion: 1,
+    chatModel: "deepseek/deepseek-v4-flash",
+    chatModelFallbacks: ["minimax/minimax-m2.5:free"],
+    embeddingModel: null,
+    embeddingDimension: 1536,
+    sttModel: null,
+    baseUrl: null,
+    extras: {},
+    allowedChatModels: [],
+    allowedEmbeddingModels: [],
+  });
+  store.settings = {
+    userId: USER_ID,
+    activeProvider: "openrouter",
+    activeTenantInstanceId: "openrouter-imj",
+    embeddingProvider: null,
+    embeddingsEnabled: true,
+    allowedChatModels: [],
+  };
+  const svc = new UserProvidersService(prisma, mockCrypto());
+  const runtime = await svc.resolveRuntime(USER_ID);
+  assert.equal(runtime.chatModel, "deepseek/deepseek-v4-flash");
+  assert.deepEqual(runtime.chatModelFallbacks, ["minimax/minimax-m2.5:free"]);
 });
 
 test("UserProvidersService — groq upsert, baseURL y STT", async () => {

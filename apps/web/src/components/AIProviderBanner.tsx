@@ -19,7 +19,7 @@ export function AIProviderBanner({ onOpenSettings }: AIProviderBannerProps) {
     void (async () => {
       try {
         const st = await fetchProviderStatus();
-        if (!cancelled) setMissing(!st.usable);
+        if (!cancelled) setMissing(!st.configured);
       } catch {
         if (!cancelled) setMissing(false);
       }

@@ -37,6 +37,10 @@ export default defineConfig({
         __dirname,
         "../../packages/shared-types/src/dbga-document-structure.ts",
       ),
+      "@theforge/shared-types/mdd-governance-patterns": path.resolve(
+        __dirname,
+        "../../packages/shared-types/src/mdd-governance-patterns.ts",
+      ),
     },
   },
   server: {

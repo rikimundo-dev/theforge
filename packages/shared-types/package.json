@@ -41,6 +41,11 @@
       "types": "./dist/format-document-markdown.d.ts",
       "import": "./dist/format-document-markdown.js",
       "require": "./dist/format-document-markdown.js"
+    },
+    "./mdd-governance-patterns": {
+      "types": "./dist/mdd-governance-patterns.d.ts",
+      "import": "./dist/mdd-governance-patterns.js",
+      "require": "./dist/mdd-governance-patterns.js"
     }
   },
   "scripts": {

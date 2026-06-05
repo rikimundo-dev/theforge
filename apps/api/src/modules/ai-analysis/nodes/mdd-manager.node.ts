@@ -18,11 +18,13 @@ import {
   ensureContratosSection,
   hydrateStructuredFromDraft,
   logMddNodeOutput,
+  finalizeMddDeliverable,
   normalizeMddFormat,
   replaceContextWhenOnlyMetadata,
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
 } from "../utils/mdd-sanitize.js";
+import { reconcileUiUxDesignIntent } from "../utils/mdd-enrich-uiux-intent.js";
 import { z } from "zod";
 import { GraphMemoryService } from "../graph-memory/graph-memory.service.js";
 import { generateImpactAnalysis } from "../utils/mdd-impact-analysis.js";
@@ -82,7 +84,7 @@ function inferSectionsFromMessage(text: string): string[] {
   const needsModelOrApi =
     /\b(modelo\s+de\s+datos|modelo\s+datos|tablas?|entidades?|schema|sql|roles?|permisos?|aplicaciones?|§3|secci[oó]n\s*3)\b/i.test(t) ||
     /\b(contratos?\s+api|endpoints?|§4|secci[oó]n\s*4)\b/i.test(t) ||
-    /\b(arquitectura|stack|frontend)\b/i.test(t) ||
+    /\b(arquitectura|stack|frontend|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|contenedores?|§2|secci[oó]n\s*2)\b/i.test(t) ||
     /\b(denue|inegi|directorio\s+estad[ií]stico|app\/api\/denue|consulta\/buscar)\b/i.test(t) ||
     /\b(base\s+de\s+datos|campo|columna|guardar(?:se)?\s+en|almacenar\s+en|jwt_token|refresh_token|token\s+en\s+bd)\b/i.test(t);
   if (needsModelOrApi) out.push("software_architect");
@@ -92,10 +94,28 @@ function inferSectionsFromMessage(text: string): string[] {
   ) {
     out.push("security");
   }
-  if (/\b(infraestructura|docker|kubernetes|despliegue|§7|secci[oó]n\s*7)\b/i.test(t)) {
+  if (/\b(infraestructura|docker|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|§7|secci[oó]n\s*7)\b/i.test(t)) {
     out.push("integration");
   }
   return [...new Set(out)];
+}
+
+/** Cambio concreto sobre stack/despliegue/infra (mensajes cortos que el LLM suele clasificar como reply). */
+function looksLikeExplicitMddModificationRequest(msg: string): boolean {
+  const t = (msg ?? "").trim();
+  if (t.length < 15) return false;
+  if (/^\s*¿/.test(t) && !/\b(cambiar|reemplaz|no\s+se\s+usar|usar[ií]a|sustitu|modific|actualiz)\b/i.test(t)) {
+    return false;
+  }
+  const changeIntent =
+    /\b(no\s+se\s+usar[aá]?|usar[ií]a|usar[aá]?|cambiar|cambio|reemplaz|sustitu|modific|actualiz|en\s+vez\s+de|en\s+lugar\s+de|pasar(?:emos)?\s+a)\b/i.test(
+      t,
+    );
+  const mddSurface =
+    /\b(kubernetes|kubernets|k8s|dokploy|coolify|docker|despliegue|deploy|infra|stack|§\s*2|secci[oó]n\s*2|secci[oó]n\s*7|§\s*7)\b/i.test(
+      t,
+    );
+  return changeIntent && mddSurface;
 }
 
 /** Descripción por nodo para el plan explícito (patrón Planner–Executor). */
@@ -142,7 +162,7 @@ const MODEL_REQUIREMENT_REGEX =
 
 /** Indicios de petición que afectan §2 Arquitectura y Stack (stack tecnológico, frontend, backend, etc.). */
 const STACK_SECTION2_REGEX =
-  /\b(stack|arquitectura|frontend|backend|framework|tecnolog[ií]a|nestjs|react|vue|angular|node\.?js|postgresql|mysql|vite|webpack|docker|secci[oó]n\s*2|§2)\b/i;
+  /\b(stack|arquitectura|frontend|backend|framework|tecnolog[ií]a|nestjs|react|vue|angular|node\.?js|postgresql|mysql|vite|webpack|docker|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|contenedores?|secci[oó]n\s*2|§2)\b/i;
 
 function truncateForGoal(text: string, max: number): string {
   const t = text.replace(/\s+/g, " ").trim();
@@ -233,17 +253,31 @@ function buildMddPlan(
   return [];
 }
 
+export type ExpandSectionsToRunOptions = {
+  /**
+   * full: format tras arquitecto + cola (format_after_redactor, diagram_injector, auditor).
+   * minimal: solo agentes de dominio (sin format ni cola) — planes acotados stack/infra.
+   */
+  tail?: "full" | "minimal";
+};
+
 /** Expande la lista de agentes solicitados a la secuencia real de nodos (incluye format entre escritores y tail). */
-export function expandSectionsToRun(agentNames: string[]): string[] {
+export function expandSectionsToRun(
+  agentNames: string[],
+  options?: ExpandSectionsToRunOptions,
+): string[] {
+  const tailMode = options?.tail ?? "full";
   const valid = new Set(agentNames.filter((a) => PIPELINE_AGENTS.includes(a as (typeof PIPELINE_AGENTS)[number])));
   const out: string[] = [];
   for (const node of PIPELINE_AGENTS) {
     if (valid.has(node)) {
       out.push(node);
-      if (node === "software_architect") out.push("format_after_architect");
+      if (tailMode === "full" && node === "software_architect") out.push("format_after_architect");
     }
   }
-  return out.length ? [...out, ...PIPELINE_TAIL] : [];
+  if (!out.length) return [];
+  if (tailMode === "minimal") return out;
+  return [...out, ...PIPELINE_TAIL];
 }
 
 const FULL_PIPELINE_NODES = ["clarifier", "software_architect", "format_after_architect", "security", "integration", "format_after_redactor", "diagram_injector", "auditor"] as const;
@@ -486,9 +520,10 @@ export function createMddManagerNode(
     const iteration = state.mddIteration ?? 0;
     LOG("entry lastUserMessage=%s mddDraftLen=%s auditorScore=%s", userMessage.slice(0, 80), (state.mddDraft ?? "").length, score);
 
-    // Done solo si Auditor >= 85% o usuario pide explícitamente detenerse.
-    if (score >= QUALITY_THRESHOLD) {
-      LOG("goto END (score >= 85)");
+    // Terminar solo sin mensaje nuevo (p. ej. vuelta del Executor). Con score alto el usuario
+    // sigue pudiendo pedir cambios (Dokploy, stack, etc.); no cortar en END aquí.
+    if (score >= QUALITY_THRESHOLD && !userMessage) {
+      LOG("goto END (score >= 85, sin mensaje nuevo)");
       return new Command({ goto: END });
     }
     if (score < AUDITOR_RETRY_THRESHOLD) {
@@ -507,8 +542,8 @@ export function createMddManagerNode(
     if (pending) {
       if (PLAN_APPROVAL_CONFIRM_PATTERN.test(userMessage)) {
         LOG("plan aprobado por usuario → Executor (paso a paso)");
-        const accumulatedWithRequest = [state.userInputAccumulated?.trim(), userMessage ? `Plan aprobado: ${userMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
-        const dbgaWithRequest = [state.dbgaContent?.trim(), userMessage ? `Plan aprobado: ${userMessage}` : ""].filter(Boolean).join("\n\n");
+        const accumulatedWithRequest = state.userInputAccumulated?.trim() ?? "";
+        const dbgaWithRequest = state.dbgaContent?.trim() ?? "";
         const directive = state.planUserIntent ?? getLastSubstantiveUserMessage(state);
         const impact = state.impactSummary?.trim();
         let mergedDirective = directive?.trim() ?? "";
@@ -594,9 +629,13 @@ export function createMddManagerNode(
           formatted = mddStructuredToMarkdown(hydrated);
         } else {
           const draft = (state.mddDraft ?? "").trim();
-          formatted = normalizeMddFormat(
-            ensureContratosSection(
-              replaceContextWhenOnlyMetadata(sanitizeContextKeyValueAndObject(sanitizeContextSection(draft))),
+          formatted = reconcileUiUxDesignIntent(
+            finalizeMddDeliverable(
+              normalizeMddFormat(
+                ensureContratosSection(
+                  replaceContextWhenOnlyMetadata(sanitizeContextKeyValueAndObject(sanitizeContextSection(draft))),
+                ),
+              ),
             ),
           );
         }
@@ -710,8 +749,16 @@ export function createMddManagerNode(
     if (state.pendingPlanApproval && state.lastUserMessage?.trim()) {
       const approved = PLAN_APPROVAL_CONFIRM_PATTERN.test(state.lastUserMessage.trim());
       const { mddPlan, delegateTarget, sectionsToRun, previousMddDraftForMerge } = state.pendingPlanApproval;
-      const accumulatedWithRequest = [state.userInputAccumulated?.trim(), state.lastUserMessage ? `Usuario: ${state.lastUserMessage}` : ""].filter(Boolean).join("\n\n---\n\n");
-      const dbgaWithRequest = [state.dbgaContent?.trim(), state.lastUserMessage ? `Usuario: ${state.lastUserMessage}` : ""].filter(Boolean).join("\n\n");
+      const accumulatedWithRequest = approved
+        ? state.userInputAccumulated?.trim() ?? ""
+        : [state.userInputAccumulated?.trim(), state.lastUserMessage ? `Usuario: ${state.lastUserMessage}` : ""]
+            .filter(Boolean)
+            .join("\n\n---\n\n");
+      const dbgaWithRequest = approved
+        ? state.dbgaContent?.trim() ?? ""
+        : [state.dbgaContent?.trim(), state.lastUserMessage ? `Usuario: ${state.lastUserMessage}` : ""]
+            .filter(Boolean)
+            .join("\n\n");
       if (approved) {
         LOG("plan aprobado por usuario → Executor (paso a paso)");
         const directive = state.planUserIntent ?? getLastSubstantiveUserMessage(state);
@@ -1006,6 +1053,52 @@ export function createMddManagerNode(
 
     // Sin fallbacks: mensajes de corrección/cambios pasan al LLM → plan → plan_approval → executor.
 
+    // Cambio explícito (p. ej. «no Kubernetes, usar Dokploy»): plan + impacto aunque el mensaje sea corto.
+    if (hasDraft && userMessage && looksLikeExplicitMddModificationRequest(userMessage)) {
+      const planDirective = getPlanDirective(state);
+      const minimalPlan = { tail: "minimal" as const };
+      let sectionsToRun = expandSectionsToRun(inferSectionsFromMessage(userMessage), minimalPlan);
+      if (sectionsToRun.length === 0) {
+        sectionsToRun = expandSectionsToRun(["software_architect", "security", "integration"], minimalPlan);
+      }
+      let mddPlan = await generateMddPlanWithLLM(llm, state, "sections", sectionsToRun);
+      if (!mddPlan.length) {
+        mddPlan = buildMddPlan("sections", sectionsToRun, getUserBrief(state), planDirective);
+      }
+      if (mddPlan.length > 0) {
+        const accumulatedWithRequest = [state.userInputAccumulated?.trim(), `Petición: ${userMessage}`]
+          .filter(Boolean)
+          .join("\n\n---\n\n");
+        const dbgaWithRequest = [state.dbgaContent?.trim(), `Petición: ${userMessage}`]
+          .filter(Boolean)
+          .join("\n\n");
+        const impactSummary = await generateImpactAnalysis(llm, state, userMessage);
+        LOG(
+          "cambio explícito MDD (stack/infra) → plan_approval sections=%s",
+          sectionsToRun.join(","),
+        );
+        return new Command({
+          update: {
+            userInputAccumulated: accumulatedWithRequest || state.userInputAccumulated,
+            dbgaContent: dbgaWithRequest || state.dbgaContent,
+            lastUserMessage: undefined,
+            managerQuestions: undefined,
+            requestQuestionsOnly: false,
+            pendingPlanApproval: {
+              mddPlan,
+              delegateTarget: "sections",
+              sectionsToRun,
+              previousMddDraftForMerge: state.mddDraft ?? "",
+              goto: sectionsToRun[0],
+            },
+            planUserIntent: planDirective,
+            impactSummary,
+          },
+          goto: "plan_approval",
+        });
+      }
+    }
+
     // Petición sustancial que describe qué hacer (modelo de datos, roles, API, seguridad, etc.) → generar plan solo con agentes involucrados y mostrar para aprobar.
     const substantialRequest =
       userMessage &&
@@ -1252,6 +1345,21 @@ export function createMddManagerNode(
     }
 
     LOG("action=%s delegateTarget=%s sectionsToRun=%s", action, delegateTarget, sectionsToRun?.length);
+
+    if (
+      action === "reply" &&
+      userMessage &&
+      hasDraft &&
+      looksLikeExplicitMddModificationRequest(userMessage)
+    ) {
+      LOG("reply anulado: cambio explícito MDD → forzar delegate/sections");
+      action = "delegate";
+      delegateTarget = "sections";
+      sectionsToRun = expandSectionsToRun(inferSectionsFromMessage(userMessage));
+      if (sectionsToRun.length === 0) {
+        sectionsToRun = expandSectionsToRun(["software_architect", "security", "integration"]);
+      }
+    }
 
     if (action === "reply") {
       LOG("interrupt reply");

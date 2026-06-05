@@ -134,7 +134,7 @@ function ContributorAvatarStrip({ contributors }: { contributors: readonly Forge
                     rel="noopener noreferrer"
                     className={cn(
                       "relative block rounded-full outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
-                      "transition-[transform,box-shadow] duration-200 ease-[cubic-bezier(0.33,1,0.68,1)]",
+                      "transition-[transform,box-shadow] duration-200 ease-forge-smooth",
                       "hover:-translate-y-2 hover:scale-[1.12] hover:shadow-md",
                       "active:scale-[1.06]",
                     )}

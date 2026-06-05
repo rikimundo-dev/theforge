@@ -72,19 +72,17 @@ pnpm run dev
 
 ---
 
-## Docker (Dokploy)
+## Docker
 
-Un solo contenedor con Postgres + API + Web (Nginx):
+| Perfil | Comando |
+|--------|---------|
+| **Dokploy (prod)** | `docker compose up --build` |
+| **Local full-docker** | `pnpm run compose:local` o merge con `docker-compose.local.yml` |
+| **Coolify** | Ver [docs/DEPLOY-COOLIFY.md](./docs/DEPLOY-COOLIFY.md) |
 
-```bash
-docker compose up --build
-```
+Desarrollo nativo: [README-LOCAL.md](./README-LOCAL.md).
 
-- **Puerto:** `80` — Web + proxy `/api` → API
-- **Volumen:** `theforge_db_data`
-- **Conexión interna:** `postgresql://theforge:theforge@localhost:5432/theforge`
-
-> Variables obligatorias en producción: `JWT_SECRET`, `DATABASE_URL`, `TOKEN_MASTER_KEYS`, `TOKEN_ACTIVE_KEY_VERSION`, `SMTP_HOST/USER/PASS` y `CORS_ORIGINS`. Las API keys de proveedores IA las guardan los usuarios en la UI (BYOK), no en el servidor. Ver referencia completa en [`.env.example`](./.env.example).
+Un solo contenedor legacy (Postgres + API + Web): ver `Dockerfile` raíz (no usado por el compose multi-servicio).
 
 ---
 

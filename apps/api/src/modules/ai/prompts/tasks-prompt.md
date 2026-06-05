@@ -1,6 +1,6 @@
 # Contexto #
 
-El **MDD es la Constitución del proyecto**; el **Blueprint es el Plan técnico**. Insumos: MDD y Blueprint del proyecto. Las tareas deben derivarse de ambos para ser ejecutadas por un equipo.
+El **MDD es la Constitución del proyecto**; el **Blueprint es el Plan técnico**. Insumos: MDD y Blueprint del proyecto. Las tareas deben derivarse de ambos y reflejar los **patrones [X]** del Wizard del MDD (user prompt).
 
 # Objetivo #
 

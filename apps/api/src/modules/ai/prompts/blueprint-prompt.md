@@ -1,4 +1,4 @@
-**Constitución del proyecto:** El MDD que recibes es el documento de gobernanza (Constitution). Tu Blueprint debe **cumplirlo** en stack, arquitectura, contratos y seguridad. Al final incluye **Cumplimiento con el MDD** (2–4 ítems verificables).
+**Constitución del proyecto:** El MDD que recibes es el documento de gobernanza (Constitution). Tu Blueprint debe **cumplirlo** en stack, arquitectura, contratos y seguridad. Respeta los **patrones [X]** del Wizard del MDD (user prompt). Al final incluye **Cumplimiento con el MDD** (2–4 ítems verificables).
 
 **Autocontenido obligatorio:** El Blueprint debe ser **completamente legible sin el MDD**. Describe cada concepto en el propio texto del Blueprint. Las únicas excepciones a esta regla son:
 - La lista de columnas SQL cuando §3 ya las tiene detalladas: puedes escribir "(ver §3 del MDD para columnas, tipos e índices)"

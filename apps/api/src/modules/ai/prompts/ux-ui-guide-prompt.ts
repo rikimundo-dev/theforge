@@ -5,14 +5,17 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { withDocumentChangelogInstructions } from "./with-document-changelog-instructions.js";
 
 const PROMPT_PATH = join(__dirname, "ux-ui-guide-prompt.md");
 
 function loadUxUiGuidePrompt(): string {
   try {
-    return readFileSync(PROMPT_PATH, "utf-8").trim();
+    return withDocumentChangelogInstructions(readFileSync(PROMPT_PATH, "utf-8").trim());
   } catch {
-    return "Eres Lead UX/UI. Construye una Guía UX/UI mediante preguntas (marca, colores, prioridades). Cuando tengas suficiente info, genera el documento en markdown y termina con ---FIN_UX_UI---.";
+    return withDocumentChangelogInstructions(
+      "Eres Lead UX/UI. Construye una Guía UX/UI mediante preguntas (marca, colores, prioridades). Cuando tengas suficiente info, genera el documento en markdown y termina con ---FIN_UX_UI---.",
+    );
   }
 }
 

@@ -43,7 +43,7 @@ const menuTriggerClosedClass = cn(
   "border border-[color-mix(in_oklch,var(--primary)_45%,var(--border))]",
   "bg-[var(--primary)] text-[var(--primary-foreground)]",
   "shadow-[0_4px_16px_color-mix(in_oklch,var(--primary)_38%,transparent)]",
-  "transition-[background-color,border-color,box-shadow,transform] duration-[var(--transition-base)]",
+  "transition-[background-color,border-color,box-shadow,transform] duration-base",
   "hover:border-[color-mix(in_oklch,var(--primary)_55%,white)]",
   "hover:bg-[var(--primary-hover)]",
   "hover:shadow-[var(--shadow-gold),0_6px_24px_color-mix(in_oklch,var(--primary)_48%,transparent)]",
@@ -57,13 +57,13 @@ const shellClass = cn(
   "bg-[color-mix(in_oklch,var(--card)_96%,var(--background))]",
   "shadow-[0_10px_32px_-4px_rgba(0,0,0,0.45)]",
   "ring-1 ring-[color-mix(in_oklch,var(--foreground)_7%,transparent)]",
-  "transition-[transform,box-shadow,width] duration-350 ease-[cubic-bezier(0.34,1.25,0.64,1)]",
+  "transition-[transform,box-shadow,width] duration-350 ease-forge-spring",
 );
 
 const menuRowClass = cn(
   "group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left",
   "text-[13px] font-medium leading-tight text-[var(--foreground)]",
-  "transition-[background-color,opacity,transform] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]",
+  "transition-[background-color,opacity,transform] duration-250 ease-forge-snappy",
   "hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-inset",
   "disabled:pointer-events-none disabled:opacity-40",
@@ -72,7 +72,7 @@ const menuRowClass = cn(
 const menuIconSlotClass = cn(
   "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[var(--border)]",
   "bg-[color-mix(in_oklch,var(--card)_70%,var(--muted))] text-[var(--muted-foreground)]",
-  "transition-[background-color,border-color,color] duration-[var(--transition-base)]",
+  "transition-[background-color,border-color,color] duration-base",
   "group-hover:border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] group-hover:bg-[var(--primary)] group-hover:text-[var(--primary-foreground)]",
   "[&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0",
 );
@@ -150,7 +150,7 @@ export function WorkshopDocBubbleMenu({
           {/* Action list — expands upward */}
           <div
             className={cn(
-              "grid transition-[grid-template-rows,opacity] duration-350 ease-[cubic-bezier(0.22,1,0.36,1)]",
+              "grid transition-[grid-template-rows,opacity] duration-350 ease-forge-snappy",
               open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
             )}
             aria-hidden={!open}
@@ -160,7 +160,7 @@ export function WorkshopDocBubbleMenu({
                 role="menu"
                 className={cn(
                   "flex flex-col gap-0.5 p-1.5 pb-1",
-                  "origin-bottom transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.34,1.2,0.64,1)]",
+                  "origin-bottom transition-[transform,opacity] duration-300 ease-forge-pop",
                   open ? "translate-y-0 opacity-100" : "translate-y-1 opacity-0",
                 )}
               >

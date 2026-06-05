@@ -34,11 +34,17 @@ export class AiAnalysisController {
     const sid = typeof stageId === "string" ? stageId.trim() || undefined : undefined;
     const metrics = await this.estimationService.getLiveMetricsForProject(id, undefined, sid);
     const mddContent = await this.estimationService.getMddContentForProject(id, sid);
+    const snapshot = await this.estimationService.getMddAuditSnapshot(id, sid);
     const precisionBreakdown =
       mddContent && mddContent.trim().length > 80
         ? this.estimationService.getPrecisionBreakdown(mddContent, { projectId: id, stageId: sid ?? null })
-        : undefined;
-    return { ...metrics, precisionBreakdown };
+        : snapshot?.precisionBreakdown;
+    return {
+      ...metrics,
+      precisionBreakdown,
+      auditTrail: snapshot?.auditTrail,
+      lastAuditAt: snapshot?.updatedAt,
+    };
   }
 
   @Post("estimation")
@@ -53,11 +59,17 @@ export class AiAnalysisController {
     const metrics = await this.estimationService.getLiveMetricsForProject(id, mddContent, sid);
     const contentForBreakdown =
       mddContent ?? (await this.estimationService.getMddContentForProject(id, sid));
+    const snapshot = await this.estimationService.getMddAuditSnapshot(id, sid);
     const precisionBreakdown =
       contentForBreakdown && contentForBreakdown.trim().length > 80
         ? this.estimationService.getPrecisionBreakdown(contentForBreakdown, { projectId: id, stageId: sid ?? null })
-        : undefined;
-    return { ...metrics, precisionBreakdown };
+        : snapshot?.precisionBreakdown;
+    return {
+      ...metrics,
+      precisionBreakdown,
+      auditTrail: snapshot?.auditTrail,
+      lastAuditAt: snapshot?.updatedAt,
+    };
   }
 
   /**
@@ -424,6 +436,33 @@ export class AiAnalysisController {
       throw new BadRequestException("projectId is required");
     }
     return this.aiAnalysis.getProjectDecisions(id);
+  }
+
+  @Post("mdd/suggest-governance-patterns")
+  async suggestGovernancePatterns(
+    @Body() body: { projectId?: string; stageId?: string },
+  ) {
+    const projectId = typeof body?.projectId === "string" ? body.projectId.trim() : "";
+    if (!projectId) throw new BadRequestException("projectId is required");
+    const stageId = typeof body?.stageId === "string" ? body.stageId.trim() : undefined;
+    return this.aiAnalysis.suggestGovernancePatterns(projectId, stageId);
+  }
+
+  @Post("mdd/record-governance-pattern-adrs")
+  async recordGovernancePatternAdrs(
+    @Body()
+    body: {
+      projectId?: string;
+      patterns?: Array<{ label: string; group: string; affects: string; description: string }>;
+    },
+  ) {
+    const projectId = typeof body?.projectId === "string" ? body.projectId.trim() : "";
+    if (!projectId) throw new BadRequestException("projectId is required");
+    const patterns = Array.isArray(body?.patterns) ? body.patterns : [];
+    if (patterns.length === 0) {
+      throw new BadRequestException("patterns is required");
+    }
+    return this.aiAnalysis.recordGovernancePatternAdrs(projectId, patterns);
   }
 
   // ─── Fase 0 — Entrevista Interactiva ─────────────────────────────

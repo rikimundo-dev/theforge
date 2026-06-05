@@ -17,7 +17,8 @@ const SQL_GLUE_REPLACEMENTS: Array<[RegExp, string]> = [
   [/_(REFERENCES)([a-z_])/gi, " REFERENCES$2"],
   [/_(REFERENCES)\b/gi, " REFERENCES"],
   [/([a-z_])_(ON|DEFAULT)\b/gi, "$1 $2"],
-  [/ON_([a-z_]+)\(/gi, "ON $1("],
+  [/\bON_(DELETE|UPDATE|CASCADE|RESTRICT|SET|NO\s+ACTION)\b/gi, "ON $1"],
+  [/regiON\s+estado\s*\(/gi, "region_estado("],
   [/^_(CREATE|INDEX)\b/gim, "$1"],
 ];
 

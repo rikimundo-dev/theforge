@@ -17,7 +17,7 @@ export class UserProvidersController {
 
   @Get("status")
   getStatus() {
-    return this.userProviders.hasUsableProvider(getRequestUserId()).then((usable) => ({ usable }));
+    return this.userProviders.getProviderStatus(getRequestUserId());
   }
 
   @Get("settings")

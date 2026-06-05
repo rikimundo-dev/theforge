@@ -28,9 +28,29 @@ cd /app && pnpm run rotate-master-key
 
 Documentación completa: [README.md § Cifrado de tokens BYOK](../README.md#cifrado-de-tokens-byok-claves-maestras).
 
+## ensure-infra.js
+
+Asegura runtime Docker (Colima en Mac si hace falta) y contenedores:
+
+| Contenedor | Puerto host |
+|------------|-------------|
+| `theforge-db` | 5432 |
+| `theforge-falkor-sdd` | 6379 |
+| `theforge-redis-queue` | 6381 |
+
+Usado por `dev:local` y `dev:api`. Ver [README-LOCAL.md](../README-LOCAL.md).
+
+## wait-for-api.js
+
+Antes de `vite`, hace polling a `GET /health` en el API (por defecto `http://127.0.0.1:3000/health`) hasta que responda o agote el timeout (120s). Lo usa `@theforge/web` en `pnpm run dev` / `dev:local` para que el proxy no reciba `ECONNREFUSED` mientras Nest compila.
+
+Variables opcionales: `PORT` / `API_PORT`, `API_WAIT_HOST`, `API_WAIT_TIMEOUT_MS`, `API_WAIT_INTERVAL_MS`.
+
+Si solo levantas el front (`dev:web`), el API debe estar ya en marcha o el script fallará con timeout.
+
 ## ensure-postgres.js
 
-Asegura que Colima (runtime de contenedores) y el contenedor Docker `theforge-db` (Postgres) estén en ejecución:
+Asegura que Colima (runtime de contenedores) y el contenedor Docker `theforge-db` (Postgres) estén en ejecución. **Preferir `ensure-infra.js`** (Postgres + Falkor + Redis cola).
 
 1. **Colima:** si no está corriendo, ejecuta `colima start --cpu 2 --memory 4`.
 2. **Postgres:** si el contenedor no existe, lo crea; si existe pero está parado, lo inicia; si ya está Up, no hace nada.

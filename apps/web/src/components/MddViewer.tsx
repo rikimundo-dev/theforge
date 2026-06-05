@@ -1,8 +1,23 @@
-import { Component, memo, useEffect, useId, useRef, useState } from "react";
+import {
+  Children,
+  Component,
+  isValidElement,
+  memo,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import mermaid from "mermaid";
 import { repairMarkdownFences } from "@theforge/shared-types/markdown-repair";
+import {
+  normalizeMermaidInDocument,
+  splitMermaidBodyAndTrailingProse,
+  stripMarkdownLeakFromMermaidDiagramBody,
+} from "@theforge/shared-types/mermaid";
 import { parseMarkdownSections } from "../utils/markdownSections";
 
 /** Quita bloques ```mermaid vacíos para no intentar renderizarlos (evita SVG de error). */
@@ -120,6 +135,18 @@ function normalizeMermaidExpert(raw: string): string {
  * 5. Líneas sueltas sin arrow (ej. "DB OK") → se convierten a `Note over B: texto`.
  *    Si no se puede determinar el participante, se ignoran (mejor que error de parse).
  */
+function prepareMermaidForRender(content: string): string {
+  const { diagram } = splitMermaidBodyAndTrailingProse(content);
+  const stripped = stripMarkdownLeakFromMermaidDiagramBody(diagram);
+  const expertNormalized = normalizeMermaidExpert(stripped);
+  const sequenced = /sequenceDiagram/i.test(expertNormalized)
+    ? normalizeMermaidSequenceSyntax(expertNormalized)
+    : expertNormalized;
+  return /erDiagram/i.test(sequenced)
+    ? normalizeMermaidForRender(sequenced)
+    : normalizeMermaidFirstLineKeywords(normalizeMermaidContent(sequenced));
+}
+
 function normalizeMermaidSequenceSyntax(content: string): string {
   // Solo aplicar a sequence diagrams
   if (!/sequenceDiagram/i.test(content)) return content;
@@ -154,6 +181,11 @@ function normalizeMermaidSequenceSyntax(content: string): string {
 
     // Skip empty lines, comments, and keywords
     if (!trimmed) { out.push(raw); continue; }
+    if (
+      /^```|^#{1,6}\s|^\*\*TechnicalMetadata\*\*|^TechnicalMetadata\s*:?\s*$|^-\s*`/i.test(trimmed)
+    ) {
+      break;
+    }
     if (/^(sequenceDiagram|participant|actor|Note\s|alt|else|end|loop|opt|par|rect|critical|break)\b/i.test(trimmed)) {
       out.push(raw);
       continue;
@@ -290,6 +322,8 @@ class MermaidBlockErrorBoundary extends Component<
   }
 }
 
+const MERMAID_BLOCK_MARKER = "data-theforge-mermaid";
+
 function MermaidBlock({ content, blockKey }: { content: string; blockKey: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const instanceId = useId();
@@ -312,10 +346,7 @@ function MermaidBlock({ content, blockKey }: { content: string; blockKey: string
 
     setError(null);
     let cancelled = false;
-    const expertNormalized = normalizeMermaidExpert(content);
-    const toRender = /erDiagram/i.test(expertNormalized)
-      ? normalizeMermaidForRender(expertNormalized)
-      : normalizeMermaidFirstLineKeywords(normalizeMermaidContent(expertNormalized));
+    const toRender = prepareMermaidForRender(content);
     if (!toRender) return;
 
     const doRender = async () => {
@@ -351,6 +382,7 @@ function MermaidBlock({ content, blockKey }: { content: string; blockKey: string
   }
   return (
     <div
+      {...{ [MERMAID_BLOCK_MARKER]: "1" }}
       className="my-6 block w-full min-w-0 [isolation:isolate] overflow-x-auto"
       aria-label="Diagrama Mermaid"
     >
@@ -362,12 +394,32 @@ function MermaidBlock({ content, blockKey }: { content: string; blockKey: string
   );
 }
 
+function preWrapsMermaidBlock(children: ReactNode): boolean {
+  return Children.toArray(children).some(
+    (child) =>
+      isValidElement(child) &&
+      typeof child.props === "object" &&
+      child.props !== null &&
+      MERMAID_BLOCK_MARKER in (child.props as Record<string, unknown>),
+  );
+}
+
 const MdSection = memo(function MdSection({ content }: { content: string }) {
   return (
     <div className={MARKDOWN_CLASS}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          pre({ children }) {
+            if (preWrapsMermaidBlock(children)) {
+              return <>{children}</>;
+            }
+            return (
+              <pre className="my-2 overflow-x-auto rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_78%,var(--card))] p-3 text-sm text-[var(--foreground)]">
+                {children}
+              </pre>
+            );
+          },
           code({ node, className, children, ...props }) {
             // mdast: node.value; hast: node.children[].value; React children (v10 puede pasar nodos)
             const fromNode =
@@ -391,6 +443,15 @@ const MdSection = memo(function MdSection({ content }: { content: string }) {
                   ? children
                   : String(children ?? "");
             const source = (fromNode || fromHast || fromChildren).replace(/\n$/, "").trim();
+            const isInlineCode =
+              !/\blanguage-[\w-]+\b/i.test(className ?? "") && !source.includes("\n");
+            if (isInlineCode) {
+              return (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            }
             const looksLikeMetadataOnly = /^\[\w+\](\s+\[\w+\])*$/.test(source.trim());
             if (looksLikeMetadataOnly) {
               return (
@@ -399,12 +460,17 @@ const MdSection = memo(function MdSection({ content }: { content: string }) {
                 </span>
               );
             }
-            if (looksLikeMermaidBlock(source, className) && source.trim()) {
+            const isMermaidLang = /\blanguage-mermaid\b/i.test(className ?? "");
+            if ((isMermaidLang || looksLikeMermaidBlock(source, className)) && source.trim()) {
               const trimmed = source.trim();
-              const expertNormalized = normalizeMermaidExpert(trimmed);
-              const normalized = /erDiagram/i.test(expertNormalized)
-                ? normalizeMermaidForRender(expertNormalized)
-                : normalizeMermaidFirstLineKeywords(normalizeMermaidSequenceSyntax(normalizeMermaidContent(expertNormalized)));
+              const normalized = prepareMermaidForRender(trimmed);
+              if (!normalized.trim()) {
+                return (
+                  <code className={className} {...props}>
+                    {normalizeCodeBlockToAsciiSpaces(source)}
+                  </code>
+                );
+              }
               const key = mermaidKey(normalized);
               return (
                 <MermaidBlockErrorBoundary content={normalized} blockKey={key}>
@@ -473,7 +539,9 @@ class MddViewerErrorBoundary extends Component<
  * evitando parpadeo al hacer streaming o al actualizar el documento.
  */
 function MddViewerInner({ content, className = "" }: MddViewerProps) {
-  const cleaned = stripBrokenMermaidBlocks(repairMarkdownFences(content));
+  const cleaned = stripBrokenMermaidBlocks(
+    normalizeMermaidInDocument(repairMarkdownFences(content)),
+  );
   const sections = parseMarkdownSections(cleaned);
 
   return (

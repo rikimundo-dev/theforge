@@ -13,6 +13,7 @@ Generar un **Domain Benchmark & Gap Analysis (DBGA)** en markdown que sirva como
 3. **Gap Detection & Recomendaciones:** Omisiones críticas en la idea del usuario; exceso/scope creep; recomendaciones para priorizar el backlog.
 4. **Complejidad:** Nivel de dificultad técnica (1–10) y breve justificación.
 5. **Arquitectura de acceso y roles:** Parte pública vs back-office; roles (superadmin, admin, etc.) y quién puede hacer qué.
+6. **Registro de cambios del documento:** Tabla al final con Versión, Fecha (mes/año en español) y Descripción del cambio. Fila inicial `1.0` en creación; incrementar en cada revisión material.
 
 # Estilo #
 
@@ -29,4 +30,4 @@ Arquitectos de software y responsables de producto que usarán el DBGA para cons
 # Respuesta #
 
 - **Solo markdown.** Sin saludos. El **primer carácter** de tu respuesta debe ser `#`.
-- Documento completo con las cinco secciones indicadas en Objetivo.
+- Documento completo con las seis secciones indicadas en Objetivo (incluido el registro de cambios al final).

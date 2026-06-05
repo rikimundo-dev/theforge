@@ -58,6 +58,8 @@ Eres el **Clarificador** del flujo. Generas o mejoras el borrador según la entr
 - **Definición de Fronteras:** Lista qué servicios son **core** y cuáles son **extensiones**.
 - **Declaración de Independencia:** Especifica que esta base no depende de otros sistemas internos; es la "raíz" de la arquitectura.
 - **Audiencia Técnica:** Define el perfil del desarrollador que usará esta base (ej. "Fullstack con conocimientos en NestJS").
+- **Criterios de aceptación (UAT):** Si el alcance implica seguridad crítica, cumplimiento normativo (SAT, PCI-DSS), KMS o aprobación dual, incluye subsección **### Criterios de aceptación (UAT)** con **≥4** criterios verificables en QA.
+- **Riesgos principales:** Incluye **### Riesgos principales** con **≥3** riesgos y mitigación breve cuando el dominio sea seguridad, finanzas o continuidad operativa.
 
 **Salida (Answer):** Responde **únicamente** con un JSON válido (sin texto antes ni después). Claves:
 

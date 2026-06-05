@@ -10,7 +10,7 @@ export const WORKSHOP_BTN_SIZE_ICON = "h-9 w-9 min-h-9 min-w-9 shrink-0 p-0";
 export const WORKSHOP_BTN_SIZE_ICON_COMPACT = "h-8 w-8 min-h-8 min-w-8 shrink-0 p-0";
 
 /** Icono dentro de botones `group` — siempre usar con `WorkshopButtonIcon`. */
-export const WORKSHOP_GROUP_ICON = "h-4 w-4 shrink-0 transition-colors duration-[var(--transition-base)]";
+export const WORKSHOP_GROUP_ICON = "h-4 w-4 shrink-0 transition-colors duration-base";
 
 export type WorkshopButtonIconTone = "primary" | "secondary" | "danger" | "success";
 
@@ -31,7 +31,7 @@ export const WORKSHOP_DOC_TOOLBAR_ICON = cn(
 
 /** Cuadrado solo icono: outline en reposo, relleno al hover (header, chat, doc toolbar). */
 const WORKSHOP_INVERSE_ICON_BTN_CHROME =
-  "group inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_65%,var(--muted))] text-[var(--muted-foreground)] shadow-sm transition-[background-color,border-color,color,box-shadow] duration-[var(--transition-base)] hover:border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] hover:bg-[var(--primary)] hover:text-[var(--primary-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:pointer-events-none disabled:opacity-40 touch-manipulation [&_svg]:transition-colors [&_svg]:duration-[var(--transition-base)] [&_svg]:group-hover:text-[var(--primary-foreground)]";
+  "group inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_65%,var(--muted))] text-[var(--muted-foreground)] shadow-sm transition-[background-color,border-color,color,box-shadow] duration-base hover:border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] hover:bg-[var(--primary)] hover:text-[var(--primary-foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))] disabled:pointer-events-none disabled:opacity-40 touch-manipulation [&_svg]:transition-colors [&_svg]:duration-base [&_svg]:group-hover:text-[var(--primary-foreground)]";
 
 export const WORKSHOP_INVERSE_ICON_BTN = cn(WORKSHOP_BTN_SIZE_ICON, WORKSHOP_INVERSE_ICON_BTN_CHROME);
 
@@ -45,20 +45,20 @@ export const WORKSHOP_INVERSE_ICON_BTN_COMPACT = cn(
 export const SIDEBAR_RAIL_ICON_BTN_OUTLINED = cn(
   WORKSHOP_BTN_SIZE_ICON_COMPACT,
   "group inline-flex items-center justify-center rounded-xl border border-[var(--border)] bg-transparent shadow-sm",
-  "text-[var(--muted-foreground)] transition-[background-color,border-color,color,box-shadow] duration-[var(--transition-base)]",
+  "text-[var(--muted-foreground)] transition-[background-color,border-color,color,box-shadow] duration-base",
   "hover:border-[var(--border)] hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]",
-  "disabled:pointer-events-none disabled:opacity-40 touch-manipulation [&_svg]:transition-colors [&_svg]:duration-[var(--transition-base)]",
+  "disabled:pointer-events-none disabled:opacity-40 touch-manipulation [&_svg]:transition-colors [&_svg]:duration-base",
 );
 
 /** Sidebar rail: reposo sin fondo ni borde; solo el paso activo lleva relleno. */
 export const SIDEBAR_RAIL_ICON_BTN_IDLE = cn(
   WORKSHOP_BTN_SIZE_ICON_COMPACT,
   "group inline-flex items-center justify-center rounded-xl border border-transparent bg-transparent shadow-none",
-  "text-[var(--muted-foreground)] transition-[background-color,border-color,color,box-shadow] duration-[var(--transition-base)]",
+  "text-[var(--muted-foreground)] transition-[background-color,border-color,color,box-shadow] duration-base",
   "hover:border-transparent hover:bg-[var(--sidebar-accent)] hover:text-[var(--sidebar-accent-foreground)]",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sidebar)]",
-  "disabled:pointer-events-none disabled:opacity-40 touch-manipulation [&_svg]:transition-colors [&_svg]:duration-[var(--transition-base)]",
+  "disabled:pointer-events-none disabled:opacity-40 touch-manipulation [&_svg]:transition-colors [&_svg]:duration-base",
 );
 
 /** Paso / control activo en el rail del sidebar. */

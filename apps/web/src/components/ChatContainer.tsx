@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import type { ChatImagePart } from "@theforge/shared-types";
 import { VISION_CONTEXT_HEADER } from "@theforge/shared-types/session";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
+import { isAgentProgressActive } from "../utils/agentProgress";
 import {
   Button,
   AlertDialog,
@@ -48,6 +49,7 @@ import {
 } from "@/constants/workshopDocToolbar";
 import { ChatProviderInfoButton } from "@/components/ChatProviderInfoButton";
 import { AiGenerationChatBubble, AiGenerativeDots } from "./AiGenerationLoader";
+import { PLAN_NODE_LABELS } from "@/utils/planApprovalChat";
 import {
   MDD_SECTION_COMMANDS,
   resolveRegenerateSectionFromChatMessage,
@@ -386,19 +388,6 @@ async function readFilesAsChatParts(files: Iterable<File>): Promise<ChatImagePar
   return out;
 }
 
-/** Etiquetas legibles por nodo del plan MDD (para aprobación). */
-const PLAN_NODE_LABELS: Record<string, string> = {
-  clarifier: "Clarificador (alcance)",
-  merge_section1_only: "Fusionar §1",
-  software_architect: "Arquitecto de Software",
-  format_after_architect: "Formatear documento",
-  security: "Seguridad",
-  integration: "Integración",
-  format_after_redactor: "Formatear final",
-  diagram_injector: "Diagramas Mermaid",
-  auditor: "Auditor",
-};
-
 type PlanStep = { step_id: string; task_description: string; node: string; goal?: string };
 
 function PlanApprovalCard({
@@ -501,6 +490,14 @@ export default function ChatContainer({
   const clearEvaluatorCritique = useWorkshopStore((s) => s.clearEvaluatorCritique);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
   const agentProgress = useWorkshopStore((s) => s.agentProgress);
+  const completedAgentSteps = useMemo(
+    () => agentProgress.filter((p) => !isAgentProgressActive(p)),
+    [agentProgress],
+  );
+  const activeAgentStep = useMemo(
+    () => agentProgress.find((p) => isAgentProgressActive(p)),
+    [agentProgress],
+  );
   const pendingPlanApproval = useWorkshopStore((s) => s.pendingPlanApproval);
   const isBenchmarkStreaming = activeTab === "benchmark" && loading && loadingReason === "benchmark";
   const isMddStreaming = loading && loadingReason === "mdd";
@@ -646,8 +643,25 @@ export default function ChatContainer({
   const benchmarkEmpty =
     activeTab === "benchmark" &&
     (messages.length === 0 || messages.every((m) => m.role === "assistant"));
-  const messagesToShow =
-    benchmarkEmpty && messages.length > 0 ? [] : messages;
+  const messagesToShow = useMemo(() => {
+    let list = benchmarkEmpty && messages.length > 0 ? [] : messages;
+    if (
+      activeTab === "mdd" &&
+      pendingPlanApproval?.plan.length &&
+      pendingPlanApproval.planMessage.trim()
+    ) {
+      const planMsg = pendingPlanApproval.planMessage.trim();
+      while (list.length > 0) {
+        const last = list[list.length - 1];
+        if (last?.role === "assistant" && (last.content?.trim() ?? "") === planMsg) {
+          list = list.slice(0, -1);
+        } else {
+          break;
+        }
+      }
+    }
+    return list;
+  }, [benchmarkEmpty, messages, activeTab, pendingPlanApproval]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
@@ -1189,13 +1203,13 @@ export default function ChatContainer({
                 aria-live="polite"
               >
                 <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--foreground-subtle)]">
-                  {agentProgress.length > 0 ? "Agentes trabajando" : "Flujo MDD en curso"}
+                  {loading ? "Progreso del flujo" : agentProgress.length > 0 ? "Pasos completados" : "Flujo MDD en curso"}
                 </p>
-                {agentProgress.length > 0 ? (
+                {agentProgress.length > 0 || loading ? (
                   <ul className="flex flex-col gap-2.5">
-                    {agentProgress.map((p, i) => (
+                    {completedAgentSteps.map((p, i) => (
                       <li
-                        key={i}
+                        key={`done-${i}-${p.agent}`}
                         className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-0.5 text-sm text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]"
                       >
                         <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5" aria-hidden>
@@ -1209,7 +1223,22 @@ export default function ChatContainer({
                         </div>
                       </li>
                     ))}
-                    {loading && (
+                    {activeAgentStep ? (
+                      <li className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-0.5 text-sm">
+                        <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
+                          <AiGenerativeDots />
+                        </span>
+                        <div className="min-w-0 flex flex-col gap-0.5 pt-0.5">
+                          <span className="font-semibold leading-snug text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">
+                            {activeAgentStep.agent}
+                          </span>
+                          <span className="text-xs leading-relaxed text-[var(--foreground-subtle)]">
+                            {activeAgentStep.message}
+                          </span>
+                        </div>
+                      </li>
+                    ) : null}
+                    {loading && !activeAgentStep ? (
                       <li className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 text-sm">
                         <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
                           <AiGenerativeDots />
@@ -1218,7 +1247,7 @@ export default function ChatContainer({
                           Siguiente paso…
                         </span>
                       </li>
-                    )}
+                    ) : null}
                   </ul>
                 ) : (
                   <div className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 text-sm text-[var(--muted-foreground)]">

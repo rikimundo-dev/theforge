@@ -1,61 +1,86 @@
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage } from "@langchain/core/messages";
+import { CROSS_CONSISTENCY_MDD_PROMPT } from "../prompts/load-prompts.js";
 import type { MDDStateType } from "../state/index.js";
+import {
+  applyCrossConsistencyPatches,
+  applyDeterministicCrossConsistencyFixes,
+  detectCrossConsistencyIssues,
+  parseCrossConsistencyPatches,
+  validateMddStructure,
+} from "../utils/mdd-sanitize.js";
 
 const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:CrossConsistency] ${msg}`, ...args);
 
+function shouldSkipLlmPass(draft: string, issues: string[]): boolean {
+  if (issues.length > 0) return false;
+  if (draft.length <= 5000) return false;
+  const validation = validateMddStructure(draft);
+  return validation.missingSections.length === 0 && validation.section3HasPayloads;
+}
+
+function buildCrossConsistencyUserMessage(draft: string, issues: string[]): string {
+  const issuesBlock =
+    issues.length > 0
+      ? `**Incoherencias detectadas (corrige con parches mínimos):**\n${issues.map((i) => `- ${i}`).join("\n")}\n\n`
+      : "";
+  return `${issuesBlock}**Borrador del MDD:**\n${draft.slice(0, 24_000)}`;
+}
+
 /**
- * Agente ligero de Consistencia Cruzada (Mesh Topology).
- * Su única tarea es detectar discrepancias técnicas entre secciones:
- * - Nombres de tablas en §3 vs §4 (API) vs §7 (Manifest).
- * - Tipos de datos en §3 vs §4.
- * - Stack en §2 vs §7.
+ * Consistencia cruzada híbrida (single-pass):
+ * 1. Siempre aplica correcciones deterministas y actualiza mddDraft.
+ * 2. Si quedan incoherencias (o el draft está incompleto), LLM devuelve parches find/replace directos.
  */
 export function createMddCrossConsistencyNode(llm: BaseChatModel) {
-    return async (state: MDDStateType): Promise<Partial<MDDStateType>> => {
-        LOG("iniciando revisión de consistencia cruzada...");
-        const draft = state.mddDraft ?? "";
-        if (!draft) return {};
+  return async (state: MDDStateType): Promise<Partial<MDDStateType>> => {
+    LOG("iniciando revisión de consistencia cruzada...");
+    const draft = state.mddDraft ?? "";
+    if (!draft) return {};
 
-        const prompt = `
-Eres el **Revisor de Consistencia Cruzada**. Tu única misión es detectar "mentiras" técnicas entre las secciones del MDD.
-No eres un redactor; eres un inspector.
+    const deterministicDraft = applyDeterministicCrossConsistencyFixes(draft);
+    const issues = detectCrossConsistencyIssues(deterministicDraft);
+    let current = deterministicDraft;
 
-**Protocolo de Inspección:**
-1. **Nombres de Tablas:** Los nombres de tablas en el SQL (§3) deben ser idénticos a los usados en los endpoints de la API (§4) y en el Manifest de Infraestructura (§7).
-2. **Tipos de Datos:** Si un campo es UUID en §3, no puede ser un integer autoincremental en los ejemplos JSON de §4.
-3. **Stack Tecnológico:** Si §2 dice "PostgreSQL", §7 no puede tener un manifest de "MongoDB".
-4. **Seguridad:** Si §6 dice "Argon2", §3 debe tener columnas para el password hash.
+    if (shouldSkipLlmPass(deterministicDraft, issues)) {
+      LOG(
+        "determinista OK (%d chars, 0 issues) → skip LLM",
+        deterministicDraft.length,
+      );
+      return deterministicDraft !== draft ? { mddDraft: deterministicDraft } : {};
+    }
 
-**Borrador del MDD:**
-${draft}
+    LOG(
+      "LLM parches directos (issues=%d, draftLen=%d)",
+      issues.length,
+      deterministicDraft.length,
+    );
 
-**Respuesta:**
-- Si todo es consistente, responde exactamente: "OK_CONSISTENT".
-- Si hay errores, envía directivas para los agentes responsables usando el formato:
-  \`[DIRECTIVE: TargetNode] Error de consistencia: {descripción}. Corregir.\`
-  Ejemplo: \`[DIRECTIVE: software_architect] Discrepancia: la tabla se llama 'users' en §3 pero 'usuarios' en §4. Unificar.\`
+    try {
+      const prompt = `${CROSS_CONSISTENCY_MDD_PROMPT}\n\n---\n${buildCrossConsistencyUserMessage(deterministicDraft, issues)}`;
+      const response = await llm.invoke([new HumanMessage(prompt)]);
+      const text = typeof response.content === "string" ? response.content : "";
 
-Responde solo con las directivas o con OK_CONSISTENT.
-`.trim();
+      if (text.includes("OK_CONSISTENT")) {
+        LOG("LLM: OK_CONSISTENT");
+        return current !== draft ? { mddDraft: current } : {};
+      }
 
-        const response = await llm.invoke([new HumanMessage(prompt)]);
-        const text = typeof response.content === "string" ? response.content : "";
+      const patches = parseCrossConsistencyPatches(text);
+      if (patches.length === 0) {
+        LOG("LLM sin parches parseables, conservando paso determinista");
+        return current !== draft ? { mddDraft: current } : {};
+      }
 
-        if (text.includes("OK_CONSISTENT")) {
-            LOG("consistencia cruzada validada (OK)");
-            return {};
-        }
+      const patched = applyCrossConsistencyPatches(current, patches);
+      current = applyDeterministicCrossConsistencyFixes(patched);
+      const remaining = detectCrossConsistencyIssues(current);
+      LOG("aplicados %d parches LLM; issues restantes=%d", patches.length, remaining.length);
 
-        // Extraer directivas si las hay
-        const { extractInternalDirectives } = await import("../utils/mdd-mesh-topology.js");
-        const internalDirectives = extractInternalDirectives(text, "cross_consistency_checker");
-
-        if (internalDirectives.length > 0) {
-            LOG("detectados %s errores de consistencia", internalDirectives.length);
-            return { internalDirectives };
-        }
-
-        return {};
-    };
+      return current !== draft ? { mddDraft: current } : {};
+    } catch (err) {
+      LOG("error LLM: %s — conservando paso determinista", err instanceof Error ? err.message : String(err));
+      return current !== draft ? { mddDraft: current } : {};
+    }
+  };
 }

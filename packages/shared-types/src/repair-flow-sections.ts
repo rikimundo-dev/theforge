@@ -2,7 +2,12 @@
  * Convierte secciones "Flujo de …" en diagramas Mermaid (flowchart).
  */
 
-import { normalizeMermaidDiagramBody, repairFlattenedWebhookFlowchart } from "./mermaid.js";
+import {
+  looksLikeJsonFlattenFlowchart,
+  normalizeMermaidDiagramBody,
+  repairFlattenedWebhookFlowchart,
+  splitMermaidBodyAndTrailingProse,
+} from "./mermaid.js";
 
 const FLOW_HEADING = /^#{2,4}\s+Flujo de\s+/i;
 
@@ -114,6 +119,23 @@ function wrapMermaidBody(body: string): string {
   return ["```mermaid", normalized, "```"].join("\n");
 }
 
+function isWebhookSyncDiagramBody(body: string): boolean {
+  const t = body.trim();
+  return (
+    /POST\s+\/api\/v1\/webhooks/i.test(t) ||
+    /Upsert en tabla espejo/i.test(t) ||
+    looksLikeJsonFlattenFlowchart(t)
+  );
+}
+
+function bulletsFromTrailingProse(trailing: string): string[] {
+  return trailing
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("- ") || l.startsWith("* "))
+    .map((l) => (l.startsWith("- ") ? l : `- ${l.replace(/^\*\s+/, "")}`));
+}
+
 export function repairFlowSectionsToMermaid(text: string): string {
   const lines = text.split("\n");
   const out: string[] = [];
@@ -134,6 +156,13 @@ export function repairFlowSectionsToMermaid(text: string): string {
           const block = extractMermaidBlock(lines, i);
           i = block.endIdx;
           existingMermaid = block.inner;
+          while (i < lines.length) {
+            const after = lines[i]!.trim();
+            if (/^#{1,4}\s/.test(after) && !FLOW_HEADING.test(after)) break;
+            if (/^```mermaid/i.test(after)) break;
+            body.push(lines[i]!);
+            i++;
+          }
           break;
         }
         body.push(lines[i]!);
@@ -141,14 +170,32 @@ export function repairFlowSectionsToMermaid(text: string): string {
       }
 
       if (existingMermaid != null) {
-        const repaired =
-          repairFlattenedWebhookFlowchart(existingMermaid) ??
-          normalizeMermaidDiagramBody(existingMermaid);
+        const { diagram, trailing } = splitMermaidBodyAndTrailingProse(existingMermaid);
+        const isAuth = /autenticaci[oó]n/i.test(t);
+        const trailingBullets = [
+          ...bulletsFromTrailingProse(trailing),
+          ...bulletsFromTrailingProse(body.join("\n")),
+        ];
+        let repaired =
+          repairFlattenedWebhookFlowchart(diagram) ?? normalizeMermaidDiagramBody(diagram);
+        if (isAuth && isWebhookSyncDiagramBody(diagram) && trailingBullets.length > 0) {
+          const fromBullets = stepsToFlowchartMermaid(
+            trailingBullets.map((b) => b.replace(/^[-*]\s+/, "")),
+          );
+          if (fromBullets) {
+            repaired = fromBullets.replace(/^```mermaid\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+          }
+        }
         const wrapped = repaired ? wrapMermaidBody(repaired) : "";
         if (wrapped) {
           out.push("");
           out.push(wrapped);
           out.push("");
+          const usedBulletsForAuth = isAuth && isWebhookSyncDiagramBody(diagram) && trailingBullets.length > 0;
+          if (trailingBullets.length > 0 && !usedBulletsForAuth) {
+            out.push(...trailingBullets);
+            out.push("");
+          }
         }
       } else {
         const steps = body

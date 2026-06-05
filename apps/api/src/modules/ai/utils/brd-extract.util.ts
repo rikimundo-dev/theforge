@@ -43,7 +43,7 @@ function looksLikeBrdMarkdown(text: string): boolean {
   if (t.length < MIN_BRD_BODY_CHARS) return false;
   const hasHeading = /^#{1,3}\s+\S/m.test(t);
   const hasBrdSignals =
-    /pain\s*points|problem\s*statement|alcance|requisitos|business\s+requirements|métricas\s+de\s+éxito|supuestos/i.test(
+    /contexto\s+y\s+objetivos|problema\s+de\s+negocio|alcance|capacidades\s+funcionales|business\s+requirements|criterios\s+de\s+aceptaci[oó]n|entidades\s+de\s+negocio|reglas\s+de\s+(?:negocio|operaci[oó]n)|m[eé]tricas\s+de\s+[eé]xito|supuestos|matriz\s+de\s+permisos|decision\s+log|flujos\s+de\s+negocio|pain\s*points|usuarios\s+y\s+casos\s+de\s+uso|l[ií]mites\s+del\s+alcance/i.test(
       t,
     );
   return hasHeading && hasBrdSignals;
@@ -51,7 +51,8 @@ function looksLikeBrdMarkdown(text: string): boolean {
 
 function extractMarkdownBrd(cleaned: string): string | null {
   const anchors = [
-    /(?:^|\n)#\s+(?:Business\s+Requirements|Pain\s+Points|BRD\b)/i,
+    /(?:^|\n)#\s+(?:Business\s+Requirements|BRD\b)/i,
+    /(?:^|\n)##\s+(?:1\.\s+)?Contexto\s+y\s+Objetivos/i,
     /(?:^|\n)##\s+Pain\s+Points/i,
     /(?:^|\n)##\s+[^\n]*Problem\s+Statement/i,
     /(?:^|\n)#\s+[^\n]{8,}/,

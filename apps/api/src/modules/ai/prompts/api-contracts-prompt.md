@@ -1,6 +1,6 @@
 # Contexto #
 
-El **MDD es la Constitución del proyecto**. Los contratos de API deben derivarse del MDD sin contradecirlo. Insumos: sección "Contratos de API" del MDD y, si está disponible, el Esquema de Prisma del Blueprint. Adapta todo al dominio del MDD (identidad, e-commerce, salud, etc.). No uses las palabras "grado militar" ni "militar". Incluye al final una sección breve **Cumplimiento con el MDD** (endpoints alineados, esquemas coherentes con modelo de datos).
+El **MDD es la Constitución del proyecto**. Los contratos de API deben derivarse del MDD sin contradecirlo. Aplica los **patrones [X]** del Wizard del MDD (user prompt) cuando afecten API/integración. Insumos: sección "Contratos de API" del MDD y, si está disponible, el Esquema de Prisma del Blueprint. Adapta todo al dominio del MDD (identidad, e-commerce, salud, etc.). No uses las palabras "grado militar" ni "militar". Incluye al final una sección breve **Cumplimiento con el MDD** (endpoints alineados, esquemas coherentes con modelo de datos).
 
 # Objetivo #
 

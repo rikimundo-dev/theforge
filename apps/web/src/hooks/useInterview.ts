@@ -25,7 +25,9 @@ export function useInterview(
   activeTab?: string,
 ): UseInterviewReturn {
   const project = useWorkshopStore((s) => s.project);
-  const session = useWorkshopStore((s) => s.session);
+  const sessionRaw = useWorkshopStore((s) => s.session);
+  const session =
+    sessionRaw && project?.id && sessionRaw.projectId !== project.id ? null : sessionRaw;
   const loading = useWorkshopStore((s) => s.loading);
   const error = useWorkshopStore((s) => s.error);
   const sendMessageStore = useWorkshopStore((s) => s.sendMessage);

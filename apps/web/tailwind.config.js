@@ -61,6 +61,13 @@ export default {
         base: "200ms",
         slow: "300ms",
       },
+      /** Evita ease-[cubic-bezier(...)] ambiguos con tailwindcss-animate / Tailwind 3.4+. */
+      transitionTimingFunction: {
+        "forge-smooth": "cubic-bezier(0.33, 1, 0.68, 1)",
+        "forge-snappy": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "forge-pop": "cubic-bezier(0.34, 1.2, 0.64, 1)",
+        "forge-spring": "cubic-bezier(0.34, 1.25, 0.64, 1)",
+      },
       keyframes: {
         "accordion-down": {
           from: { height: "0" },

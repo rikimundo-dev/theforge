@@ -7,6 +7,7 @@ import type {
 import type { ChatImagePart, ChecklistResult } from "@theforge/shared-types";
 import type { UserLLMRuntime } from "../providers/llm-runtime.types.js";
 import { llmMaxTokens } from "../config/llm-config.js";
+import { llmDebug } from "../config/llm-debug.util.js";
 import { runWithModelFallback } from "../config/llm-model-fallback.js";
 
 function buildOpenAiUserMessage(
@@ -39,9 +40,6 @@ function historyToOpenAiMessages(history: ChatMessage[]): OpenAI.Chat.ChatComple
   return history.map((m) => {
     if (m.role === "assistant") {
       return { role: "assistant", content: m.content };
-    }
-    if (m.images?.length) {
-      return buildOpenAiUserMessage(m.content, m.images);
     }
     return { role: "user", content: m.content };
   });
@@ -101,7 +99,7 @@ function chatModelChain(runtime: UserLLMRuntime): string[] {
 }
 
 function visionModelChain(runtime: UserLLMRuntime): string[] {
-  const primary = (runtime.visionModel?.trim() || runtime.chatModel?.trim() || "").trim();
+  const primary = runtime.visionModel?.trim() || "";
   if (!primary) return [];
   const vf =
     typeof runtime.extras?.visionModelFallback === "string"
@@ -109,10 +107,7 @@ function visionModelChain(runtime: UserLLMRuntime): string[] {
       : "";
   const dedupe = (models: string[]) =>
     models.filter((m, i, a) => Boolean(m) && a.indexOf(m) === i);
-  if (vf) return dedupe([primary, vf]);
-  const chain = chatModelChain(runtime);
-  if (chain.length > 1) return dedupe([primary, ...chain.slice(1)]);
-  return [primary];
+  return vf ? dedupe([primary, vf]) : [primary];
 }
 
 export class OpenAICompatibleAdapter implements LLMProvider {
@@ -130,6 +125,12 @@ export class OpenAICompatibleAdapter implements LLMProvider {
     this.label = `OpenAICompatibleAdapter(${runtime.providerId})`;
     this.chatModels = chatModelChain(runtime);
     this.visionModels = visionModelChain(runtime);
+    llmDebug("OpenAICompatibleAdapter", "adapter creado", {
+      providerId: runtime.providerId,
+      chatModels: this.chatModels,
+      visionModels: this.visionModels,
+      baseURL: runtime.baseURL ?? null,
+    });
     this.embeddingModel = runtime.embeddingModel;
     this.embeddingsEnabled = runtime.embeddingsEnabled && !!runtime.embeddingModel;
     const headers = optionalDefaultHeaders(runtime);
@@ -184,6 +185,14 @@ export class OpenAICompatibleAdapter implements LLMProvider {
   ): Promise<AsyncIterable<string>> {
     const hasImages = options?.userMessageImages != null && options.userMessageImages.length > 0;
     const models = hasImages ? this.visionModels : this.chatModels;
+
+    llmDebug("OpenAICompatibleAdapter", "generateResponseStream", {
+      label: this.label,
+      hasImages,
+      models,
+      activeTab: options?.activeTab ?? null,
+      historyTurns: history.length,
+    });
 
     const stream = await runWithModelFallback({
       models,

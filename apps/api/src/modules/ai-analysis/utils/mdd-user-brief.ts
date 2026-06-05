@@ -109,9 +109,9 @@ const MIN_SUBSTANTIVE_LENGTH = 25;
 /** Bloques que parecen pregunta del sistema, no requisito del usuario (excluir de directiva). */
 const SYSTEM_QUESTION_PATTERN = /^(?:¿Ejecutar\s+este\s+plan|¿Puedes\s+detallar|¿Quieres\s+que\s+avancemos)/i;
 
-/** Indicios de requisito de diseño: entidades, modelo, diagrama, aplicaciones, roles, permisos, stack, arquitectura. */
+/** Indicios de requisito de diseño: entidades, modelo, diagrama, aplicaciones, roles, permisos, stack, arquitectura, despliegue. */
 const DESIGN_REQUIREMENT_REGEX =
-  /\b(aplicaciones?|diagrama\s*(er|entidad|relaci[oó]n)?|entidad|entidades|modelo\s+de\s+datos|roles?|permisos?|relaci[oó]n(es)?|tablas?|usuarios?|CREATE\s+TABLE|stack|arquitectura|frontend|backend|framework|tecnolog[ií]a|nestjs|react|vue|angular|node\.?js|postgresql|mysql|vite|webpack|secci[oó]n\s*2|§2|denue|inegi|contratos?\s+de\s+api|endpoints?|documentaci[oó]n\s+(de\s+)?api|microservicio|consumo\s+del\s+microservicio|otras\s+aplicaciones|api\s+propia)\b/i;
+  /\b(aplicaciones?|diagrama\s*(er|entidad|relaci[oó]n)?|entidad|entidades|modelo\s+de\s+datos|roles?|permisos?|relaci[oó]n(es)?|tablas?|usuarios?|CREATE\s+TABLE|stack|arquitectura|frontend|backend|framework|tecnolog[ií]a|nestjs|react|vue|angular|node\.?js|postgresql|mysql|vite|webpack|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|contenedores?|docker|secci[oó]n\s*2|§2|secci[oó]n\s*7|§7|denue|inegi|contratos?\s+de\s+api|endpoints?|documentaci[oó]n\s+(de\s+)?api|microservicio|consumo\s+del\s+microservicio|otras\s+aplicaciones|api\s+propia)\b/i;
 
 /**
  * Ultimo mensaje sustancial del usuario (directiva al confirmar un plan): prioridad diseño > ultimo bloque > lastUserMessage.

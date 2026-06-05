@@ -1,0 +1,1 @@
+**Gobernanza inmutable del MDD:** No elimines ni reescribas la sección `## [ARQUITECTURA - SECCIÓN INMUTABLE] CONFIGURACIÓN DE PATRONES DE DESARROLLO`. Los patrones marcados con `[X]` en el Wizard son la SSOT vinculante para las secciones §2–§7 y para Spec, Arquitectura, API, Flujos, Tasks e Infra. Si el usuario no marcó un patrón, no lo impongas en el diseño.

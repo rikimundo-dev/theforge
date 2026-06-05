@@ -20,6 +20,7 @@ export class ModelsUnavailableExceptionFilter implements ExceptionFilter {
       statusCode: HttpStatus.SERVICE_UNAVAILABLE,
       message: exception.message,
       code: MODELS_UNAVAILABLE_CODE,
+      ...(exception.details ? { details: exception.details } : {}),
     });
   }
 }

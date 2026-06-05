@@ -57,8 +57,30 @@ export async function updateUserAISettings(
   return res.json() as Promise<UserAISettings>;
 }
 
-export async function fetchProviderStatus(): Promise<{ usable: boolean }> {
+export async function fetchProviderStatus(): Promise<{
+  usable: boolean;
+  configured: boolean;
+  resolveError?: string;
+  runtime?: {
+    providerId: string;
+    chatModel: string;
+    fallbacks: string[];
+    source: "tenant" | "byok";
+    instanceName?: string;
+  };
+}> {
   const res = await api.get(`${BASE}/status`);
   await ensureOk(res, "No se pudo comprobar el proveedor de IA");
-  return res.json() as Promise<{ usable: boolean }>;
+  return res.json() as Promise<{
+    usable: boolean;
+    configured: boolean;
+    resolveError?: string;
+    runtime?: {
+      providerId: string;
+      chatModel: string;
+      fallbacks: string[];
+      source: "tenant" | "byok";
+      instanceName?: string;
+    };
+  }>;
 }

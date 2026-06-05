@@ -1,5 +1,10 @@
-# Dokploy: db + api + web + FalkorDB (grafo SDD documental; TheForge MCP es externo)
+# Dokploy (prod): db + api + web + FalkorDB (grafo SDD documental; TheForge MCP es externo)
 # Traefik en Dokploy: / → theforge-web:80 (solo estáticos); /api → theforge-api:3000 (strip path).
+#
+# Otros perfiles (no modifican este archivo):
+#   Local full-docker:  docker compose -f docker-compose.yml -f docker-compose.local.yml up --build
+#   Coolify:            docker compose -f docker-compose.yml -f docker-compose.coolify.yml up --build
+#   Ver docs/DEPLOY-COOLIFY.md y README-LOCAL.md § Opción B
 # El nginx del contenedor web no hace proxy a la API (evita duplicar rutas con Traefik).
 # Si falla "network dokploy-network not found", quitar la red externa (Isolated Deployments)
 # default con name evita que Compose cree una red *_default extra (reduce agotamiento de address pools)
@@ -99,6 +104,8 @@ services:
       TOKEN_ACTIVE_KEY_VERSION: ${TOKEN_ACTIVE_KEY_VERSION:-1}
       OPENAI_EMBEDDING_DIM: ${OPENAI_EMBEDDING_DIM:-}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-}
+      # Trazas LLM detalladas (cadena de modelos, runtime, chat stream): LLM_DEBUG=1
+      LLM_DEBUG: ${LLM_DEBUG:-}
       # Scout (DBGA): búsqueda web vía @langchain/tavily; sin clave el Scout puede limitarse a scrape/otras rutas.
       TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       # THEFORGE_MCP_URL / MCP_AUTH_TOKEN / MCP_X_M2M_TOKEN: no usar ${VAR:-} aquí (quedan
