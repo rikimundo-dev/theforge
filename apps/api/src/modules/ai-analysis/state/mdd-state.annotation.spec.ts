@@ -3,11 +3,22 @@ import { describe, it } from "node:test";
 import { reduceMddDraft, reducePreferDefined } from "./mdd-state.annotation.js";
 
 describe("reduceMddDraft", () => {
-  it("prefiere el borrador más largo cuando hay dos actualizaciones", () => {
+  it("prefiere el borrador más largo cuando el nuevo es una ampliación", () => {
     const short = "# Master Design Document\n\n## 1. Contexto\n\nBreve.";
     const long = `${short}\n\n## 2. Arquitectura\n\n${"x".repeat(400)}`;
     assert.equal(reduceMddDraft(short, long), long);
-    assert.equal(reduceMddDraft(long, short), long);
+  });
+
+  it("prefiere la actualización más reciente aunque sea más corta (MDD reescrito)", () => {
+    const prev = `# Master Design Document\n\n## 1. Contexto\n\n${"a".repeat(4000)}\n\n## 2. Arquitectura y Stack\n\n| Contenedores | Docker + Kubernetes |`;
+    const next = `# Master Design Document\n\n## 1. Contexto\n\nResumen.\n\n## 2. Arquitectura y Stack\n\n| Contenedores | Docker + Dokploy |`;
+    assert.equal(reduceMddDraft(prev, next), next);
+  });
+
+  it("conserva el previo si el nuevo parece fragmento sin estructura MDD", () => {
+    const prev = `# Master Design Document\n\n## 1. Contexto\n\n${"x".repeat(5000)}`;
+    const fragment = "solo un párrafo suelto sin secciones.";
+    assert.equal(reduceMddDraft(prev, fragment), prev);
   });
 
   it("conserva el valor previo si la actualización está vacía", () => {

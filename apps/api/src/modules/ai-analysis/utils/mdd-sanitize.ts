@@ -1345,6 +1345,34 @@ export function extractArquitecturaSectionBody(draft: string): string | null {
   return null;
 }
 
+/**
+ * Si la directiva pide Dokploy / no Kubernetes, actualiza la fila de contenedores en §2.1 de forma determinista.
+ */
+export function applyDeploymentStackDirectiveToDraft(draft: string, directive: string): string {
+  if (!draft?.trim() || !directive?.trim()) return draft;
+  const wantsDokploy = /\bdokploy\b/i.test(directive);
+  const rejectsK8s =
+    (/\b(no\s+se\s+usar[aá]?|sin\s+|reemplaz|sustitu|en\s+lugar\s+de)\b/i.test(directive) &&
+      /\b(kubernetes|kubernets|k8s)\b/i.test(directive)) ||
+    /\b(kubernetes|kubernets|k8s)\b[\s\S]{0,120}\b(dokploy)\b/i.test(directive);
+  if (!wantsDokploy && !rejectsK8s) return draft;
+
+  let body = extractArquitecturaSectionBody(draft);
+  if (!body) return draft;
+
+  body = body.replace(/\|\s*Contenedores\s*\|[^|\n]*\|[^|\n]*\|[^|\n]*\|/gi, (row) => {
+    if (!/\bkubernetes|kubernets|k8s\b/i.test(row) && !/\bdokploy\b/i.test(row)) return row;
+    return "| Contenedores | Docker + Dokploy | — | Despliegue con Dokploy; sin orquestación Kubernetes |";
+  });
+  body = body.replace(/Docker\s*\+\s*Kubernetes/gi, "Docker + Dokploy");
+  body = body.replace(
+    /\|\s*Infraestructura\s*\|[^|\n]*\b(?:kubernetes|kubernets|k8s)\b[^|\n]*\|/gi,
+    "| Infraestructura | Docker / Dokploy | — |",
+  );
+
+  return replaceArquitecturaSectionBody(draft, body);
+}
+
 /** Reemplaza el cuerpo de "## 2. Arquitectura y Stack" en draft por newBody. */
 export function replaceArquitecturaSectionBody(draft: string, newBody: string): string {
   for (const re of ARQUITECTURA_HEADINGS) {
@@ -2288,6 +2316,135 @@ export function replaceSection6Or7InDraft(
     return (trimmed.slice(0, otherRange.end) + "\n\n" + sectionMd + (otherRange.end < trimmed.length ? "\n\n" + trimmed.slice(otherRange.end) : "")).trim();
   }
   return (trimmed + "\n\n" + sectionMd).trim();
+}
+
+/** Cuerpo de sección MDD que aún no tiene contenido real (placeholders del pipeline). */
+export function isMddSectionPlaceholderBody(body: string | null | undefined): boolean {
+  const b = (body ?? "").trim();
+  if (!b || b.length < 30) return true;
+  if (/^\s*\(?\s*(Pendiente|TBD|\[Placeholder|\/\/ TODO)/i.test(b)) return true;
+  if (/Pendiente:\s*Arquitecto/i.test(b)) return true;
+  if (/Pendiente:\s*Ingeniero/i.test(b)) return true;
+  return false;
+}
+
+export function extractSection6Body(draft: string): string | null {
+  const range = getSection6Or7Range((draft ?? "").trim(), 6);
+  if (!range) return null;
+  const body = draft.slice(range.start + range.heading.length, range.end).replace(/^\s*\n+/, "").trim();
+  return isMddSectionPlaceholderBody(body) ? null : body;
+}
+
+export function extractSection7Body(draft: string): string | null {
+  const range = getSection6Or7Range((draft ?? "").trim(), 7);
+  if (!range) return null;
+  const body = draft.slice(range.start + range.heading.length, range.end).replace(/^\s*\n+/, "").trim();
+  return isMddSectionPlaceholderBody(body) ? null : body;
+}
+
+function replaceH2SectionBody(draft: string, headingPattern: RegExp, newBody: string): string {
+  headingPattern.lastIndex = 0;
+  const match = headingPattern.exec(draft);
+  if (!match || match.index == null) return draft;
+  const sectionStart = match.index + match[0].length;
+  const rest = draft.slice(sectionStart);
+  const nextH2 = rest.search(/\n##\s+/);
+  const endOfSection = nextH2 !== -1 ? sectionStart + nextH2 : draft.length;
+  const afterSection = endOfSection < draft.length ? draft.slice(endOfSection).trimStart() : "";
+  return draft.slice(0, sectionStart) + "\n\n" + newBody.trim() + (afterSection ? "\n\n" + afterSection : "");
+}
+
+function replaceSection3Body(draft: string, newBody: string): string {
+  return replaceH2SectionBody(draft, /##\s*3\.\s*Modelo\s+(?:de\s+)?datos/i, newBody);
+}
+
+function replaceSection4Body(draft: string, newBody: string): string {
+  return replaceH2SectionBody(
+    draft,
+    /##\s*4\.\s*Contratos\s+de\s+API|##\s*3\.\s*Contratos\s+de\s+API|##\s*Contratos\s+de\s+API/i,
+    newBody,
+  );
+}
+
+function replaceSection5Body(draft: string, newBody: string): string {
+  return replaceH2SectionBody(draft, /##\s*5\.\s*Lógica\s+y\s*Edge\s+Cases/i, newBody);
+}
+
+/** Secciones 1–7 que no serán reescritas por los nodos del plan sections (sin format/diagram/auditor). */
+export function getSectionsToPreserveFromExecutorPlan(sectionsToRun: string[] | undefined): number[] {
+  if (!sectionsToRun?.length) return [];
+  const touched = new Set<number>();
+  for (const node of sectionsToRun) {
+    if (node === "clarifier" || node === "merge_section1_only") touched.add(1);
+    if (node === "software_architect") {
+      touched.add(2);
+      touched.add(3);
+      touched.add(4);
+      touched.add(5);
+    }
+    if (node === "security") touched.add(6);
+    if (node === "integration") touched.add(7);
+  }
+  return [1, 2, 3, 4, 5, 6, 7].filter((n) => !touched.has(n));
+}
+
+/**
+ * Restaura desde baseline las secciones listadas cuando el draft actual tiene placeholder o cuerpo peor.
+ * Usado en planes acotados (executorControlled + sectionsToRun) para no vaciar §3–§6 fuera de alcance.
+ */
+export function preserveUntouchedMddSectionsFromBaseline(
+  currentDraft: string,
+  baselineDraft: string,
+  sectionsToPreserve: number[],
+): string {
+  if (!baselineDraft.trim() || !sectionsToPreserve.length) return currentDraft;
+  let out = currentDraft;
+  for (const n of sectionsToPreserve) {
+    const prevBody =
+      n === 1
+        ? extractContextSectionBody(baselineDraft)
+        : n === 2
+          ? extractArquitecturaSectionBody(baselineDraft)
+          : n === 3
+            ? extractSection3Body(baselineDraft)
+            : n === 4
+              ? extractSection4Body(baselineDraft)
+              : n === 5
+                ? getSectionBody(baselineDraft.trim(), /##\s*5\.\s*Lógica\s+y\s*Edge\s+Cases/i)
+                : n === 6
+                  ? extractSection6Body(baselineDraft)
+                  : n === 7
+                    ? extractSection7Body(baselineDraft)
+                    : null;
+    if (!prevBody || isMddSectionPlaceholderBody(prevBody)) continue;
+    const curBody =
+      n === 1
+        ? extractContextSectionBody(out)
+        : n === 2
+          ? extractArquitecturaSectionBody(out)
+          : n === 3
+            ? extractSection3Body(out)
+            : n === 4
+              ? extractSection4Body(out)
+              : n === 5
+                ? getSectionBody(out.trim(), /##\s*5\.\s*Lógica\s+y\s*Edge\s+Cases/i)
+                : n === 6
+                  ? extractSection6Body(out) ?? getSectionBody(out.trim(), /##\s*6\.\s*Seguridad/i)
+                  : n === 7
+                    ? extractSection7Body(out) ?? getSectionBody(out.trim(), /##\s*7\.\s*Infraestructura/i)
+                    : null;
+    const curIsPlaceholder = isMddSectionPlaceholderBody(curBody);
+    const curShorter = (curBody?.length ?? 0) < prevBody.length * 0.5;
+    if (!curIsPlaceholder && !curShorter) continue;
+    if (n === 1) out = replaceContextSectionBody(out, prevBody);
+    else if (n === 2) out = replaceArquitecturaSectionBody(out, prevBody);
+    else if (n === 3) out = replaceSection3Body(out, prevBody);
+    else if (n === 4) out = replaceSection4Body(out, prevBody);
+    else if (n === 5) out = replaceSection5Body(out, prevBody);
+    else if (n === 6) out = replaceSection6Or7InDraft(out, 6, `## 6. Seguridad\n\n${prevBody}`);
+    else if (n === 7) out = replaceSection6Or7InDraft(out, 7, `## 7. Infraestructura\n\n${prevBody}`);
+  }
+  return out;
 }
 
 /** Línea que es solo el título de la sección (evitar duplicar "6. Seguridad" en el cuerpo). */

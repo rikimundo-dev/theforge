@@ -4,9 +4,11 @@ import {
   extractSection3Body,
   getMddDraftSummary,
   getSection6Or7Range,
+  getSectionsToPreserveFromExecutorPlan,
   hydrateStructuredFromDraft,
   logMddNodeOutput,
   normalizeMddFormat,
+  preserveUntouchedMddSectionsFromBaseline,
   replaceContextWhenOnlyMetadata,
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
@@ -49,8 +51,15 @@ export function createMddFormatterNode(): (state: MDDStateType) => Promise<Parti
     // No reemplazar por mddStructured si: directiva aceptada, §3 sustancial, o §6 sustancial (evitar pisar Seguridad generada por Security node).
     const preserveDraftFromArchitect =
       (state.acceptedProposalDirective ?? "").trim().length > 0 && currentDraftLen > 500;
+    const executorSectionPreserve =
+      state.executorControlled === true &&
+      (state.previousMddDraftForMerge?.trim().length ?? 0) > 500 &&
+      getSectionsToPreserveFromExecutorPlan(state.sectionsToRun).length > 0;
     const preserveDraft =
-      preserveDraftFromArchitect || draftHasSubstantialSection3 || draftHasSubstantialSection6;
+      preserveDraftFromArchitect ||
+      draftHasSubstantialSection3 ||
+      draftHasSubstantialSection6 ||
+      executorSectionPreserve;
 
     if (hasStructuredContent(state.mddStructured) && !preserveDraft) {
       try {
@@ -81,11 +90,22 @@ export function createMddFormatterNode(): (state: MDDStateType) => Promise<Parti
       return {};
     }
     try {
-      const formatted = normalizeMddFormat(
+      let formatted = normalizeMddFormat(
         ensureContratosSection(
           replaceContextWhenOnlyMetadata(sanitizeContextKeyValueAndObject(sanitizeContextSection(draft))),
         ),
       );
+      if (state.executorControlled === true && state.previousMddDraftForMerge?.trim()) {
+        const preserve = getSectionsToPreserveFromExecutorPlan(state.sectionsToRun);
+        if (preserve.length > 0) {
+          formatted = preserveUntouchedMddSectionsFromBaseline(
+            formatted,
+            state.previousMddDraftForMerge.trim(),
+            preserve,
+          );
+          LOG("preservadas secciones fuera de plan tras format: %s", preserve.join(","));
+        }
+      }
       if (formatted === draft) {
         const sum = getMddDraftSummary(draft);
         LOG("sin cambios len=%s section2=%s", sum.length, sum.section2);

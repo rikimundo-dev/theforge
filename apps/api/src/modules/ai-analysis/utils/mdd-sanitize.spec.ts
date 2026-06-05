@@ -1,6 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { normalizeMddEnglishSubheadings, sanitizeSeguridadIntegracionRawJson } from "./mdd-sanitize.js";
+import {
+  applyDeploymentStackDirectiveToDraft,
+  getSectionsToPreserveFromExecutorPlan,
+  isMddSectionPlaceholderBody,
+  normalizeMddEnglishSubheadings,
+  preserveUntouchedMddSectionsFromBaseline,
+  sanitizeSeguridadIntegracionRawJson,
+} from "./mdd-sanitize.js";
+import { expandSectionsToRun } from "../nodes/mdd-manager.node.js";
 
 describe("normalizeMddEnglishSubheadings", () => {
   it("traduce subtítulos típicos del brief en inglés (§1–§2, §6)", () => {
@@ -103,5 +111,99 @@ describe("sanitizeSeguridadIntegracionRawJson", () => {
 `;
     const result = sanitizeSeguridadIntegracionRawJson(other);
     assert.ok(result.includes("(Pendiente de definir.)"));
+  });
+});
+
+describe("isMddSectionPlaceholderBody", () => {
+  it("trata (Pendiente: Arquitecto de Seguridad) como placeholder", () => {
+    assert.ok(isMddSectionPlaceholderBody("(Pendiente: Arquitecto de Seguridad)"));
+    assert.ok(!isMddSectionPlaceholderBody("### A. Autenticación\n\n- JWT con rotación de claves."));
+  });
+});
+
+describe("getSectionsToPreserveFromExecutorPlan", () => {
+  it("preserva §6 cuando el plan solo incluye architect e integration", () => {
+    const agents = expandSectionsToRun(["software_architect", "integration"], { tail: "minimal" });
+    assert.deepStrictEqual(agents, ["software_architect", "integration"]);
+    const preserve = getSectionsToPreserveFromExecutorPlan(agents);
+    assert.ok(preserve.includes(6));
+    assert.ok(!preserve.includes(2));
+    assert.ok(!preserve.includes(7));
+  });
+});
+
+describe("preserveUntouchedMddSectionsFromBaseline", () => {
+  it("restaura §6 real cuando el arquitecto dejó placeholder", () => {
+    const baseline = `# MDD
+
+## 1. Contexto
+
+Contexto largo con alcance del producto y requisitos no funcionales descritos.
+
+## 2. Arquitectura y Stack
+
+Stack original.
+
+## 3. Modelo de Datos
+
+\`\`\`sql
+CREATE TABLE users ( id UUID PRIMARY KEY );
+\`\`\`
+
+## 4. Contratos de API
+
+### GET /api/v1/health
+
+OK.
+
+## 5. Lógica y Edge Cases
+
+Reglas.
+
+## 6. Seguridad
+
+### A. Autenticación
+
+- MFA TOTP obligatorio para administradores.
+
+## 7. Infraestructura
+
+Docker legacy.
+`;
+    const damaged = baseline.replace(
+      /## 6\. Seguridad[\s\S]*?(?=\n## 7\.)/,
+      "## 6. Seguridad\n\n(Pendiente: Arquitecto de Seguridad)\n\n",
+    );
+    const out = preserveUntouchedMddSectionsFromBaseline(
+      damaged,
+      baseline,
+      getSectionsToPreserveFromExecutorPlan(["software_architect", "integration"]),
+    );
+    assert.match(out, /MFA TOTP obligatorio/);
+    assert.doesNotMatch(out, /Pendiente:\s*Arquitecto de Seguridad/);
+  });
+});
+
+describe("applyDeploymentStackDirectiveToDraft", () => {
+  it("reemplaza Docker + Kubernetes por Dokploy en §2", () => {
+    const draft = `# Master Design Document
+
+## 1. Contexto
+
+Algo.
+
+## 2. Arquitectura y Stack
+
+### 2.1 Stack Tecnológico
+
+| Capa | Tecnología | Versión | Justificación |
+| Contenedores | Docker + Kubernetes | 24 / 1.28 | Orquestación |
+`;
+    const out = applyDeploymentStackDirectiveToDraft(
+      draft,
+      "No se usará kubernetes; se usaría dokploy",
+    );
+    assert.match(out, /Docker \+ Dokploy/i);
+    assert.doesNotMatch(out, /Docker \+ Kubernetes/i);
   });
 });

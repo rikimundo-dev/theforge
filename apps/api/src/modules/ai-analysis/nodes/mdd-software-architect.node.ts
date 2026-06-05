@@ -6,7 +6,24 @@ import type { MDDStateType } from "../state/index.js";
 import { mddContratosApiSchema } from "../state/mdd-structured.schema.js";
 import { mddStructuredToMarkdown } from "../render/mdd-structured-to-markdown.js";
 import { mergeMddStructured } from "../utils/mdd-merge-structured.js";
-import { ensureContratosSection, extractSection3Body, getMddDraftSummary, logMddNodeOutput, logSection3Debug, normalizeMddFormat, parseModeloDatosFromSection3Markdown, preserveContextSectionIfSubstantial, replaceContextWhenOnlyMetadata, sanitizeContextSection } from "../utils/mdd-sanitize.js";
+import {
+  applyDeploymentStackDirectiveToDraft,
+  ensureContratosSection,
+  extractSection3Body,
+  extractSection6Body,
+  extractSection7Body,
+  getMddDraftSummary,
+  getSectionsToPreserveFromExecutorPlan,
+  isMddSectionPlaceholderBody,
+  logMddNodeOutput,
+  logSection3Debug,
+  normalizeMddFormat,
+  parseModeloDatosFromSection3Markdown,
+  preserveContextSectionIfSubstantial,
+  preserveUntouchedMddSectionsFromBaseline,
+  replaceContextWhenOnlyMetadata,
+  sanitizeContextSection,
+} from "../utils/mdd-sanitize.js";
 import { getUserBrief, getUserExplicitRequirements } from "../utils/mdd-user-brief.js";
 import { extractFirstJsonObject, extractJsonFromCodeBlock } from "../utils/parse-json.js";
 import { parseJsonOrThrow } from "../utils/parse-json.js";
@@ -421,18 +438,12 @@ export type MddSoftwareArchitectNodeOptions = {
 
 /** Extrae el cuerpo de ## 6. Seguridad del draft (hasta ## 7. o fin). */
 function extractSection6SeguridadBody(draft: string): string | null {
-  const m = draft.match(/\n##\s+(?:6\.\s+)?Seguridad\b[^\n]*\n+([\s\S]*?)(?=\n##\s+|\z)/i);
-  if (!m?.[1]) return null;
-  const body = m[1].trim();
-  return body.length > 30 && !/^\s*\(?\s*Pendiente\s*\)?\s*$/i.test(body) ? body : null;
+  return extractSection6Body(draft);
 }
 
 /** Extrae el cuerpo de ## 7. Infraestructura del draft (hasta fin de documento). */
 function extractSection7InfraestructuraBody(draft: string): string | null {
-  const m = draft.match(/\n##\s+(?:7\.\s+)?Infraestructura\b[^\n]*\n+([\s\S]*?)(?=\n##\s+|\z)/i);
-  if (!m?.[1]) return null;
-  const body = m[1].trim();
-  return body.length > 30 && !/^\s*\(?\s*Pendiente\s*\)?\s*$/i.test(body) ? body : null;
+  return extractSection7Body(draft);
 }
 
 /** Reemplaza el cuerpo de una sección en el draft. Busca el heading y reemplaza hasta el siguiente ## o fin. */
@@ -448,8 +459,7 @@ function replaceSectionBody(draft: string, headingPattern: RegExp, newBody: stri
 
 /** Regex para detectar si §6 o §7 tienen solo placeholder (Pendiente, TBD, etc.). */
 function isPlaceholderSection(body: string | null): boolean {
-  if (!body || body.length < 30) return true;
-  return /^\s*\(?\s*(Pendiente|TBD|\[Placeholder|\/\/ TODO)/i.test(body);
+  return isMddSectionPlaceholderBody(body);
 }
 
 function buildArchitectToolsByName(tools: StructuredToolInterface[]): Record<string, StructuredToolInterface> {
@@ -484,13 +494,18 @@ export function createMddSoftwareArchitectNode(
     LOG("Draft Preview (Section 2 search): %s", (state.mddDraft ?? "").match(/##\s*2\.[^#]*/)?.[0]?.slice(0, 100) ?? "Not found");
     try {
       const draftTrimmed = (state.mddDraft ?? "").trim();
+      const mergeBaseline = (state.previousMddDraftForMerge ?? "").trim() || draftTrimmed;
+      const sectionsToPreserve =
+        state.executorControlled === true
+          ? getSectionsToPreserveFromExecutorPlan(state.sectionsToRun)
+          : [];
       const brief = getUserBrief(state);
       const explicitReqs = getUserExplicitRequirements(state);
       const directive = state.acceptedProposalDirective?.trim();
       const AFFECTS_MODEL_REGEX =
         /\b(modelo\s+de\s+datos|sql|tablas?|fk|clave\s+externa|integridad\s+referencial|references|create\s+table|entidades?|diagrama\s*(er|entidad|relaci[oó]n)?|aplicaciones?|relaci[oó]n(es)?|permisos?\s+en|roles?\s+por\s+aplicaci[oó]n)\b/i;
       const AFFECTS_SECTION2_REGEX =
-        /\b(stack|arquitectura|frontend|backend|framework|tecnolog[ií]a|nestjs|react|vue|angular|node\.?js|postgresql|mysql|vite|webpack|docker|secci[oó]n\s*2|§2)\b/i;
+        /\b(stack|arquitectura|frontend|backend|framework|tecnolog[ií]a|nestjs|react|vue|angular|node\.?js|postgresql|mysql|vite|webpack|docker|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|contenedores?|secci[oó]n\s*2|§2)\b/i;
       const affectsModel = !!(directive && AFFECTS_MODEL_REGEX.test(directive));
       const affectsSection2 = !!(directive && AFFECTS_SECTION2_REGEX.test(directive)) || (explicitReqs.length > 0 && AFFECTS_SECTION2_REGEX.test(explicitReqs));
       const explicitReqsAffectModel = explicitReqs.length > 0 && AFFECTS_MODEL_REGEX.test(explicitReqs);
@@ -841,18 +856,25 @@ export function createMddSoftwareArchitectNode(
       mddDraft = replaceContextWhenOnlyMetadata(mddDraft);
       mddDraft = ensureContratosSection(mddDraft);
       mddDraft = normalizeMddFormat(mddDraft);
-      // Preservar §6 y §7 del borrador entrante si el LLM los reemplazó con placeholders
-      const incomingSection6 = extractSection6SeguridadBody(draftTrimmed);
+      // Preservar §6 y §7 del borrador de merge si el LLM los reemplazó con placeholders
+      const incomingSection6 = extractSection6SeguridadBody(mergeBaseline);
       const currentSection6 = extractSection6SeguridadBody(mddDraft);
       if (incomingSection6 && isPlaceholderSection(currentSection6)) {
         mddDraft = replaceSectionBody(mddDraft, /##\s+(?:6\.\s+)?Seguridad\b[^\n]*/i, `## 6. Seguridad\n\n${incomingSection6}`);
-        LOG("preservada sección 6 entrante (el Arquitecto puso placeholder)");
+        LOG("preservada sección 6 desde baseline (el Arquitecto puso placeholder)");
       }
-      const incomingSection7 = extractSection7InfraestructuraBody(draftTrimmed);
+      const incomingSection7 = extractSection7InfraestructuraBody(mergeBaseline);
       const currentSection7 = extractSection7InfraestructuraBody(mddDraft);
       if (incomingSection7 && isPlaceholderSection(currentSection7)) {
         mddDraft = replaceSectionBody(mddDraft, /##\s+(?:7\.\s+)?Infraestructura\b[^\n]*/i, `## 7. Infraestructura\n\n${incomingSection7}`);
-        LOG("preservada sección 7 entrante (el Arquitecto puso placeholder)");
+        LOG("preservada sección 7 desde baseline (el Arquitecto puso placeholder)");
+      }
+      if (sectionsToPreserve.length > 0 && mergeBaseline.length >= minLength) {
+        mddDraft = preserveUntouchedMddSectionsFromBaseline(mddDraft, mergeBaseline, sectionsToPreserve);
+        LOG("preservadas secciones fuera de plan desde baseline: %s", sectionsToPreserve.join(","));
+      }
+      if (directive && affectsSection2) {
+        mddDraft = applyDeploymentStackDirectiveToDraft(mddDraft, directive);
       }
       const sum = getMddDraftSummary(mddDraft);
       LOG("ok mddDraftLen=%s section2=%s", sum.length, sum.section2);
