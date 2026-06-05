@@ -11,11 +11,14 @@ import { getUserBrief } from "../utils/mdd-user-brief.js";
 import {
   buildNewFormatManifestFromIdentifiedTerms,
   extractIdentifiedInfraFromText,
+  ensureSection6WhenSection7Present,
   fixIntegrationSectionBullets,
   getMddDraftSummary,
   integracionToSection7Markdown,
   jsonSectionToMarkdown,
   logMddNodeOutput,
+  getSectionsToPreserveFromExecutorPlan,
+  preserveUntouchedMddSectionsFromBaseline,
   replaceSection6Or7InDraft,
   sanitizeManifestToMatchIdentifiedInfra,
   stripInstructionAndFeedbackBlocks,
@@ -184,7 +187,10 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
       const contextParts: string[] = briefBlock ? [briefBlock] : [];
       if (state.acceptedProposalDirective?.trim()) {
         const directive = state.acceptedProposalDirective.trim();
-        const affectsSection7 = /\b(infraestructura|docker|ci\/cd|despliegue|variables?\s+de\s+entorno|manifest|\.env|integracion)\b/i.test(directive);
+        const affectsSection7 =
+          /\b(infraestructura|docker|ci\/cd|despliegue|variables?\s+de\s+entorno|manifest|\.env|integracion|kubernetes|kubernets|k8s|dokploy|coolify|contenedores?)\b/i.test(
+            directive,
+          );
         const priorityBlock = affectsSection7
           ? ["**Prioridad (léelo primero):** La ACCIÓN REQUERIDA siguiente tiene prioridad máxima. Aplícala en ## 7. Infraestructura/Integración.", ""]
           : [];
@@ -258,7 +264,17 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
           }),
         };
         const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
-        const fallbackDraft = replaceSection6Or7InDraft(state.mddDraft ?? "", 7, integracionToSection7Markdown(slice.integracion));
+        let fallbackDraft = replaceSection6Or7InDraft(state.mddDraft ?? "", 7, integracionToSection7Markdown(slice.integracion));
+        if (state.executorControlled === true && state.previousMddDraftForMerge?.trim()) {
+          const preserve = getSectionsToPreserveFromExecutorPlan(state.sectionsToRun);
+          if (preserve.length > 0) {
+            fallbackDraft = preserveUntouchedMddSectionsFromBaseline(
+              fallbackDraft,
+              state.previousMddDraftForMerge.trim(),
+              preserve,
+            );
+          }
+        }
         logMddNodeOutput("Integration", fallbackDraft);
         return { mddStructured: merged, mddDraft: fallbackDraft };
       }
@@ -315,7 +331,19 @@ export function createMddIntegrationNode(llm: BaseChatModel) {
         ? { subsections: merged.integracion }
         : (merged.integracion ?? slice.integracion);
       const section7Md = integracionToSection7Markdown(integracionForMd);
-      const mddDraft = replaceSection6Or7InDraft(state.mddDraft ?? "", 7, section7Md);
+      const draftWithSection6 = ensureSection6WhenSection7Present(state.mddDraft ?? "");
+      let mddDraft = replaceSection6Or7InDraft(draftWithSection6, 7, section7Md);
+      if (state.executorControlled === true && state.previousMddDraftForMerge?.trim()) {
+        const preserve = getSectionsToPreserveFromExecutorPlan(state.sectionsToRun);
+        if (preserve.length > 0) {
+          mddDraft = preserveUntouchedMddSectionsFromBaseline(
+            mddDraft,
+            state.previousMddDraftForMerge.trim(),
+            preserve,
+          );
+          LOG("preservadas secciones fuera de plan tras integration: %s", preserve.join(","));
+        }
+      }
       const sum = getMddDraftSummary(mddDraft);
       LOG("ok integracion §7 en mddDraft len=%s section2=%s", sum.length, sum.section2);
       logMddNodeOutput("Integration", mddDraft);

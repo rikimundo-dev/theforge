@@ -173,3 +173,9 @@ export const MDD_LLM_FORMATTER_PROMPT = loadPrompt(
   "mdd-formatter-prompt.md",
   "Eres el Formateador del MDD. Recibes JSON estructurado y generas markdown limpio. Sin JSON keys en la salida.",
 );
+
+export const CROSS_CONSISTENCY_MDD_PROMPT = loadPrompt(
+  "mdd",
+  "cross-consistency-prompt.md",
+  "Eres el Revisor de Consistencia Cruzada del MDD. Responde OK_CONSISTENT o un array JSON de parches find/replace.",
+);

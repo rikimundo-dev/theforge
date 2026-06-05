@@ -86,6 +86,18 @@ K8s.
     assert.ok(!isPlaceholderSeguridad(items));
   });
 
+  it("ignora placeholder del arquitecto (Pendiente: Arquitecto de Seguridad)", () => {
+    const draft = `## 6. Seguridad
+
+(Pendiente: Arquitecto de Seguridad)
+
+## 7. Infraestructura
+
+K8s.
+`;
+    assert.strictEqual(seguridadItemsFromDraftSection6(draft), null);
+  });
+
   it("replaceSection6Or7 preserva §1 al actualizar desde items del draft", () => {
     const draft = `# MDD
 

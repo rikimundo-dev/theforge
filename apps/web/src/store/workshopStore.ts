@@ -16,6 +16,11 @@ import { isModelsUnavailableStreamError } from "../utils/llm-stream-error";
 import { parseNdjsonLine } from "../utils/ndjson";
 import { mddHasSection6Heading } from "../utils/mddSectionRegen";
 import { isWorkshopAgentsBusy } from "../utils/workshopAgentsBusy";
+import { appendAgentProgressDone, type AgentProgressItem } from "../utils/agentProgress";
+import {
+  buildPlanApprovalChatContents,
+  isPlanApprovalResumeMessage,
+} from "../utils/planApprovalChat";
 import { listGovernancePatternOptions } from "@theforge/shared-types/mdd-governance-patterns";
 
 function workshopScopeProjectId(get: () => WorkshopState): string {
@@ -671,7 +676,7 @@ interface WorkshopState {
   /** Tab del mensaje en streaming (para filtrar por tab) */
   streamingTab: string | null;
   /** Progreso de agentes DBGA (Benchmark): qué agente trabaja y qué hace */
-  agentProgress: Array<{ agent: string; message: string; step?: string; status?: string }>;
+  agentProgress: AgentProgressItem[];
   /** Conteo de docs completados en cascada (para botón) */
   cascadeCompleted: number;
   cascadeTotal: number;
@@ -917,7 +922,7 @@ const initialState = {
   streamingUserImages: null as ChatImagePart[] | null,
   streamingContent: null as string | null,
   streamingTab: null as string | null,
-  agentProgress: [] as Array<{ agent: string; message: string; step?: string; status?: string }>,
+  agentProgress: [] as AgentProgressItem[],
   cascadeCompleted: 0,
   cascadeTotal: 0,
   liveMetrics: null as LiveMetricsResult | null,
@@ -1533,7 +1538,13 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         loadingReason: "mdd",
         error: null,
         synced: false,
-        agentProgress: [{ agent: "Regenerando sección", message: `§${regenerateSection}...` }],
+        agentProgress: [
+          {
+            agent: "Regenerando sección",
+            message: `Regenerando §${regenerateSection}…`,
+            status: "active",
+          },
+        ],
       });
       try {
         const appendRes = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
@@ -1576,7 +1587,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
               try {
                 const ev = event as { type: string; agent?: string; markdown?: string; message?: string; precision?: number; status?: string; precisionBreakdown?: PrecisionBreakdown };
                 if (ev.type === "progress" && ev.agent != null && ev.message != null) {
-                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
+                  set((s) => ({
+                    agentProgress: appendAgentProgressDone(s.agentProgress, {
+                      agent: ev.agent!,
+                      message: ev.message!,
+                    }),
+                  }));
                 } else if (ev.type === "done") {
                   const merged = (ev.markdown ?? "").trim();
                   if (merged.length > 80) {
@@ -1692,6 +1708,11 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
     if (tab === "mdd" && session?.id) {
       const managerThreadId = get().managerThreadId;
+      const pendingPlan = get().pendingPlanApproval;
+      const approvingPlan =
+        Boolean(pendingPlan?.plan?.length) &&
+        managerThreadId != null &&
+        isPlanApprovalResumeMessage(msg);
       const wantsManager = true;
 
       const looksLikeMddDocument =
@@ -1742,6 +1763,28 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
             sessionForManager = updatedSession;
             set({ session: updatedSession });
           }
+
+          if (approvingPlan && pendingPlan && sessionForManager?.id) {
+            const stageId = get().activeStageId;
+            for (const content of buildPlanApprovalChatContents(
+              pendingPlan.planMessage,
+              pendingPlan.plan,
+            )) {
+              const planArchiveRes = await apiFetch(
+                `${API_BASE}/sessions/${sessionForManager.id}/messages`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: sessionMessageBody({ role: "assistant", content, tab: "mdd" }, stageId),
+                },
+              );
+              if (planArchiveRes.ok) {
+                sessionForManager = (await planArchiveRes.json()) as Session;
+                set({ session: sessionForManager });
+              }
+            }
+          }
+
           set({ streamingUserMessage: null, streamingUserImages: null });
 
           const enrichedFromChat = lastMddUserMessageContent(sessionForManager?.chatLog);
@@ -1818,7 +1861,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     set((s) => {
                       if ((s.projectId ?? s.project?.id ?? "").trim() !== requestProjectId) return s;
                       return {
-                        agentProgress: [...s.agentProgress, { agent: event.agent!, message: event.message! }],
+                        agentProgress: appendAgentProgressDone(s.agentProgress, {
+                          agent: event.agent!,
+                          message: event.message!,
+                        }),
                       };
                     });
                   } else if (event.type === "draft" && event.markdown != null && event.markdown.trim().length > 80) {
@@ -1863,24 +1909,27 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                       });
                     }
 
-                    // Calculamos clarifierContent siempre (plan_approval usa planMessage)
-                    const clarifierContent =
-                      Array.isArray(event.plan) && event.plan.length > 0 && event.planMessage
-                        ? event.planMessage
-                        : event.reply != null && event.reply !== ""
-                          ? event.reply
-                          : Array.isArray(event.questions) && event.questions.length > 0
-                            ? event.questions.join("\n\n")
-                            : "Responde en el chat para continuar con la entrevista (objetivos del sistema, integraciones, etc.).";
+                    const hasPlanForApproval =
+                      Array.isArray(event.plan) && event.plan.length > 0;
+                    // plan_approval: PlanApprovalCard ya muestra planMessage + tabla «Tareas y responsables»;
+                    // no duplicar el mismo texto como burbuja en el historial del chat.
+                    const clarifierContent = hasPlanForApproval
+                      ? null
+                      : event.reply != null && event.reply !== ""
+                        ? event.reply
+                        : Array.isArray(event.questions) && event.questions.length > 0
+                          ? event.questions.join("\n\n")
+                          : "Responde en el chat para continuar con la entrevista (objetivos del sistema, integraciones, etc.).";
 
-                    // Ya NO enviamos auditContent al chat explícitamente, solo clarifierContent
-                    const messagesToPost: string[] = [clarifierContent];
                     let sess = get().session;
-                    for (const content of messagesToPost) {
+                    if (clarifierContent) {
                       const appendAssistant = await apiFetch(`${API_BASE}/sessions/${session.id}/messages`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: sessionMessageBody({ role: "assistant", content, tab: "mdd" }, get().activeStageId),
+                        body: sessionMessageBody(
+                          { role: "assistant", content: clarifierContent, tab: "mdd" },
+                          get().activeStageId,
+                        ),
                       });
                       if (appendAssistant.ok) {
                         sess = (await appendAssistant.json()) as Session;
@@ -2765,7 +2814,12 @@ if (prog && prog.step && prog.step !== "done") {
                   code?: string;
                 };
                 if (ev.type === "progress" && ev.agent != null && ev.message != null) {
-                  set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
+                  set((s) => ({
+                    agentProgress: appendAgentProgressDone(s.agentProgress, {
+                      agent: ev.agent!,
+                      message: ev.message!,
+                    }),
+                  }));
                 } else if (ev.type === "done" && ev.markdown != null) {
                   finalMarkdown = ev.markdown;
                   if (ev.complexityProposal != null) {
@@ -2853,11 +2907,16 @@ if (prog && prog.step && prog.step !== "done") {
               for (const event of parseNdjsonLine(line)) {
                 try {
                   const ev = event as { type: string; agent?: string; message?: string; markdown?: string; code?: string };
-                  if (ev.type === "progress" && ev.agent != null && ev.message != null) {
-                    set((s) => ({ agentProgress: [...s.agentProgress, { agent: ev.agent!, message: ev.message! }] }));
-                  } else if (ev.type === "draft" && ev.markdown != null && ev.markdown.trim().length > 80) {
-                    accumulatedMdd = ev.markdown;
-                    set({ mddContent: ev.markdown });
+                if (ev.type === "progress" && ev.agent != null && ev.message != null) {
+                  set((s) => ({
+                    agentProgress: appendAgentProgressDone(s.agentProgress, {
+                      agent: ev.agent!,
+                      message: ev.message!,
+                    }),
+                  }));
+                } else if (ev.type === "draft" && ev.markdown != null && ev.markdown.trim().length > 80) {
+                  accumulatedMdd = ev.markdown;
+                  set({ mddContent: ev.markdown });
                   } else if (ev.type === "done" && ev.markdown != null) {
                     finalMarkdown = ev.markdown;
                   } else if (ev.type === "blocked" && ev.message) {

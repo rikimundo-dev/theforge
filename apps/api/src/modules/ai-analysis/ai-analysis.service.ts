@@ -17,6 +17,7 @@ import { NodeCacheService } from "./checkpoint/node-cache.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
 import type { AuditorGaps } from "./estimation/estimation.types.js";
 import { stateToMarkdown, getAgentLabel } from "./state/state-to-markdown.js";
+import { getMddNodeProgressMessage } from "./utils/mdd-progress-messages.js";
 import {
   extractContextSectionBody,
   extractSections2To5Content,
@@ -355,10 +356,10 @@ export class AiAnalysisService {
       : undefined;
 
     const order: Array<{ node: string; message: string }> = [
-      { node: "scout", message: "Buscando competidores y referencias de mercado..." },
-      { node: "auditor", message: "Analizando tech stack de los competidores..." },
-      { node: "critic", message: "Validando calidad de la investigación..." },
-      { node: "synthesis", message: "Generando documento de Gap Analysis..." },
+      { node: "scout", message: "Competidores y referencias de mercado recopilados" },
+      { node: "auditor", message: "Tech stack de competidores analizado" },
+      { node: "critic", message: "Calidad de la investigación validada" },
+      { node: "synthesis", message: "Documento de Gap Analysis generado" },
     ];
 
     let lastState: Record<string, unknown> = {};
@@ -504,18 +505,6 @@ export class AiAnalysisService {
         : {}),
     };
 
-    const mddOrder: Array<{ node: string; message: string }> = [
-      { node: "clarifier", message: "Clarificando alcance y requisitos..." },
-      { node: "software_architect", message: "Definiendo schema SQL y contratos de API..." },
-      { node: "architect_critic", message: "Verificando §3 y §4 frente a la directiva..." },
-      { node: "format_after_architect", message: "Formateando documento..." },
-      { node: "security", message: "Definiendo arquitectura de seguridad..." },
-      { node: "integration", message: "Definiendo integraciones..." },
-      { node: "format_after_redactor", message: "Formateando documento..." },
-      { node: "diagram_injector", message: "Añadiendo diagramas Mermaid..." },
-      { node: "auditor", message: "Evaluando calidad del MDD..." },
-    ];
-
     let lastState: MDDState = initialState;
     const auditTrail: string[] = [];
 
@@ -538,9 +527,8 @@ export class AiAnalysisService {
             if (draftLen) extra.push(`draft=${draftLen}`);
             if (scopeLen) extra.push(`scope=${scopeLen}`);
             auditTrail.push(`${nodeName}(${extra.join(" ")})`);
-            const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : getAgentLabel(nodeName);
-            yield { type: "progress", agent: label, message: entry?.message ?? nodeName };
+            yield { type: "progress", agent: label, message: getMddNodeProgressMessage(nodeName) };
           }
         }
         if (mode === "values" && data && typeof data === "object") {
@@ -647,8 +635,6 @@ export class AiAnalysisService {
     });
     const threadId = row.threadId;
 
-    yield { type: "progress", agent: "Manager", message: "Procesando tu mensaje..." };
-
     let graph: Awaited<ReturnType<typeof createMddGraphWithManager>>;
     try {
       const mddUserId = await this.resolveUserId(projectId);
@@ -715,22 +701,6 @@ export class AiAnalysisService {
       configurable: { thread_id: threadId } as Record<string, string>,
       recursionLimit: LANGGRAPH_RECURSION_LIMIT,
     };
-
-    const mddOrder: Array<{ node: string; message: string }> = [
-      { node: "manager", message: "Entrevistando al usuario..." },
-      { node: "ask_initial_topic", message: "Preguntando tema o problema del MDD..." },
-      { node: "plan_approval", message: "Esperando aprobación del plan..." },
-      { node: "executor", message: "Ejecutando plan paso a paso..." },
-      { node: "clarifier", message: "Clarificando alcance y requisitos..." },
-      { node: "software_architect", message: "Definiendo schema SQL y contratos de API..." },
-      { node: "architect_critic", message: "Verificando §3 y §4 frente a la directiva..." },
-      { node: "format_after_architect", message: "Formateando documento..." },
-      { node: "security", message: "Definiendo arquitectura de seguridad..." },
-      { node: "integration", message: "Definiendo integraciones..." },
-      { node: "format_after_redactor", message: "Formateando documento..." },
-      { node: "diagram_injector", message: "Añadiendo diagramas Mermaid..." },
-      { node: "auditor", message: "Evaluando calidad del MDD..." },
-    ];
 
     let lastState: MDDState = initialState;
     let lastNonEmptyDraft = (initialState.mddDraft ?? "").trim() || "";
@@ -811,10 +781,9 @@ export class AiAnalysisService {
             return;
           }
           if (nodeName) {
-            const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : nodeName === "manager" ? "Manager (entrevista)" : getAgentLabel(nodeName);
             this.logger.log(`[MDD stream/manager] progress node=${nodeName} label=${label}`);
-            yield { type: "progress", agent: label, message: entry?.message ?? nodeName };
+            yield { type: "progress", agent: label, message: getMddNodeProgressMessage(nodeName) };
           }
         }
         if (mode === "values" && data && typeof data === "object") {
@@ -994,8 +963,6 @@ export class AiAnalysisService {
 
     // requireBrdTobeGate eliminado — To-Be/As-Is removidos
 
-    yield { type: "progress", agent: "Manager", message: "Reanudando flujo con tu respuesta..." };
-
     let graph: Awaited<ReturnType<typeof createMddGraphWithManager>>;
     try {
       const resumeUserId = await this.resolveUserId(projectId);
@@ -1027,22 +994,6 @@ export class AiAnalysisService {
       recursionLimit: LANGGRAPH_RECURSION_LIMIT,
     };
     const auditTrail: string[] = [];
-    const mddOrder: Array<{ node: string; message: string }> = [
-      { node: "manager", message: "Entrevistando al usuario..." },
-      { node: "ask_initial_topic", message: "Preguntando tema o problema del MDD..." },
-      { node: "plan_approval", message: "Esperando aprobación del plan..." },
-      { node: "executor", message: "Ejecutando plan paso a paso..." },
-      { node: "clarifier", message: "Clarificando alcance y requisitos..." },
-      { node: "software_architect", message: "Definiendo schema SQL y contratos de API..." },
-      { node: "architect_critic", message: "Verificando §3 y §4 frente a la directiva..." },
-      { node: "format_after_architect", message: "Formateando documento..." },
-      { node: "security", message: "Definiendo arquitectura de seguridad..." },
-      { node: "integration", message: "Definiendo integraciones..." },
-      { node: "format_after_redactor", message: "Formateando documento..." },
-      { node: "diagram_injector", message: "Añadiendo diagramas Mermaid..." },
-      { node: "auditor", message: "Evaluando calidad del MDD..." },
-    ];
-
     let lastState: MDDState | null = null;
     let lastNonEmptyDraft = "";
 
@@ -1065,8 +1016,13 @@ export class AiAnalysisService {
       if (clientDraft) {
         try {
           const snapshot = await graph.getState(config);
-          const checkpointDraft = ((snapshot?.values as MDDState)?.mddDraft ?? "").trim();
-          skipClientDraft = checkpointDraft.length > 0 && checkpointDraft === clientDraft;
+          const cpValues = snapshot?.values as MDDState | undefined;
+          const checkpointDraft = (cpValues?.mddDraft ?? "").trim();
+          skipClientDraft =
+            checkpointDraft.length > 0 &&
+            (checkpointDraft === clientDraft ||
+              !!(cpValues?.mddPlan?.length) ||
+              !!(cpValues?.pendingPlanApproval?.mddPlan?.length));
         } catch {
           /* usar clientDraft */
         }
@@ -1156,7 +1112,6 @@ export class AiAnalysisService {
             return;
           }
           if (nodeName) {
-            const entry = mddOrder.find((e) => e.node === nodeName);
             const label = nodeName === "auditor" ? getAgentLabel("auditor", "mdd") : nodeName === "manager" ? "Manager (entrevista)" : getAgentLabel(nodeName);
 
             const nodeData = dataRecord[nodeName] as Partial<MDDState> | undefined;
@@ -1168,7 +1123,7 @@ export class AiAnalysisService {
             auditTrail.push(`${nodeName}(${extra.join(" ")})`);
 
             this.logger.log(`[MDD stream/resume] progress node=${nodeName} label=${label}`);
-            yield { type: "progress", agent: label, message: entry?.message ?? nodeName };
+            yield { type: "progress", agent: label, message: getMddNodeProgressMessage(nodeName) };
           }
         }
         if (mode === "values" && data && typeof data === "object") {
@@ -1387,17 +1342,6 @@ export class AiAnalysisService {
       yield { type: "error", message: formatted.message, code: formatted.code };
       return;
     }
-    const agentLabel =
-      section === 1
-        ? "Contexto (sintetizador)"
-        : section === 7
-          ? "Integración"
-          : section === 6
-            ? "Seguridad"
-            : "Arquitecto de Software";
-
-    yield { type: "progress", agent: agentLabel, message: `Regenerando §${section}...` };
-
     try {
       if (section === 1) {
         const prompt = `${CONTEXT_SYNTHESIZER_PROMPT}${contextSynthesizerComplexityAppendix(regenCx)}\n\n---\n\n**Documento MDD (usa las secciones 2–7 para sintetizar la sección 1):**\n\n${mddContent}`;
@@ -1553,8 +1497,8 @@ export class AiAnalysisService {
     projectId: string,
     patterns: Array<{ label: string; group: string; affects: string; description: string }>,
   ) {
-    for (const p of patterns) {
-      await this.graphMemory.saveDecision(projectId, {
+    await Promise.all(patterns.map((p) =>
+      this.graphMemory.saveDecision(projectId, {
         title: `Patrón SSOT: ${p.label}`,
         context: `Selección en el wizard del MDD (grupo: ${p.group}). Derivada del análisis de Fase 0 / Benchmark / BRD.`,
         consequence: [
@@ -1565,8 +1509,8 @@ export class AiAnalysisService {
           .join(" ")
           .slice(0, 2000),
         status: "Accepted",
-      });
-    }
+      }),
+    ));
     return this.graphMemory.getDecisionsByProject(projectId);
   }
 

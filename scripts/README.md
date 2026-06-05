@@ -40,6 +40,14 @@ Asegura runtime Docker (Colima en Mac si hace falta) y contenedores:
 
 Usado por `dev:local` y `dev:api`. Ver [README-LOCAL.md](../README-LOCAL.md).
 
+## wait-for-api.js
+
+Antes de `vite`, hace polling a `GET /health` en el API (por defecto `http://127.0.0.1:3000/health`) hasta que responda o agote el timeout (120s). Lo usa `@theforge/web` en `pnpm run dev` / `dev:local` para que el proxy no reciba `ECONNREFUSED` mientras Nest compila.
+
+Variables opcionales: `PORT` / `API_PORT`, `API_WAIT_HOST`, `API_WAIT_TIMEOUT_MS`, `API_WAIT_INTERVAL_MS`.
+
+Si solo levantas el front (`dev:web`), el API debe estar ya en marcha o el script fallará con timeout.
+
 ## ensure-postgres.js
 
 Asegura que Colima (runtime de contenedores) y el contenedor Docker `theforge-db` (Postgres) estén en ejecución. **Preferir `ensure-infra.js`** (Postgres + Falkor + Redis cola).

@@ -79,19 +79,32 @@ export function createMddAuditorNode(
       LOG("draft grande (%s chars) → shortcut determinístico", draft.length);
       const validation = validateMddStructure(draft);
       let shortcutScore = 80;
-      if (!validation.section3HasPayloads) shortcutScore -= 20;
-      if (!validation.hasTechnicalMetadata) shortcutScore -= 5;
-      if (validation.missingSections.length > 0) {
-        shortcutScore = Math.min(shortcutScore, 94);
-        shortcutScore -= validation.missingSections.length * 5;
+      // Boost: draft completo con todas las secciones y contratos → pasa el threshold en un solo paso
+      if (validation.missingSections.length === 0 && validation.section3HasPayloads) {
+        shortcutScore = 88;
+      } else {
+        if (!validation.section3HasPayloads) shortcutScore -= 20;
+        if (!validation.hasTechnicalMetadata) shortcutScore -= 5;
+        if (validation.missingSections.length > 0) {
+          shortcutScore = Math.min(shortcutScore, 94);
+          shortcutScore -= validation.missingSections.length * 5;
+        }
       }
       shortcutScore = Math.max(0, Math.min(100, shortcutScore));
-      const shortcutDecision = shortcutScore >= AUDIT_PASS_THRESHOLD && validation.missingSections.length === 0 ? "done" as const : "clarifier" as const;
-      const shortcutIteration = (state.mddIteration ?? 0) + (shortcutDecision === "clarifier" ? 1 : 0);
-      const shortcutFeedback = validation.issues.length > 0
-        ? validation.issues.join(" ")
-        : "Revisión completada: el MDD tiene estructura base.";
-      LOG("shortcut score=%s decision=%s", shortcutScore, shortcutDecision);
+      const currentIteration = state.mddIteration ?? 0;
+      const shortcutDecision: "done" | "clarifier" = (() => {
+        if (shortcutScore >= AUDIT_PASS_THRESHOLD && validation.missingSections.length === 0) return "done";
+        // Termination guard: si ya iteramos y el score no mejora, entregar el mejor draft disponible
+        if (currentIteration > 0 && shortcutScore <= (state.auditorScore ?? 0)) return "done";
+        return "clarifier";
+      })();
+      const shortcutIteration = currentIteration + (shortcutDecision === "clarifier" ? 1 : 0);
+      const shortcutFeedback = shortcutDecision === "done" && validation.issues.length === 0
+        ? "MDD completo: todas las secciones, contratos y metadatos técnicos presentes."
+        : validation.issues.length > 0
+          ? validation.issues.join(" ")
+          : "Revisión completada: el MDD tiene estructura base.";
+      LOG("shortcut score=%s decision=%s iteration=%s", shortcutScore, shortcutDecision, shortcutIteration);
       return {
         auditorScore: shortcutScore,
         auditorFeedback: shortcutFeedback,

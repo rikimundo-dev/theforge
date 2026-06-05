@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { AiGenerativeDots } from "../AiGenerationLoader";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 font-medium rounded-[var(--radius)] transition-all duration-[var(--transition-base)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ring-offset)] disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 font-medium rounded-[var(--radius)] transition-all duration-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ring-offset)] disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {

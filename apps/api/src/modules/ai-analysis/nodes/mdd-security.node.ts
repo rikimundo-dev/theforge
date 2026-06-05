@@ -8,6 +8,7 @@ import { mergeMddStructured } from "../utils/mdd-merge-structured.js";
 import {
   isCorruptedSeguridadSlice,
   isPlaceholderSeguridad,
+  draftHasPreservableSection6,
   parseSecurityLlmResponse,
   seguridadItemsFromDraftSection6,
   stripThinkingTags,
@@ -53,7 +54,8 @@ function resolveSeguridadSlice(
 
 function buildMddDraftWithSection6(state: MDDStateType, seguridad: MddSeguridadItem[]): string {
   const draft = state.mddDraft ?? "";
-  if (isPlaceholderSeguridad(seguridad) && seguridadItemsFromDraftSection6(draft)) {
+  // No conservar el draft si §6 sigue siendo el placeholder del arquitecto de software.
+  if (isPlaceholderSeguridad(seguridad) && draftHasPreservableSection6(draft)) {
     return draft;
   }
   const section6Md = seguridadItemsToSection6Markdown(seguridad);
@@ -114,7 +116,28 @@ export function createMddSecurityNode(llm: BaseChatModel) {
         llmItems ? isPlaceholderSeguridad(llmItems) : "n/a",
       );
 
-      const seguridad = resolveSeguridadSlice(state, llmItems);
+      let seguridad = resolveSeguridadSlice(state, llmItems);
+      // Retry 1x si cayó a placeholder (LLM devolvió JSON corrupto y no hay §6 previa).
+      // Evita §6 = "(Pendiente: Arquitecto de Seguridad)" en el documento entregado.
+      const hasPrevSection6 =
+        (state.mddStructured?.seguridad?.length && !isPlaceholderSeguridad(state.mddStructured.seguridad)) ||
+        draftHasPreservableSection6(state.mddDraft ?? "");
+      if (isPlaceholderSeguridad(seguridad) && !hasPrevSection6) {
+        LOG("[DIAG §6] placeholder sin §6 previa → retry 1x");
+        const retry = await llm.invoke([new HumanMessage(prompt)]);
+        const retryText = stripThinkingTags(typeof retry.content === "string" ? retry.content : "");
+        const retryItems = retryText.trim() ? parseSecurityLlmResponse(retryText) : null;
+        LOG("[DIAG §6] retry llmItems=%s isCorrupted=%s isPlaceholder=%s",
+          retryItems?.length ?? "null",
+          retryItems ? isCorruptedSeguridadSlice(retryItems) : "n/a",
+          retryItems ? isPlaceholderSeguridad(retryItems) : "n/a",
+        );
+        const retrySeguridad = resolveSeguridadSlice(state, retryItems);
+        if (!isPlaceholderSeguridad(retrySeguridad)) {
+          seguridad = retrySeguridad;
+          LOG("[DIAG §6] retry recuperó §6 (items=%s)", retrySeguridad.length);
+        }
+      }
       const slice = { seguridad };
       const merged = mergeMddStructured(state.mddStructured, slice, state.mddDraft ?? "");
       const mddDraft = buildMddDraftWithSection6(state, merged.seguridad ?? seguridad);

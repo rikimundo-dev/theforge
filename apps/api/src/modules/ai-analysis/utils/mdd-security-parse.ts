@@ -3,6 +3,7 @@ import type { MddSeguridadItem } from "../state/mdd-structured.schema.js";
 import { mddSeguridadItemSchema } from "../state/mdd-structured.schema.js";
 import {
   getSection6Or7Range,
+  isMddSectionPipelinePlaceholderBody,
   jsonSectionToMarkdown,
   unbulletAndJoinForJson,
 } from "./mdd-sanitize.js";
@@ -232,12 +233,18 @@ export function seguridadItemsFromDraftSection6(draft: string): MddSeguridadItem
   if (!range) return null;
   const bodyStart = range.start + range.heading.length;
   const body = trimmed.slice(bodyStart, range.end).replace(/^\s*\n+/, "").trim();
-  if (body.length < 15 || /^\s*\(?\s*Pendiente\s*\)?\s*$/i.test(body)) return null;
+  if (body.length < 15 || isMddSectionPipelinePlaceholderBody(body)) return null;
   const parsed = parseSecurityLlmResponse(`## 6. Seguridad\n\n${body}`);
   if (parsed?.length && !isCorruptedSeguridadSlice(parsed) && !isPlaceholderSeguridad(parsed)) {
     return parsed;
   }
+  if (isMddSectionPipelinePlaceholderBody(body)) return null;
   return [mddSeguridadItemSchema.parse({ title: "Aspectos generales", content: [body] })];
+}
+
+/** True si el borrador ya tiene §6 con contenido real (no placeholder del arquitecto). */
+export function draftHasPreservableSection6(draft: string): boolean {
+  return !!seguridadItemsFromDraftSection6(draft);
 }
 
 /**

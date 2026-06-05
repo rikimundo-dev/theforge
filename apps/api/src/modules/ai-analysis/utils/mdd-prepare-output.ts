@@ -3,15 +3,20 @@ import { mddStructuredToMarkdown } from "../render/mdd-structured-to-markdown.js
 import { injectMddDiagrams, suggestMddDiagrams } from "./mdd-diagram-suggestions.js";
 import {
   extractSection3Body,
+  finalizeMddDeliverable,
   getSection6Or7Range,
   hydrateStructuredFromDraft,
+  mddHasDuplicateSectionHeadings,
   normalizeMddFormat,
   replaceContextWhenOnlyMetadata,
   replaceSection6Or7InDraft,
   sanitizeContextKeyValueAndObject,
   sanitizeContextSection,
 } from "./mdd-sanitize.js";
-import { enrichMddWithUiUxDesignIntent } from "./mdd-enrich-uiux-intent.js";
+import {
+  enrichMddWithUiUxDesignIntent,
+  reconcileUiUxDesignIntent,
+} from "./mdd-enrich-uiux-intent.js";
 import { isPlaceholderSeguridad } from "./mdd-security-parse.js";
 import { ensureMddGovernanceSection, extractGovernanceSection } from "@theforge/shared-types/mdd-governance-patterns";
 
@@ -88,6 +93,8 @@ export function draftHasSection6Heading(draft: string): boolean {
  * Restaura desde el borrador pre-normalize si desaparecieron.
  */
 function restoreSections6And7AfterNormalize(source: string, normalized: string): string {
+  // No reinyectar desde un borrador con §5/§6/§7 repetidas (evita reintroducir el bucle de duplicación).
+  if (mddHasDuplicateSectionHeadings(source)) return normalized;
   let out = normalized;
   for (const section of [6, 7] as const) {
     const srcRange = getSection6Or7Range(source, section);
@@ -135,5 +142,6 @@ export function prepareMddForOutput(
   const normalized = restoreSections6And7AfterNormalize(raw, normalizeMddFormat(sanitized));
   const withDiagrams = injectMddDiagrams(normalized, suggestMddDiagrams(normalized));
   const enriched = enrichMddWithUiUxDesignIntent(withDiagrams);
-  return ensureMddGovernanceSection(enriched, preserved);
+  const withGovernance = ensureMddGovernanceSection(enriched, preserved);
+  return reconcileUiUxDesignIntent(finalizeMddDeliverable(withGovernance));
 }

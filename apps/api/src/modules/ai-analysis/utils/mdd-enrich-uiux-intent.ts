@@ -59,6 +59,11 @@ const STATE_COLORS: Record<string, string> = {
 function classifyEntity(name: string): EntityClassification {
   const lower = name.toLowerCase();
 
+  // Logs / outbox / sesiones — registros append-only o técnicos, no kanban
+  if (/^audit_events?$/.test(lower) || /^outbox_events?$/.test(lower) || /^sessions?$/.test(lower)) {
+    return "DataRegistry";
+  }
+
   // Configuraciones — entidades de parámetros, precios, settings
   const configPatterns = [
     /^config/, /^setting/, /^param/, /^price/, /^rate/, /^fee/,
@@ -105,6 +110,10 @@ function classifyEntity(name: string): EntityClassification {
 function inferLifecycle(name: string): string[] {
   const lower = name.toLowerCase();
 
+  if (/^export_requests?$/.test(lower)) {
+    return ["pending", "first_approved", "approved", "completed", "rejected", "expired"];
+  }
+
   const lifecycleMap: Record<string, string[]> = {
     // Órdenes / transacciones
     order: ["draft", "confirmed", "processing", "completed", "cancelled"],
@@ -134,6 +143,7 @@ function inferLifecycle(name: string): string[] {
     audit: ["pending", "in_progress", "completed", "resolved"],
     review: ["pending", "in_progress", "completed", "appealed"],
     approval: ["pending", "approved", "rejected", "escalated"],
+    export: ["pending", "first_approved", "approved", "completed", "rejected", "expired"],
     session: ["pending", "active", "completed", "expired", "cancelled"],
     feedback: ["draft", "submitted", "reviewed", "acknowledged"],
     incident: ["reported", "investigating", "resolved", "closed"],
@@ -188,6 +198,58 @@ function suggestComponentType(
       if (/setting|config|param/.test(lower)) return "SettingsPanel";
       return "PropertyGrid";
   }
+}
+
+/** Extrae nombres de columna del bloque CREATE TABLE de una entidad en §3. */
+function extractColumnsFromCreateTable(section3: string, tableName: string): string[] {
+  const tableRe = new RegExp(
+    `CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?${tableName}\\s*\\(([\\s\\S]*?)\\)\\s*;`,
+    "i",
+  );
+  const match = section3.match(tableRe);
+  if (!match?.[1]) return [];
+  const cols: string[] = [];
+  for (const line of match[1].split("\n")) {
+    const trimmed = line.trim();
+    const col = trimmed.match(/^(\w+)\s+/);
+    if (!col?.[1]) continue;
+    const name = col[1];
+    if (/^(CONSTRAINT|PRIMARY|FOREIGN|UNIQUE|CHECK|REFERENCES)$/i.test(name)) continue;
+    if (!cols.includes(name)) cols.push(name);
+  }
+  return cols;
+}
+
+/** Elige columnas de UI a partir del DDL real (fallback a heurística por nombre). */
+function pickDisplayColumns(tableName: string, allCols: string[]): string[] {
+  if (allCols.length === 0) return suggestKeyFields(tableName);
+  const picked: string[] = [];
+  if (allCols.includes("id")) picked.push("id");
+  for (const candidate of ["name", "title", "label", "username", "email", "display_name"]) {
+    if (allCols.includes(candidate) && !picked.includes(candidate)) {
+      picked.push(candidate);
+      break;
+    }
+  }
+  for (const candidate of ["state", "status", "is_active"]) {
+    if (allCols.includes(candidate) && !picked.includes(candidate)) {
+      picked.push(candidate);
+      break;
+    }
+  }
+  for (const candidate of ["key_type", "algorithm", "created_at", "updated_at", "expires_at"]) {
+    if (allCols.includes(candidate) && picked.length < 5 && !picked.includes(candidate)) {
+      picked.push(candidate);
+    }
+  }
+  for (const col of allCols) {
+    if (picked.length >= 5) break;
+    if (picked.includes(col)) continue;
+    if (/_hash$|_encrypted$|password_hash/i.test(col)) continue;
+    if (/_id$/.test(col) && col !== "id") continue;
+    picked.push(col);
+  }
+  return picked.length > 0 ? picked : suggestKeyFields(tableName);
 }
 
 /**
@@ -250,9 +312,10 @@ function parseEntitiesFromSection3(section3: string): string[] {
 /**
  * Analiza semánticamente una entidad del modelo de datos.
  */
-function analyzeEntity(name: string): EntitySemanticAnalysis {
+function analyzeEntity(name: string, section3?: string): EntitySemanticAnalysis {
   const classification = classifyEntity(name);
-  const keyFields = suggestKeyFields(name);
+  const ddlCols = section3 ? extractColumnsFromCreateTable(section3, name) : [];
+  const keyFields = pickDisplayColumns(name, ddlCols);
   const componentType = suggestComponentType(classification, name);
   const note = suggestNote(name, classification);
 
@@ -308,7 +371,8 @@ function generateContractMapping(entity: EntitySemanticAnalysis): string {
 
   const propMappings: string[] = [];
   if (classification === "WorkflowProcess") {
-    propMappings.push(`'columns' mapeadas a estados de \`${name}.status\``);
+    const stateCol = keyFields?.includes("state") ? "state" : "status";
+    propMappings.push(`'columns' mapeadas a estados de \`${name}.${stateCol}\``);
     propMappings.push(`'rows' mapeadas a registros de \`${name}\``);
     if (keyFields) {
       propMappings.push(`'title' mapeado a \`${name}.${keyFields[1] ?? "name"}\``);
@@ -336,23 +400,11 @@ function generateContractMapping(entity: EntitySemanticAnalysis): string {
  *
  * NO altera el contenido existente del MDD. Simplemente anexa la sección al final.
  */
-export function enrichMddWithUiUxDesignIntent(markdown: string): string {
-  const trimmed = (markdown ?? "").trim();
-  if (!trimmed) return markdown;
-
-  // Ya tiene la sección? Skip para evitar duplicados
-  if (/^##\s*UI\/UX\s+Design\s+Intent/im.test(trimmed)) return markdown;
-
-  // Extraer §3 del markdown
-  const section3 = extractSection3Body(trimmed);
-  if (!section3) return markdown; // Sin modelo de datos, no hay entidades que analizar
-
-  // Parsear entidades del SQL
+function buildUiUxDesignIntentSection(section3: string): string | null {
   const entityNames = parseEntitiesFromSection3(section3);
-  if (entityNames.length === 0) return markdown;
+  if (entityNames.length === 0) return null;
 
-  // Analizar cada entidad
-  const analyses = entityNames.map(analyzeEntity);
+  const analyses = entityNames.map((n) => analyzeEntity(n, section3));
 
   // Clasificar por tipo
   const workflowEntities = analyses.filter((e) => e.classification === "WorkflowProcess");
@@ -401,7 +453,8 @@ export function enrichMddWithUiUxDesignIntent(markdown: string): string {
       }
       lines.push("");
       lines.push("- **Mapeo de props:**");
-      lines.push(`  - \`columns\` mapeadas a estados de \`${entity.name}.status\``);
+      const stateCol = entity.keyFields?.includes("state") ? "state" : "status";
+      lines.push(`  - \`columns\` mapeadas a estados de \`${entity.name}.${stateCol}\``);
       lines.push(`  - \`rows\` mapeadas a registros de \`${entity.name}\``);
       if (entity.keyFields?.[1]) {
         lines.push(`  - \`title\` mapeado a \`${entity.name}.${entity.keyFields[1]}\``);
@@ -477,5 +530,43 @@ export function enrichMddWithUiUxDesignIntent(markdown: string): string {
     lines.push("");
   }
 
-  return trimmed + "\n\n" + lines.join("\n") + "\n";
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Enriquecimiento semántico: analiza el MDD y añade la sección
+ * "## UI/UX Design Intent" con clasificación de entidades y sugerencias de UI.
+ */
+export function enrichMddWithUiUxDesignIntent(markdown: string): string {
+  const trimmed = (markdown ?? "").trim();
+  if (!trimmed) return markdown;
+  if (/^##\s*UI\/UX\s+Design\s+Intent/im.test(trimmed)) return markdown;
+
+  const section3 = extractSection3Body(trimmed);
+  if (!section3) return markdown;
+
+  const section = buildUiUxDesignIntentSection(section3);
+  if (!section) return markdown;
+  return `${trimmed}\n\n${section}`;
+}
+
+/** Regenera UI/UX cuando la sección existente usa columnas genéricas repetidas. */
+export function reconcileUiUxDesignIntent(markdown: string): string {
+  const trimmed = (markdown ?? "").trim();
+  if (!trimmed) return markdown;
+
+  const section3 = extractSection3Body(trimmed);
+  if (!section3) return markdown;
+
+  const hasUi = /##\s*UI\/UX\s+Design\s+Intent/i.test(trimmed);
+  const genericHits = (trimmed.match(/\bid,\s*name,\s*status\b/g) ?? []).length;
+  if (hasUi && genericHits < 4) return markdown;
+
+  const core = hasUi
+    ? trimmed.replace(/\n##\s*UI\/UX\s+Design\s+Intent[\s\S]*$/i, "").trim()
+    : trimmed;
+
+  const section = buildUiUxDesignIntentSection(section3);
+  if (!section) return markdown;
+  return `${core}\n\n${section}`;
 }

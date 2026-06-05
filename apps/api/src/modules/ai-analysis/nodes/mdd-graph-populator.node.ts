@@ -25,9 +25,11 @@ export function createMddGraphPopulatorNode(llm: BaseChatModel, graphMemory: Gra
             // 1. Sincronización determinista (Tablas, Endpoints)
             await graphMemory.syncMddToGraph(projectId, state.activeStageId, structured);
 
-            // 2. Extracción semántica de ADRs (LLM)
+            // 2. Extracción semántica de ADRs (LLM) — fire-and-forget: no bloquea entrega del doc
             if (state.mddDraft && state.mddDraft.length > 500) {
-                await extractAndLogAdrs(llm, graphMemory, projectId, state.mddDraft);
+                void extractAndLogAdrs(llm, graphMemory, projectId, state.mddDraft).catch((err) => {
+                    logger.error(`Error extrayendo ADRs: ${err instanceof Error ? err.message : String(err)}`);
+                });
             }
 
             logger.log(`MDD sincronizado exitosamente al grafo para proyecto ${projectId}`);

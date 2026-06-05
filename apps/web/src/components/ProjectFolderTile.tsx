@@ -50,7 +50,7 @@ function FolderWithPeekPapers() {
           <div
             className={cn(
               "h-5 w-[86%] rounded-[5px] border border-zinc-400/25 bg-zinc-100/95 shadow-md will-change-transform",
-              "translate-y-10 transition-[transform,opacity] duration-500 ease-[cubic-bezier(0.33,1,0.68,1)] dark:border-zinc-500/40 dark:bg-zinc-200/95",
+              "translate-y-10 transition-[transform,opacity] duration-500 ease-forge-smooth dark:border-zinc-500/40 dark:bg-zinc-200/95",
               "opacity-80 group-hover:translate-y-1 group-hover:opacity-100",
               "motion-reduce:translate-y-1 motion-reduce:opacity-100 motion-reduce:transition-none",
             )}
@@ -59,7 +59,7 @@ function FolderWithPeekPapers() {
           <div
             className={cn(
               "h-5 w-[90%] translate-x-px rounded-[5px] border border-zinc-400/35 bg-white shadow-md will-change-transform",
-              "translate-y-11 transition-[transform] duration-500 ease-[cubic-bezier(0.33,1,0.68,1)] dark:border-zinc-500/55 dark:bg-zinc-50",
+              "translate-y-11 transition-[transform] duration-500 ease-forge-smooth dark:border-zinc-500/55 dark:bg-zinc-50",
               "group-hover:translate-y-0.5",
               "motion-reduce:translate-y-0.5 motion-reduce:transition-none",
             )}
@@ -68,7 +68,7 @@ function FolderWithPeekPapers() {
           <div
             className={cn(
               "relative h-6 w-[94%] rounded-[6px] border border-zinc-300/70 bg-white shadow-lg will-change-transform",
-              "translate-y-12 transition-[transform] duration-500 ease-[cubic-bezier(0.33,1,0.68,1)] dark:border-zinc-500/65 dark:bg-white",
+              "translate-y-12 transition-[transform] duration-500 ease-forge-smooth dark:border-zinc-500/65 dark:bg-white",
               "group-hover:translate-y-0",
               "motion-reduce:translate-y-0 motion-reduce:transition-none",
             )}

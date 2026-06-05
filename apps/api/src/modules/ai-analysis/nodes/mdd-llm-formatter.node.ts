@@ -3,7 +3,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { MDD_LLM_FORMATTER_PROMPT } from "../prompts/load-prompts.js";
 import type { MDDStateType } from "../state/index.js";
 import { getUserBrief } from "../utils/mdd-user-brief.js";
-import { logMddNodeOutput } from "../utils/mdd-sanitize.js";
+import { logMddNodeOutput, validateMddStructure } from "../utils/mdd-sanitize.js";
 
 const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:LLMFormatter] ${msg}`, ...args);
 
@@ -14,10 +14,20 @@ const LOG = (msg: string, ...args: unknown[]) => console.log(`[MDD:LLMFormatter]
  */
 export function createMddLlmFormatterNode(llm: BaseChatModel) {
   return async (state: MDDStateType): Promise<Partial<MDDStateType>> => {
+    const currentDraft = (state.mddDraft ?? "").trim();
     LOG("entry mddStructured=%s draftLen=%s",
       state.mddStructured ? "present" : "null",
-      (state.mddDraft ?? "").length,
+      currentDraft.length,
     );
+
+    // Skip LLM reformat when draft is already complete — preserves full content and avoids lossy rewrite
+    if (currentDraft.length > 5000) {
+      const validation = validateMddStructure(currentDraft);
+      if (validation.missingSections.length === 0 && validation.section3HasPayloads) {
+        LOG("draft completo (%d chars, 7 secciones) → skip LLM reformat", currentDraft.length);
+        return {};
+      }
+    }
 
     try {
       const brief = getUserBrief(state);
