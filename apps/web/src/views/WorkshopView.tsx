@@ -81,6 +81,10 @@ import {
   mddNeedsPatternWizard,
   selectedPatternIdsFromMdd,
 } from "@theforge/shared-types/mdd-governance-patterns";
+import {
+  WorkshopDocumentIslandToc,
+  isWorkshopMarkdownPreviewActive,
+} from "../components/WorkshopDocumentIslandToc";
 import { replaceYamlFrontMatter } from "../components/DesignMdPreview";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
 import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
@@ -4122,6 +4126,36 @@ export default function WorkshopView({
             </>
           );
         })()}
+
+        <WorkshopDocumentIslandToc
+          scrollContainerRef={workspaceScrollRef}
+          enabled={
+            isLgLayout &&
+            isWorkshopMarkdownPreviewActive(
+              centralPanel,
+              {
+                mddViewMode,
+                mddInicialViewMode,
+                specViewMode,
+                architectureViewMode,
+                useCasesViewMode,
+                userStoriesViewMode,
+                uxUiGuideViewMode,
+                aemViewMode,
+                blueprintViewMode,
+                apiContractsViewMode,
+                logicFlowsViewMode,
+                brdDocViewMode,
+                infraViewMode,
+              },
+              benchmarkPhaseTab,
+              benchmarkViewMode,
+              phase0SummaryViewMode,
+            )
+          }
+          centralPanel={centralPanel}
+          contentKey={centralPanel}
+        />
 
         <nav
           className="lg:hidden shrink-0 sticky bottom-0 z-10 grid grid-cols-3 border-t border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_92%,black)] pb-[max(4px,env(safe-area-inset-bottom))]"
