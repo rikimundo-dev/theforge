@@ -36,6 +36,7 @@ type Phase0StreamPayload = {
   borrador?: unknown;
   question?: string;
   n?: number;
+  total?: number;
 };
 
 function applyPhase0StreamError(
@@ -64,7 +65,7 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
   const [question, setQuestion] = useState<string>("");
   const [answer, setAnswer] = useState("");
   const [preguntaN, setPreguntaN] = useState(0);
-  const [totalPreguntas] = useState(5);
+  const [totalPreguntas, setTotalPreguntas] = useState(5);
   const [error, setError] = useState<string | null>(null);
   const [ideaInput, setIdeaInput] = useState("");
   const [borradorVisible, setBorradorVisible] = useState(false);
@@ -151,6 +152,9 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
 
       setQuestion(data.question);
       setPreguntaN(data.n ?? 0);
+      if (typeof data.total === "number" && data.total > 0) {
+        setTotalPreguntas(data.total);
+      }
       setStatus("interviewing");
       setAnswer("");
       setTimeout(() => inputRef.current?.focus(), 100);
