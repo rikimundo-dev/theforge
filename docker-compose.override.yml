@@ -1,0 +1,14 @@
+# Local host access (auto-loaded by `docker compose`). Not used on Dokploy.
+services:
+  theforge-db:
+    ports:
+      - "5432:5432"
+  theforge-web:
+    ports:
+      - "8080:80"
+  theforge-api:
+    ports:
+      - "3001:3000"
+  theforge-adminer:
+    ports:
+      - "8081:8080"

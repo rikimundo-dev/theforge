@@ -81,6 +81,10 @@ import {
   mddNeedsPatternWizard,
   selectedPatternIdsFromMdd,
 } from "@theforge/shared-types/mdd-governance-patterns";
+import {
+  WorkshopDocumentIslandToc,
+  isWorkshopMarkdownPreviewActive,
+} from "../components/WorkshopDocumentIslandToc";
 import { replaceYamlFrontMatter } from "../components/DesignMdPreview";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
 import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
@@ -1540,29 +1544,9 @@ export default function WorkshopView({
     printMarkdownDocument(mdPreview, { title: docTitle });
   }, [centralPanel, uxUiGuideViewMode]);
 
-  const docBubbleMenuItems = useMemo((): WorkshopDocBubbleMenuItem[] => {
-    if (centralPanel === "legacy" || centralPanel === "adrs") return [];
-
-    const ordered: WorkshopDocBubbleMenuItem[] = [];
-    const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
-      mddViewMode,
-      mddInicialViewMode,
-      specViewMode,
-      architectureViewMode,
-      useCasesViewMode,
-      userStoriesViewMode,
-      uxUiGuideViewMode,
-      aemViewMode,
-      blueprintViewMode,
-      apiContractsViewMode,
-      logicFlowsViewMode,
-      brdDocViewMode,
-      infraViewMode,
-    });
-    const { Icon: DocToggleIcon, tooltip: docToggleTooltip } = workshopDocSourceTogglePresentation(
-      centralPanel,
-      activeDocViewMode,
-    );
+  /** Preview/source (or design) toggle — header toolbar on desktop; not in the bubble menu. */
+  const docEditToolbarToggle = useMemo(() => {
+    if (centralPanel === "legacy" || centralPanel === "adrs") return null;
 
     const editableDocPanels = new Set([
       "spec",
@@ -1594,8 +1578,82 @@ export default function WorkshopView({
         (centralPanel === "infra" && infraContent) ||
         (centralPanel === "mdd-inicial" && (activeLegacyState?.codebaseDoc || mddInicialLocalContent)) ||
         (centralPanel === "brd" && !!activeStageId));
-
     const showBenchmarkEdit = centralPanel === "benchmark";
+    if (!showDocEdit && !showBenchmarkEdit) return null;
+
+    if (showBenchmarkEdit) {
+      const benchmarkViewModeActive =
+        benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode;
+      const { Icon, tooltip } = workshopDocSourceTogglePresentation("mdd", benchmarkViewModeActive);
+      return {
+        Icon,
+        tooltip,
+        onClick: () => {
+          if (benchmarkPhaseTab === "fase0") {
+            setBenchmarkViewMode((m) => (m === "preview" ? "source" : "preview"));
+          } else {
+            setPhase0SummaryViewMode((m) => (m === "preview" ? "source" : "preview"));
+          }
+        },
+      };
+    }
+
+    const activeDocViewMode = getWorkshopDocToolbarActiveViewMode(centralPanel, {
+      mddViewMode,
+      mddInicialViewMode,
+      specViewMode,
+      architectureViewMode,
+      useCasesViewMode,
+      userStoriesViewMode,
+      uxUiGuideViewMode,
+      aemViewMode,
+      blueprintViewMode,
+      apiContractsViewMode,
+      logicFlowsViewMode,
+      brdDocViewMode,
+      infraViewMode,
+    });
+    const { Icon, tooltip } = workshopDocSourceTogglePresentation(centralPanel, activeDocViewMode);
+    return {
+      Icon,
+      tooltip,
+      onClick: () => toggleDocViewMode(centralPanel),
+    };
+  }, [
+    centralPanel,
+    mddViewMode,
+    mddInicialViewMode,
+    specViewMode,
+    architectureViewMode,
+    useCasesViewMode,
+    userStoriesViewMode,
+    uxUiGuideViewMode,
+    aemViewMode,
+    blueprintViewMode,
+    apiContractsViewMode,
+    logicFlowsViewMode,
+    brdDocViewMode,
+    infraViewMode,
+    benchmarkPhaseTab,
+    benchmarkViewMode,
+    phase0SummaryViewMode,
+    blueprintContent,
+    apiContractsContent,
+    architectureContent,
+    useCasesContent,
+    userStoriesContent,
+    logicFlowsContent,
+    infraContent,
+    activeLegacyState?.codebaseDoc,
+    mddInicialLocalContent,
+    activeStageId,
+    toggleDocViewMode,
+  ]);
+
+  const docBubbleMenuItems = useMemo((): WorkshopDocBubbleMenuItem[] => {
+    if (centralPanel === "legacy" || centralPanel === "adrs") return [];
+
+    const ordered: WorkshopDocBubbleMenuItem[] = [];
 
     const downloadPayload = resolveWorkshopActiveDocumentDownload({
       panel: centralPanel,
@@ -1803,35 +1861,6 @@ export default function WorkshopView({
       onClick: handlePrintDocument,
     });
 
-    if (showDocEdit || showBenchmarkEdit) {
-      ordered.push({
-        id: "edit",
-        label: showBenchmarkEdit
-          ? workshopDocSourceTogglePresentation(
-              "mdd",
-              benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode,
-            ).tooltip
-          : docToggleTooltip,
-        icon: showBenchmarkEdit
-          ? workshopDocSourceTogglePresentation(
-              "mdd",
-              benchmarkPhaseTab === "fase0" ? benchmarkViewMode : phase0SummaryViewMode,
-            ).Icon
-          : DocToggleIcon,
-        onClick: () => {
-          if (centralPanel === "benchmark") {
-            if (benchmarkPhaseTab === "fase0") {
-              setBenchmarkViewMode((m) => (m === "preview" ? "source" : "preview"));
-            } else {
-              setPhase0SummaryViewMode((m) => (m === "preview" ? "source" : "preview"));
-            }
-            return;
-          }
-          toggleDocViewMode(centralPanel);
-        },
-      });
-    }
-
     return ordered;
   }, [
     centralPanel,
@@ -1886,7 +1915,6 @@ export default function WorkshopView({
     legacyMddPanelIsAsIsOnly,
     legacyGenerateMdd,
     handleRegenerateLegacyCodebaseDoc,
-    toggleDocViewMode,
     generateSpec,
     generateArchitecture,
     generateUseCases,
@@ -2446,6 +2474,31 @@ export default function WorkshopView({
                 panel={centralPanel}
                 benchmarkPhaseTab={benchmarkPhaseTab}
               />
+              {docEditToolbarToggle ? (
+                <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className={WORKSHOP_DOC_TOOLBAR_ICON_BTN}
+                        aria-label={docEditToolbarToggle.tooltip}
+                        onClick={docEditToolbarToggle.onClick}
+                      >
+                        <docEditToolbarToggle.Icon
+                          className={WORKSHOP_DOC_TOOLBAR_ICON}
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[14rem]">
+                      {docEditToolbarToggle.tooltip}
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              ) : null}
               <div className="flex flex-wrap items-center gap-1.5 shrink-0 sm:justify-end sm:gap-2 sm:pt-0.5 lg:hidden">
                 {centralPanel !== "benchmark" && (["spec", "mdd", "ux-ui-guide", "aem", "blueprint", "tasks", "api-contracts", "logic-flows", "architecture", "use-cases", "user-stories", "infra", "brd"] as const).includes(
                   centralPanel as any,
@@ -4073,6 +4126,36 @@ export default function WorkshopView({
             </>
           );
         })()}
+
+        <WorkshopDocumentIslandToc
+          scrollContainerRef={workspaceScrollRef}
+          enabled={
+            isLgLayout &&
+            isWorkshopMarkdownPreviewActive(
+              centralPanel,
+              {
+                mddViewMode,
+                mddInicialViewMode,
+                specViewMode,
+                architectureViewMode,
+                useCasesViewMode,
+                userStoriesViewMode,
+                uxUiGuideViewMode,
+                aemViewMode,
+                blueprintViewMode,
+                apiContractsViewMode,
+                logicFlowsViewMode,
+                brdDocViewMode,
+                infraViewMode,
+              },
+              benchmarkPhaseTab,
+              benchmarkViewMode,
+              phase0SummaryViewMode,
+            )
+          }
+          centralPanel={centralPanel}
+          contentKey={centralPanel}
+        />
 
         <nav
           className="lg:hidden shrink-0 sticky bottom-0 z-10 grid grid-cols-3 border-t border-[var(--border)] bg-[color-mix(in_oklch,var(--background)_92%,black)] pb-[max(4px,env(safe-area-inset-bottom))]"

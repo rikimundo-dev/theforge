@@ -19,12 +19,28 @@ import { Brain,
 } from "lucide-react";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "./complexityTabs";
 
+/** Greenfield (NEW) steps required before generating downstream deliverables. */
+export const WORKSHOP_MANDATORY_NEW_PROJECT_STEP_IDS = ["benchmark", "brd", "mdd"] as const;
+
+export type WorkshopMandatoryNewProjectStepId =
+  (typeof WORKSHOP_MANDATORY_NEW_PROJECT_STEP_IDS)[number];
+
+export function isWorkshopMandatoryDeliverableStep(
+  id: string,
+  opts: { isLegacyProject: boolean },
+): boolean {
+  if (opts.isLegacyProject) return false;
+  return (WORKSHOP_MANDATORY_NEW_PROJECT_STEP_IDS as readonly string[]).includes(id);
+}
+
 export interface WorkshopDocNavItem {
   id: string;
   label: string;
   title: string;
   Icon: LucideIcon;
   content: unknown;
+  /** Required before other deliverables can be generated (Paso 0 → BRD → MDD). */
+  required?: boolean;
 }
 
 export interface WorkshopDocNavBuildContext {
@@ -81,9 +97,10 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
     items.push({
       id: "benchmark",
       label: "Paso 0",
-      title: "Benchmark & Gap Analysis (Paso 0, opcional)",
+      title: "Benchmark & Gap Analysis (Paso 0) — obligatorio para generar el resto de entregables",
       Icon: Target,
       content: (ctx.phase0SummaryContent || "") + (ctx.dbgaContent || ""),
+      required: true,
     });
   }
 
@@ -92,18 +109,20 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
     items.push({
       id: "brd",
       label: "BRD",
-      title: "BRD por etapa; requisitos de negocio",
+      title: "BRD por etapa — obligatorio antes de MDD y entregables posteriores",
       Icon: ClipboardList,
       content: ctx.activeWorkshopStage?.brdContent,
+      required: !ctx.isLegacyProject,
     });
   }
   if (visible("mdd")) {
     items.push({
       id: "mdd",
       label: "MDD",
-      title: "Constitución del proyecto (gobierna Blueprint, Contratos API e Infra)",
+      title: "Constitución del proyecto — obligatorio para Spec, Blueprint, API e Infra",
       Icon: FileText,
       content: ctx.mddContent,
+      required: !ctx.isLegacyProject,
     });
   }
   if (visible("spec")) {
