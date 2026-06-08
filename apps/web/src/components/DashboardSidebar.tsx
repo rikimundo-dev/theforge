@@ -805,7 +805,6 @@ export function DashboardSidebar({
                                   <button
                                     type="button"
                                     role="listitem"
-                                    title={`${item.title}${item.required ? " — paso obligatorio" : ""}${done ? " — con contenido" : ""}`}
                                     aria-current={isCurrent ? "page" : undefined}
                                     disabled={workshopAgentsBusy}
                                     title={
