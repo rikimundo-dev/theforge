@@ -155,6 +155,12 @@ export const PHASE0_UPDATE_PROMPT = loadPrompt(
   "Eres analista. Actualiza borrador + gaps con respuesta. JSON: { borrador: {...}, gaps: [...] }.",
 );
 
+export const PHASE0_EXTRACT_DBGA_PROMPT = loadPrompt(
+  "phase0",
+  "extract-dbga-prompt.md",
+  "Extrae borrador Fase 0 + gaps desde un DBGA markdown existente. JSON: { borrador: {...}, gaps: [...] }.",
+);
+
 export const MANAGER_PLAN_GENERATOR_PROMPT = loadPrompt(
   "mdd",
   "manager-plan-generator-prompt.md",

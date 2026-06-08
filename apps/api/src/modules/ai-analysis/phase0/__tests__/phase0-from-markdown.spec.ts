@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { phase0ToMarkdown } from "../phase0-to-markdown.js";
 import { markdownToPhase0Document } from "../phase0-from-markdown.js";
-import { loadProjectBorrador } from "../phase0-load-borrador.util.js";
+import { loadProjectBorrador, hasAuditDocument, isFreeformDbgaContent } from "../phase0-load-borrador.util.js";
 import type { Phase0Document } from "../phase0.types.js";
 
 const sampleDoc = (): Phase0Document => ({
@@ -55,5 +55,22 @@ describe("loadProjectBorrador", () => {
     );
 
     assert.equal(loaded.proposito.problema, "Versión editada en el Workshop");
+  });
+});
+
+describe("hasAuditDocument", () => {
+  it("acepta DBGA libre aunque no haya JSON de entrevista", () => {
+    const freeformDbga =
+      "# Domain Benchmark & Gap Analysis (DBGA) — Fase 0\n\n## Índice\n1. Funcionalidades\n\n".repeat(
+        5,
+      );
+    assert.equal(isFreeformDbgaContent(freeformDbga), true);
+    assert.equal(hasAuditDocument(freeformDbga, null), true);
+    assert.equal(hasAuditDocument(freeformDbga, ""), true);
+  });
+
+  it("rechaza documento vacío", () => {
+    assert.equal(hasAuditDocument("", null), false);
+    assert.equal(hasAuditDocument("  ", "{}"), false);
   });
 });

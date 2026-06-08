@@ -80,6 +80,11 @@ export interface Phase0InterviewState {
   historial: Phase0QA[];
   /** Entrevista inicial vs auditoría manual posterior */
   mode: "interview" | "audit";
+  /**
+   * structured = borrador entrevista / markdown Fase 0 canónico.
+   * freeform_dbga = dbgaContent libre (lo que muestra el Workshop en pestaña Fase 0).
+   */
+  sourceFormat?: "structured" | "freeform_dbga";
 }
 
 export interface Phase0QA {
