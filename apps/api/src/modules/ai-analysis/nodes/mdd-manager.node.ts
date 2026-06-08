@@ -94,8 +94,13 @@ function inferSectionsFromMessage(text: string): string[] {
   ) {
     out.push("security");
   }
-  if (/\b(infraestructura|docker|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|§7|secci[oó]n\s*7)\b/i.test(t)) {
+  if (
+    /\b(infraestructura|docker|kubernetes|kubernets|k8s|dokploy|coolify|despliegue|§7|secci[oó]n\s*7|§6\.3|6\.3)\b/i.test(t)
+  ) {
     out.push("integration");
+  }
+  if (/\b(§6|secci[oó]n\s*6|6\.3)\b/i.test(t) && !out.includes("security")) {
+    out.push("security");
   }
   return [...new Set(out)];
 }
@@ -103,19 +108,38 @@ function inferSectionsFromMessage(text: string): string[] {
 /** Cambio concreto sobre stack/despliegue/infra (mensajes cortos que el LLM suele clasificar como reply). */
 function looksLikeExplicitMddModificationRequest(msg: string): boolean {
   const t = (msg ?? "").trim();
-  if (t.length < 15) return false;
+  if (t.length < 10) return false;
   if (/^\s*¿/.test(t) && !/\b(cambiar|reemplaz|no\s+se\s+usar|usar[ií]a|sustitu|modific|actualiz)\b/i.test(t)) {
     return false;
   }
+  const staleDocComplaint =
+    /\b(no\s+veo\s+(los\s+)?cambios|sigue\s+(haciendo\s+)?menci|a[uú]n\s+(dice|menciona|tiene|aparece|contiene)|no\s+se\s+(reflej|aplic|guard)|documento\s+sigue|persiste|sigue\s+igual)\b/i.test(
+      t,
+    );
+  if (
+    staleDocComplaint &&
+    /\b(kubernetes|kubernets|k8s|dokploy|docker|despliegue|infra|§\s*[67]|secci[oó]n\s*[67]|6\.\d)\b/i.test(t)
+  ) {
+    return true;
+  }
   const changeIntent =
-    /\b(no\s+se\s+usar[aá]?|usar[ií]a|usar[aá]?|cambiar|cambio|reemplaz|sustitu|modific|actualiz|en\s+vez\s+de|en\s+lugar\s+de|pasar(?:emos)?\s+a)\b/i.test(
+    /\b(no\s+se\s+usar[aá]?|usar[ií]a|usar[aá]?|cambiar|cambio|reemplaz|sustitu|modific|actualiz|eliminar|quitar|en\s+vez\s+de|en\s+lugar\s+de|pasar(?:emos)?\s+a|ajust)\b/i.test(
       t,
     );
   const mddSurface =
-    /\b(kubernetes|kubernets|k8s|dokploy|coolify|docker|despliegue|deploy|infra|stack|§\s*2|secci[oó]n\s*2|secci[oó]n\s*7|§\s*7)\b/i.test(
+    /\b(kubernetes|kubernets|k8s|dokploy|coolify|docker|despliegue|deploy|infra|stack|§\s*[267]|secci[oó]n\s*[267]|6\.\d|7\.)\b/i.test(
       t,
     );
   return changeIntent && mddSurface;
+}
+
+/** El Manager no debe afirmar cambios en el MDD con action reply (sin ejecutar agentes). */
+function replyClaimsDocumentWasModified(reply: string): boolean {
+  const r = (reply ?? "").trim();
+  if (r.length < 20) return false;
+  return /\b(ajust[eé]|ajustamos|elimin[eé]|eliminamos|actualic[eé]|modifiqu[eé]|reescrib[ií]|reescribimos|ya\s+no\s+(contiene|menciona|incluye)|sin\s+referencias|sin\s+menciones|qued[oó]\s+(ajustad|actualizad)|hemos\s+(ajustad|actualizad|eliminad|modificad)|no\s+(contiene|menciona|incluye)\s+(ya|más)|se\s+(ajust|actualiz|modific|elimin)[oa]|documento\s+(est[aá]|qued[oó]))\b/i.test(
+    r,
+  );
 }
 
 /** Descripción por nodo para el plan explícito (patrón Planner–Executor). */
@@ -1359,6 +1383,22 @@ export function createMddManagerNode(
       if (sectionsToRun.length === 0) {
         sectionsToRun = expandSectionsToRun(["software_architect", "security", "integration"]);
       }
+    }
+
+    if (
+      action === "reply" &&
+      replyContent &&
+      replyClaimsDocumentWasModified(replyContent)
+    ) {
+      LOG("reply anulado: afirma cambios en el MDD sin ejecutar agentes → forzar delegate/sections");
+      action = "delegate";
+      delegateTarget = "sections";
+      const hint = [userMessage ?? "", replyContent].filter(Boolean).join(" ");
+      sectionsToRun = expandSectionsToRun(inferSectionsFromMessage(hint));
+      if (sectionsToRun.length === 0) {
+        sectionsToRun = expandSectionsToRun(["software_architect", "security", "integration"]);
+      }
+      replyContent = "";
     }
 
     if (action === "reply") {

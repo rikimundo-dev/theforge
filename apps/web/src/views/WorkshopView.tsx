@@ -120,6 +120,7 @@ import {
 import { UxUiGuidePanel } from "../components/UxUiGuidePanel";
 import { Phase0InterviewPanel } from "../components/Phase0InterviewPanel";
 import { Phase0ManualAudit } from "../components/Phase0ManualAudit";
+import { MddManualAudit } from "../components/MddManualAudit";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { AdrsPanel } from "../components/AdrsPanel";
 import { useAutoSaveContent } from "../hooks/useAutoSaveContent";
@@ -3607,6 +3608,18 @@ export default function WorkshopView({
                     </>
                   )}
                 </WorkshopPanelActionRegion>
+                {!legacyMddPanelIsAsIsOnly && (mddContent ?? "").trim().length > 0 ? (
+                  <MddManualAudit
+                    projectId={projectId}
+                    stageId={activeStageId}
+                    mddContent={mddContent}
+                    onUpdated={async () => {
+                      const store = useWorkshopStore.getState();
+                      await store.fetchProject(projectId);
+                      await store.fetchEstimation(projectId);
+                    }}
+                  />
+                ) : null}
                 {mddDirty && (
                   <WorkshopDirtySaveBar
                     message="Tienes cambios sin guardar. Graba para revisar consistencia (ER, etc.)."

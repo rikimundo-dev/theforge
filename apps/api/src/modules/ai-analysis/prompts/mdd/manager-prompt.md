@@ -100,6 +100,8 @@ El usuario **da requisitos, correcciones o reglas** que deben quedar en el MDD. 
 
 **Regla de oro:** Si dudas entre "reply" y "delegate", elige **delegate**. Solo usa "reply" cuando sea claramente una pregunta conceptual o un saludo/gracias.
 
+**Prohibido mentir sobre el documento:** Con `action: "reply"` **nunca** afirmes que ya ajustaste, eliminaste, actualizaste o reescribiste el MDD (ej. "ya no contiene Kubernetes", "ajusté las secciones 6 y 7"). Un `reply` **no modifica** el borrador; solo los agentes lo hacen vía `delegate`. Si el usuario pide cambios, quejas de que el doc sigue igual, o confirma una corrección → **siempre** `delegate` con `target: "sections"` y los agentes de las secciones afectadas.
+
 **Nota para el sistema:** Si el usuario pide explícitamente **solo** generar o corregir la sección "contexto y alcance" a partir del documento (ej. "no generaste el contexto y alcance, debes generarlo a partir del contenido del documento"), el orquestador enviará solo al Clarificador y luego fusionará únicamente esa sección en el documento; no se ejecutarán el resto de agentes (modelo de datos, arquitecto, etc.).
 
 ---

@@ -22,6 +22,10 @@ import {
   isPlanApprovalResumeMessage,
 } from "../utils/planApprovalChat";
 import { listGovernancePatternOptions } from "@theforge/shared-types/mdd-governance-patterns";
+import {
+  orchestratorDocSnapshot,
+  resolveOrchestratorDocUnchangedError,
+} from "../utils/orchestratorDocGuard";
 
 function workshopScopeProjectId(get: () => WorkshopState): string {
   return (get().projectId ?? get().project?.id ?? "").trim();
@@ -1801,6 +1805,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
               : `${API_BASE}/ai-analysis/mdd/stream/manager`;
           const mddStage = get().activeStageId;
           const draftForMdd = (get().mddContent ?? get().project?.mddContent ?? "").trim() || undefined;
+          const mddSnapshotBeforeStream = draftForMdd ?? "";
           const body =
             managerThreadId != null
               ? {
@@ -1879,19 +1884,39 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                           : null,
                     });
                     if (event.markdown != null && event.markdown.trim().length > 80) {
-                      set({ mddContent: event.markdown });
-                      const { persistMddContent, fetchProject, fetchEstimation } = get();
-                      await persistMddContent(event.markdown);
-                      const errBeforeFetch = get().error;
-                      if (shouldApplyWorkshopUpdate(get, requestProjectId)) {
-                        await fetchProject(requestProjectId);
-                        if (errBeforeFetch) set({ error: errBeforeFetch });
-                        await fetchEstimation(requestProjectId);
-                        const current = get();
+                      const incoming = event.markdown.trim();
+                      const unchanged =
+                        mddSnapshotBeforeStream.length > 80 && incoming === mddSnapshotBeforeStream;
+                      const replyClaimsEdit =
+                        typeof event.reply === "string" &&
+                        /\b(ajust|elimin|actualiz|modific|ya no contiene|sin referencias)\b/i.test(
+                          event.reply,
+                        );
+                      if (unchanged && replyClaimsEdit) {
                         set({
-                          mddContent: event.markdown,
-                          project: current.project ? { ...current.project, mddContent: event.markdown } : null,
+                          error:
+                            "El chat indicó cambios pero el MDD no se actualizó. Revisa si hay un plan pendiente de aprobar, o usa /infraestructura o /seguridad para forzar la regeneración.",
                         });
+                      }
+                      set({ mddContent: incoming });
+                      const { persistMddContent, fetchProject, fetchEstimation } = get();
+                      if (!unchanged) {
+                        await persistMddContent(incoming, { force: true });
+                      }
+                      if (!unchanged) {
+                        const errBeforeFetch = get().error;
+                        if (shouldApplyWorkshopUpdate(get, requestProjectId)) {
+                          await fetchProject(requestProjectId);
+                          if (errBeforeFetch) set({ error: errBeforeFetch });
+                          await fetchEstimation(requestProjectId);
+                          const current = get();
+                          set({
+                            mddContent: incoming,
+                            project: current.project
+                              ? { ...current.project, mddContent: incoming }
+                              : null,
+                          });
+                        }
                       }
                     }
                     // No sobrescribir mddContent con markdown vacío (auditar puede venir de checkpoint sin draft)
@@ -2096,6 +2121,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         streamingTab: tab,
         evaluatorCritique: null,
       });
+      const orchestratorDocSnapshotBefore = orchestratorDocSnapshot(get(), tab);
       try {
         const body: Record<string, unknown> = {
           projectId: requestProjectId,
@@ -2196,6 +2222,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 if (sess && sess.projectId !== requestProjectId) continue;
                 const proj = data.project as Project | undefined;
                 if (proj && proj.id !== requestProjectId) continue;
+                const docUnchangedError = resolveOrchestratorDocUnchangedError({
+                  tab,
+                  snapshotBefore: orchestratorDocSnapshotBefore,
+                  data,
+                  snapshotSource: get(),
+                  userMessage: msg,
+                  session: sess,
+                });
                 const uxFromApi = (data.uxUiGuideContent ?? proj?.uxUiGuideContent) as string | null | undefined;
                 const packed = projectWithUxAfterStream(proj, uxFromApi, get().activeStageId);
                 const nextStages = packed?.project?.stages ?? proj?.stages;
@@ -2233,11 +2267,11 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   streamingContent: null,
                   streamingTab: null,
                   synced: true,
-                  error: null,
+                  error: docUnchangedError,
                   evaluatorCritique: pickEvaluatorCritique(data),
                 });
                 // Auto-persist UX/UI guide when the orchestrator returns content on its tab
-                if (tab === "ux-ui-guide" && freshUx) {
+                if (tab === "ux-ui-guide" && freshUx && !docUnchangedError) {
                   get().persistUxUiGuideContent(freshUx).catch(() => {});
                 }
               } else if (event === "error" && data.error) {
@@ -2278,6 +2312,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   (!sessTail?.projectId || sessTail.projectId === requestProjectId) &&
                   (!projTail?.id || projTail.id === requestProjectId);
                 if (scopeOk) {
+                  const docUnchangedError = resolveOrchestratorDocUnchangedError({
+                    tab,
+                    snapshotBefore: orchestratorDocSnapshotBefore,
+                    data,
+                    snapshotSource: get(),
+                    userMessage: msg,
+                    session: sessTail,
+                  });
                   const uxFromApi = (data.uxUiGuideContent ?? projTail?.uxUiGuideContent) as
                     | string
                     | null
@@ -2318,10 +2360,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     streamingContent: null,
                     streamingTab: null,
                     synced: true,
-                    error: null,
+                    error: docUnchangedError,
                     evaluatorCritique: pickEvaluatorCritique(data),
                   });
-                  if (tab === "ux-ui-guide" && freshUx) {
+                  if (tab === "ux-ui-guide" && freshUx && !docUnchangedError) {
                     get().persistUxUiGuideContent(freshUx).catch(() => {});
                   }
                 }
