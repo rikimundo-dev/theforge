@@ -65,6 +65,10 @@ export interface Phase0InterviewState {
   gaps: Phase0Gap[];
   preguntasRealizadas: number;
   maxPreguntas: number;  // default 5
+  /** Cola fija de gaps a entrevistar (máx. maxPreguntas), definida al arrancar */
+  questionPlan: Phase0Gap[];
+  /** Índice del siguiente gap planificado en questionPlan */
+  planCursor: number;
   status: "idle" | "starting" | "interviewing" | "done" | "error";
   /** Input original del usuario (idea cruda o documento externo) */
   inputRaw: string;

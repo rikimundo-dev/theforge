@@ -45,6 +45,8 @@ Si NO quedan gaps críticos (solo importantes/opcionales):
 }
 ```
 
+**Excepción:** si el payload incluye `gap_objetivo` y `pregunta_planificada_numero` < `total_planificadas`, **debes** formular la pregunta sobre `gap_objetivo` (type: "question"). No respondas "done" para acortar la entrevista planificada.
+
 # Selector de gap
 
 - Toma el gap con criticidad "critico" de mayor prioridad.

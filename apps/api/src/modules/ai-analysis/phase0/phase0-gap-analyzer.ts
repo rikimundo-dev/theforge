@@ -111,6 +111,38 @@ export function analyzeGaps(borrador: Phase0Document): Phase0Gap[] {
   return gaps.sort((a, b) => GAP_WEIGHT[a.criticidad] - GAP_WEIGHT[b.criticidad]);
 }
 
+/** Gaps que justifican una pregunta al usuario */
+export function isAskableGap(gap: Phase0Gap): boolean {
+  return gap.criticidad === "critico" || gap.criticidad === "importante";
+}
+
+/**
+ * Plan de entrevista: hasta `max` gaps críticos/importantes, ordenados por prioridad.
+ * Evita terminar tras 1 respuesta cuando el LLM rellena el borrador de golpe.
+ */
+export function buildQuestionPlan(gaps: Phase0Gap[], max: number): Phase0Gap[] {
+  const ordered = [...gaps]
+    .filter(isAskableGap)
+    .sort((a, b) => GAP_WEIGHT[a.criticidad] - GAP_WEIGHT[b.criticidad]);
+  const plan: Phase0Gap[] = [];
+  const seen = new Set<string>();
+  for (const gap of ordered) {
+    const key = `${gap.seccion}:${gap.descripcion.slice(0, 64)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    plan.push(gap);
+    if (plan.length >= max) break;
+  }
+  return plan;
+}
+
+/** True si el gap sigue presente según el analizador lógico */
+export function isGapStillOpen(gap: Phase0Gap, borrador: Phase0Document): boolean {
+  return analyzeGaps(borrador).some(
+    (g) => g.seccion === gap.seccion && g.descripcion === gap.descripcion,
+  );
+}
+
 /**
  * Filtra gaps que ya no aplican basado en el contenido actual del borrador
  * y gaps que se resolvieron (su pregunta ya fue respondida).

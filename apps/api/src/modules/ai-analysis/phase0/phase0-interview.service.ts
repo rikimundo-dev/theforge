@@ -17,7 +17,7 @@ import { AIFactory } from "../../ai/ai.factory.js";
 import { PrismaService } from "../../../prisma/prisma.service.js";
 import { createDbgaLLM } from "../llm/create-dbga-llm.js";
 import { PHASE0_ARRANQUE_PROMPT, PHASE0_QUESTION_PROMPT, PHASE0_UPDATE_PROMPT } from "../prompts/load-prompts.js";
-import { analyzeGaps, filterResolvedGaps } from "./phase0-gap-analyzer.js";
+import { analyzeGaps, buildQuestionPlan, filterResolvedGaps } from "./phase0-gap-analyzer.js";
 import { phase0ToMarkdown } from "./phase0-to-markdown.js";
 import type {
   Phase0Document,
@@ -96,6 +96,8 @@ export class Phase0InterviewService {
       // Gap analyzer lógico como respaldo
       const logicGaps = analyzeGaps(borrador);
       const mergedGaps = mergeGaps(llmGaps, logicGaps);
+      const questionPlan = buildQuestionPlan(mergedGaps, MAX_PREGUNTAS);
+      const hasInterview = questionPlan.length > 0;
 
       const state: Phase0InterviewState = {
         projectId,
@@ -104,7 +106,9 @@ export class Phase0InterviewService {
         gaps: mergedGaps,
         preguntasRealizadas: 0,
         maxPreguntas: MAX_PREGUNTAS,
-        status: mergedGaps.some((g) => g.criticidad === "critico") ? "interviewing" : "done",
+        questionPlan,
+        planCursor: 0,
+        status: hasInterview ? "interviewing" : "done",
         inputRaw: idea,
         inputType,
         historial: [],
@@ -112,8 +116,13 @@ export class Phase0InterviewService {
 
       this.states.set(threadId, state);
 
-      // Persistir
+      // Persistir borrador intermedio (sin dbgaContent hasta finalizar entrevista)
       await this.persistPhase0(projectId, borrador, mergedGaps, state.status);
+
+      if (!hasInterview) {
+        await this.finalizePhase0(state);
+        return { type: "done", borrador, gaps: mergedGaps };
+      }
 
       return { type: "init", threadId, borrador };
     } catch (err) {
@@ -130,26 +139,22 @@ export class Phase0InterviewService {
       return { type: "error", message: "Thread no encontrado. Inicia la Fase 0 primero." };
     }
 
-    const criticalGaps = state.gaps.filter((g) => g.criticidad === "critico");
-
-    if (criticalGaps.length === 0 || state.preguntasRealizadas >= state.maxPreguntas) {
-      const remainingGaps = state.gaps.filter(
-        (g) => g.criticidad === "importante" || g.criticidad === "opcional",
-      );
-      state.borrador.preguntasPendientes = remainingGaps.map((g) => g.descripcion);
-      state.status = "done";
-      await this.finalizePhase0(state);
-      return { type: "done", borrador: state.borrador, gaps: state.gaps };
+    if (state.preguntasRealizadas >= state.maxPreguntas) {
+      return this.finalize(state);
     }
 
-    // Intentar con LLM; fallback a gap analyzer lógico
+    const targetGap = this.resolvePlannedGap(state);
+    if (!targetGap) {
+      return this.finalize(state);
+    }
+
     const llm = await this.getUserLLM(state.projectId);
     if (!llm) {
       return phase0ProviderUnavailableEvent();
     }
 
     try {
-      const prompt = this.buildQuestionPrompt(state);
+      const prompt = this.buildQuestionPrompt(state, targetGap);
       const response = await llm.invoke([
         { role: "system", content: PHASE0_QUESTION_PROMPT },
         { role: "user", content: prompt },
@@ -159,40 +164,47 @@ export class Phase0InterviewService {
       const parsed = JSON.parse(content);
 
       if (parsed.type === "done") {
-        state.status = "done";
-        await this.finalizePhase0(state);
-        return { type: "done", borrador: state.borrador, gaps: state.gaps };
+        this.logger.warn(
+          `[Phase0] LLM devolvió done antes de tiempo (plan ${state.planCursor + 1}/${state.questionPlan.length}); usando gap planificado`,
+        );
+        return this.askFromPlannedGap(state, targetGap);
       }
 
-      state.ultimaPregunta = parsed.question;
-      return {
-        type: "question",
-        question: parsed.question,
-        n: state.preguntasRealizadas + 1,
-        total: state.maxPreguntas,
-      };
+      const question =
+        typeof parsed.question === "string" && parsed.question.trim()
+          ? parsed.question.trim()
+          : targetGap.sugerenciaPregunta;
+      state.ultimaPregunta = question;
+      return this.questionEvent(state, question);
     } catch (err) {
       this.logger.error(`[Phase0] question LLM error: ${err}`);
       if (isPhase0FatalLlmError(err)) {
         return toPhase0ErrorEvent(err);
       }
-      return this.fallbackQuestion(state);
+      return this.askFromPlannedGap(state, targetGap);
     }
   }
 
-  private fallbackQuestion(state: Phase0InterviewState): Phase0StreamEvent {
-    const nextGap = state.gaps.find((g) => g.criticidad === "critico");
-    if (nextGap) {
-      state.ultimaPregunta = nextGap.sugerenciaPregunta;
-      return {
-        type: "question",
-        question: nextGap.sugerenciaPregunta,
-        n: state.preguntasRealizadas + 1,
-        total: state.maxPreguntas,
-      };
+  private resolvePlannedGap(state: Phase0InterviewState): Phase0Gap | undefined {
+    while (state.planCursor < state.questionPlan.length) {
+      return state.questionPlan[state.planCursor];
     }
-    state.status = "done";
-    return { type: "done", borrador: state.borrador, gaps: state.gaps };
+    return undefined;
+  }
+
+  private askFromPlannedGap(state: Phase0InterviewState, gap: Phase0Gap): Phase0StreamEvent {
+    state.ultimaPregunta = gap.sugerenciaPregunta;
+    return this.questionEvent(state, gap.sugerenciaPregunta);
+  }
+
+  private questionEvent(state: Phase0InterviewState, question: string): Phase0StreamEvent {
+    const total = Math.max(state.questionPlan.length, 1);
+    return {
+      type: "question",
+      question,
+      n: state.planCursor + 1,
+      total,
+    };
   }
 
   // ─── Procesar respuesta → actualizar borrador ───────────────────────
@@ -206,6 +218,7 @@ export class Phase0InterviewService {
     // Registrar historial
     state.historial.push({ pregunta: state.ultimaPregunta ?? "—", respuesta: answer });
     state.preguntasRealizadas += 1;
+    state.planCursor += 1;
 
     // Intentar actualizar con LLM
     const llm = await this.getUserLLM(state.projectId);
@@ -323,11 +336,14 @@ export class Phase0InterviewService {
     this.states.delete(threadId);
   }
 
-  private buildQuestionPrompt(state: Phase0InterviewState): string {
+  private buildQuestionPrompt(state: Phase0InterviewState, targetGap: Phase0Gap): string {
     return JSON.stringify({
       borrador_actual: state.borrador,
       gaps_actuales: state.gaps,
+      gap_objetivo: targetGap,
       preguntas_realizadas: state.preguntasRealizadas,
+      pregunta_planificada_numero: state.planCursor + 1,
+      total_planificadas: state.questionPlan.length,
       max_preguntas: state.maxPreguntas,
       historial: state.historial.map((qa) => ({ P: qa.pregunta, R: qa.respuesta })),
     }, null, 2);
@@ -352,7 +368,7 @@ function mergeGaps(llmGaps: Phase0Gap[], logicGaps: Phase0Gap[]): Phase0Gap[] {
   const seen = new Set<string>();
   const merged: Phase0Gap[] = [];
   for (const gap of [...llmGaps, ...logicGaps]) {
-    const key = gap.seccion + ":" + gap.criticidad;
+    const key = `${gap.seccion}:${gap.criticidad}:${gap.descripcion.slice(0, 64)}`;
     if (!seen.has(key)) {
       merged.push(gap);
       seen.add(key);
