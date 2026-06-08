@@ -34,10 +34,28 @@ type Phase0StreamPayload = {
   code?: string;
   threadId?: string;
   borrador?: unknown;
+  gaps?: unknown;
   question?: string;
   n?: number;
   total?: number;
 };
+
+function applyQuestionPayload(
+  data: Phase0StreamPayload,
+  setQuestion: (q: string) => void,
+  setPreguntaN: (n: number) => void,
+  setTotalPreguntas: (t: number) => void,
+  setStatus: (s: Phase0Status) => void,
+): boolean {
+  if (data.type !== "question" || !data.question?.trim()) return false;
+  setQuestion(data.question.trim());
+  setPreguntaN(data.n ?? 1);
+  if (typeof data.total === "number" && data.total > 0) {
+    setTotalPreguntas(data.total);
+  }
+  setStatus("interviewing");
+  return true;
+}
 
 function applyPhase0StreamError(
   data: Phase0StreamPayload,
@@ -67,6 +85,7 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
   const [preguntaN, setPreguntaN] = useState(0);
   const [totalPreguntas, setTotalPreguntas] = useState(5);
   const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [ideaInput, setIdeaInput] = useState("");
   const [borradorVisible, setBorradorVisible] = useState(false);
   const [borrador, setBorrador] = useState<string>("");
@@ -122,7 +141,9 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
   /** Obtener siguiente pregunta */
   const fetchQuestion = useCallback(async (tid: string) => {
     try {
-      const res = await apiFetch(`${API_BASE}/ai-analysis/phase0/question/${tid}`);
+      const res = await apiFetch(
+        `${API_BASE}/ai-analysis/phase0/question/${encodeURIComponent(tid)}?projectId=${encodeURIComponent(projectId)}`,
+      );
       if (!res.ok) {
         const { message, code } = await parseApiErrorPayloadFromResponse(
           res,
@@ -144,37 +165,33 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
         return;
       }
 
-      if (data.type !== "question" || !data.question) {
+      if (!applyQuestionPayload(data, setQuestion, setPreguntaN, setTotalPreguntas, setStatus)) {
         setError(resolvePhase0ErrorMessage({ message: "No se recibió una pregunta válida" }));
         setStatus("error");
         return;
       }
 
-      setQuestion(data.question);
-      setPreguntaN(data.n ?? 0);
-      if (typeof data.total === "number" && data.total > 0) {
-        setTotalPreguntas(data.total);
-      }
-      setStatus("interviewing");
       setAnswer("");
       setTimeout(() => inputRef.current?.focus(), 100);
     } catch (e) {
       setError(formatUserFacingThrownError(e, "No se pudo obtener la siguiente pregunta"));
       setStatus("error");
     }
-  }, [onComplete]);
+  }, [onComplete, projectId]);
 
   /** Enviar respuesta */
   const handleAnswer = useCallback(async () => {
-    if (!answer.trim() || !threadId) return;
+    if (!answer.trim() || !threadId || isSubmitting) return;
     const currentAnswer = answer.trim();
     setAnswer("");
+    setIsSubmitting(true);
+    setError(null);
 
     try {
       const res = await apiFetch(`${API_BASE}/ai-analysis/phase0/answer`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId, answer: currentAnswer }),
+        body: JSON.stringify({ threadId, answer: currentAnswer, projectId }),
       });
       if (!res.ok) {
         const { message, code } = await parseApiErrorPayloadFromResponse(
@@ -198,16 +215,27 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
         return;
       }
 
-      // Actualizar borrador
       if (data.borrador) setBorrador(JSON.stringify(data.borrador, null, 2));
 
-      // Siguiente pregunta
-      await fetchQuestion(threadId);
+      if (applyQuestionPayload(data, setQuestion, setPreguntaN, setTotalPreguntas, setStatus)) {
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      if (data.type === "draft_updated") {
+        await fetchQuestion(threadId);
+        return;
+      }
+
+      setError(resolvePhase0ErrorMessage({ message: "Respuesta inesperada al enviar tu respuesta" }));
+      setStatus("error");
     } catch (e) {
       setError(formatUserFacingThrownError(e, "No se pudo enviar tu respuesta"));
       setStatus("error");
+    } finally {
+      setIsSubmitting(false);
     }
-  }, [answer, threadId, fetchQuestion, onComplete]);
+  }, [answer, threadId, fetchQuestion, onComplete, isSubmitting]);
 
   /** Manejar Enter para enviar */
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -275,6 +303,12 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
       {/* Modo entrevista */}
       {status === "interviewing" && (
         <>
+          {isSubmitting && (
+            <div className="flex items-center gap-2 text-sm text-[var(--foreground-subtle)]">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <span>Procesando tu respuesta y preparando la siguiente pregunta…</span>
+            </div>
+          )}
           {/* Progreso */}
           <div className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
             <span className="font-medium text-[var(--foreground)]">
@@ -308,6 +342,7 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={handleKeyDown}
+              disabled={isSubmitting}
               placeholder="Escribe tu respuesta (Enter para enviar, Shift+Enter para nueva línea)..."
               className="flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-3 text-sm text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] outline-none resize-none"
               rows={3}
@@ -317,7 +352,8 @@ export function Phase0InterviewPanel({ projectId, onComplete }: Props) {
             <WorkshopPanelButton
               tone="primary"
               onClick={handleAnswer}
-              disabled={!answer.trim()}
+              disabled={!answer.trim() || isSubmitting}
+              loading={isSubmitting}
             >
               <WorkshopButtonIcon icon={Send} tone="primary" />
               Enviar respuesta

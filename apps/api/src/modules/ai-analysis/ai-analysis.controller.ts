@@ -484,21 +484,26 @@ export class AiAnalysisController {
    * Obtiene la siguiente pregunta del entrevistador.
    */
   @Get("phase0/question/:threadId")
-  async getPhase0Question(@Param("threadId") threadId: string) {
+  async getPhase0Question(
+    @Param("threadId") threadId: string,
+    @Query("projectId") projectId?: string,
+  ) {
     if (!threadId) throw new BadRequestException("threadId is required");
-    return this.phase0Interview.getQuestion(threadId);
+    const pid = typeof projectId === "string" ? projectId.trim() || undefined : undefined;
+    return this.phase0Interview.getQuestion(threadId, pid);
   }
 
   /**
    * Envía respuesta a la última pregunta y recibe borrador actualizado.
    */
   @Post("phase0/answer")
-  async answerPhase0(@Body() body: { threadId?: string; answer?: string }) {
+  async answerPhase0(@Body() body: { threadId?: string; answer?: string; projectId?: string }) {
     const threadId = typeof body?.threadId === "string" ? body.threadId.trim() : "";
     const answer = typeof body?.answer === "string" ? body.answer.trim() : "";
+    const projectId = typeof body?.projectId === "string" ? body.projectId.trim() || undefined : undefined;
     if (!threadId) throw new BadRequestException("threadId is required");
     if (!answer) throw new BadRequestException("answer is required");
-    return this.phase0Interview.processAnswer(threadId, answer);
+    return this.phase0Interview.processAnswer(threadId, answer, projectId);
   }
 
   /**
