@@ -190,6 +190,7 @@ export function lastAssistantChatForTab(
   if (!chatLog?.length) return "";
   for (let i = chatLog.length - 1; i >= 0; i--) {
     const m = chatLog[i];
+    if (!m) continue;
     if (m.role === "assistant" && (m.tab ?? tab) === tab && typeof m.content === "string") {
       return m.content.trim();
     }
