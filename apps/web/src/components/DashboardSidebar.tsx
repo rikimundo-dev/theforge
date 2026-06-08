@@ -130,6 +130,10 @@ const railControlActiveClass = (extra?: string) =>
     extra,
   );
 
+/** Compact badge for mandatory workshop steps (Paso 0, BRD, MDD). */
+const STEP_REQUIRED_BADGE_CLASS =
+  "h-4 shrink-0 border-[color-mix(in_oklch,var(--primary)_40%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_12%,var(--sidebar))] px-1 py-0 text-[9px] font-semibold uppercase leading-none tracking-wide text-[var(--primary)]";
+
 /** Solid success badge on workshop step icons (rail + expanded). */
 const STEP_DONE_BADGE_CLASS =
   "fill-[color-mix(in_oklch,var(--success)_92%,transparent)] text-[var(--sidebar)] stroke-[var(--sidebar)]";
@@ -778,6 +782,7 @@ export function DashboardSidebar({
                             const done = workshopTabDocHasContent(item.id, item.content);
                             const Icon = item.Icon;
                             const isCurrent = activeDocPanel === item.id;
+                            const mandatorySuffix = item.required ? " · Obligatorio" : "";
                             return (
                               <li
                                 key={item.id}
@@ -792,13 +797,15 @@ export function DashboardSidebar({
                                 <CollapsedRailHint
                                   rail={rail}
                                   label={
-                                    done ? `${item.label} · Con contenido · ${item.title}` : `${item.label} · ${item.title}`
+                                    done
+                                      ? `${item.label} · Con contenido${mandatorySuffix} · ${item.title}`
+                                      : `${item.label}${mandatorySuffix} · ${item.title}`
                                   }
                                 >
                                   <button
                                     type="button"
                                     role="listitem"
-                                    title={`${item.title}${done ? " — con contenido" : ""}`}
+                                    title={`${item.title}${item.required ? " — paso obligatorio" : ""}${done ? " — con contenido" : ""}`}
                                     aria-current={isCurrent ? "page" : undefined}
                                     onClick={() => {
                                       closeMobileNav();
@@ -824,6 +831,12 @@ export function DashboardSidebar({
                                   >
                                     {rail ? (
                                       <span className="relative flex size-5 items-center justify-center" aria-hidden>
+                                        {item.required ? (
+                                          <span
+                                            className="pointer-events-none absolute -left-0.5 -top-0.5 z-[1] h-1.5 w-1.5 rounded-full bg-[var(--primary)] ring-1 ring-[var(--sidebar)]"
+                                            title="Obligatorio"
+                                          />
+                                        ) : null}
                                         <Icon
                                           className={cn(
                                             "size-4",
@@ -853,6 +866,15 @@ export function DashboardSidebar({
                                           aria-hidden
                                         />
                                         <span className="min-w-0 flex-1 text-left leading-snug">{item.label}</span>
+                                        {item.required ? (
+                                          <Badge
+                                            variant="outline"
+                                            className={STEP_REQUIRED_BADGE_CLASS}
+                                            title="Obligatorio para generar los demás documentos"
+                                          >
+                                            Oblig.
+                                          </Badge>
+                                        ) : null}
                                         {done ? (
                                           <CircleCheck
                                             className={cn("h-3.5 w-3.5 shrink-0", STEP_DONE_BADGE_CLASS)}

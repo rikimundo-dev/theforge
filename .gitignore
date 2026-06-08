@@ -76,3 +76,6 @@ logs/
 sandboxes/
 answer*.json
 cron/
+
+# DB migration dumps (may contain production data)
+.migration-backup/
