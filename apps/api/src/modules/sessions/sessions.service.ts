@@ -22,6 +22,12 @@ import {
 import { llmMaxTokens } from "../ai/config/llm-config.js";
 import { normalizeDashes } from "./document-content.util.js";
 import {
+  appendOrchestratorDocNotPersistedWarning,
+  currentDocLengthForTab,
+  shouldWarnOrchestratorDocNotPersisted,
+  type DocPersistFlags,
+} from "./orchestrator-doc-guard.util.js";
+import {
   BENCHMARK_CHAT_ACK,
   benchmarkAssistantChatMessage,
   dbgaReflectsUserEditIntent,
@@ -510,10 +516,32 @@ export class SessionsService {
       options,
       dbgaDocPart,
     );
-    const assistantContent = this.parser.stripChatLabel(
+    let assistantContent = this.parser.stripChatLabel(
       activeTab === "benchmark"
         ? benchmarkAssistantChatMessage(rawChat, finalDbga)
         : rawChat,
+    );
+    assistantContent = this.maybeWarnOrchestratorDocNotPersisted(
+      activeTab,
+      effectiveUserMessage,
+      assistantContent,
+      {
+        hasMdd,
+        hasSpec,
+        hasArch,
+        hasUseCases,
+        hasStories,
+        hasBlue,
+        hasApi,
+        hasFlows,
+        hasTasks,
+        hasInfra,
+        hasBrd,
+        hasDbga,
+        hasUx,
+        hasPhase0,
+      },
+      options,
     );
 
     const tab = activeTab;
@@ -907,10 +935,32 @@ export class SessionsService {
       options,
       dbgaDocPart,
     );
-    const assistantContent = this.parser.stripChatLabel(
+    let assistantContent = this.parser.stripChatLabel(
       tab === "benchmark"
         ? benchmarkAssistantChatMessage(rawChat, finalDbga)
         : rawChat,
+    );
+    assistantContent = this.maybeWarnOrchestratorDocNotPersisted(
+      tab,
+      effectiveUserMessage,
+      assistantContent,
+      {
+        hasMdd,
+        hasSpec,
+        hasArch,
+        hasUseCases,
+        hasStories,
+        hasBlue,
+        hasApi,
+        hasFlows,
+        hasTasks,
+        hasInfra,
+        hasBrd,
+        hasDbga,
+        hasUx,
+        hasPhase0,
+      },
+      options,
     );
     const assistantEntry = stageId
       ? { role: "assistant" as const, content: assistantContent, tab, stageId }
@@ -1538,5 +1588,47 @@ ${msg}
       recoveredFromSessionId: best.sessionId,
       length: best.len,
     };
+  }
+
+  private maybeWarnOrchestratorDocNotPersisted(
+    tab: string,
+    userMessage: string,
+    assistantContent: string,
+    flags: DocPersistFlags,
+    options?: {
+      currentMddContent?: string;
+      currentSpecContent?: string;
+      currentArchitectureContent?: string;
+      currentUseCasesContent?: string;
+      currentUserStoriesContent?: string;
+      currentBlueprintContent?: string;
+      currentApiContractsContent?: string;
+      currentLogicFlowsContent?: string;
+      currentTasksContent?: string;
+      currentInfraContent?: string;
+      currentBrdContent?: string;
+      currentDbgaContent?: string;
+      currentUxUiGuideContent?: string;
+      currentPhase0SummaryContent?: string;
+    },
+  ): string {
+    const currentDocLen = currentDocLengthForTab(tab, options);
+    if (
+      !shouldWarnOrchestratorDocNotPersisted({
+        tab,
+        userMessage,
+        assistantContent,
+        flags,
+        currentDocLen,
+      })
+    ) {
+      return assistantContent;
+    }
+    console.warn("[Chat] documento no persistido pese a pedido/afirmación de cambio", {
+      tab,
+      currentDocLen,
+      assistantPreview: assistantContent.slice(0, 120),
+    });
+    return appendOrchestratorDocNotPersistedWarning(assistantContent, tab);
   }
 }

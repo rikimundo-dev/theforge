@@ -22,6 +22,10 @@ import {
   isPlanApprovalResumeMessage,
 } from "../utils/planApprovalChat";
 import { listGovernancePatternOptions } from "@theforge/shared-types/mdd-governance-patterns";
+import {
+  orchestratorDocSnapshot,
+  resolveOrchestratorDocUnchangedError,
+} from "../utils/orchestratorDocGuard";
 
 function workshopScopeProjectId(get: () => WorkshopState): string {
   return (get().projectId ?? get().project?.id ?? "").trim();
@@ -2117,6 +2121,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         streamingTab: tab,
         evaluatorCritique: null,
       });
+      const orchestratorDocSnapshotBefore = orchestratorDocSnapshot(get(), tab);
       try {
         const body: Record<string, unknown> = {
           projectId: requestProjectId,
@@ -2217,6 +2222,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                 if (sess && sess.projectId !== requestProjectId) continue;
                 const proj = data.project as Project | undefined;
                 if (proj && proj.id !== requestProjectId) continue;
+                const docUnchangedError = resolveOrchestratorDocUnchangedError({
+                  tab,
+                  snapshotBefore: orchestratorDocSnapshotBefore,
+                  data,
+                  snapshotSource: get(),
+                  userMessage: msg,
+                  session: sess,
+                });
                 const uxFromApi = (data.uxUiGuideContent ?? proj?.uxUiGuideContent) as string | null | undefined;
                 const packed = projectWithUxAfterStream(proj, uxFromApi, get().activeStageId);
                 const nextStages = packed?.project?.stages ?? proj?.stages;
@@ -2254,11 +2267,11 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   streamingContent: null,
                   streamingTab: null,
                   synced: true,
-                  error: null,
+                  error: docUnchangedError,
                   evaluatorCritique: pickEvaluatorCritique(data),
                 });
                 // Auto-persist UX/UI guide when the orchestrator returns content on its tab
-                if (tab === "ux-ui-guide" && freshUx) {
+                if (tab === "ux-ui-guide" && freshUx && !docUnchangedError) {
                   get().persistUxUiGuideContent(freshUx).catch(() => {});
                 }
               } else if (event === "error" && data.error) {
@@ -2299,6 +2312,14 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                   (!sessTail?.projectId || sessTail.projectId === requestProjectId) &&
                   (!projTail?.id || projTail.id === requestProjectId);
                 if (scopeOk) {
+                  const docUnchangedError = resolveOrchestratorDocUnchangedError({
+                    tab,
+                    snapshotBefore: orchestratorDocSnapshotBefore,
+                    data,
+                    snapshotSource: get(),
+                    userMessage: msg,
+                    session: sessTail,
+                  });
                   const uxFromApi = (data.uxUiGuideContent ?? projTail?.uxUiGuideContent) as
                     | string
                     | null
@@ -2339,10 +2360,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
                     streamingContent: null,
                     streamingTab: null,
                     synced: true,
-                    error: null,
+                    error: docUnchangedError,
                     evaluatorCritique: pickEvaluatorCritique(data),
                   });
-                  if (tab === "ux-ui-guide" && freshUx) {
+                  if (tab === "ux-ui-guide" && freshUx && !docUnchangedError) {
                     get().persistUxUiGuideContent(freshUx).catch(() => {});
                   }
                 }
