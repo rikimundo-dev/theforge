@@ -3,6 +3,7 @@
 | Componente | Rol |
 |------------|-----|
 | **Phase0ManualAudit** | Botón **Auditar Paso 0**: audita el **dbgaContent** visible en pestaña Fase 0 (DBGA libre o entrevista estructurada); no exige JSON de entrevista. `POST …/phase0/audit` → gaps/preguntas o `audit_complete`. |
+| **MddManualAudit** | Botón **Auditar MDD**: audita el **mddContent** visible en pestaña MDD (`POST …/mdd/audit` / `…/mdd/audit/answer`). Reutiliza nodo Auditor MDD + preguntas por gaps. |
 | **Phase0InterviewPanel** | Entrevistador interactivo Paso 0 (`start` → preguntas → `answer`). Incluye auditoría manual al completar. |
 | **MddViewer** | Preview markdown (Fase 0, MDD, BRD): normaliza bloques `mermaid` al pintar (`normalizeMermaidInDocument`, incl. fusión de `sequenceDiagram` partidos con `###`/`viñetas` fuera del fence), render sin `<pre>` envolviendo el SVG, y `prepareMermaidForRender` separa viñetas pegadas dentro del fence. |
 | **DashboardSidebar** | En Workshop, «Panel de proyectos» queda `disabled` mientras `selectWorkshopAgentsBusy` (mismo criterio que el chat). |

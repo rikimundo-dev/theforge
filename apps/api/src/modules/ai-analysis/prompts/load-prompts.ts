@@ -161,6 +161,12 @@ export const PHASE0_EXTRACT_DBGA_PROMPT = loadPrompt(
   "Extrae borrador Fase 0 + gaps desde un DBGA markdown existente. JSON: { borrador: {...}, gaps: [...] }.",
 );
 
+export const MDD_AUDIT_UPDATE_PROMPT = loadPrompt(
+  "mdd",
+  "mdd-audit-update-prompt.md",
+  "Integra respuesta de auditoría en el MDD. JSON: { mddContent: string }.",
+);
+
 export const MANAGER_PLAN_GENERATOR_PROMPT = loadPrompt(
   "mdd",
   "manager-plan-generator-prompt.md",

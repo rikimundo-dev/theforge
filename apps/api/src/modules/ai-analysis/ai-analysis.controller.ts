@@ -5,6 +5,7 @@ import { PrismaService } from "../../prisma/prisma.service.js";
 import { AiAnalysisService } from "./ai-analysis.service.js";
 import { EstimationService } from "./estimation/estimation.service.js";
 import { Phase0InterviewService } from "./phase0/phase0-interview.service.js";
+import { MddManualAuditService } from "./mdd/mdd-manual-audit.service.js";
 import { parseChatImageAttachments } from "../ai/utils/chat-image-attachments.util.js";
 import { formatDbgaStreamError } from "./utils/dbga-stream-error.util.js";
 
@@ -14,6 +15,7 @@ export class AiAnalysisController {
     private readonly aiAnalysis: AiAnalysisService,
     private readonly estimationService: EstimationService,
     private readonly phase0Interview: Phase0InterviewService,
+    private readonly mddManualAudit: MddManualAuditService,
     private readonly prisma: PrismaService,
   ) { }
 
@@ -174,6 +176,32 @@ export class AiAnalysisController {
       typeof body?.mddContent === "string" ? body.mddContent.trim() || undefined : undefined;
     const updated = await this.aiAnalysis.reviewMddConsistency(id, mddContent);
     return { mddContent: updated };
+  }
+
+  /** Auditoría manual del MDD visible en el Workshop. */
+  @Post("mdd/audit")
+  async auditMdd(
+    @Body() body: { projectId?: string; stageId?: string; mddContent?: string },
+  ) {
+    const projectId = typeof body?.projectId === "string" ? body.projectId.trim() : "";
+    if (!projectId) throw new BadRequestException("projectId is required");
+    const stageId = typeof body?.stageId === "string" ? body.stageId.trim() || undefined : undefined;
+    const mddContent =
+      typeof body?.mddContent === "string" ? body.mddContent.trim() || undefined : undefined;
+    return this.mddManualAudit.audit(projectId, stageId, mddContent);
+  }
+
+  @Post("mdd/audit/answer")
+  async answerMddAudit(
+    @Body() body: { threadId?: string; answer?: string; projectId?: string; stageId?: string },
+  ) {
+    const threadId = typeof body?.threadId === "string" ? body.threadId.trim() : "";
+    const answer = typeof body?.answer === "string" ? body.answer.trim() : "";
+    if (!threadId) throw new BadRequestException("threadId is required");
+    if (!answer) throw new BadRequestException("answer is required");
+    const projectId = typeof body?.projectId === "string" ? body.projectId.trim() || undefined : undefined;
+    const stageId = typeof body?.stageId === "string" ? body.stageId.trim() || undefined : undefined;
+    return this.mddManualAudit.processAnswer(threadId, answer, projectId, stageId);
   }
 
   /**
