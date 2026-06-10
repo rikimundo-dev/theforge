@@ -18,17 +18,11 @@ import type { TheForgeFileToModify } from "../theforge/theforge.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import {
   DEFAULT_SEMANTIC_QUERIES,
-  askCodebaseOptionsForCodebaseDoc,
-  askCodebaseOptionsForCodebaseDocClassicSegments,
   gatherLegacyIndexSignals,
-  getLegacyCodebaseDocSynthesisInputMaxChars,
   getLegacyAskCodebaseOptions,
   getLegacySemanticSearchLimit,
-  isDeterministicRawEvidenceClassicAsk,
-  isLegacyCodebaseDocIndexSynthesisEnabled,
   isLegacyEvidenceFirstEnabled,
   clipLegacySemanticSection,
-  clipLegacySemanticSectionForCodebaseDoc,
   legacyAnalyzerIndicatesEmptyIndex,
   legacyIndexHasUsableGraphEvidence,
   type LegacyIndexSignalsGathered,
@@ -79,54 +73,6 @@ import {
 } from "../ai-analysis/utils/brd-tobe-gate.util.js";
 
 const KNOWLEDGE = loadLegacyKnowledgePack();
-
-/** Modo clásico `generate-codebase-doc`: síntesis única si las 4 rondas `ask_codebase` vienen vacías (p. ej. timeout por serie secuencial). */
-const CODEBASE_DOC_FALLBACK_SYNTHESIS_PROMPT =
-  "Documenta el repositorio indexado en Ariadne (ámbito actual). Responde en **español** en markdown con subapartados claros: " +
-  "**Propósito** del repo en el producto; **stack y tooling** (solo lo que inferas del índice: React, Vite, npm, etc.); " +
-  "**Estructura de carpetas**; **pantallas o rutas principales**; **datos y API** — si en este repo no hay modelos/Prisma y el backend está en otro servicio, dilo explícitamente. " +
-  "No inventes archivos ni endpoints. Mínimo unas 400 palabras. Si algo no consta en el índice, dilo.";
-
-/** Una sola llamada `ask_codebase` con `responseMode: evidence_first` (modo Workshop `ingest_mdd`). */
-const CODEBASE_DOC_INGEST_MDD_QUESTION =
-  "Documentación de partida (MDD) del código indexado en el ámbito actual: propósito del repo, " +
-  "superficie API y rutas, modelo de datos y persistencia, lógica de negocio deducible del grafo, infraestructura relevante, " +
-  "riesgos y lagunas del índice, y rutas de evidencia. Respeta **solo** el alcance de `scope.repoIds` de esta petición (multi-root: no mezcles archivos de otros roots del mismo workspace Ariadne). " +
-  "`evidence_paths` debe contener únicamente rutas verificadas en ese alcance; si una ruta no pertenece al árbol fuente acotado, no la incluyas. " +
-  "No inventes artefactos que no aparezcan en el índice; si algo no consta, dilo explícitamente por sección. " +
-  "Cumple el contrato MDD `evidence_first` del orchestrator/ingest.";
-
-const CODEBASE_DOC_CLASSIC_Q = {
-  q1:
-    "List exhaustively: all data models, entities, tables and their fields; all API routes and services; main UI components and screens; configuration and env. This is for documentation generation — be thorough.",
-  q2:
-    "Describe architecture: folder structure, modules, how backend and frontend connect, existing patterns and conventions. Include file paths for key areas.",
-  q3:
-    "What is the EXACT tech stack and directory structure of this project? List only what exists in the codebase: backend runtime and framework (e.g. Node/Express, Node/NestJS, Python/Django), frontend framework (e.g. React, Vue), database, build tools. If the project has multiple repositories, list them and their main folders. Do NOT assume or invent; only state what the codebase contains.",
-  q4:
-    "What are the main business rules, validations, naming conventions, and key patterns used across the codebase? Include any domain-specific logic, constants, or shared utilities.",
-} as const;
-
-/** Segunda pasada (prosa) cuando el clásico usó evidencia determinista: convierte bundle + semántica en MDD legible. */
-const CODEBASE_DOC_MDD_FROM_INDEX_PROMPT =
-  "Eres redactor técnico SDD. Recibes **EVIDENCIA** del índice Ariadne (markdown: bundle `raw_evidence` determinista y, si consta, extractos de `semantic_search`). " +
-  "Redacta un **documento de partida tipo MDD** en **español**, en **markdown claro**, con **exactamente** estos encabezados `##` en este orden. " +
-  "Si un apartado no tiene soporte en la evidencia, escribe *No consta en el índice para este repo/alcance.*\n\n" +
-  "## Resumen ejecutivo\n" +
-  "## Modelos de datos y persistencia\n" +
-  "## Rutas, API y servicios\n" +
-  "## Arquitectura y estructura de carpetas\n" +
-  "## Stack y herramientas observables\n" +
-  "## Reglas de negocio, convenciones y patrones\n" +
-  "## Riesgos y lagunas del índice\n\n" +
-  "Normas: no inventes archivos ni APIs que no aparezcan en la evidencia; cita rutas con backticks. " +
-  "No repitas tablas JSON ni bloques `cypher` ni el texto de ayuda sobre `evidence_first`: sintetiza en prosa y viñetas. " +
-  "Máximo ~1400 palabras en total.\n\n" +
-  "--- EVIDENCIA ---\n\n";
-
-/** Prefacio cuando solo se pudo rellenar la §5 (grafo); las síntesis ask_codebase quedaron vacías. */
-const CODEBASE_DOC_SEMANTIC_ONLY_PREFACE =
-  "> **Por qué ves solo el índice semántico (§5):** en esta ejecución **`ask_codebase` no devolvió texto** para las secciones 1–4 ni para la síntesis de respaldo (suele ser **timeout** del `fetch` hacia el MCP: por defecto `ask_codebase` usa **15 min** vía `THEFORGE_MCP_ASK_CODEBASE_TIMEOUT_MS` / fallback en código; el resto de herramientas sigue en `THEFORGE_MCP_TIMEOUT_MS` ~60s. Si aún corta, sube `THEFORGE_MCP_ASK_CODEBASE_TIMEOUT_MS` y alinea con `MCP_ASK_CODEBASE_TIMEOUT_MS` en el servidor MCP Ariadne / ingest. El modo clásico usa **4× `ask_codebase` secuenciales** por defecto (`LEGACY_CODEBASE_DOC_PARALLEL_ASK=0`); si reactivas paralelo (`=1`), aumenta timeouts. Lo que sigue **no es un resumen deliberado**: es la salida combinada de **`semantic_search`** por cada repo multi-root, con límite por query (`LEGACY_SEMANTIC_SEARCH_LIMIT`) y recorte global (`LEGACY_CODEBASE_DOC_SEMANTIC_MAX_CHARS`). En descubrimiento escalonado, `LEGACY_STAGED_DISCOVERY_SEMANTIC_FLOOR` evita `limit` demasiado bajo en herramientas. Activa `LEGACY_CODEBASE_DOC_MCP_DEBUG_UI` para ver las llamadas MCP o vuelve a generar cuando el orchestrator responda.";
 
 /** Respuesta de `generate-codebase-doc` cuando el API tiene trazas MCP (debug UI). */
 export type GenerateCodebaseDocResponse = { codebaseDoc: string; mcpDebugTrace?: McpUiDebugEntry[] };
@@ -230,12 +176,6 @@ function envFlag(name: string, defaultTrue: boolean): boolean {
 /** Cruza índice Ariadne con Falkor SDD antes de LLM (default: activo). Desactivar: LEGACY_SDD_INDEX_GATE=0. */
 function isLegacySddIndexGateEnabled(): boolean {
   return envFlag("LEGACY_SDD_INDEX_GATE", true);
-}
-
-/** Modo clásico doc. partida: 4× `ask_codebase` en paralelo (más riesgo de timeout en MCP). Default: secuencial. */
-function isCodebaseDocClassicParallelAsk(): boolean {
-  const v = process.env.LEGACY_CODEBASE_DOC_PARALLEL_ASK?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
 /** Logs Nest por paso en cascada entregables legacy. Activar: `LEGACY_DELIVERABLES_DEBUG=1`. */
