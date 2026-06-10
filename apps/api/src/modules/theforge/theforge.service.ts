@@ -851,6 +851,61 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
   }
 
   /**
+   * Documentación legacy de partida — modo único MCP (`generate_legacy_documentation`).
+   * Evidencia MDD determinista desde Falkor (sin los 4 modos ask_codebase + síntesis Nest).
+   */
+  async generateLegacyDocumentation(
+    projectId: string,
+    opts?: Pick<AskCodebaseOptions, "scope" | "currentFilePath">,
+  ): Promise<string> {
+    if (!this.isConfigured()) return "";
+    try {
+      const ident = await this.resolveStoredToMcp(projectId);
+      const scope = mergeAriadneCodebaseScope(ident.scopeForScopedTools, opts?.scope);
+      const args: Record<string, unknown> = { projectId: ident.workspaceProjectId };
+      if (opts?.currentFilePath?.trim()) args.currentFilePath = opts.currentFilePath.trim();
+      if (scope && Object.keys(scope).length > 0) args.scope = scope;
+      const response = await this.postTheForgeMcp(
+        {
+          jsonrpc: "2.0",
+          id: "generate-legacy-doc-1",
+          method: "tools/call",
+          params: { name: "generate_legacy_documentation", arguments: args },
+        },
+        { timeoutMs: this.theforgeMcpAskCodebaseTimeoutMs() },
+      );
+      if (!response.ok) return "";
+      const raw = await response.text();
+      const data = parseMcpResponse(raw) as {
+        result?: { content?: Array<{ type: string; text?: string }>; isError?: boolean };
+        error?: { message: string };
+      } | null;
+      if (!data || data.error || data.result?.isError) return "";
+      const text = data.result?.content?.find((c) => c.type === "text")?.text ?? "";
+      if (!text.trim()) return "";
+      try {
+        const jsonStr = extractJsonFromToolContent(text.trim());
+        const envelope = JSON.parse(jsonStr) as {
+          format?: string;
+          answer?: string;
+          mddDocument?: unknown;
+        };
+        if (envelope.format === "legacy_mdd_v1" && typeof envelope.answer === "string") {
+          return normalizeAskCodebaseEvidenceFirstContent(envelope.answer);
+        }
+      } catch {
+        /* fall through */
+      }
+      return normalizeAskCodebaseEvidenceFirstContent(text);
+    } catch (err) {
+      this.logger.error(
+        `TheForge generateLegacyDocumentation failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return "";
+    }
+  }
+
+  /**
    * Extrae tokens de diseño del codebase (herramienta MCP extract_design_tokens).
    * @param projectId - `theforgeProjectId` persistido.
    * @returns JSON con tokens de diseño (tailwindTokens, cssTokens, etc.) o string vacío si falla.

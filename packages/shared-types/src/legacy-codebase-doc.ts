@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * Modo `ask_codebase` (Ariadne) para generar documentación de partida (`generate-codebase-doc`).
- * - `ingest_mdd`: una sola llamada `evidence_first` (MDD 7§ del orchestrator/ingest), sin síntesis Nest ni 4 rondas clásicas.
+ * Modo `ask_codebase` (Ariadne) — **deprecado** para doc. partida.
+ * Usar siempre `generate_legacy_documentation` vía MCP (único modo fiel al código).
  */
 export const codebaseDocResponseModeSchema = z.enum([
   "default",
@@ -14,6 +14,7 @@ export type CodebaseDocResponseMode = z.infer<typeof codebaseDocResponseModeSche
 
 export const generateCodebaseDocRequestSchema = z
   .object({
+    /** @deprecated Ignorado: doc. partida usa `generate_legacy_documentation` (MCP). */
     responseMode: codebaseDocResponseModeSchema.optional(),
     stageId: z.string().optional(),
   })

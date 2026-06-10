@@ -63,7 +63,6 @@ import {
 import {
   agentGovernanceScaffoldHasContent,
   parseAgentGovernanceScaffold,
-  type CodebaseDocResponseMode,
 } from "@theforge/shared-types";
 import {
   selectPersistedMddBaseline,
@@ -878,9 +877,6 @@ export default function WorkshopView({
   const [brdWorkshopDraft, setBrdWorkshopDraft] = useState("");
   const [brdDocViewMode, setBrdDocViewMode] = useState<"preview" | "source">("preview");
   const [brdTobePersistBusy, setBrdTobePersistBusy] = useState(false);
-  /** `ask_codebase` / Ariadne al generar doc. partida (`POST …/legacy/generate-codebase-doc`). Default `raw_evidence`. `ingest_mdd` = una sola pasada `evidence_first` (MDD ingest), sin agente escalonado ni síntesis Nest. */
-  const [codebaseDocResponseMode, setCodebaseDocResponseMode] = useState<CodebaseDocResponseMode>("raw_evidence");
-
   /** Alterna preview/source/design del panel de documento activo. */
   const toggleDocViewMode = (panel: string) => {
     if (panel === "mdd") setMddViewMode((m) => (m === "preview" ? "source" : "preview"));
@@ -942,7 +938,6 @@ export default function WorkshopView({
   const handleRegenerateLegacyCodebaseDoc = useCallback(async () => {
     if (!projectId) return null;
     const res = await legacyGenerateCodebaseDoc(projectId, {
-      responseMode: codebaseDocResponseMode,
       stageId: activeStageId ?? undefined,
     });
     if (res?.codebaseDoc) {
@@ -953,7 +948,6 @@ export default function WorkshopView({
   }, [
     projectId,
     legacyGenerateCodebaseDoc,
-    codebaseDocResponseMode,
     activeStageId,
     setCentralPanel,
   ]);
@@ -2935,86 +2929,8 @@ export default function WorkshopView({
                     ) : null}
                   </div>
                   <p className="text-[var(--foreground-subtle)] text-xs leading-relaxed max-w-3xl">
-                    Reconstrucción AS-IS desde el índice AriadneSpecs (equivalente al “primer paso” de documentación). Opcional: puedes ir directo a <strong>Modificación</strong> si solo quieres un cambio puntual; para volcar todo el conocimiento del repo aquí, usa el botón de abajo.
+                    Reconstrucción AS-IS desde el índice Ariadne (`generate_legacy_documentation`): MDD determinista desde Falkor, sin modos alternos de `ask_codebase`. Opcional: puedes ir directo a <strong>Modificación</strong> si solo quieres un cambio puntual.
                   </p>
-                  <details className="w-full min-w-0 rounded-lg border border-[var(--border)]/60 bg-[color-mix(in_oklch,var(--background)_35%,var(--muted))] text-left [&_summary::-webkit-details-marker]:hidden open:[&_summary_.ingest-mode-chevron]:rotate-180">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2.5 text-left text-[11px] font-medium text-[var(--muted-foreground)] hover:bg-[color-mix(in_oklch,var(--card)_75%,var(--background))] sm:px-4">
-                      <span>Modo ingest (ask_codebase)</span>
-                      <ChevronDown
-                        className="ingest-mode-chevron h-4 w-4 shrink-0 text-[var(--foreground-subtle)] transition-transform duration-200"
-                        aria-hidden
-                      />
-                    </summary>
-                    <fieldset
-                      disabled={loading && loadingReason === "legacy-codebase-doc"}
-                      className="m-0 min-w-0 border-0 p-0 px-3 pb-3 pt-1 sm:px-4 sm:pb-4"
-                    >
-                      <div className="space-y-2">
-                        <label className="flex cursor-pointer gap-2.5 items-start rounded-md px-1 py-1.5 hover:bg-[var(--card)]/60 sm:px-2">
-                          <input
-                            type="radio"
-                            name="codebase-doc-response-mode"
-                            className="mt-1 shrink-0 accent-[var(--primary)]"
-                            checked={codebaseDocResponseMode === "default"}
-                            onChange={() => setCodebaseDocResponseMode("default")}
-                          />
-                          <span className="min-w-0">
-                            <span className="text-sm text-[var(--foreground)]">Chat normal</span>
-                            <span className="mt-0.5 block text-xs text-[var(--foreground-subtle)] leading-relaxed">
-                              Prosa; ReAct en retrieve (hasta 4 vueltas LLM en backend).
-                            </span>
-                          </span>
-                        </label>
-                        <label className="flex cursor-pointer gap-2.5 items-start rounded-md px-1 py-1.5 hover:bg-[var(--card)]/60 sm:px-2">
-                          <input
-                            type="radio"
-                            name="codebase-doc-response-mode"
-                            className="mt-1 shrink-0 accent-[var(--primary)]"
-                            checked={codebaseDocResponseMode === "evidence_first"}
-                            onChange={() => setCodebaseDocResponseMode("evidence_first")}
-                          />
-                          <span className="min-w-0">
-                            <span className="text-sm text-[var(--foreground)]">MDD / SDD (pesado)</span>
-                            <span className="mt-0.5 block text-xs text-[var(--foreground-subtle)] leading-relaxed">
-                              JSON MDD 7§ vía orchestrator/ingest: puede tardar muchos minutos en repos grandes.
-                            </span>
-                          </span>
-                        </label>
-                        <label className="flex cursor-pointer gap-2.5 items-start rounded-md px-1 py-1.5 hover:bg-[var(--card)]/60 sm:px-2">
-                          <input
-                            type="radio"
-                            name="codebase-doc-response-mode"
-                            className="mt-1 shrink-0 accent-[var(--primary)]"
-                            checked={codebaseDocResponseMode === "raw_evidence"}
-                            onChange={() => setCodebaseDocResponseMode("raw_evidence")}
-                          />
-                          <span className="min-w-0">
-                            <span className="text-sm text-[var(--foreground)]">Evidencia bruta (recomendado)</span>
-                            <span className="mt-0.5 block text-xs text-[var(--foreground-subtle)] leading-relaxed">
-                              Retrieve determinista; suele ser el mejor equilibrio tiempo/calidad para doc. partida.
-                            </span>
-                          </span>
-                        </label>
-                        <label className="flex cursor-pointer gap-2.5 items-start rounded-md px-1 py-1.5 hover:bg-[var(--card)]/60 sm:px-2">
-                          <input
-                            type="radio"
-                            name="codebase-doc-response-mode"
-                            className="mt-1 shrink-0 accent-[var(--primary)]"
-                            checked={codebaseDocResponseMode === "ingest_mdd"}
-                            onChange={() => setCodebaseDocResponseMode("ingest_mdd")}
-                          />
-                          <span className="min-w-0">
-                            <span className="text-sm text-[var(--foreground)]">MDD ingest (solo Ariadne)</span>
-                            <span className="mt-0.5 block text-xs text-[var(--foreground-subtle)] leading-relaxed">
-                              Una llamada <code className="text-[var(--muted-foreground)]">evidence_first</code>: salida normalizada del
-                              orchestrator. Sin agente escalonado ni segunda pasada en The Forge; si falla, fallback
-                              clásico <code className="text-[var(--muted-foreground)]">raw_evidence</code>.
-                            </span>
-                          </span>
-                        </label>
-                      </div>
-                    </fieldset>
-                  </details>
                 </div>
                 {activeLegacyState?.codebaseDoc || mddInicialLocalContent ? (
                   <>
@@ -3108,7 +3024,6 @@ export default function WorkshopView({
                           type="button"
                           onClick={async () => {
                             const res = await legacyGenerateCodebaseDoc(projectId, {
-                              responseMode: codebaseDocResponseMode,
                               stageId: activeStageId ?? undefined,
                             });
                             if (res?.codebaseDoc) setCentralPanel("mdd-inicial");
@@ -3146,7 +3061,6 @@ export default function WorkshopView({
                         type="button"
                         onClick={async () => {
                           const res = await legacyGenerateCodebaseDoc(projectId, {
-                            responseMode: codebaseDocResponseMode,
                             stageId: activeStageId ?? undefined,
                           });
                           if (res?.codebaseDoc?.trim()) setCentralPanel("mdd-inicial");

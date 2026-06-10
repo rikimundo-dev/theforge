@@ -9,6 +9,7 @@
  */
 export const THEFORGE_MCP_CLIENT_ARG_KEYS: Readonly<Record<string, ReadonlySet<string>>> = {
   list_known_projects: new Set<string>(),
+  generate_legacy_documentation: new Set(["projectId", "currentFilePath", "scope"]),
   ask_codebase: new Set([
     "question",
     "projectId",
@@ -56,6 +57,7 @@ export const THEFORGE_MCP_CLIENT_ARG_KEYS: Readonly<Record<string, ReadonlySet<s
 /** Herramientas que el cliente espera que existan en el MCP (falla el humo si faltan). */
 export const THEFORGE_MCP_TOOLS_WE_CALL = new Set<string>([
   "list_known_projects",
+  "generate_legacy_documentation",
   "ask_codebase",
   "get_modification_plan",
   "get_file_content",

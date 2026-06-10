@@ -828,208 +828,41 @@ export class LegacyCoordinatorService {
     const legacyState = resolvedStage?.legacyChangeState
       ? (resolvedStage.legacyChangeState as LegacyFlowState)
       : ((project as { legacyFlowState?: LegacyFlowState | null }).legacyFlowState ?? {}) as LegacyFlowState;
-    /** `ingest_mdd` omite el gate por defecto: evita 3× `semantic_search` previas que no alimentan el JSON y confunden trazas; el ingest ya acota multi-root. Reactivar: `LEGACY_INDEX_SDD_GATE_INGEST_MDD=1`. */
-    const runIndexSddGateForIngest =
-      req?.responseMode !== "ingest_mdd" ||
-      String(process.env.LEGACY_INDEX_SDD_GATE_INGEST_MDD ?? "").trim() === "1";
-    const indexSignalsFromGate = runIndexSddGateForIngest
-      ? await this.assertLegacyIndexSddGate(projectId, theforgeId, legacyState)
-      : null;
+    /** Gate índice ↔ SDD Falkor local (siempre antes de doc. partida). */
+    await this.assertLegacyIndexSddGate(projectId, theforgeId, legacyState);
+
+    if (req?.responseMode) {
+      this.logger.warn(
+        `generateCodebaseDoc: responseMode="${req.responseMode}" ignorado — doc. partida usa generate_legacy_documentation (modo único MCP).`,
+      );
+    }
+
+    const catalog = await this.theforge.listKnownProjects();
+    const resolved = resolveAriadneCodebaseMcpTarget(theforgeId, catalog);
+    let scope = resolved.scopeForScopedTools;
+    const repoIds = scope?.repoIds ?? [];
+    const narrowMulti = String(process.env.LEGACY_INGEST_MDD_NARROW_MULTI_ROOT ?? "1").trim() !== "0";
+    if (repoIds.length > 1 && narrowMulti && resolved.graphProjectId?.trim()) {
+      const primary = resolved.graphProjectId.trim();
+      scope = mergeAriadneCodebaseScope(scope, { repoIds: [primary] });
+      this.logger.log(
+        `[Legacy] generate_legacy_documentation: workspace multi-root (${repoIds.length} repos) → scope.repoIds=[${primary.slice(0, 8)}…]`,
+      );
+    }
 
     let codebaseDoc = "";
-    const codebaseDocAskOpts = askCodebaseOptionsForCodebaseDoc(req?.responseMode);
-
-    if (req?.responseMode === "ingest_mdd") {
-      const catalog = await this.theforge.listKnownProjects();
-      const resolved = resolveAriadneCodebaseMcpTarget(theforgeId, catalog);
-      const repoIds = resolved.scopeForScopedTools?.repoIds ?? [];
-      const narrowMulti =
-        String(process.env.LEGACY_INGEST_MDD_NARROW_MULTI_ROOT ?? "1").trim() !== "0";
-      const ingestAsk: AskCodebaseOptions = { ...askCodebaseOptionsForCodebaseDoc("ingest_mdd") };
-      if (repoIds.length > 1 && narrowMulti && resolved.graphProjectId?.trim()) {
-        const primary = resolved.graphProjectId.trim();
-        ingestAsk.scope = mergeAriadneCodebaseScope(resolved.scopeForScopedTools, { repoIds: [primary] });
-        this.logger.log(
-          `[Legacy] ingest_mdd: workspace multi-root (${repoIds.length} repos) → scope.repoIds=[${primary.slice(0, 8)}…] ` +
-            `(desactivar acotación: LEGACY_INGEST_MDD_NARROW_MULTI_ROOT=0).`,
-        );
-      }
-      const raw =
-        (await this.theforge.askCodebase(CODEBASE_DOC_INGEST_MDD_QUESTION, theforgeId, ingestAsk))?.trim() ?? "";
-      if (raw && legacyAnalyzerIndicatesEmptyIndex(raw)) {
-        this.logger.warn(
-          `generateCodebaseDoc: ingest_mdd devolvió señal de índice vacío; se intenta modo clásico. theforgeId=${theforgeId}`,
-        );
-      } else if (raw) {
-        codebaseDoc = "# MDD de partida (ingest Ariadne — evidence_first)\n\n" + raw;
-      } else {
-        this.logger.warn(
-          `generateCodebaseDoc: ingest_mdd devolvió vacío; modo clásico. theforgeId=${theforgeId.slice(0, 8)}…`,
-        );
-      }
-    }
-
-    if (isLegacyEvidenceFirstEnabled() && req?.responseMode !== "ingest_mdd") {
-      try {
-        const body = await runLegacyStagedDiscoveryMddAgent({
-          aiFactory: this.aiFactory,
-          userId: getRequestUserId(),
-          theforge: this.theforge,
-          projectId,
-          theforgeProjectId: theforgeId,
-          agentSupervisor: this.agentSupervisor,
-          mode: "initial",
-          askCodebaseOptions: codebaseDocAskOpts,
-          logger: this.logger,
-        });
-        const trimmed = body.trim();
-        if (trimmed && legacyAnalyzerIndicatesEmptyIndex(trimmed)) {
-          this.logger.warn(
-            `generateCodebaseDoc: descubrimiento escalonado devolvió «sin datos en índice» (evidencia insuficiente). ` +
-              `No se persiste ese texto; se intenta modo clásico ask_codebase. theforgeId=${theforgeId} — confirma UUID/repo en Ariadne.`,
-          );
-        } else if (trimmed) {
-          codebaseDoc = "# MDD inicial (Legacy) — documentación de partida\n\n" + trimmed;
-        } else {
-          this.logger.warn(
-            `generateCodebaseDoc: descubrimiento escalonado devolvió vacío (sin texto tras herramientas). ` +
-              `Siguiente paso: modo clásico ask_codebase. theforgeId=${theforgeId.slice(0, 8)}…`,
-          );
-        }
-      } catch (err) {
-        this.logger.warn(
-          `generateCodebaseDoc: descubrimiento escalonado falló, modo clásico. ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-    }
-
-    if (!codebaseDoc) {
-      const parts: string[] = [];
-      const semanticLim = getLegacySemanticSearchLimit();
-      const legacyAsk = askCodebaseOptionsForCodebaseDocClassicSegments(req?.responseMode);
-      const deterministicClassic = isDeterministicRawEvidenceClassicAsk(legacyAsk);
-      let r1: string;
-      let r2: string;
-      let r3: string;
-      let r4: string;
-      if (deterministicClassic) {
-        r1 = await this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q1, theforgeId, legacyAsk);
-        r2 = "";
-        r3 = "";
-        r4 = "";
-      } else if (isCodebaseDocClassicParallelAsk()) {
-        [r1, r2, r3, r4] = await Promise.all([
-          this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q1, theforgeId, legacyAsk),
-          this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q2, theforgeId, legacyAsk),
-          this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q3, theforgeId, legacyAsk),
-          this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q4, theforgeId, legacyAsk),
-        ]);
-      } else {
-        r1 = await this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q1, theforgeId, legacyAsk);
-        r2 = await this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q2, theforgeId, legacyAsk);
-        r3 = await this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q3, theforgeId, legacyAsk);
-        r4 = await this.theforge.askCodebase(CODEBASE_DOC_CLASSIC_Q.q4, theforgeId, legacyAsk);
-      }
-
-      let synthesisFallback = "";
-      if (!r1.trim() && !r2.trim() && !r3.trim() && !r4.trim()) {
-        this.logger.warn(
-          "generateCodebaseDoc: las cuatro rondas ask_codebase (clásico) vinieron vacías; síntesis única de respaldo (revisa THEFORGE_MCP_TIMEOUT_MS si persiste).",
-        );
-        const fb = await this.theforge.askCodebase(CODEBASE_DOC_FALLBACK_SYNTHESIS_PROMPT, theforgeId, legacyAsk);
-        synthesisFallback = fb?.trim() ?? "";
-        if (synthesisFallback) {
-          parts.unshift("## 1–4. Panorama del codebase (síntesis)\n\n" + synthesisFallback);
-        }
-      }
-
-      const gateChunks = indexSignalsFromGate?.semanticChunks;
-      const reuseGateTriple =
-        Array.isArray(gateChunks) &&
-        gateChunks.length >= 3 &&
-        gateChunks.slice(0, 3).every((c) => typeof c === "string");
-      const [searchModels, searchApi, searchUi] = reuseGateTriple
-        ? ([gateChunks[0], gateChunks[1], gateChunks[2]] as [string, string, string])
-        : await Promise.all([
-            this.theforge.semanticSearch("data models entities database schema tables", theforgeId, semanticLim),
-            this.theforge.semanticSearch("API routes endpoints controllers services", theforgeId, semanticLim),
-            this.theforge.semanticSearch("UI components screens pages views", theforgeId, semanticLim),
-          ]);
-      const searchParts: string[] = [];
-      const clipSem = (chunk: string) => clipLegacySemanticSectionForCodebaseDoc(chunk);
-      if (searchModels.trim()) {
-        searchParts.push("Modelos/entidades (búsqueda semántica):\n" + clipSem(searchModels));
-      }
-      if (searchApi.trim()) searchParts.push("API/rutas (búsqueda semántica):\n" + clipSem(searchApi));
-      if (searchUi.trim()) {
-        searchParts.push("Componentes/pantallas (búsqueda semántica):\n" + clipSem(searchUi));
-      }
-
-      let mddFromIndex = "";
-      if (
-        deterministicClassic &&
-        r1.trim() &&
-        isLegacyCodebaseDocIndexSynthesisEnabled() &&
-        !synthesisFallback
-      ) {
-        const maxIn = getLegacyCodebaseDocSynthesisInputMaxChars();
-        let bundle =
-          r1.trim() +
-          (searchParts.length > 0
-            ? "\n\n---\n\n### Fragmentos de búsqueda semántica (TheForge)\n\n" + searchParts.join("\n\n")
-            : "");
-        if (bundle.length > maxIn) {
-          bundle =
-            bundle.slice(0, maxIn) +
-            `\n\n… [recortado: LEGACY_CODEBASE_DOC_SYNTHESIS_INPUT_MAX_CHARS=${maxIn}]`;
-        }
-        const proseOpts: AskCodebaseOptions = {
-          ...legacyAsk,
-          responseMode: "default",
-          deterministicRetriever: false,
-        };
-        try {
-          mddFromIndex =
-            (await this.theforge.askCodebase(
-              CODEBASE_DOC_MDD_FROM_INDEX_PROMPT + bundle,
-              theforgeId,
-              proseOpts,
-            ))?.trim() ?? "";
-        } catch (err) {
-          this.logger.warn(
-            `generateCodebaseDoc: síntesis MDD desde índice omitida: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      }
-
-      if (deterministicClassic && r1.trim() && !synthesisFallback) {
-        if (mddFromIndex) {
-          parts.push("## MDD de partida (síntesis desde el índice)\n\n" + mddFromIndex);
-          parts.push("## Anexo: evidencia MCP (`raw_evidence`, determinista)\n\n" + r1.trim());
-        } else {
-          parts.push("## 1–4. Evidencia del índice (determinista)\n\n" + r1.trim());
-        }
-        if (searchParts.length > 0) {
-          parts.push("## 5. Índice semántico del grafo\n\n" + searchParts.join("\n\n"));
-        }
-      } else {
-        if (r1.trim()) parts.push("## 1. Modelos, rutas y configuración\n\n" + r1.trim());
-        if (r2.trim()) parts.push("## 2. Arquitectura y carpetas\n\n" + r2.trim());
-        if (r3.trim()) parts.push("## 3. Stack y estructura\n\n" + r3.trim());
-        if (r4.trim()) parts.push("## 4. Reglas de negocio y convenciones\n\n" + r4.trim());
-        if (searchParts.length > 0) parts.push("## 5. Índice semántico del grafo\n\n" + searchParts.join("\n\n"));
-      }
-
-      const hasAskProse =
-        [r1, r2, r3, r4].some((x) => x.trim()) ||
-        synthesisFallback.length > 0 ||
-        mddFromIndex.length > 0;
-
-      let docBody = parts.length > 0 ? parts.join("\n\n---\n\n") : "";
-      if (docBody && !hasAskProse) {
-        docBody = `${CODEBASE_DOC_SEMANTIC_ONLY_PREFACE}\n\n${docBody}`;
-      }
-      codebaseDoc = docBody.length > 0 ? "# Documentación del Codebase (partida)\n\n" + docBody : "";
+    const raw =
+      (await this.theforge.generateLegacyDocumentation(theforgeId, { scope }))?.trim() ?? "";
+    if (raw && legacyAnalyzerIndicatesEmptyIndex(raw)) {
+      this.logger.warn(
+        `generateCodebaseDoc: generate_legacy_documentation señaló índice vacío. theforgeId=${theforgeId}`,
+      );
+    } else if (raw) {
+      codebaseDoc = "# MDD de partida (Ariadne — generate_legacy_documentation)\n\n" + raw;
+    } else {
+      this.logger.warn(
+        `generateCodebaseDoc: generate_legacy_documentation devolvió vacío. theforgeId=${theforgeId.slice(0, 8)}…`,
+      );
     }
 
     if (codebaseDoc.trim()) {
