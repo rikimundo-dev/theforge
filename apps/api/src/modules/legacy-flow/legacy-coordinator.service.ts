@@ -61,6 +61,9 @@ import {
   type McpUiDebugEntry,
 } from "../theforge/mcp-ui-debug.context.js";
 import { normalizeRawEvidenceJsonBlocksInMarkdown } from "../theforge/theforge-raw-evidence-markdown.js";
+import {
+  normalizeLegacyMddV1JsonBlocksInMarkdown,
+} from "../theforge/legacy-mdd-v1-markdown.util.js";
 import { trySectionMergeDeliverable } from "./legacy-section-merge-deliverables.runner.js";
 import type { LegacySectionMergeTrace } from "./legacy-section-merge.types.js";
 import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strategy/legacy-deliverables-strategy.service.js";
@@ -75,7 +78,16 @@ import {
 const KNOWLEDGE = loadLegacyKnowledgePack();
 
 /** Respuesta de `generate-codebase-doc` cuando el API tiene trazas MCP (debug UI). */
-export type GenerateCodebaseDocResponse = { codebaseDoc: string; mcpDebugTrace?: McpUiDebugEntry[] };
+export type GenerateCodebaseDocResponse = {
+  codebaseDoc: string;
+  mddContent?: string;
+  mcpDebugTrace?: McpUiDebugEntry[];
+};
+
+function isLegacyAutoGenerateMddAfterCodebaseDocEnabled(): boolean {
+  const v = process.env.LEGACY_AUTO_GENERATE_MDD_AFTER_CODEBASE_DOC?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
 
 export type LegacyIndexSddResolutionChoice = "trust_index" | "trust_sdd" | "proceed_with_warnings";
 
@@ -754,7 +766,7 @@ export class LegacyCoordinatorService {
     projectId: string,
     req?: GenerateCodebaseDocRequest,
     stageId?: string,
-  ): Promise<{ codebaseDoc: string } | null> {
+  ): Promise<{ codebaseDoc: string; mddContent?: string } | null> {
     const { project, theforgeId } = await this.getLegacyProject(projectId);
     if (!this.theforge.isConfigured()) return null;
 
@@ -788,6 +800,7 @@ export class LegacyCoordinatorService {
     }
 
     if (codebaseDoc.trim()) {
+      codebaseDoc = normalizeLegacyMddV1JsonBlocksInMarkdown(codebaseDoc);
       codebaseDoc = normalizeRawEvidenceJsonBlocksInMarkdown(codebaseDoc);
     }
 
@@ -805,7 +818,20 @@ export class LegacyCoordinatorService {
         data: { legacyFlowState: nextLegacy as object },
       });
     }
-    return { codebaseDoc };
+    const response: { codebaseDoc: string; mddContent?: string } = { codebaseDoc };
+    if (isLegacyAutoGenerateMddAfterCodebaseDocEnabled() && codebaseDoc.trim().length >= 300) {
+      try {
+        const mdd = await this.generateMdd(projectId, stageId?.trim());
+        response.mddContent = mdd.mddContent;
+      } catch (err) {
+        this.logger.warn(
+          `generateCodebaseDoc: auto generateMdd falló (LEGACY_AUTO_GENERATE_MDD_AFTER_CODEBASE_DOC=1): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+    return response;
   }
 
   /**

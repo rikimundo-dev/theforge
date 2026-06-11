@@ -3326,6 +3326,7 @@ if (prog && prog.step && prog.step !== "done") {
       }
       const data = (await r.json()) as {
         codebaseDoc: string;
+        mddContent?: string;
         mcpDebugTrace?: LegacyMcpDebugEntry[];
       } | null;
       await get().fetchProject(projectId);
