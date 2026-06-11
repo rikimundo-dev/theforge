@@ -63,6 +63,7 @@ import {
 import { normalizeRawEvidenceJsonBlocksInMarkdown } from "../theforge/theforge-raw-evidence-markdown.js";
 import {
   normalizeLegacyMddV1JsonBlocksInMarkdown,
+  compactCodebaseDocForMddPrompt,
 } from "../theforge/legacy-mdd-v1-markdown.util.js";
 import { trySectionMergeDeliverable } from "./legacy-section-merge-deliverables.runner.js";
 import type { LegacySectionMergeTrace } from "./legacy-section-merge.types.js";
@@ -1141,10 +1142,13 @@ export class LegacyCoordinatorService {
     const codebaseDoc = ((state.codebaseDoc ?? "") as string).trim();
     const codebaseDocBlock = codebaseDoc.length >= 80
       ? "## Documentación de partida — MDD inicial del codebase (Ariadne)\n\n" +
-        codebaseDoc.slice(0, 40000) +
-        (codebaseDoc.length > 40000 ? "\n\n> *[Nota: El MDD inicial se truncó a 40,000 caracteres para control de contexto.]*" : "") +
+        compactCodebaseDocForMddPrompt(codebaseDoc) +
         "\n\n---\n\n"
       : "";
+    const pathGroundingRules =
+      "**Rutas:** Usa paths **exactamente** como aparecen en la doc. de partida (`src/api/…`, `src/…`). " +
+      "PROHIBIDO inventar prefijos (`backend/`, `frontend/`) ni bundles/API no listados en entidades, contratos API o rutas de evidencia. " +
+      "Si una funcionalidad del BRD no tiene evidencia en el índice, márcala como brecha/pendiente — no la implementes en el MDD como existente.\n\n";
     let prompt: string;
     if (isInitialMdd) {
       // Sin descripción de cambio → MDD inicial del sistema completo (no de cambio)
@@ -1156,6 +1160,7 @@ export class LegacyCoordinatorService {
         "Debe tener **exactamente 7 secciones** en este orden: " +
         "1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, 4. Contratos de API, 5. Lógica y Edge Cases, " +
         "6. Seguridad, 7. Infraestructura.\n\n" +
+        pathGroundingRules +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona. " +
         "Usa TODO ese contexto para describir fielmente la aplicación existente. " +
         "No inventes rutas, APIs, entidades ni funcionalidades que no aparezcan en el contexto. " +
@@ -1185,6 +1190,7 @@ export class LegacyCoordinatorService {
         "**exactamente 7 secciones** en este orden: 1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, " +
         "4. Contratos de API, 5. Lógica y Edge Cases, 6. Seguridad, 7. Infraestructura. " +
         "Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra).\n\n" +
+        pathGroundingRules +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona " +
         "antes de elaborar el documento. Usa TODO ese contexto; infiere todas las modificaciones necesarias en módulos, " +
         "entidades, APIs y pantallas existentes que el cambio afecte; no te limites al requerimiento literal. " +

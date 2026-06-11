@@ -192,14 +192,37 @@ function formatEvidencePathsList(paths: unknown): string {
   return bullets;
 }
 
+function emptySectionPlaceholder(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number]): string {
+  if (key === "entities") {
+    return "_Sin entidades en grafo (Model / StrapiContentType). Ejecuta sync + reindex del repo y regenera doc. partida._";
+  }
+  if (key === "api_contracts") {
+    return "_Sin contratos API indexados (OpenApiOperation / StrapiRoute / NestController). Revisa sync Strapi o export OpenAPI._";
+  }
+  if (key === "business_logic") {
+    return "_Sin servicios Nest/Strapi indexados en grafo para este alcance._";
+  }
+  return "";
+}
+
 function formatMddEvidenceSectionValue(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number], v: unknown): string {
-  if (v === undefined || v === null) return "";
-  if (typeof v === "string") return v.trim();
-  if (key === "entities") return formatEntitiesTable(v);
-  if (key === "api_contracts") return formatApiContractsTable(v);
-  if (key === "business_logic") return formatBusinessLogicTable(v);
+  if (v === undefined || v === null) return emptySectionPlaceholder(key);
+  if (typeof v === "string") return v.trim() || emptySectionPlaceholder(key);
+  if (key === "entities") {
+    if (Array.isArray(v) && v.length === 0) return emptySectionPlaceholder(key);
+    return formatEntitiesTable(v);
+  }
+  if (key === "api_contracts") {
+    if (Array.isArray(v) && v.length === 0) return emptySectionPlaceholder(key);
+    return formatApiContractsTable(v);
+  }
+  if (key === "business_logic") {
+    if (Array.isArray(v) && v.length === 0) return emptySectionPlaceholder(key);
+    return formatBusinessLogicTable(v);
+  }
   if (key === "evidence_paths") return formatEvidencePathsList(v);
   if (Array.isArray(v)) {
+    if (v.length === 0) return emptySectionPlaceholder(key);
     return v.map((x) => `- ${typeof x === "string" ? x : JSON.stringify(x)}`).join("\n");
   }
   return "```json\n" + JSON.stringify(v, null, 2).slice(0, 16000) + "\n```";
@@ -210,7 +233,6 @@ export function formatLegacyMddEvidenceToMarkdown(payload: Record<string, unknow
   const parts: string[] = ["## Evidencia (MDD estructurado — ingest)\n"];
   for (const key of MDD_EVIDENCE_JSON_KEYS) {
     const body = formatMddEvidenceSectionValue(key, payload[key]);
-    if (!body) continue;
     parts.push(`### ${MDD_EVIDENCE_SECTION_TITLE[key]}\n\n${body}`);
   }
   return parts.join("\n\n").trim();
@@ -252,4 +274,42 @@ export function normalizeLegacyMddV1JsonBlocksInMarkdown(md: string): string {
   }
   out += md.slice(last);
   return out;
+}
+
+function legacyMddCodebaseDocPromptMaxChars(): number {
+  const raw = process.env.LEGACY_MDD_CODEBASE_DOC_PROMPT_MAX_CHARS?.trim();
+  if (!raw) return 120_000;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 120_000;
+}
+
+function legacyMddCodebaseDocPromptPathCap(): number {
+  const raw = process.env.LEGACY_MDD_CODEBASE_DOC_PROMPT_PATHS?.trim();
+  if (!raw) return 150;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 150;
+}
+
+/**
+ * Compacta `codebaseDoc` para prompts LLM: preserva secciones estructuradas (entidades, API, resumen)
+ * y recorta solo el volcado masivo de `### Rutas de evidencia`.
+ */
+export function compactCodebaseDocForMddPrompt(md: string, maxChars?: number): string {
+  const limit = maxChars ?? legacyMddCodebaseDocPromptMaxChars();
+  const pathCap = legacyMddCodebaseDocPromptPathCap();
+  const sectionRe =
+    /(### Rutas de evidencia\n\n)([\s\S]*?)(?=\n### |\n---\n|\n## Repositorio:|$)/g;
+  let compact = md.replace(sectionRe, (_match, head: string, body: string) => {
+    const lines = body.split("\n").filter((l: string) => l.startsWith("- "));
+    if (lines.length <= pathCap) return head + body;
+    const kept = lines.slice(0, pathCap).join("\n");
+    const omitted = lines.length - pathCap;
+    const note = omitted > 0 ? `\n\n_${omitted} rutas omitidas en prompt (total sección: ${lines.length})._` : "";
+    return `${head}${kept}${note}`;
+  });
+  if (compact.length <= limit) return compact;
+  return (
+    compact.slice(0, limit) +
+    "\n\n> *[codebaseDoc truncado para prompt; secciones estructuradas priorizadas. Regenera doc. partida si faltan entidades/API.]*"
+  );
 }

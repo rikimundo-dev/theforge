@@ -4,6 +4,7 @@ import {
   formatLegacyMddEvidenceToMarkdown,
   normalizeLegacyMddToolText,
   normalizeLegacyMddV1JsonBlocksInMarkdown,
+  compactCodebaseDocForMddPrompt,
 } from "./legacy-mdd-v1-markdown.util.js";
 
 describe("legacy-mdd-v1-markdown.util", () => {
@@ -55,5 +56,28 @@ describe("legacy-mdd-v1-markdown.util", () => {
     const out = normalizeLegacyMddV1JsonBlocksInMarkdown(md);
     expect(out).toContain("## Evidencia (MDD estructurado");
     expect(out).not.toContain('"format": "legacy_mdd_v1"');
+  });
+
+  it("compactCodebaseDocForMddPrompt recorta solo evidence_paths", () => {
+    const paths = Array.from({ length: 300 }, (_, i) => `- \`src/f-${i}.js\``).join("\n");
+    const md = `# Doc\n\n### Entidades\n\n| x |\n\n### Rutas de evidencia\n\n${paths}`;
+    const out = compactCodebaseDocForMddPrompt(md, 50_000);
+    expect(out).toContain("### Entidades");
+    expect(out).toContain("rutas omitidas en prompt");
+  });
+
+  it("formatLegacyMddEvidenceToMarkdown incluye secciones vacías con diagnóstico", () => {
+    const md = formatLegacyMddEvidenceToMarkdown({
+      summary: "test",
+      openapi_spec: { found: false, path: null, trust_level: "low" },
+      entities: [],
+      api_contracts: [],
+      business_logic: [],
+      infrastructure: { orm: "none", env_vars: [] },
+      risk_report: { complexity: 1, anti_patterns: [] },
+      evidence_paths: [],
+    });
+    expect(md).toContain("StrapiContentType");
+    expect(md).toContain("StrapiRoute");
   });
 });
