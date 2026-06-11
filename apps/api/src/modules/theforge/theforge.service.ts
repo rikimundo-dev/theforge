@@ -15,6 +15,7 @@ import {
   repoLabelFromProjectsCatalog,
 } from "./legacy-documentation-merge.util.js";
 import { formatRawEvidenceObjectToMarkdown } from "./theforge-raw-evidence-markdown.js";
+import { normalizeLegacyMddToolText } from "./legacy-mdd-v1-markdown.util.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { getRequestUserId } from "../../common/request-user.store.js";
 
@@ -90,93 +91,8 @@ function extractJsonFromToolContent(text: string): string {
   return jsonBlock ? jsonBlock[1].trim() : t;
 }
 
-/** Claves del JSON MDD que el ingest puede devolver con `ask_codebase` + `responseMode: evidence_first` (Ariadne mcp_server_specs). */
-const MDD_EVIDENCE_JSON_KEYS = [
-  "summary",
-  "openapi_spec",
-  "entities",
-  "api_contracts",
-  "business_logic",
-  "infrastructure",
-  "risk_report",
-  "evidence_paths",
-] as const;
-
-const MDD_EVIDENCE_SECTION_TITLE: Record<(typeof MDD_EVIDENCE_JSON_KEYS)[number], string> = {
-  summary: "Resumen",
-  openapi_spec: "OpenAPI / especificación",
-  entities: "Entidades y modelo de datos",
-  api_contracts: "Contratos API",
-  business_logic: "Lógica de negocio",
-  infrastructure: "Infraestructura",
-  risk_report: "Riesgos",
-  evidence_paths: "Rutas de evidencia",
-};
-
-function mddEvidencePayloadHasContent(o: Record<string, unknown>): boolean {
-  for (const k of MDD_EVIDENCE_JSON_KEYS) {
-    const v = o[k];
-    if (v === undefined || v === null) continue;
-    if (typeof v === "string" && v.trim().length > 0) return true;
-    if (Array.isArray(v) && v.length > 0) return true;
-    if (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length > 0) return true;
-  }
-  return false;
-}
-
-function unwrapMddEvidenceJson(parsed: unknown): Record<string, unknown> | null {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  const root = parsed as Record<string, unknown>;
-  const nested = root.mddDocument;
-  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
-    const n = nested as Record<string, unknown>;
-    if (mddEvidencePayloadHasContent(n)) return n;
-  }
-  if (mddEvidencePayloadHasContent(root)) return root;
-  return null;
-}
-
-function formatMddEvidenceSectionValue(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number], v: unknown): string {
-  if (v === undefined || v === null) return "";
-  if (typeof v === "string") return v.trim();
-  if (Array.isArray(v)) {
-    if (key === "evidence_paths") {
-      return v
-        .map((x) => {
-          const s = String(x).trim();
-          return s ? `- \`${s.replace(/`/g, "\\`")}\`` : "";
-        })
-        .filter(Boolean)
-        .join("\n");
-    }
-    return v.map((x) => `- ${typeof x === "string" ? x : JSON.stringify(x)}`).join("\n");
-  }
-  return "```json\n" + JSON.stringify(v, null, 2).slice(0, 16000) + "\n```";
-}
-
-/**
- * Convierte JSON MDD de `evidence_first` a markdown legible para Legacy Analyzer / prompts.
- * Si no es JSON MDD, devuelve el texto original.
- */
 function normalizeAskCodebaseEvidenceFirstContent(text: string): string {
-  const trimmed = text.trim();
-  if (!trimmed) return "";
-  try {
-    const jsonStr = extractJsonFromToolContent(trimmed);
-    const parsed = JSON.parse(jsonStr) as unknown;
-    const payload = unwrapMddEvidenceJson(parsed);
-    if (!payload) return text;
-
-    const parts: string[] = ["## Evidencia (MDD estructurado — ingest / LLM)\n"];
-    for (const key of MDD_EVIDENCE_JSON_KEYS) {
-      const body = formatMddEvidenceSectionValue(key, payload[key]);
-      if (!body) continue;
-      parts.push(`### ${MDD_EVIDENCE_SECTION_TITLE[key]}\n\n${body}`);
-    }
-    return parts.join("\n\n").trim();
-  } catch {
-    return text;
-  }
+  return normalizeLegacyMddToolText(text);
 }
 
 /**
@@ -825,20 +741,7 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
 
   private parseGenerateLegacyDocumentationToolText(text: string): string {
     if (!text.trim()) return "";
-    try {
-      const jsonStr = extractJsonFromToolContent(text.trim());
-      const envelope = JSON.parse(jsonStr) as {
-        format?: string;
-        answer?: string;
-        mddDocument?: unknown;
-      };
-      if (envelope.format === "legacy_mdd_v1" && typeof envelope.answer === "string") {
-        return normalizeAskCodebaseEvidenceFirstContent(envelope.answer);
-      }
-    } catch {
-      /* fall through */
-    }
-    return normalizeAskCodebaseEvidenceFirstContent(text);
+    return normalizeLegacyMddToolText(text);
   }
 
   private async invokeGenerateLegacyDocumentationMcp(
