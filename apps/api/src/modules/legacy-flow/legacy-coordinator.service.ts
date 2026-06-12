@@ -28,6 +28,11 @@ import {
   type LegacyIndexSignalsGathered,
 } from "../theforge/theforge-evidence-context.util.js";
 import { inferLegacyGraphNodeNameFromFunctionsFileText } from "./legacy-graph-node-name.util.js";
+import {
+  appendComponentDiagramToCodebaseDoc,
+  injectComponentDiagramIntoMddSection2,
+  isLegacyComponentDiagramEnabled,
+} from "./legacy-component-diagram.util.js";
 import { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.service.js";
 import { runLegacyStagedDiscoveryMddAgent } from "./legacy-staged-discovery-agent.js";
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
@@ -803,6 +808,9 @@ export class LegacyCoordinatorService {
     if (codebaseDoc.trim()) {
       codebaseDoc = normalizeLegacyMddV1JsonBlocksInMarkdown(codebaseDoc);
       codebaseDoc = normalizeRawEvidenceJsonBlocksInMarkdown(codebaseDoc);
+      if (isLegacyComponentDiagramEnabled()) {
+        codebaseDoc = appendComponentDiagramToCodebaseDoc(codebaseDoc);
+      }
     }
 
     const persistStage = stageId?.trim()
@@ -1161,6 +1169,8 @@ export class LegacyCoordinatorService {
         "Debe tener **exactamente 7 secciones** en este orden: " +
         "1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, 4. Contratos de API, 5. Lógica y Edge Cases, " +
         "6. Seguridad, 7. Infraestructura.\n\n" +
+        "**§2 obligatorio:** incluye `### Diagrama de Componentes` con un bloque ```mermaid (flowchart) " +
+        "que refleje capas reales del codebase (frontend, API/backend, persistencia) usando solo evidencia de la doc. de partida.\n\n" +
         pathGroundingRules +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona. " +
         "Usa TODO ese contexto para describir fielmente la aplicación existente. " +
@@ -1190,7 +1200,8 @@ export class LegacyCoordinatorService {
         "Según Specification-Driven Development, el MDD es la **Constitución del cambio** y debe tener " +
         "**exactamente 7 secciones** en este orden: 1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, " +
         "4. Contratos de API, 5. Lógica y Edge Cases, 6. Seguridad, 7. Infraestructura. " +
-        "Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra).\n\n" +
+        "Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra). " +
+        "En §2 incluye `### Diagrama de Componentes` (Mermaid flowchart) anclado a la doc. de partida.\n\n" +
         pathGroundingRules +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona " +
         "antes de elaborar el documento. Usa TODO ese contexto; infiere todas las modificaciones necesarias en módulos, " +
@@ -1211,7 +1222,10 @@ export class LegacyCoordinatorService {
     }
     const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
     const mddContent = await this.reviewer.reviewMdd(description, mddDraft?.trim() ?? "");
-    const cleaned = cleanDocumentContent(mddContent);
+    let cleaned = cleanDocumentContent(mddContent);
+    if (isLegacyComponentDiagramEnabled() && codebaseDoc.length >= 80) {
+      cleaned = injectComponentDiagramIntoMddSection2(cleaned, codebaseDoc);
+    }
     // Dual-write durante migración: stage.legacyChangeState + project.legacyFlowState
     if (gateStage?.id) {
       await this.persistLegacyChangeState(projectId, gateStage.id, state).catch(() => {});
