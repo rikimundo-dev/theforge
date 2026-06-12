@@ -59,8 +59,11 @@ export function ProjectMergeDialog({
   const defaultName = useMemo(() => {
     if (sources.length === 0) return "";
     if (sources.length === 2) {
-      const a = sources[0].name.slice(0, 28);
-      const b = sources[1].name.slice(0, 28);
+      const first = sources[0];
+      const second = sources[1];
+      if (!first || !second) return "";
+      const a = first.name.slice(0, 28);
+      const b = second.name.slice(0, 28);
       return `${a} + ${b}`;
     }
     return `Suite (${sources.length} productos)`;
