@@ -205,9 +205,53 @@ function emptySectionPlaceholder(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number]): 
   return "";
 }
 
+function formatOpenApiSpecSection(v: unknown): string {
+  if (v === undefined || v === null || typeof v !== "object" || Array.isArray(v)) {
+    return emptySectionPlaceholder("openapi_spec");
+  }
+  const o = v as Record<string, unknown>;
+  const metadata: Record<string, unknown> = { ...o };
+  delete metadata.supplementary_docs;
+
+  const parts: string[] = ["```json", JSON.stringify(metadata, null, 2), "```"];
+
+  const docs = o.supplementary_docs;
+  if (Array.isArray(docs) && docs.length > 0) {
+    parts.push("", "#### Documentación complementaria", "");
+    for (const doc of docs) {
+      if (!doc || typeof doc !== "object") continue;
+      const d = doc as Record<string, unknown>;
+      const path = typeof d.path === "string" ? d.path : "—";
+      parts.push(`##### \`${path.replace(/`/g, "\\`")}\``, "");
+      if (d.truncated === true && typeof d.total_chars === "number") {
+        parts.push(
+          `_Extracto del archivo indexado (${d.total_chars} caracteres; muestra recortada en MDD)._`,
+          "",
+        );
+      }
+      const excerpt = typeof d.excerpt === "string" ? d.excerpt.trim() : "";
+      parts.push(excerpt || "_Sin contenido legible en índice para esta ruta._", "");
+    }
+  } else if (Array.isArray(o.supplementary_doc_paths) && o.supplementary_doc_paths.length > 0) {
+    parts.push(
+      "",
+      "#### Documentación complementaria",
+      "",
+      "_Rutas detectadas sin extracto en este MDD — regenera doc. partida con Ariadne actualizado:_",
+      "",
+    );
+    for (const p of o.supplementary_doc_paths) {
+      parts.push(`- \`${String(p).replace(/`/g, "\\`")}\``);
+    }
+  }
+
+  return parts.join("\n");
+}
+
 function formatMddEvidenceSectionValue(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number], v: unknown): string {
   if (v === undefined || v === null) return emptySectionPlaceholder(key);
   if (typeof v === "string") return v.trim() || emptySectionPlaceholder(key);
+  if (key === "openapi_spec") return formatOpenApiSpecSection(v);
   if (key === "entities") {
     if (Array.isArray(v) && v.length === 0) return emptySectionPlaceholder(key);
     return formatEntitiesTable(v);
