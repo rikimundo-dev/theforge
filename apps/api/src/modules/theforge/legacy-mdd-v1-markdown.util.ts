@@ -194,13 +194,13 @@ function formatEvidencePathsList(paths: unknown): string {
 
 function emptySectionPlaceholder(key: (typeof MDD_EVIDENCE_JSON_KEYS)[number]): string {
   if (key === "entities") {
-    return "_Sin entidades en grafo (Model / StrapiContentType). Ejecuta sync + reindex del repo y regenera doc. partida._";
+    return "_Sin entidades en grafo (Model / StrapiContentType / frontend Models). Ejecuta sync + reindex del repo y regenera doc. partida._";
   }
   if (key === "api_contracts") {
-    return "_Sin contratos API indexados (OpenApiOperation / StrapiRoute / NestController). Revisa sync Strapi o export OpenAPI._";
+    return "_Sin contratos API indexados (OpenApiOperation / StrapiRoute / apiDirection frontend / NestController). Revisa sync Strapi o export OpenAPI._";
   }
   if (key === "business_logic") {
-    return "_Sin servicios Nest/Strapi indexados en grafo para este alcance._";
+    return "_Sin servicios Nest/Strapi/frontend (src/api) indexados en grafo para este alcance._";
   }
   return "";
 }

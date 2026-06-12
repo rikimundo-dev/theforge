@@ -1146,8 +1146,9 @@ export class LegacyCoordinatorService {
         "\n\n---\n\n"
       : "";
     const pathGroundingRules =
-      "**Rutas:** Usa paths **exactamente** como aparecen en la doc. de partida (`src/api/…`, `src/…`). " +
+      "**Rutas:** Usa paths **exactamente** como aparecen en la doc. de partida (`src/api/…`, `src/Models/…`, `src/…`). " +
       "PROHIBIDO inventar prefijos (`backend/`, `frontend/`) ni bundles/API no listados en entidades, contratos API o rutas de evidencia. " +
+      "Entidades frontend (`source: frontend`) y contratos `apiDirection` cuentan como evidencia válida para el cliente OBP. " +
       "Si una funcionalidad del BRD no tiene evidencia en el índice, márcala como brecha/pendiente — no la implementes en el MDD como existente.\n\n";
     let prompt: string;
     if (isInitialMdd) {
