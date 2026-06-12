@@ -56,6 +56,13 @@ describe("shouldPreferDraftOverStructured", () => {
 });
 
 describe("prepareMddForOutput", () => {
+  it("inyecta Diagrama de componentes propuesto en §2 para MDD greenfield", () => {
+    const out = prepareMddForOutput({ mddDraft: FULL_MDD_PREFIX });
+    assert.match(out, /### Diagrama de componentes propuesto/);
+    assert.match(out, /```mermaid/);
+    assert.match(out, /NestJS/);
+  });
+
   it("conserva §1–§5 del draft cuando structured es parcial tras fallo de §6", () => {
     const draft = FULL_MDD_PREFIX + EXISTING_SECTION6;
     const structured = {
