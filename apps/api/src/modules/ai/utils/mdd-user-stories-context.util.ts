@@ -1,8 +1,6 @@
 /** Presupuesto de caracteres del MDD para generación de historias de usuario. */
 export const USER_STORIES_MDD_BUDGET = 50_000;
 
-const SECTION_BOUNDARY = /(?=\n##\s|$(?!\n))/;
-
 /** Extrae el cuerpo de la primera sección cuyo título coincide con pattern (hasta el siguiente ##). */
 function extractSection(md: string, pattern: RegExp): string {
   const content = (md || "").trim();
