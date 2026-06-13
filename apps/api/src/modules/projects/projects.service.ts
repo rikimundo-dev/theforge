@@ -9,6 +9,7 @@ import { enrichBlueprintWithUiDesignSystem } from "../engine/blueprint-enrich-ui
 import { MddUpdatePipelineService } from "../engine/mdd-update-pipeline.service.js";
 import { SemaphoreService, type SemaphoreEvaluationInput } from "../engine/semaphore.service.js";
 import { normalizeMddContent } from "../engine/mdd-markdown-parser.js";
+import { shouldReplacePhase0SummaryWithBorrador } from "@theforge/shared-types";
 import {
   enforceMddGovernancePatternsOnPersist,
   mddHasSubstantialBody,
@@ -409,11 +410,13 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         "../ai-analysis/phase0/phase0-from-markdown.js"
       );
       if (isPhase0StructuredMarkdown(rest.dbgaContent)) {
-        updatePayload.phase0SummaryContent = JSON.stringify(
-          markdownToPhase0Document(rest.dbgaContent),
-          null,
-          2,
-        );
+        if (shouldReplacePhase0SummaryWithBorrador(existing.phase0SummaryContent)) {
+          updatePayload.phase0SummaryContent = JSON.stringify(
+            markdownToPhase0Document(rest.dbgaContent),
+            null,
+            2,
+          );
+        }
       }
     }
 

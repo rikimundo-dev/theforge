@@ -62,6 +62,7 @@ import {
 } from "../constants/workshopHeaderToolbar";
 import {
   agentGovernanceScaffoldHasContent,
+  isPhase0BorradorJson,
   parseAgentGovernanceScaffold,
 } from "@theforge/shared-types";
 import {
@@ -385,6 +386,12 @@ export default function WorkshopView({
   const useCasesContent = useCasesContentField ?? project?.useCasesContent ?? null;
   const userStoriesContent = userStoriesContentField ?? project?.userStoriesContent ?? null;
   const phase0SummaryContent = phase0SummaryContentField ?? project?.phase0SummaryContent ?? null;
+  /** Deep Research markdown; ignora JSON de borrador que pudo quedar en phase0SummaryContent. */
+  const benchmarkMarkdown =
+    phase0SummaryContent?.trim() && !isPhase0BorradorJson(phase0SummaryContent)
+      ? phase0SummaryContent
+      : null;
+  const benchmarkNeedsRegenerate = isPhase0BorradorJson(phase0SummaryContent);
   const uxUiGuideContent = uxUiGuideContentField ?? project?.uxUiGuideContent ?? null;
   const aemContent = aemContentField ?? project?.aemContent ?? null;
 
@@ -3367,8 +3374,16 @@ export default function WorkshopView({
                   </>
                   )) : (
                   <>
-                    {phase0SummaryViewMode === "preview" && !phase0SummaryContent?.trim() ? (
+                    {phase0SummaryViewMode === "preview" && !benchmarkMarkdown?.trim() ? (
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        {benchmarkNeedsRegenerate ? (
+                          <div className="shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--warning)_12%,var(--card))] border border-[color-mix(in_oklch,var(--warning)_35%,var(--border))] px-4 py-2 mb-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))] flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 shrink-0" />
+                            <span>
+                              Actualizaste Fase 0 y el benchmark anterior quedó desincronizado. Pulsa «Generar Benchmark» para volver a formatearlo.
+                            </span>
+                          </div>
+                        ) : null}
                         <DocEmptyState
                           icon={Globe}
                           title="Benchmark"
@@ -3395,6 +3410,14 @@ export default function WorkshopView({
                         )}
                         {phase0SummaryViewMode === "preview" ? (
                           <WorkshopPanelActionRegion role="region" aria-label="Acciones de Benchmark">
+                            {benchmarkNeedsRegenerate ? (
+                              <div className="w-full shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--warning)_12%,var(--card))] border border-[color-mix(in_oklch,var(--warning)_35%,var(--border))] px-4 py-2 mb-2 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))] flex items-center gap-2">
+                                <AlertTriangle className="w-4 h-4 shrink-0" />
+                                <span>
+                                  El benchmark mostraba JSON del borrador tras editar Fase 0. Regenera para recuperar el markdown de Deep Research.
+                                </span>
+                              </div>
+                            ) : null}
                             <div className="flex flex-wrap items-center gap-2">
                               <WorkshopPanelButton
                                 tone="primary"
@@ -3415,7 +3438,7 @@ export default function WorkshopView({
                                   ? "Generando…"
                                   : "Regenerar Benchmark"}
                               </WorkshopPanelButton>
-                              {phase0SummaryContent != null && phase0SummaryContent !== "" ? (
+                              {benchmarkMarkdown != null && benchmarkMarkdown !== "" ? (
                                 <WorkshopPanelButton
                                   tone="danger"
                                   onClick={() => projectId && clearPhase0SummaryContent(projectId)}
@@ -3430,7 +3453,7 @@ export default function WorkshopView({
                               Deep Research a partir del DBGA de Fase 0.
                             </p>
                           </WorkshopPanelActionRegion>
-                        ) : phase0SummaryContent != null && phase0SummaryContent !== "" ? (
+                        ) : benchmarkMarkdown != null && benchmarkMarkdown !== "" ? (
                           <WorkshopPanelActionRegion className="items-end" role="region" aria-label="Acciones de Benchmark">
                             <WorkshopPanelButton
                               tone="danger"
@@ -3445,14 +3468,14 @@ export default function WorkshopView({
                         <div className="flex-1 flex flex-col min-h-0">
                           <div className="flex-1 flex flex-col min-h-0">
                             {phase0SummaryViewMode === "preview" &&
-                            phase0SummaryContent != null &&
-                            phase0SummaryContent !== "" ? (
+                            benchmarkMarkdown != null &&
+                            benchmarkMarkdown !== "" ? (
                               <div className="flex-1 min-h-[200px] overflow-auto">
-                                <MddViewer content={phase0SummaryContent ?? ""} />
+                                <MddViewer content={benchmarkMarkdown} />
                               </div>
                             ) : (
                               <WorkshopDocTextarea
-                                value={phase0SummaryContent ?? ""}
+                                value={benchmarkNeedsRegenerate ? "" : (phase0SummaryContent ?? "")}
                                 onChange={(v) => setPhase0SummaryContent(v || null)}
                                 onBlur={handlePhase0SummaryBlur}
                                 placeholder="# Resumen Deep Research..."

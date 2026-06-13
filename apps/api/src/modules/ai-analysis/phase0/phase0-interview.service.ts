@@ -25,6 +25,7 @@ import {
   mergePhase0Borrador,
   normalizePhase0Document,
 } from "./phase0-normalize.util.js";
+import { shouldReplacePhase0SummaryWithBorrador } from "@theforge/shared-types";
 import { phase0ToMarkdown } from "./phase0-to-markdown.js";
 import {
   hasAuditDocument,
@@ -431,15 +432,28 @@ export class Phase0InterviewService {
     const markdown = phase0ToMarkdown(borrador);
     const syncDbga = this.shouldSyncDbgaMarkdown(state);
     try {
+      const existing = await this.prisma.project.findUnique({
+        where: { id: projectId },
+        select: { phase0SummaryContent: true },
+      });
+      const data: {
+        phase0SummaryContent?: string;
+        phase0Gaps?: string;
+        phase0Status: "done";
+        phase0Questions?: number;
+        dbgaContent?: string;
+      } = {
+        phase0Gaps: state ? serializePhase0GapsEnvelope(state) : undefined,
+        phase0Status: "done",
+        phase0Questions: state?.preguntasRealizadas,
+        ...(syncDbga ? { dbgaContent: markdown } : {}),
+      };
+      if (shouldReplacePhase0SummaryWithBorrador(existing?.phase0SummaryContent)) {
+        data.phase0SummaryContent = JSON.stringify(borrador, null, 2);
+      }
       await this.prisma.project.update({
         where: { id: projectId },
-        data: {
-          phase0SummaryContent: JSON.stringify(borrador, null, 2),
-          phase0Gaps: state ? serializePhase0GapsEnvelope(state) : undefined,
-          phase0Status: "done",
-          phase0Questions: state?.preguntasRealizadas,
-          ...(syncDbga ? { dbgaContent: markdown } : {}),
-        },
+        data,
       });
     } catch (err) {
       this.logger.warn(`[Phase0] finalize persist failed for ${projectId}: ${err}`);
@@ -480,20 +494,35 @@ export class Phase0InterviewService {
     return heuristicBorradorFromFreeformDbga(markdown);
   }
 
-  private async persistInterviewState(state: Phase0InterviewState): Promise<void> {
+  private async persistInterviewState(
+    state: Phase0InterviewState,
+    existingPhase0Summary?: string | null,
+  ): Promise<void> {
     try {
+      let existing = existingPhase0Summary;
+      if (existing === undefined) {
+        const row = await this.prisma.project.findUnique({
+          where: { id: state.projectId },
+          select: { phase0SummaryContent: true },
+        });
+        existing = row?.phase0SummaryContent;
+      }
+
+      const summaryJson = JSON.stringify(state.borrador, null, 2);
       const data: {
-        phase0SummaryContent: string;
+        phase0SummaryContent?: string;
         phase0Gaps: string;
         phase0Status: Phase0InterviewState["status"];
         phase0Questions: number;
         dbgaContent?: string;
       } = {
-        phase0SummaryContent: JSON.stringify(state.borrador, null, 2),
         phase0Gaps: serializePhase0GapsEnvelope(state),
         phase0Status: state.status,
         phase0Questions: state.preguntasRealizadas,
       };
+      if (shouldReplacePhase0SummaryWithBorrador(existing)) {
+        data.phase0SummaryContent = summaryJson;
+      }
       if (this.shouldSyncDbgaMarkdown(state)) {
         data.dbgaContent = phase0ToMarkdown(state.borrador);
       }
