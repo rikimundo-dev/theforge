@@ -33,6 +33,10 @@ import {
   injectComponentDiagramIntoMddSection2,
   isLegacyComponentDiagramEnabled,
 } from "./legacy-component-diagram.util.js";
+import {
+  injectAsIsCodebaseEvidenceIntoMdd,
+  isLegacyAsIsMddEvidenceInjectEnabled,
+} from "./legacy-as-is-mdd-inject.util.js";
 import { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.service.js";
 import { runLegacyStagedDiscoveryMddAgent } from "./legacy-staged-discovery-agent.js";
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
@@ -1164,6 +1168,10 @@ export class LegacyCoordinatorService {
         "Las funcionalidades no documentadas o gaps van en «Brechas de información» o notas neutras, **no** como propósito del documento.\n\n" +
         "**§2 obligatorio:** incluye `### Diagrama de Componentes` con un bloque ```mermaid (flowchart) " +
         "que refleje capas reales del codebase (frontend, API/backend, persistencia) usando solo evidencia de la doc. de partida.\n\n" +
+        "**§3 Modelo de Datos (AS-IS exhaustivo):** documenta **cada entidad** de la doc. de partida en tablas " +
+        "(Entidad | Origen | Atributos). PROHIBIDO resumir con «Otras entidades significativas», «N+ adicionales» " +
+        "o listas separadas por comas en lugar de filas de tabla. Agrupa por repo si hay multi-root.\n\n" +
+        "**§4 Contratos de API:** tablas completas de rutas/métodos por repo; no omitir endpoints listados en la doc. de partida.\n\n" +
         pathGroundingRulesBaseline +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona. " +
         "Usa TODO ese contexto para describir fielmente la aplicación existente. " +
@@ -1220,6 +1228,9 @@ export class LegacyCoordinatorService {
     let cleaned = cleanDocumentContent(mddContent);
     if (isLegacyComponentDiagramEnabled() && codebaseDoc.length >= 80) {
       cleaned = injectComponentDiagramIntoMddSection2(cleaned, codebaseDoc);
+    }
+    if (isInitialMdd && isLegacyAsIsMddEvidenceInjectEnabled() && codebaseDoc.length >= 80) {
+      cleaned = injectAsIsCodebaseEvidenceIntoMdd(cleaned, codebaseDoc);
     }
     // Dual-write durante migración: stage.legacyChangeState + project.legacyFlowState
     if (gateStage?.id) {

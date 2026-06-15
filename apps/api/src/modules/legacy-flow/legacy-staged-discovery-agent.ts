@@ -51,6 +51,8 @@ function buildHumanInstruction(mode: StagedDiscoveryMode, changeDescription?: st
     s +=
       "\n\n**Modo etapa inicial (AS-IS):** En **§1 Contexto** describe el sistema **tal como existe hoy**. " +
       "PROHIBIDO como propósito: modificar, incorporar funcionalidades pendientes del BRD/MVP, alcance de cambio o objetivos futuros. " +
+      "En **§3 Modelo de Datos** documenta **cada entidad** indexada en tablas (Entidad | Origen | Atributos); " +
+      "PROHIBIDO resumir con «Otras entidades significativas» o listas por comas. " +
       "Las lagunas de evidencia van como «Brechas de información», no como meta de modificación.";
   }
   if (mode === "change") {

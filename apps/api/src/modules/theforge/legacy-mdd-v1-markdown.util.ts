@@ -36,7 +36,7 @@ function legacyMddEvidencePathsSampleLimit(): number {
 }
 
 function legacyMddTableRowSampleLimit(): number {
-  return legacyMddEvidenceSampleLimit("LEGACY_MDD_TABLE_ROW_SAMPLE", 120);
+  return legacyMddEvidenceSampleLimit("LEGACY_MDD_TABLE_ROW_SAMPLE", 250);
 }
 
 function escapeMdCell(value: string): string {

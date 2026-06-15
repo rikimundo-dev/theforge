@@ -82,6 +82,8 @@ export class LegacyReviewerService {
         "Asegura coherencia y completitud con la evidencia del codebase. " +
         "**§1 Contexto:** propósito y alcance = describir el sistema **en su estado actual**. " +
         "PROHIBIDO lenguaje de modificación, MVP pendiente, «incorporar funcionalidades del BRD» o delta de cambio. " +
+        "**§3 Modelo de Datos:** debe ser exhaustivo — tablas por entidad (Entidad | Origen | Atributos). " +
+        "Elimina bloques «Otras entidades significativas (N+ adicionales)» o listas por comas que sustituyan filas de tabla. " +
         "Responde ÚNICAMENTE con el markdown del MDD revisado (sin comentarios adicionales).\n\nMDD borrador:\n---\n" +
         mddDraft +
         "\n---"
