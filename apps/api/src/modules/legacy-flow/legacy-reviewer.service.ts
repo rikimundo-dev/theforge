@@ -67,19 +67,31 @@ export class LegacyReviewerService {
    * @param mddDraft - Borrador del MDD en Markdown.
    * @returns Contenido del MDD revisado.
    */
-  async reviewMdd(description: string, mddDraft: string): Promise<string> {
+  async reviewMdd(
+    description: string,
+    mddDraft: string,
+    options?: { asIsBaseline?: boolean },
+  ): Promise<string> {
     const refHint =
       countMddCodePathReferences(mddDraft) < 3
         ? "ADVERTENCIA SDD: el borrador casi no cita rutas de archivo (`ruta/archivo.ts`). Enriquece cada sección aplicable con paths concretos alineados al contexto del cambio y al índice TheForge.\n\n"
         : "";
-    const prompt =
-      refHint +
-      "Revisa el siguiente MDD de cambio para un proyecto legacy. Asegura que sea coherente con la descripción del cambio y completo. " +
-      "Responde ÚNICAMENTE con el markdown del MDD revisado (sin comentarios adicionales).\n\nDescripción del cambio:\n---\n" +
-      description +
-      "\n---\n\nMDD borrador:\n---\n" +
-      mddDraft +
-      "\n---";
+    const prompt = options?.asIsBaseline
+      ? refHint +
+        "Revisa el MDD **AS-IS** (etapa inicial legacy — sistema existente, sin proyecto de modificación). " +
+        "Asegura coherencia y completitud con la evidencia del codebase. " +
+        "**§1 Contexto:** propósito y alcance = describir el sistema **en su estado actual**. " +
+        "PROHIBIDO lenguaje de modificación, MVP pendiente, «incorporar funcionalidades del BRD» o delta de cambio. " +
+        "Responde ÚNICAMENTE con el markdown del MDD revisado (sin comentarios adicionales).\n\nMDD borrador:\n---\n" +
+        mddDraft +
+        "\n---"
+      : refHint +
+        "Revisa el siguiente MDD de cambio para un proyecto legacy. Asegura que sea coherente con la descripción del cambio y completo. " +
+        "Responde ÚNICAMENTE con el markdown del MDD revisado (sin comentarios adicionales).\n\nDescripción del cambio:\n---\n" +
+        description +
+        "\n---\n\nMDD borrador:\n---\n" +
+        mddDraft +
+        "\n---";
     try {
       const provider = await this.aiFactory.createForUser(getRequestUserId());
       const out = await provider.generateResponse(prompt, [], { systemPrompt: REVIEWER_SYSTEM });

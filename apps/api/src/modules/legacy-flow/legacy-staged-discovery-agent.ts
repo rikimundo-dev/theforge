@@ -47,6 +47,12 @@ function buildHumanInstruction(mode: StagedDiscoveryMode, changeDescription?: st
     "No repitas la misma tool_call ni la misma búsqueda semántica. " +
     "Máximo 6 rondas de tool_calls en total; si llegas a ese límite, fuerza la salida con lo que tengas. " +
     "Tu respuesta final debe ser ÚNICAMENTE el documento Markdown del MDD (sin preámbulos ni comentarios meta).";
+  if (mode === "initial") {
+    s +=
+      "\n\n**Modo etapa inicial (AS-IS):** En **§1 Contexto** describe el sistema **tal como existe hoy**. " +
+      "PROHIBIDO como propósito: modificar, incorporar funcionalidades pendientes del BRD/MVP, alcance de cambio o objetivos futuros. " +
+      "Las lagunas de evidencia van como «Brechas de información», no como meta de modificación.";
+  }
   if (mode === "change") {
     s +=
       "\n\n**Modo cambio (contexto para otro paso de redacción):** En Fase 3 mantén las **7 secciones canónicas** y cita rutas/archivos, " +

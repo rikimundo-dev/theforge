@@ -37,7 +37,7 @@ import { AgentSupervisorService } from "../agent-supervisor/agent-supervisor.ser
 import { runLegacyStagedDiscoveryMddAgent } from "./legacy-staged-discovery-agent.js";
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
 import { evaluateLegacyIndexSddGate } from "./legacy-index-sdd-alignment.util.js";
-import { pickPrimaryStage } from "../projects/stage-helpers.js";
+import { isLegacyBaselineStage, pickPrimaryStage } from "../projects/stage-helpers.js";
 import { AiService } from "../ai/ai.service.js";
 import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { loadLegacyKnowledgePack } from "./knowledge-loader.js";
@@ -600,7 +600,7 @@ export class LegacyCoordinatorService {
         }
       } catch { /* non-critical */ }
     }
-    const isInitialLegacyStage = !baselineBrdBlock;
+    const isInitialLegacyStage = isLegacyBaselineStage(stage);
     const sourcePrep = prepareLegacyCodebaseDocForBrdPrompt(codebaseDoc);
     let brdSourceDocument = sourcePrep.text;
     let sourceTruncated = sourcePrep.truncated;
@@ -1022,18 +1022,19 @@ export class LegacyCoordinatorService {
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n");
 
+    const isInitialMdd = isLegacyBaselineStage(gateStage);
     const descTermsGate = description.slice(0, 160).replace(/[^\w\s]/g, " ").trim();
     const gateSemanticQueries =
-      descTermsGate.length > 2
+      !isInitialMdd && descTermsGate.length > 2
         ? [`${descTermsGate} modules services handlers components routes`, ...DEFAULT_SEMANTIC_QUERIES]
         : [...DEFAULT_SEMANTIC_QUERIES];
     await this.assertLegacyIndexSddGate(projectId, theforgeId, state, { semanticQueries: gateSemanticQueries });
-    // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos
-    const brdPre = gateStage?.brdContent ? composeBrdPreamble(gateStage.brdContent) : "";
+    // Etapa 1 = AS-IS: el BRD no debe empujar lenguaje de modificación al MDD (solo etapas 2+).
+    const brdPre =
+      !isInitialMdd && gateStage?.brdContent ? composeBrdPreamble(gateStage.brdContent) : "";
 
     // Múltiples consultas a TheForge para contexto amplio (evidencia del índice + ask_codebase + refactor seguro)
     const theforgeParts: string[] = [];
-  const isInitialMdd = !description.trim();
   // Fase 5: Buscar etapa base (ordinal anterior) para contexto incremental
   let baselineStage: { mddContent?: string | null } | null = null;
   if (!isInitialMdd && gateStage && gateStage.ordinal > 1) {
@@ -1078,7 +1079,7 @@ export class LegacyCoordinatorService {
         );
       }
     }
-    if (description) {
+    if (!isInitialMdd && description.trim()) {
       const legacyAsk = getLegacyAskCodebaseOptions();
       // Búsqueda semántica con términos del cambio para descubrir archivos/símbolos relacionados
       const descTerms = description.slice(0, 200).replace(/[^\w\s]/g, " ");
@@ -1108,24 +1109,26 @@ export class LegacyCoordinatorService {
     }
     // Validación antes de editar (validate_before_edit = impacto + contrato); fallback a get_legacy_impact
     // + get_definitions (ubicación exacta); get_functions_in_file alimenta el nombre de nodo para el grafo
-    for (let i = 0; i < Math.min(3, files.length); i++) {
-      const f = files[i]!;
-      const repoId = f.repoId || theforgeId;
-      const funcs = await this.theforge.getFunctionsInFile(f.path, repoId, f.path);
-      const nodeName = inferLegacyGraphNodeNameFromFunctionsFileText(funcs, f.path);
-      const [impactBlock, defs] = await Promise.all([
-        this.theforge.validateBeforeEdit(nodeName, repoId, f.path).then((b) => b || this.theforge.getLegacyImpact(nodeName, repoId, f.path)),
-        this.theforge.getDefinitions(nodeName, repoId, f.path),
-      ]);
-      if (impactBlock?.trim()) theforgeParts.push(`Validación antes de editar "${f.path}" (nodo grafo: \`${nodeName}\`):\n` + impactBlock.trim());
-      if (defs?.trim()) theforgeParts.push(`Definición de "${nodeName}" (archivo:líneas):\n` + defs.trim());
-      if (funcs?.trim()) theforgeParts.push(`Funciones/componentes en ${f.path}:\n` + funcs.trim());
-    }
-    // Contenido de los primeros 2 archivos a modificar (get_file_content) para contexto exacto
-    for (let i = 0; i < Math.min(2, files.length); i++) {
-      const f = files[i]!;
-      const content = await this.theforge.getFileContent(f.path, f.repoId || theforgeId, undefined, f.path);
-      if (content.trim()) theforgeParts.push(`Contenido de ${f.path}:\n` + content.slice(0, 3000) + (content.length > 3000 ? "\n…" : ""));
+    if (!isInitialMdd) {
+      for (let i = 0; i < Math.min(3, files.length); i++) {
+        const f = files[i]!;
+        const repoId = f.repoId || theforgeId;
+        const funcs = await this.theforge.getFunctionsInFile(f.path, repoId, f.path);
+        const nodeName = inferLegacyGraphNodeNameFromFunctionsFileText(funcs, f.path);
+        const [impactBlock, defs] = await Promise.all([
+          this.theforge.validateBeforeEdit(nodeName, repoId, f.path).then((b) => b || this.theforge.getLegacyImpact(nodeName, repoId, f.path)),
+          this.theforge.getDefinitions(nodeName, repoId, f.path),
+        ]);
+        if (impactBlock?.trim()) theforgeParts.push(`Validación antes de editar "${f.path}" (nodo grafo: \`${nodeName}\`):\n` + impactBlock.trim());
+        if (defs?.trim()) theforgeParts.push(`Definición de "${nodeName}" (archivo:líneas):\n` + defs.trim());
+        if (funcs?.trim()) theforgeParts.push(`Funciones/componentes en ${f.path}:\n` + funcs.trim());
+      }
+      // Contenido de los primeros 2 archivos a modificar (get_file_content) para contexto exacto
+      for (let i = 0; i < Math.min(2, files.length); i++) {
+        const f = files[i]!;
+        const content = await this.theforge.getFileContent(f.path, f.repoId || theforgeId, undefined, f.path);
+        if (content.trim()) theforgeParts.push(`Contenido de ${f.path}:\n` + content.slice(0, 3000) + (content.length > 3000 ? "\n…" : ""));
+      }
     }
     const theforgeContext = theforgeParts.join("\n\n---\n\n");
     const filesLine = files.length > 0
@@ -1138,25 +1141,30 @@ export class LegacyCoordinatorService {
         compactCodebaseDocForMddPrompt(codebaseDoc) +
         "\n\n---\n\n"
       : "";
-    const pathGroundingRules =
+    const pathGroundingRulesBaseline =
       "**Rutas:** Usa paths **exactamente** como aparecen en la doc. de partida (`src/api/…`, `src/Models/…`, `src/…`). " +
       "PROHIBIDO inventar prefijos (`backend/`, `frontend/`) ni bundles/API no listados en entidades, contratos API o rutas de evidencia. " +
       "Entidades frontend (`source: frontend`) y contratos `apiDirection` cuentan como evidencia válida para el cliente OBP. " +
+      "Si falta evidencia, documéntalo como brecha — no inventes ni proyectes cambios futuros.\n\n";
+    const pathGroundingRulesChange =
+      pathGroundingRulesBaseline +
       "Si una funcionalidad del BRD no tiene evidencia en el índice, márcala como brecha/pendiente — no la implementes en el MDD como existente.\n\n";
     let prompt: string;
     if (isInitialMdd) {
-      // Sin descripción de cambio → MDD inicial del sistema completo (no de cambio)
+      // Etapa 1 → MDD AS-IS del sistema completo (no de cambio), aunque exista description en legacyChangeState
       prompt =
-        (brdPre ? brdPre + "\n\n" : "") +
         codebaseDocBlock +
         "Genera un documento MDD inicial (Markdown) para un proyecto legacy. " +
-        "El MDD describe **el sistema existente en su totalidad**, no un cambio. " +
+        "El MDD describe **el sistema existente en su totalidad (AS-IS)**, no un cambio ni un MVP futuro. " +
         "Debe tener **exactamente 7 secciones** en este orden: " +
         "1. Contexto, 2. Arquitectura y Stack, 3. Modelo de Datos, 4. Contratos de API, 5. Lógica y Edge Cases, " +
         "6. Seguridad, 7. Infraestructura.\n\n" +
+        "**§1 Contexto (AS-IS obligatorio):** Propósito y alcance = qué es el sistema **hoy**, quién lo usa y qué hace **en producción**. " +
+        "PROHIBIDO: «modificar el sistema», «incorporar funcionalidades del BRD/MVP», alcance de cambio, objetivos de implementación futura. " +
+        "Las funcionalidades no documentadas o gaps van en «Brechas de información» o notas neutras, **no** como propósito del documento.\n\n" +
         "**§2 obligatorio:** incluye `### Diagrama de Componentes` con un bloque ```mermaid (flowchart) " +
         "que refleje capas reales del codebase (frontend, API/backend, persistencia) usando solo evidencia de la doc. de partida.\n\n" +
-        pathGroundingRules +
+        pathGroundingRulesBaseline +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona. " +
         "Usa TODO ese contexto para describir fielmente la aplicación existente. " +
         "No inventes rutas, APIs, entidades ni funcionalidades que no aparezcan en el contexto. " +
@@ -1187,7 +1195,7 @@ export class LegacyCoordinatorService {
         "4. Contratos de API, 5. Lógica y Edge Cases, 6. Seguridad, 7. Infraestructura. " +
         "Aplica cada sección al **cambio** descrito (qué se modifica en contexto, stack, modelo, API, lógica, seguridad e infra). " +
         "En §2 incluye `### Diagrama de Componentes` (Mermaid flowchart) anclado a la doc. de partida.\n\n" +
-        pathGroundingRules +
+        pathGroundingRulesChange +
         "**Prioridad:** Recupera y usa en su totalidad el conocimiento del codebase (TheForge) que se te proporciona " +
         "antes de elaborar el documento. Usa TODO ese contexto; infiere todas las modificaciones necesarias en módulos, " +
         "entidades, APIs y pantallas existentes que el cambio afecte; no te limites al requerimiento literal. " +
@@ -1206,7 +1214,9 @@ export class LegacyCoordinatorService {
           : "");
     }
     const mddDraft = await this.ai.generateResponse(prompt, [], { systemPrompt: COORDINATOR_SYSTEM });
-    const mddContent = await this.reviewer.reviewMdd(description, mddDraft?.trim() ?? "");
+    const mddContent = await this.reviewer.reviewMdd(description, mddDraft?.trim() ?? "", {
+      asIsBaseline: isInitialMdd,
+    });
     let cleaned = cleanDocumentContent(mddContent);
     if (isLegacyComponentDiagramEnabled() && codebaseDoc.length >= 80) {
       cleaned = injectComponentDiagramIntoMddSection2(cleaned, codebaseDoc);

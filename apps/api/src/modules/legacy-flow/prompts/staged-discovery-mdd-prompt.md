@@ -62,7 +62,7 @@ Una vez recolectada evidencia **suficiente pero anclada** a repos y rutas, redac
 Para que el Semáforo de The Forge apruebe tu documento, debes incluir obligatoriamente las lógicas centrales (`business_core`) y las Entidades cuando consten en el índice.
 
 **Orden y títulos de las 7 secciones (español, exactos):**
-1. Contexto  
+1. Contexto — en **etapa inicial (AS-IS)** describe el sistema **en su estado actual**; prohibido propósito de modificación o MVP pendiente  
 2. Arquitectura y Stack  
 3. Modelo de Datos  
 4. Contratos de API  
