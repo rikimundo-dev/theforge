@@ -10,7 +10,6 @@ import { ComplexityLevel, type Project as DbProject } from "@theforge/database";
 import {
   DELIVERABLES_BY_COMPLEXITY,
   DELIVERABLE_STEP_LABELS,
-  DELIVERABLE_PROJECT_CONTENT_FIELD,
   planLegacyDeliverablesToGenerate,
   type DeliverableKind,
   type GenerateCodebaseDocRequest,
@@ -355,16 +354,6 @@ function deliverableFieldCharCount(p: Record<string, unknown>, kind: Deliverable
   const field = DELIVERABLE_PROJECT_FIELD[kind];
   if (!field) return 0;
   return String(p[field] ?? "").length;
-}
-
-function legacyContentLengthsFromProject(p: Record<string, unknown>): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const field of new Set(
-    Object.values(DELIVERABLE_PROJECT_CONTENT_FIELD).filter((f): f is string => !!f),
-  )) {
-    out[field] = String(p[field] ?? "").length;
-  }
-  return out;
 }
 
 function clipDebug(s: string, max: number): string {
@@ -1856,7 +1845,6 @@ export class LegacyCoordinatorService {
     const deliverablesPlanned = planLegacyDeliverablesToGenerate({
       complexity,
       hasMddContent: !!mddContent,
-      contentLengthByField: legacyContentLengthsFromProject(p as Record<string, unknown>),
     });
     report.deliverablesOrder = [...deliverablesPlanned];
 

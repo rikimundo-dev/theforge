@@ -22,7 +22,6 @@ import {
   isPlanApprovalResumeMessage,
 } from "../utils/planApprovalChat";
 import {
-  DELIVERABLE_PROJECT_CONTENT_FIELD,
   deliverableStepLabelsForComplexity,
   deliverableStepLabelsForKinds,
   planLegacyDeliverablesToGenerate,
@@ -3604,17 +3603,9 @@ if (prog && prog.step && prog.step !== "done") {
     const stageId = get().activeStageId?.trim() || undefined;
     const project = get().project;
     const complexity = project?.complexity ?? "HIGH";
-    const contentLengthByField: Record<string, number> = {};
-    for (const field of new Set(
-      Object.values(DELIVERABLE_PROJECT_CONTENT_FIELD).filter((f): f is string => !!f),
-    )) {
-      const raw = project?.[field as keyof typeof project];
-      contentLengthByField[field] = typeof raw === "string" ? raw.length : 0;
-    }
     const plannedKinds = planLegacyDeliverablesToGenerate({
       complexity,
       hasMddContent: !!project?.mddContent?.trim(),
-      contentLengthByField,
     });
     const stepLabels = deliverableStepLabelsForKinds(plannedKinds);
 

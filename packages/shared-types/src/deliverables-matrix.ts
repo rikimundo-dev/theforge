@@ -55,21 +55,16 @@ export function deliverableStepLabelsForComplexity(
 }
 
 /**
- * Entregables legacy que faltan por generar: omite `mdd_canonical` si ya hay MDD
- * y cualquier paso cuyo campo en proyecto supere `minContentChars`.
+ * Entregables legacy en cascada bulk: omite solo `mdd_canonical` si ya hay MDD
+ * (regeneración manual vía «Regenerar MDD»). El resto se genera o regenera siempre.
  */
 export function planLegacyDeliverablesToGenerate(params: {
   complexity: ComplexityLevel;
   hasMddContent: boolean;
-  contentLengthByField: Record<string, number>;
-  minContentChars?: number;
 }): DeliverableKind[] {
-  const min = params.minContentChars ?? 48;
   return DELIVERABLES_BY_COMPLEXITY[params.complexity].filter((kind) => {
     if (kind === "mdd_canonical") return !params.hasMddContent;
-    const field = DELIVERABLE_PROJECT_CONTENT_FIELD[kind];
-    if (!field) return true;
-    return (params.contentLengthByField[field] ?? 0) <= min;
+    return true;
   });
 }
 
