@@ -15,7 +15,7 @@ TheForge es un monorepo (API NestJS + Web React) que orquesta una **entrevista p
 | Flujo | Entrada | Salida principal | Dónde vive |
 |-------|---------|-------------------|------------|
 | **Proyecto nuevo (SADD)** | Nombre del proyecto, chat con IA (entrevista) | MDD en sesión → Semáforo → Estimación → Entregables (Blueprint, SPEC, Casos de Uso, Historias, API, Flujos, Infra, Tasks) | Workshop: pestañas Entrevista, MDD, Semáforo, Entregables. Backend: `modules/ai`, `modules/engine`, `modules/projects`. |
-| **Proyecto legacy** | Descripción del cambio + proyecto/repo indexado en Ariadne | Plan de modificación (archivos a modificar + preguntas de negocio) → Respuestas del usuario → MDD de cambio → misma cascada de entregables | Workshop: tab «Modificación» en proyectos LEGACY. Backend: `modules/legacy-flow` (Coordinador, Revisor), `modules/theforge` (cliente MCP). |
+| **Proyecto legacy** | Repo(s) indexados en Ariadne + etapas (`Stage`) | **Etapa 1:** MDD Inicial (`codebaseDoc`) → MDD AS-IS (`mddContent`) → entregables. **Etapas 2+:** Modificación (plan + preguntas) → MDD de cambio → entregables | Workshop: **MDD Inicial**, **MDD**, **Modificación**, BRD. Backend: `legacy-flow`, `theforge` (MCP). Ver [LEGACY-FLOW-AS-IS-MDD.md](./LEGACY-FLOW-AS-IS-MDD.md). |
 
 En ambos casos el **MDD es la Constitución**: todo se valida contra él (SDD). El semáforo y el estimador leen el contenido del MDD (y del proyecto) para calcular estado y coste.
 
@@ -67,9 +67,24 @@ Gestor: **pnpm** (`pnpm-workspace.yaml`, `pnpm-lock.yaml`). Desarrollo: `pnpm in
 
 ## 6. Integración AriadneSpecs (proyectos legacy)
 
-- **AriadneSpecs** indexa repos/proyectos en un grafo (FalkorDB) y expone un MCP Streamable HTTP. The Forge llama al MCP por **HTTP** (JSON-RPC `tools/call`, headers `MCP-Protocol-Version`, Bearer o `X-M2M-Token`) desde `TheForgeService`. Contrato: monorepo Ariadne (`MCP_HTTPS.md`, `mcp_server_specs.md`); resumen cliente: [integracion-theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md](./integracion-theforge/THEFORGE-COMO-INVOCA-THEFORGE-MCP.md).
-- **Flujo:** Usuario crea proyecto legacy eligiendo un **proyecto** o **repositorio** indexado → se guarda **`theforgeProjectId`**. En «Modificación» describe el cambio → `get_modification_plan` devuelve `filesToModify` (path + repoId) y `questionsToRefine` → el usuario responde (con sugerencias desde `ask_codebase`) → al generar MDD se usa `validate_before_edit` (o `get_legacy_impact`), `get_file_content` y varias `ask_codebase` para contexto. Luego misma cascada de entregables que en proyecto nuevo.
-- **Herramientas MCP usadas:** list_known_projects, get_modification_plan, ask_codebase, validate_before_edit, get_file_content, get_legacy_impact; disponibles get_contract_specs, get_component_graph. Ver [integracion-theforge/HERRAMIENTAS-MCP-THEFORGE.md](./integracion-theforge/HERRAMIENTAS-MCP-THEFORGE.md).
+- **AriadneSpecs** indexa repos en FalkorDB y expone MCP Streamable HTTP. The Forge llama por **HTTP** (JSON-RPC) desde `TheForgeService`. Contrato: monorepo Ariadne (`MCP_HTTPS.md`, `mcp_server_specs.md`).
+
+### 6.1 Etapa 1 — AS-IS (documentación del sistema actual)
+
+1. Usuario elige workspace/repo → `theforgeProjectId`.
+2. **MDD Inicial:** `generate-codebase-doc` → MCP **`generate_legacy_documentation`** → `legacyFlowState.codebaseDoc`.
+3. **MDD:** `generate-mdd` → LLM AS-IS + inyección determinista de §3 (entidades), §4 (API), §5 (servicios) desde `codebaseDoc`.
+4. Cascada entregables (bulk unificado con regen individual).
+
+Pestaña **MDD → Regenerar** = `generate-mdd` (no Ariadne). Pestaña **MDD Inicial → Regenerar** = `generate-codebase-doc`.
+
+### 6.2 Etapas 2+ — cambio
+
+1. Tab **Modificación:** `legacy/start` → `get_modification_plan` → archivos + preguntas.
+2. Usuario responde → `generate-mdd` con BRD, línea base etapa anterior, `validate_before_edit`, etc.
+3. Entregables vía `generate-deliverables`.
+
+**Herramientas MCP:** `generate_legacy_documentation`, `list_known_projects`, `get_modification_plan`, `ask_codebase`, `validate_before_edit`, `get_file_content`, `semantic_search`, … Ver [integracion-theforge/HERRAMIENTAS-MCP-THEFORGE.md](./integracion-theforge/HERRAMIENTAS-MCP-THEFORGE.md).
 
 ---
 
@@ -106,7 +121,7 @@ Cada entregable se valida (Revisor) y se persiste en el proyecto. La estructura 
 | **../../mdd.md** | MDD del producto TheForge (7 secciones). |
 | **THEFORGE-DOCUMENTACION-ESTRATEGICA.md** | Valor ejecutivo (tesis, negocio, ROI). |
 | **ENTREGABLES-SDD-VALIDACION.md** | Estructura canónica del MDD, mapeo SDD, validación frente a Architecting Agentic Systems. |
-| **integracion-theforge/** | Cliente The Forge ↔ MCP AriadneSpecs, herramientas, flujo legacy. |
+| **integracion-theforge/** | Cliente The Forge ↔ MCP AriadneSpecs, herramientas, flujo legacy. Ver [../LEGACY-FLOW-AS-IS-MDD.md](../LEGACY-FLOW-AS-IS-MDD.md). |
 
 ---
 
@@ -114,4 +129,4 @@ Cada entregable se valida (Revisor) y se persiste en el proyecto. La estructura 
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

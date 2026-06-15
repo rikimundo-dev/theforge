@@ -1,6 +1,8 @@
 # SPEC-MCP-001 — Uso desde The Forge
 
-Resumen del contrato entre la **API The Forge** (flujo legacy) y el **MCP AriadneSpecs**. La definición normativa del servidor está en el monorepo **Ariadne**: **`docs/mcp_server_specs.md`** (SPEC-MCP-001), **`docs/MCP_HTTPS.md`**, **`docs/MCP_AYUDA.md`** (copias equivalentes posibles en **`docs/notebooklm/`**). Este archivo describe solo el **uso cliente** The Forge.
+Resumen del contrato entre la **API The Forge** (flujo legacy) y el **MCP AriadneSpecs**. La definición normativa del servidor está en el monorepo **Ariadne**: **`docs/mcp_server_specs.md`** (SPEC-MCP-001), **`docs/MCP_HTTPS.md`**, **`docs/MCP_AYUDA.md`**. Este archivo describe solo el **uso cliente** The Forge.
+
+**Flujo legacy completo (Workshop):** [../LEGACY-FLOW-AS-IS-MDD.md](../LEGACY-FLOW-AS-IS-MDD.md).
 
 ## Proyecto vs repo
 
@@ -23,7 +25,16 @@ Para `POST /projects/:projectId/legacy/start` con `{ description }`:
 
 4. **Sugerencias:** Tras obtener `questionsToRefine`, TheForge llama `ask_codebase` para rellenar respuestas sugeridas.
 
-5. **Generación de MDD:** TheForge enriquece el contexto con **`validate_before_edit`** (obligatorio antes de editar: impacto + contrato en un solo llamado) para los 3 primeros archivos a modificar; si no está disponible, fallback a `get_legacy_impact`. Además usa `get_file_content` (contenido de los 2 primeros archivos) y varias `ask_codebase`, para que el MDD refleje impacto real, contratos y código existente.
+5. **Generación de MDD (etapas 2+):** TheForge enriquece el contexto con **`validate_before_edit`** para los 3 primeros archivos a modificar; fallback `get_legacy_impact`; `get_file_content` y `ask_codebase` acotados al cambio.
+
+## Doc. partida y MDD AS-IS (etapa 1)
+
+| Paso | Endpoint The Forge | Herramienta MCP |
+|------|-------------------|-----------------|
+| MDD Inicial | `POST …/legacy/generate-codebase-doc` | **`generate_legacy_documentation`** (determinista; no `ask_codebase` prosa) |
+| MDD canónico | `POST …/legacy/generate-mdd` (`ordinal === 1`) | Usa `codebaseDoc` ya persistido; post-inyección §3–§5 en API |
+
+En Workshop: pestaña **MDD Inicial** = primera fila; pestaña **MDD → Regenerar** = segunda fila (no regenerar Ariadne desde MDD).
 
 ## Regla para toda la documentación legacy
 
@@ -44,9 +55,10 @@ El servidor Ariadne puede devolver con **`evidence_first`** un **JSON estructura
 
 | Uso | Herramienta |
 |-----|-------------|
+| **Doc. partida legacy (MDD Inicial)** | **`generate_legacy_documentation`** — JSON MDD 7 claves desde Falkor; TheForge normaliza a markdown multi-repo |
 | Listar proyectos (multi-root) al crear proyecto legacy | `list_known_projects` → `{ id, name, roots: [{ id, name?, branch? }] }` |
-| Inicio del flujo (archivos + preguntas) | `get_modification_plan` (primario), `ask_codebase` (fallback/sugerencias) |
-| Contexto para generar MDD | `ask_codebase` (múltiples); **`validate_before_edit`** (impacto + contrato por archivo); fallback `get_legacy_impact`; `get_file_content` (contenido de archivos a modificar) |
+| Inicio del flujo **cambio** (archivos + preguntas) | `get_modification_plan` (primario), `ask_codebase` (fallback/sugerencias) |
+| Contexto MDD **etapa 2+** | `ask_codebase`, **`validate_before_edit`**, `get_file_content`, `semantic_search` |
 | Refactor seguro (disponibles en TheForgeService) | `get_contract_specs`, `get_component_graph` (aún no usados en flujo automático). Catálogo completo: **HERRAMIENTAS-MCP-THEFORGE.md**. |
 
 ## Transporte
@@ -62,4 +74,4 @@ El servidor Ariadne puede devolver con **`evidence_first`** un **JSON estructura
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

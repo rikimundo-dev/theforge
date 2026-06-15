@@ -61,4 +61,4 @@ El backend usa **OpenRouter** (`OPENROUTER_API_KEY` o `AI_API_KEY` / `OPENAI_API
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

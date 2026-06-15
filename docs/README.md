@@ -9,6 +9,7 @@ Punto de entrada para humanos y agentes. **Arquitectura y producto (NotebookLM):
 | Agente IA implementando desde docs TheForge | [THEFORGE-DOC-CONSUMPTION-GUIDE.md](THEFORGE-DOC-CONSUMPTION-GUIDE.md) |
 || Visión técnica única (flujo, semáforo, costos, Docker) | [notebooklm/THEFORGE-INDEX.md](notebooklm/THEFORGE-INDEX.md) |
 | Etapas `Stage`, API aplanada, Falkor | [notebooklm/STAGE-SDD.md](notebooklm/STAGE-SDD.md) |
+| Legacy etapa 1 AS-IS (MDD Inicial → MDD) | [notebooklm/LEGACY-FLOW-AS-IS-MDD.md](notebooklm/LEGACY-FLOW-AS-IS-MDD.md) |
 | Cliente HTTP The Forge ↔ MCP AriadneSpecs | [notebooklm/integracion-theforge/README.md](notebooklm/integracion-theforge/README.md) |
 | Despliegue Coolify (override compose) | [DEPLOY-COOLIFY.md](DEPLOY-COOLIFY.md) |
 | Histórico / roadmaps no prioritarios | [archive/README.md](archive/README.md) |

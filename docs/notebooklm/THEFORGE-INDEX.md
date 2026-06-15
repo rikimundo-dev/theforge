@@ -34,7 +34,7 @@ flowchart LR
 
 **MCP AriadneSpecs vs Grafo SDD:** El MCP **AriadneSpecs** (código indexado del cliente) es **externo** al monorepo The Forge y se invoca por HTTP desde la API (`THEFORGE_MCP_URL`, JSON-RPC Streamable HTTP). Especificación del servidor: monorepo **Ariadne** (`MCP_HTTPS.md`, `mcp_server_specs.md`, `MCP_AYUDA.md`). El grafo documental SDD vive en **FalkorDB local** (`FALKORDB_SDD_URL`). No son intercambiables. Detalle: [MCP-ARQUITECTURA-THEFORGE.md](MCP-ARQUITECTURA-THEFORGE.md), [integracion-theforge/README.md](integracion-theforge/README.md). Histórico / roadmaps no prioritarios: [../archive/README.md](../archive/README.md).
 
-**Etapas como cambios legacy (mayo 2026):** Cada etapa de cambio en flujo legacy es un `Stage` independiente. FalkorDB sincroniza `:LegacyStage` con `DERIVED_FROM` al padre por ordinal. Stage 1 produce BRD/To-Be como "sistema actual". Etapas 2+ usan prompts incrementales desde el MDD de la etapa base. El chat legacy incluye desambiguación: ante ambigüedad, pregunta si es consulta o cambio nuevo. Ver `PLAN-BRD-TOBE-MANUAL-PROCESOS-THEFORGE.md`.
+**Etapas como cambios legacy (junio 2026):** Cada cambio es un `Stage` (`ordinal`). **Etapa 1** = línea base **AS-IS** (MDD Inicial vía Ariadne + MDD canónico con inyección §3–§5). **Etapas 2+** = MDD de **cambio** con línea base de la etapa anterior. FalkorDB sincroniza `:LegacyStage` con `DERIVED_FROM`. BRD/To-Be opcionales por etapa (`requireBrdTobeGate`). Detalle: [LEGACY-FLOW-AS-IS-MDD.md](LEGACY-FLOW-AS-IS-MDD.md), [PLAN-BRD-TOBE-MANUAL-PROCESOS-THEFORGE.md](PLAN-BRD-TOBE-MANUAL-PROCESOS-THEFORGE.md).
 
 **MCP servidor The Forge (`@theforge/mcp-server`):** paquete en `packages/mcp-server` que expone la **API Nest** como herramientas MCP (stdio o HTTP); auth `MCP_M2M_SECRET`. Documentación: [THEFORGE-MCP-SERVER.md](THEFORGE-MCP-SERVER.md). No sustituye a AriadneSpecs.
 
@@ -187,4 +187,4 @@ Modelos principales: **Project** (entregables globales: SPEC, Blueprint, API, In
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

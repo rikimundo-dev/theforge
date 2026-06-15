@@ -1,6 +1,6 @@
 # Etapas (Stage) y SDD — modelo mental
 
-**Propósito:** Una sola página con el mapa **Proyecto → Etapa → Constitución + coste → grafo Falkor**. Complementa [THEFORGE-INDEX.md](THEFORGE-INDEX.md) §7 y [MCP-ARQUITECTURA-THEFORGE.md](MCP-ARQUITECTURA-THEFORGE.md) §2 sin repetir Docker ni Relic.
+**Propósito:** Una sola página con el mapa **Proyecto → Etapa → Constitución + coste → grafo Falkor**. Complementa [THEFORGE-INDEX.md](THEFORGE-INDEX.md) §7 y [MCP-ARQUITECTURA-THEFORGE.md](MCP-ARQUITECTURA-THEFORGE.md) §2 sin repetir Docker ni AriadneSpecs.
 
 ---
 
@@ -78,4 +78,4 @@ Consultas desde agentes: `params.projectId` **o** `params.stageId` (mínimo uno)
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

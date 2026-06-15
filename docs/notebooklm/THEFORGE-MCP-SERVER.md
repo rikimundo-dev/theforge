@@ -2,7 +2,7 @@
 
 Paquete **`packages/mcp-server`** del monorepo The Forge: servidor **MCP propio** que expone la **API REST Nest** (`apps/api`) como herramientas MCP. **No es** el MCP **AriadneSpecs** (código indexado del cliente); ese sigue siendo externo (`THEFORGE_MCP_URL` → oráculo Ariadne). Este servidor es **The Forge sobre The Forge**: IDE u orquestador llama al MCP → JWT M2M → mismo backend que la web.
 
-**Última revisión:** 2026-05-22 (despliegue vía pnpm en monorepo).
+**Última revisión:** 2026-06-10 (despliegue vía pnpm en monorepo).
 
 ---
 
@@ -93,4 +93,4 @@ No mezclar URLs ni secretos: M2M de The Forge ≠ `MCP_AUTH_TOKEN` de Ariadne.
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

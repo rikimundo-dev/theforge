@@ -16,7 +16,7 @@ TheForge es la primera plataforma que convierte la especificación de software e
 
 **Hoy (sin TheForge):** El cliente opera como una **obra sin plano**: el producto se define en reuniones, correos y documentos sueltos. Los equipos interpretan distinto el alcance; los presupuestos se fijan por intuición o por "lo que salió el proyecto anterior". Los cambios en sistemas existentes se documentan a mano o no se documentan, y cada modificación es un riesgo de romper algo que nadie tiene mapeado. El resultado es retrabajo, desvíos de alcance y conversaciones difíciles con negocio o con el cliente final.
 
-**Con TheForge:** El cliente opera como una **constructora con planos aprobados y presupuesto cerrado**. La plataforma guía una entrevista estructurada (con IA) hasta producir un documento maestro de diseño (MDD) que actúa como Constitución: todo lo que se construye o se modifica se valida contra ese documento. El estado del proyecto es visible en todo momento (semáforo: rojo / amarillo / verde) y el costo en horas y pesos se actualiza en vivo. Para sistemas ya existentes, TheForge se integra con el grafo del código (Relic): el equipo describe el cambio, obtiene la lista real de archivos afectados y preguntas de negocio, y genera un MDD de cambio que mantiene trazabilidad y mitigación de errores. La agilidad no es "ir más rápido a ciegas", sino **ir más rápido con control**: menos retrabajo, menos sorpresas, escalabilidad operativa real.
+**Con TheForge:** El cliente opera como una **constructora con planos aprobados y presupuesto cerrado**. La plataforma guía una entrevista estructurada (con IA) hasta producir un documento maestro de diseño (MDD) que actúa como Constitución: todo lo que se construye o se modifica se valida contra ese documento. El estado del proyecto es visible en todo momento (semáforo: rojo / amarillo / verde) y el costo en horas y pesos se actualiza en vivo. Para sistemas ya existentes, TheForge se integra con el grafo del código (**AriadneSpecs** / MCP): el equipo describe el cambio, obtiene la lista real de archivos afectados y preguntas de negocio, y genera un MDD de cambio que mantiene trazabilidad y mitigación de errores. La agilidad no es "ir más rápido a ciegas", sino **ir más rápido con control**: menos retrabajo, menos sorpresas, escalabilidad operativa real.
 
 ---
 
@@ -26,7 +26,7 @@ TheForge es la primera plataforma que convierte la especificación de software e
 |-------------------|----------------------|--------------------|
 | **Constitución MDD + Semáforo en tiempo real** | Un solo documento maestro que gobierna alcance, arquitectura, datos, API, seguridad e infra; validación automática de completitud antes de construir. | Reducción de desvíos de alcance y retrabajo (estimable 20–35% en proyectos típicos); menos ciclos de "nos faltó esto". |
 | **Motor de estimación en MXN (horas × tarifas por rol)** | Presupuesto y horas visibles desde la especificación, sin depender de hojas de cálculo externas ni de juicio aislado. | Mejor precisión en ofertas y planificación; reducción del TCO por menor incertidumbre y menos sobrecostos por alcance no acordado. |
-| **Flujo Legacy con grafo de código (Relic)** | Documentar cambios en sistemas existentes con lista real de archivos afectados y preguntas de negocio; MDD de cambio alineado al código. | Aceleración del time-to-market en evolución de productos legacy; mitigación de errores por cambios no documentados o mal acotados. |
+| **Flujo Legacy con grafo de código (AriadneSpecs)** | Documentar sistemas existentes (etapa 1 AS-IS) y planificar cambios (etapas 2+) con archivos reales del índice y MDD alineado al código. | Aceleración del time-to-market en evolución legacy; mitigación de errores por cambios no documentados. |
 | **IA vía capa de adapters (OpenRouter)** | Mismo contrato de negocio; el tráfico sale por OpenRouter (modelos y precios centralizados en un hub). | Menos acoplamiento en servicios; cambios de modelo vía `OPENROUTER_*` sin tocar lógica de entrevista. |
 | **Orquestación multiagente (Clarificador, Arquitecto, Seguridad, Integración, Auditor)** | Generación guiada del MDD por especialistas virtuales con revisión y umbral de calidad (ej. 85%) antes de dar por cerrado. | Menor tiempo de redacción manual de especificaciones; mayor consistencia y menor tasa de errores en el documento base. |
 
@@ -35,7 +35,7 @@ TheForge es la primera plataforma que convierte la especificación de software e
 ## 4. Diferenciación y "Unfair Advantage"
 
 - **Especificación como producto, no como adjunto:** TheForge no es un chat con IA ni un generador de código suelto; el MDD es el artefacto central y todo (entregables, estimación, semáforo) depende de él. Eso crea una **barrera de entrada**: competidores que solo añaden IA a un IDE no tienen el flujo de gobernanza ni la trazabilidad costo-alcance.
-- **Legacy como ciudadano de primera clase:** La integración con el grafo de código (Relic) para proyectos existentes permite planificar y documentar cambios con precisión (archivos reales, preguntas de negocio). La competencia suele enfocarse solo en proyectos verdes; aquí el **time-to-value en sistemas ya desplegados** es un diferenciador claro.
+- **Legacy como ciudadano de primera clase:** Integración **AriadneSpecs** (MCP + doc. partida determinista + MDD AS-IS por etapa). Competencia suele enfocarse solo en greenfield; **time-to-value en sistemas desplegados** es diferenciador.
 - **Estimación y semáforo en vivo:** El costo en MXN y el estado (rojo/amarillo/verde) se actualizan durante la elaboración del MDD. El comprador ve el impacto de cada decisión de alcance de inmediato; no hay "sorpresa" al final del proceso. Eso mejora la confianza y reduce las negociaciones conflictivas.
 - **Despliegue en un solo contenedor (Dokploy-ready):** Operación simplificada; el cliente puede tener la plataforma funcionando con mínima infraestructura, reduciendo TCO de adopción y tiempo de implementación.
 
@@ -56,7 +56,7 @@ TheForge es la primera plataforma que convierte la especificación de software e
 Todo lo descrito anteriormente está soportado por la implementación actual de TheForge:
 
 - El MDD de 7 secciones, el semáforo (rojo/amarillo/verde) y el motor de estimación en MXN existen y se calculan en tiempo real a partir del contenido del proyecto.
-- El flujo legacy con integración Relic (plan de modificación, archivos a modificar, preguntas de afinación, generación de MDD de cambio) está implementado; la lista de archivos y preguntas proviene del grafo de código cuando el MCP correspondiente está disponible.
+- El flujo legacy con **AriadneSpecs** (MDD Inicial, MDD AS-IS etapa 1, plan de modificación, MDD de cambio, entregables unificados) está implementado cuando `THEFORGE_MCP_URL` está configurado.
 - La orquestación multiagente (Manager, Clarificador, Arquitecto, Seguridad, Integración, Auditor) y el umbral de calidad (ej. 85%) para ceder al usuario están implementados en el backend.
 - El LLM está acotado a **OpenRouter** (adapter + `llm-config`); no hay lógica de entrevista acoplada al detalle del proveedor remoto.
 - El despliegue en un solo contenedor (Dokploy) está documentado y soportado en el repositorio.
@@ -65,4 +65,4 @@ La postura es audaz en valor de negocio, pero **100% alineada con lo que el cód
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

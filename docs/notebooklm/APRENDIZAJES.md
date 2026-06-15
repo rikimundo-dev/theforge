@@ -89,6 +89,18 @@ _Rellenar: ejemplos de "pedí X en una frase y el agente hizo Y"; p. ej. "Para c
 | Usuario confirma plan con "sí" y el Arquitecto no aplicaba cambios (ej. añadir aplicaciones al ER)              | Al confirmar "¿Ejecutar este plan?" no se guardaba directiva; el Arquitecto no recibía "qué pidió el usuario" y podía recibir "no modifiques §3".                                                                                                                                                                                                                                   | Manager: al aprobar plan setear \`acceptedProposalDirective\` con \`getLastSubstantiveUserMessage(state)\`. Arquitecto: detectar "afecta modelo" (diagrama, aplicaciones, relación, permisos, roles); \`hasExplicitRequirements\` = true si directiva afecta modelo; \`allowSection3\` = true si \`affectsModel\`.                                                                                                                                                                                                                                                                                                                         |
 | Plan MDD agents: directiva equivocada, conflicto de instrucciones, Formatter pisaba draft                       | \`getLastSubstantiveUserMessage\` devolvía "¿Ejecutar este plan?"; "No modifiques §3" se inyectaba antes que ACCIÓN REQUERIDA; Formatter reemplazaba draft del Arquitecto por render de \`mddStructured\` antiguo.                                                                                                                                                                  | **B:** Preferir bloque con indicios de requisito de diseño (aplicaciones, diagrama, entidad, roles…) y excluir preguntas del sistema. **D:** \`planUserIntent\` en estado; setear al crear \`pendingPlanApproval\`, usar al confirmar. **A/C:** Prioridad inviolable en prompt y primera línea de contexto; no inyectar "No modifiques §3" cuando \`userAskedForModelOrApiChanges\`. **E:** COSTAR-A/RISEN (Objective, Narrowing, Answer). **F:** Clarificador: \`clarifiedScope\` debe listar entidades explícitas. **G:** Formatter: si \`acceptedProposalDirective\` y draft sustancial, no reemplazar por \`mddStructuredToMarkdown\`. |
 
+### Legacy AS-IS y MDD (junio 2026)
+
+| Síntoma | Causa | Fix |
+|---------|-------|-----|
+| Regenerar MDD llamaba Ariadne | UI enrutaba etapa 1 a `generate-codebase-doc` | PR #318 — pestaña MDD → `generate-mdd` |
+| §3 listas «N adicionales» | LLM resumía entidades | PR #319 — inyección §3–§4 desde `codebaseDoc` |
+| §5 «Además, servicios…» | LLM resumía servicios | PR #320 — inyección §5 |
+| §1 lenguaje de modificación en etapa 1 | `description` activaba modo cambio | PR #317 — `isLegacyBaselineStage` |
+| Bulk entregables ≠ regen individual | Pipelines distintos | PR #315/#316 |
+
+Ver [LEGACY-FLOW-AS-IS-MDD.md](LEGACY-FLOW-AS-IS-MDD.md).
+
 ---
 
 ## 5. Pivotes
@@ -216,6 +228,7 @@ _Rellenar con datos reales._
 | Recurso             | Enlace                                                                                      |
 | ------------------- | ------------------------------------------------------------------------------------------- |
 | Índice              | [THEFORGE-INDEX.md](THEFORGE-INDEX.md)                                                    |
+| Legacy AS-IS        | [LEGACY-FLOW-AS-IS-MDD.md](LEGACY-FLOW-AS-IS-MDD.md)                                      |
 | Docs / archivo      | [archive/README.md](archive/README.md) — roadmaps y análisis no prioritarios              |
 | Plan MDD structured | [archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md](archive/PLAN-MDD-STRUCTURED-OUTPUT-JSON2MD.md) |
 | Plan Fase 0         | [PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md](PLAN-FASE0-SCRAPING-DEEP-RESEARCH.md)                |
@@ -224,4 +237,4 @@ _Rellenar con datos reales._
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

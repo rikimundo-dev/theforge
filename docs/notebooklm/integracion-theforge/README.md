@@ -14,7 +14,7 @@ Documentación para usar el conocimiento indexado por **AriadneSpecs** (grafo de
 | **ARIADNE-CONSULTA-DESDE-THEFORGE.md** | Reglas prácticas: timeout, `projectId`, `semantic_search` vs `ask_codebase`, suelo de `limit`, doc. partida secuencial. |
 | **../THEFORGE-MCP-SERVER.md** | MCP **local** del monorepo (`@theforge/mcp-server`): API Nest como herramientas; no es AriadneSpecs. |
 
-Flujo legacy detallado (histórico): [../../archive/PLAN-FLUJO-LEGACY-V2.md](../../archive/PLAN-FLUJO-LEGACY-V2.md).
+Flujo legacy detallado: [../LEGACY-FLOW-AS-IS-MDD.md](../LEGACY-FLOW-AS-IS-MDD.md). Histórico: [../../archive/PLAN-FLUJO-LEGACY-V2.md](../../archive/PLAN-FLUJO-LEGACY-V2.md).
 
 **Monorepo The Forge:** gestor **pnpm** (`pnpm-workspace.yaml`). Desarrollo: `pnpm install` en la raíz → `pnpm run dev:local` o `pnpm run dev`. Ver [../README.md](../README.md).
 
@@ -28,4 +28,4 @@ En la entrada se distingue **proyecto nuevo** vs **legacy (TheForge)**; los proy
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*

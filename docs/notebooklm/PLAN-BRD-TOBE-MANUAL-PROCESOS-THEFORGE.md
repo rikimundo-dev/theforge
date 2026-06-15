@@ -1,13 +1,8 @@
 # Plan de implementación: BRD, Manual To-Be y As-Is en The Forge
 
-Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be en greenfield; As-Is + BRD/To-Be antes del MDD de cambio en legacy), alineado con el stack actual (NestJS, Prisma, FalkorDB, `AgentSupervisorService`, `AiOrchestratorService`, `LegacyCoordinatorService`, MCP Ariadne/TheForge).
+> **Estado junio 2026:** Gates BRD/To-Be (G0–G2, L1) implementados. **Legacy etapa 1** no depende de To-Be: flujo `codebaseDoc` + `generate-mdd` + inyección §3–§5 — [LEGACY-FLOW-AS-IS-MDD.md](LEGACY-FLOW-AS-IS-MDD.md). To-Be manual legacy retirado (Jul 2026). Falkor F1/F2 pendientes baja prioridad. Etapas: `DERIVED_FROM`, dual-write, chat desambiguación consulta vs cambio.
 
-**Estado:** ✅ **Completado** (mayo 2026) — G0/G1/G2/L1/L2 implementados en código.  
-- Etapas como cambios legacy: FalkorDB sync LegacyStage con DERIVED_FROM, dual-write legacy→stage, prompts incrementales.  
-- Stage 1: BRD/To-Be como "sistema actual".  
-- Chat legacy con desambiguación consulta vs cambio.  
-- Botón "+ Nueva etapa de cambio" en UI Workshop.  
-- F1/F2 (FalkorDB ingesta extendida) pendientes de baja prioridad.
+Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be en greenfield; evidencia MCP + BRD antes del MDD de cambio en legacy), alineado con el stack actual (NestJS, Prisma, FalkorDB, `AgentSupervisorService`, `AiOrchestratorService`, `LegacyCoordinatorService`, MCP Ariadne/TheForge).
 
 ---
 
@@ -16,7 +11,7 @@ Documento de trabajo para integrar **fases previas al MDD** (BRD + Manual To-Be 
 | Objetivo             | Descripción                                                                                                                                                                                                              |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Greenfield**       | Tras la entrevista proactiva, el sistema recoge **BRD** (problema, KPIs, alcance de negocio) y **Manual To-Be** (lógica deseada, diagramas de negocio) **antes** de autorizar redacción técnica del MDD §1–§7.           |
-| **Legacy**           | Nutrir **As-Is** desde evidencia MCP (`ask_codebase`, `semantic_search`, grafo); definir **BRD de cambio** + **To-Be**; luego sintetizar **MDD de cambio** cruzando evidencia + reglas.                                  |
+| **Legacy**           | **Etapa 1:** MDD Inicial (Ariadne) + MDD AS-IS. **Etapas 2+:** BRD de cambio + plan Modificación → MDD de cambio.                                  |
 | **Anti-alucinación** | Reutilizar el patrón “**no LLM sin insumo mínimo**” (ej. casos de uso sin MDD en `AiService.generateUseCases`): **gates** explícitos antes de Manager MDD / pipeline LangGraph y antes de cascada legacy de entregables. |
 
 **Principio YAGNI:** versionar BRD/To-Be como markdown + estado de aprobación antes de modelar grafos ricos; ampliar Falkor cuando el flujo HITL esté estable.
@@ -140,4 +135,4 @@ _Última actualización: alineado a fuente única `Stage`; priorizar L1/L2 antes
 
 ---
 
-*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-05-22 (pnpm). Rutas relativas al monorepo `theforge`.*
+*Corpus «The Forge - by Kreo» — NotebookLM sync 2026-06-10 (pnpm). Rutas relativas al monorepo `theforge`.*
