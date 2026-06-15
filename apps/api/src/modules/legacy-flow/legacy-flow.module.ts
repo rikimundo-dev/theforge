@@ -14,12 +14,14 @@ import { ResolveChangeToFilesService } from "./resolve-change-to-files.service.j
 import { CheckNavigationImpactService } from "./check-navigation-impact.service.js";
 import { LegacyTransitionService } from "./legacy-transition.service.js";
 import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strategy/legacy-deliverables-strategy.service.js";
+import { LegacyDeliverablesQueueService } from "./legacy-deliverables-queue.service.js";
 
 @Module({
   imports: [PrismaModule, AiModule, ProjectsModule, TheForgeModule, AiAnalysisModule, AgentSupervisorModule],
   controllers: [LegacyFlowController, ChangeInterviewController],
   providers: [
     LegacyCoordinatorService,
+    LegacyDeliverablesQueueService,
     LegacyReviewerService,
     ChangeInterviewService,
     ResolveChangeToFilesService,

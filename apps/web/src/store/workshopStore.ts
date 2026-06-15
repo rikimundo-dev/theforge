@@ -21,7 +21,7 @@ import {
   buildPlanApprovalChatContents,
   isPlanApprovalResumeMessage,
 } from "../utils/planApprovalChat";
-import { deliverableStepLabelsForComplexity } from "@theforge/shared-types";
+import { deliverableStepLabelsForComplexity, DELIVERABLE_STEP_LABELS } from "@theforge/shared-types";
 import { listGovernancePatternOptions } from "@theforge/shared-types/mdd-governance-patterns";
 import {
   orchestratorDocSnapshot,
@@ -3595,11 +3595,75 @@ if (prog && prog.step && prog.step !== "done") {
 
   legacyGenerateDeliverables: async (projectId) => {
     if (!projectId?.trim()) return false;
-    set({ loading: true, loadingReason: "legacy-deliverables", error: null });
+    const pid = projectId.trim();
+    const stageId = get().activeStageId?.trim() || undefined;
+    const complexity = get().project?.complexity ?? "HIGH";
+    const allStepLabels = deliverableStepLabelsForComplexity(complexity);
+
+    set({
+      loading: true,
+      loadingReason: "legacy-deliverables",
+      error: null,
+      agentProgress: allStepLabels.map((label) => ({
+        agent: "Entregables",
+        message: `⚪ ${label} — Generando…`,
+        step: label,
+        status: "generando" as const,
+      })),
+      cascadeTotal: allStepLabels.length,
+      cascadeCompleted: 0,
+    });
+
+    const pollLegacyDeliverablesJob = async (jobId: string): Promise<boolean> => {
+      const deadline = Date.now() + 90 * 60 * 1000;
+      const completedSteps = new Set<string>();
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const st = await apiFetch(`${API_BASE}/projects/${pid}/legacy/deliverables-jobs/${jobId}`);
+        if (!st.ok) {
+          const err = await st.json().catch(() => ({}));
+          throw new Error((err as { message?: string }).message ?? "Error al consultar cola legacy");
+        }
+        const j = (await st.json()) as {
+          status: string;
+          progress?: { step?: string; index?: number; total?: number };
+          result?: { ok?: boolean; lastDeliverablesDebug?: LegacyDeliverablesDebugReport };
+          error?: string;
+        };
+        if (j.status === "failed") {
+          throw new Error(j.error ?? "Cascada legacy fallida");
+        }
+        if (j.status === "completed") {
+          if (j.result?.lastDeliverablesDebug) {
+            set({ lastLegacyDeliverablesDebug: j.result.lastDeliverablesDebug });
+          }
+          return true;
+        }
+        const prog = j.progress;
+        if (prog?.step && prog.step !== "preflight") {
+          const label =
+            DELIVERABLE_STEP_LABELS[prog.step as keyof typeof DELIVERABLE_STEP_LABELS] ?? prog.step;
+          if (!completedSteps.has(label)) {
+            completedSteps.add(label);
+            set((s) => ({
+              agentProgress: s.agentProgress.map((item) =>
+                item.step === label
+                  ? { ...item, message: `⚡ ${label} — Generando…`, status: "generando" }
+                  : item,
+              ),
+              cascadeCompleted: Math.min(completedSteps.size, allStepLabels.length),
+            }));
+          }
+        }
+      }
+      throw new Error("Tiempo de espera agotado en cascada legacy (90 min). Revisa el proyecto por si hubo avance parcial.");
+    };
+
     try {
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/legacy/generate-deliverables`, {
+      const r = await apiFetch(`${API_BASE}/projects/${pid}/legacy/generate-deliverables`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(stageId ? { stageId } : {}),
       });
       if (!r.ok) {
         const err = (await r.json().catch(() => ({}))) as {
@@ -3616,19 +3680,54 @@ if (prog && prog.step && prog.step !== "done") {
             : "";
         throw new Error((err.message ?? "Error al generar entregables") + suffix);
       }
-      const data = (await r.json()) as { ok?: boolean; lastDeliverablesDebug?: LegacyDeliverablesDebugReport };
-      if (import.meta.env.DEV && data.lastDeliverablesDebug) {
-        console.debug("[LegacyDeliverables]", data.lastDeliverablesDebug);
+      const data = (await r.json()) as {
+        queued?: boolean;
+        jobId?: string;
+        ok?: boolean;
+        lastDeliverablesDebug?: LegacyDeliverablesDebugReport;
+      };
+
+      if (data.queued === true && typeof data.jobId === "string") {
+        await pollLegacyDeliverablesJob(data.jobId);
+      } else {
+        if (import.meta.env.DEV && data.lastDeliverablesDebug) {
+          console.debug("[LegacyDeliverables]", data.lastDeliverablesDebug);
+        }
+        set({ lastLegacyDeliverablesDebug: data.lastDeliverablesDebug ?? null });
       }
-      set({ lastLegacyDeliverablesDebug: data.lastDeliverablesDebug ?? null });
-      const proj = await get().fetchProject(projectId);
-      set({ loading: false, loadingReason: null, error: null });
+
+      const proj = await get().fetchProject(pid);
+      await get().fetchEstimation(pid).catch(() => {});
+      set({
+        loading: false,
+        loadingReason: null,
+        error: null,
+        agentProgress: [],
+        cascadeCompleted: allStepLabels.length,
+      });
       return proj != null;
     } catch (e) {
+      try {
+        const project = await get().fetchProject(pid);
+        const debug = project?.legacyFlowState?.lastDeliverablesDebug;
+        const partial =
+          debug?.steps?.some((s) => typeof s.outChars === "number" && s.outChars > 48) ?? false;
+        if (partial || (project?.specContent?.trim()?.length ?? 0) > 48) {
+          set({
+            lastLegacyDeliverablesDebug: debug ?? null,
+            loading: false,
+            loadingReason: null,
+            error: null,
+            agentProgress: [],
+          });
+          return true;
+        }
+      } catch {
+        /* fetchProject recovery failed */
+      }
       const msg = e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
-      // Log error to console for debugging
       console.error("[workshopStore] legacyGenerateDeliverables error:", msg, e);
-      set({ error: msg, loading: false, loadingReason: null });
+      set({ error: msg, loading: false, loadingReason: null, agentProgress: [] });
       return false;
     }
   },

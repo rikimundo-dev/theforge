@@ -1324,6 +1324,9 @@ export class LegacyCoordinatorService {
   async generateDeliverables(
     projectId: string,
     stageId?: string,
+    options?: {
+      onProgress?: (p: { step: string; index: number; total: number }) => void;
+    },
   ): Promise<{ ok: boolean; lastDeliverablesDebug: LegacyDeliverablesDebugReport }> {
     const report: LegacyDeliverablesDebugReport = {
       startedAt: new Date().toISOString(),
@@ -1858,7 +1861,9 @@ export class LegacyCoordinatorService {
     }
 
     let didRunLlmDeliverableStep = false;
-    for (const kind of deliverablesToRun) {
+    for (let i = 0; i < deliverablesToRun.length; i++) {
+      const kind = deliverablesToRun[i]!;
+      options?.onProgress?.({ step: kind, index: i, total: deliverablesToRun.length });
       if (kind === "mdd_canonical") {
         pushStep({ kind: "mdd_canonical", durationMs: 0, ok: true, detail: "noop" });
         continue;
