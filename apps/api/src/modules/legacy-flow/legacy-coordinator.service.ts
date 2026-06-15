@@ -52,7 +52,11 @@ import {
   extractBrdFromLlmResponse,
   type BrdExtractFailure,
 } from "../ai/utils/brd-extract.util.js";
-import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.util.js";
+import {
+  BRD_BUSINESS_INVENTORY_SYSTEM,
+  buildLegacyBrdBusinessInventoryPrompt,
+  prepareLegacyCodebaseDocForBrdPrompt,
+} from "../ai/utils/brd-legacy-source.util.js";
 import {
   BRD_GENERATION_SYSTEM,
   buildBrdUserPrompt,
@@ -637,13 +641,34 @@ export class LegacyCoordinatorService {
       } catch { /* non-critical */ }
     }
     const isInitialLegacyStage = !baselineBrdBlock;
-    const { text: codebaseChunk, truncated: sourceTruncated } =
-      truncateSourceDocForBrdPrompt(codebaseDoc);
+    const sourcePrep = prepareLegacyCodebaseDocForBrdPrompt(codebaseDoc);
+    let brdSourceDocument = sourcePrep.text;
+    let sourceTruncated = sourcePrep.truncated;
+
+    if (isInitialLegacyStage && sourcePrep.needsInventoryPass) {
+      console.log(
+        `[suggestBrdFromCodebaseDoc] inventario previo (truncated=${sourcePrep.truncated} entities=${sourcePrep.entityCount} services=${sourcePrep.serviceCount} len=${sourcePrep.text.length})`,
+      );
+      const inventoryRaw = await this.ai.generateResponse(
+        buildLegacyBrdBusinessInventoryPrompt(sourcePrep.text),
+        [],
+        { systemPrompt: BRD_BUSINESS_INVENTORY_SYSTEM },
+      );
+      const inventory = cleanDocumentContent(inventoryRaw ?? "").trim();
+      if (inventory.length >= 400) {
+        brdSourceDocument =
+          "## Inventario de negocio (extracción previa — cubrir TODO en el BRD)\n\n" +
+          inventory +
+          "\n\n---\n\n## Documento de partida (referencia)\n\n" +
+          sourcePrep.text.slice(0, Math.min(sourcePrep.text.length, 24_000));
+        sourceTruncated = sourceTruncated || sourcePrep.text.length > 24_000;
+      }
+    }
 
     const brdPromptBase = buildBrdUserPrompt({
       mode: isInitialLegacyStage ? "legacy-as-is" : "legacy-change",
       sourceLabel: "DOCUMENTO",
-      sourceDocument: codebaseChunk,
+      sourceDocument: brdSourceDocument,
       baselineBrdBlock: baselineBrdBlock || undefined,
     });
 

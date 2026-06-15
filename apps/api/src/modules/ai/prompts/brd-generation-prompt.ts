@@ -127,6 +127,8 @@ function modePreamble(mode: BrdGenerationMode): string {
     case "legacy-as-is":
       return (
         "A partir del **MDD inicial / documentación del codebase** siguiente, genera el **BRD del sistema actual** (no es documento de cambio).\n\n" +
+        "**Cobertura exhaustiva (obligatorio):** cada entidad, servicio de negocio y capacidad listada en el inventario o documento fuente debe reflejarse en §3 Capacidades Funcionales, §5 Reglas/UAT o glosario §5 — **sin omitir dominios** por resumir. " +
+        "Si el fuente documenta decenas de módulos (p. ej. campañas, medios, facturación), el BRD debe tener subsecciones ### por dominio, no un párrafo genérico.\n\n" +
         "Refleja fielmente las capacidades de negocio documentadas: usuarios, procesos, integraciones en términos comerciales. " +
         "Pain Points: dolores que el sistema resuelve y los que aún persisten. **No copies** endpoints ni esquemas del MDD al BRD.\n\n"
       );

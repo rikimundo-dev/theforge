@@ -43,6 +43,7 @@ Si el fuente menciona estos detalles, **absorbe la intención de negocio** y des
 - **Contexto y objetivos:** problema cuantificado, objetivos comerciales medibles, costo de la inacción (tiempo, dinero, riesgo).
 - **Usuarios y casos de uso:** roles de negocio (comercial, trade, gerencia, operaciones), no roles técnicos; casos en formato actor → necesidad → resultado de negocio.
 - **Capacidades funcionales:** procesos de negocio (cotizar, aprobar descuento, sincronizar costos), **no** módulos de software ni nombres de endpoints.
+- **Sistemas legacy / AS-IS:** si el fuente documenta muchas entidades o servicios, el BRD debe **mapear cada dominio** con subsección ### propia y al menos un criterio UAT por capacidad crítica — **prohibido** un BRD de 2 páginas para un ERP de decenas de módulos.
 - **Reglas de operación y políticas:** jerarquías de precios, márgenes, quién aprueba qué, qué queda bloqueado hasta autorización.
 - **Definición de entidades de negocio:** glosario corporativo (Costo Base, Costo Real, Margen Teórico, Lista de Precios Dinámica, etc.) — qué significan para la empresa, sin mencionar tablas.
 - **Criterios de aceptación de negocio (UAT):** escenarios comerciales verificables (ej. «El sistema debe impedir que un vendedor cotice por debajo del nivel 5 de descuento sin autorización de gerencia»).
