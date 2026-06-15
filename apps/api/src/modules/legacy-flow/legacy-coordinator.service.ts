@@ -429,6 +429,17 @@ function normalizeFilesToModify(raw: LegacyFlowState["filesToModify"], defaultRe
   );
 }
 
+/** Respuesta de `POST …/legacy/generate-mdd` (ligera por defecto; evita multi‑MB en el wire). */
+export type LegacyGenerateMddResponse = {
+  ok: true;
+  persisted: true;
+  mddLength: number;
+  wordCount: number;
+  stageId?: string;
+  /** Solo si `?includeContent=true` (MCP/debug). */
+  mddContent?: string;
+};
+
 /**
  * Coordinador del flujo legacy: orquesta TheForge (archivos + preguntas), respuestas del usuario,
  * generación del MDD de cambio y cascada de entregables (SPEC → Arquitectura → … → Tasks).
@@ -816,11 +827,18 @@ export class LegacyCoordinatorService {
         data: { legacyFlowState: nextLegacy as object },
       });
     }
-    const response: { codebaseDoc: string; mddContent?: string } = { codebaseDoc };
+    const response: {
+      codebaseDoc: string;
+      mddGenerated?: boolean;
+      mddLength?: number;
+      mddWordCount?: number;
+    } = { codebaseDoc };
     if (isLegacyAutoGenerateMddAfterCodebaseDocEnabled() && codebaseDoc.trim().length >= 300) {
       try {
-        const mdd = await this.generateMdd(projectId, stageId?.trim());
-        response.mddContent = mdd.mddContent;
+        const mdd = await this.generateMdd(projectId, stageId?.trim(), { includeContent: false });
+        response.mddGenerated = true;
+        response.mddLength = mdd.mddLength;
+        response.mddWordCount = mdd.wordCount;
       } catch (err) {
         this.logger.warn(
           `generateCodebaseDoc: auto generateMdd falló (LEGACY_AUTO_GENERATE_MDD_AFTER_CODEBASE_DOC=1): ${
@@ -1010,10 +1028,14 @@ export class LegacyCoordinatorService {
   /**
    * Genera el MDD de cambio a partir de la descripción, archivos, respuestas del usuario y contexto AriadneSpecs (múltiples ask_codebase).
    * Persiste el resultado en mddContent del proyecto.
+   * Por defecto la respuesta HTTP es **ligera** (metadatos); el cliente debe `GET /projects/:id` para el markdown.
    * @param projectId - ID del proyecto.
-   * @returns Contenido Markdown del MDD generado.
    */
-  async generateMdd(projectId: string, stageId?: string): Promise<{ mddContent: string }> {
+  async generateMdd(
+    projectId: string,
+    stageId?: string,
+    options?: { includeContent?: boolean },
+  ): Promise<LegacyGenerateMddResponse> {
     const { project, theforgeId } = await this.getLegacyProject(projectId);
     const gateStage = stageId?.trim()
       ? (await this.prisma.stage.findUnique({ where: { id: stageId.trim() } })) ?? await this.resolveLegacyGateStage(projectId)
@@ -1244,7 +1266,17 @@ export class LegacyCoordinatorService {
       mddContent: cleaned,
       ...(gateStage?.id ? { stageId: gateStage.id } : {}),
     });
-    return { mddContent: cleaned };
+    const response: LegacyGenerateMddResponse = {
+      ok: true,
+      persisted: true,
+      mddLength: cleaned.length,
+      wordCount: cleaned.trim() ? cleaned.trim().split(/\s+/).length : 0,
+      ...(gateStage?.id ? { stageId: gateStage.id } : {}),
+    };
+    if (options?.includeContent) {
+      response.mddContent = cleaned;
+    }
+    return response;
   }
 
   /** Persiste `lastDeliverablesDebug` en `legacyFlowState` (no lanza si Prisma falla). */

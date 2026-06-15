@@ -3445,17 +3445,36 @@ if (prog && prog.step && prog.step !== "done") {
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message ?? "Error al generar MDD");
       }
-      const data = (await r.json()) as { mddContent: string };
-      await get().fetchProject(projectId);
+      await r.json().catch(() => ({}));
+      const project = await get().fetchProject(projectId);
+      const mddContent = project?.mddContent ?? "";
       set({
-        mddContent: data.mddContent ?? get().project?.mddContent ?? "",
+        mddContent,
         loading: false,
         loadingReason: null,
         error: null,
       });
-      return data;
+      return mddContent.trim() ? { mddContent } : null;
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "Error al generar MDD legacy", loading: false, loadingReason: null });
+      try {
+        const project = await get().fetchProject(projectId);
+        if (project?.mddContent?.trim()) {
+          set({
+            mddContent: project.mddContent,
+            loading: false,
+            loadingReason: null,
+            error: null,
+          });
+          return { mddContent: project.mddContent };
+        }
+      } catch {
+        /* persist recovery failed */
+      }
+      set({
+        error: friendlyFetchError(e),
+        loading: false,
+        loadingReason: null,
+      });
       return null;
     }
   },

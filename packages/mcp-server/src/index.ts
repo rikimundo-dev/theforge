@@ -648,10 +648,18 @@ const TOOLS: Tool[] = [
   },
   {
     name: "legacy_generate_mdd",
-    description: "Genera MDD de cambio desde el estado del flujo legacy",
+    description:
+      "Genera MDD legacy (persiste en stage). Respuesta ligera por defecto; includeContent=true devuelve markdown completo.",
     inputSchema: {
       type: "object",
-      properties: { projectId: { type: "string" } },
+      properties: {
+        projectId: { type: "string" },
+        stageId: { type: "string" },
+        includeContent: {
+          type: "boolean",
+          description: "Si true, añade ?includeContent=true (respuesta grande; preferir get_project después)",
+        },
+      },
       required: ["projectId"],
     },
   },
@@ -1311,7 +1319,12 @@ const handlers: Record<string, Handler> = {
     );
   },
   async legacy_generate_mdd(args) {
-    return JSON.stringify(await apiPost(`/projects/${args.projectId}/legacy/generate-mdd`));
+    const query = args.includeContent === true ? "?includeContent=true" : "";
+    const body: Record<string, unknown> = {};
+    if (args.stageId) body.stageId = args.stageId;
+    return JSON.stringify(
+      await apiPost(`/projects/${args.projectId}/legacy/generate-mdd${query}`, body),
+    );
   },
   async legacy_generate_codebase_doc(args) {
     const body: Record<string, unknown> = {};

@@ -71,7 +71,7 @@
  *
  * - **`legacy_start`**: `POST /projects/:id/legacy/start`
  * - **`legacy_answer`**: `POST /projects/:id/legacy/answer`
- * - **`legacy_generate_mdd`**: `POST /projects/:id/legacy/generate-mdd`
+ * - **`legacy_generate_mdd`**: `POST /projects/:id/legacy/generate-mdd` (stageId, `?includeContent=true` opcional)
  * - **`legacy_generate_codebase_doc`**: `POST /projects/:id/legacy/generate-codebase-doc`
  * - **`legacy_generate_deliverables`**: `POST /projects/:id/legacy/generate-deliverables`
  * - **`legacy_update_codebase_doc`**: `PATCH /projects/:id/legacy/codebase-doc`
@@ -90,4 +90,4 @@
  * Revisión del catálogo; incrementar si cambia el conjunto de tools.
  * @constant
  */
-export const MCP_THEFORGE_TOOLS_DOC_REVISION = 2;
+export const MCP_THEFORGE_TOOLS_DOC_REVISION = 3;
