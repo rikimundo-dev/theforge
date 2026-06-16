@@ -338,9 +338,13 @@ function legacyMddCodebaseDocPromptPathCap(): number {
  * Compacta `codebaseDoc` para prompts LLM: preserva secciones estructuradas (entidades, API, resumen)
  * y recorta solo el volcado masivo de `### Rutas de evidencia`.
  */
-export function compactCodebaseDocForMddPrompt(md: string, maxChars?: number): string {
+export function compactCodebaseDocForMddPrompt(
+  md: string,
+  maxChars?: number,
+  evidencePathCap?: number,
+): string {
   const limit = maxChars ?? legacyMddCodebaseDocPromptMaxChars();
-  const pathCap = legacyMddCodebaseDocPromptPathCap();
+  const pathCap = evidencePathCap ?? legacyMddCodebaseDocPromptPathCap();
   const sectionRe =
     /(### Rutas de evidencia\n\n)([\s\S]*?)(?=\n### |\n---\n|\n## Repositorio:|$)/g;
   let compact = md.replace(sectionRe, (_match, head: string, body: string) => {

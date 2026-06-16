@@ -6,6 +6,7 @@ import type { Logger } from "@nestjs/common";
 import type { DeliverableKind } from "@theforge/shared-types";
 import type { AiService } from "../ai/ai.service.js";
 import type { LegacyGenerateOptions } from "../ai/ai.service.js";
+import { appendLegacyBaselineDetailPrompt } from "../ai/utils/legacy-baseline-detail.util.js";
 import { BLUEPRINT_PROMPT } from "../ai/prompts/blueprint-prompt.js";
 import { SPEC_PROMPT } from "../ai/prompts/spec-prompt.js";
 import { ARCHITECTURE_PROMPT } from "../ai/prompts/architecture-prompt.js";
@@ -277,13 +278,16 @@ export async function trySectionMergeDeliverable(
     }
 
     const userPrompt = prependTheForge(
-      `**Modo ventana MDD (${g.id}):** Genera un **fragmento markdown** del entregable que cubra solo lo deducible de las secciones **§${g.sections.join(", §")}** del MDD.\n` +
-        "No repitas un documento completo si el extracto es parcial. Usa subtítulos `###` bajo el bloque.\n" +
-        "Si no aplica contenido, responde exactamente: `Sin contenido aplicable.`\n\n" +
-        "**Extracto MDD:**\n---\n" +
-        window +
-        "\n---" +
-        tail,
+      appendLegacyBaselineDetailPrompt(
+        `**Modo ventana MDD (${g.id}):** Genera un **fragmento markdown** del entregable que cubra solo lo deducible de las secciones **§${g.sections.join(", §")}** del MDD.\n` +
+          "No repitas un documento completo si el extracto es parcial. Usa subtítulos `###` bajo el bloque.\n" +
+          "Si no aplica contenido, responde exactamente: `Sin contenido aplicable.`\n\n" +
+          "**Extracto MDD:**\n---\n" +
+          window +
+          "\n---" +
+          tail,
+        legacyOpts?.legacyBaselineStage,
+      ),
       legacyOpts,
     );
 
@@ -329,6 +333,13 @@ export async function trySectionMergeDeliverable(
     "\n\n" +
     cfg.mergeIntro +
     bodies.map((b) => stripLeadingH1(b, cfg.h1Pattern)).join("\n\n---\n\n");
+
+  if (/Sin contenido aplicable\.?/i.test(assembled)) {
+    logger.warn(
+      `[LegacyDeliverables] section_merge rejected kind=${kind}: empty block(s) in assembled output`,
+    );
+    return null;
+  }
 
   let mech = mechanicalVerify(kind, assembled, cfg);
   let confOk: boolean | undefined;

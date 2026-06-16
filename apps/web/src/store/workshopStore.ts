@@ -414,6 +414,18 @@ export interface LegacySectionMergeTrace {
   finalChars: number;
 }
 
+/** Cobertura heurística servicios §5 vs flujos (legacy etapa 1). */
+export interface LogicFlowsSection5CoverageReport {
+  totalServices: number;
+  coveredServices: number;
+  coveragePercent: number;
+  missingServices: string[];
+  targetPercent: number;
+  metTarget: boolean;
+  batchCount?: number;
+  gapPassApplied?: boolean;
+}
+
 /** Trazabilidad de la última generación de entregables legacy (API + `legacyFlowState`). */
 export interface LegacyDeliverablesDebugReport {
   startedAt: string;
@@ -438,6 +450,8 @@ export interface LegacyDeliverablesDebugReport {
   mddRollupWindows?: number;
   mddRollupFailed?: boolean;
   sectionMergeTraces?: LegacySectionMergeTrace[];
+  legacyBaselineStage?: boolean;
+  logicFlowsSection5Coverage?: LogicFlowsSection5CoverageReport;
 }
 
 /** Estado del flujo legacy (archivos, preguntas, respuestas sugeridas por AriadneSpecs). */
@@ -2496,6 +2510,7 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       const data = await queueAndPoll<Project>(`${API_BASE}/projects/${projectId}/generate-logic-flows`, body);
       set({ project: data, logicFlowsContent: data.logicFlowsContent ?? null, error: null });
       get().fetchConformance(projectId).catch(() => { });
+      get().fetchProject(projectId).catch(() => { });
       return data;
     } catch (e) { set({ error: friendlyFetchError(e) }); return null; }
     finally { set({ loading: false }); }

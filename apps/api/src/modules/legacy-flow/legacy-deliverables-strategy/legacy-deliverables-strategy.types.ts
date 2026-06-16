@@ -29,6 +29,8 @@ export type LegacyDeliverablesStrategyContext = {
   blueprintText?: string;
   specText?: string;
   useCasesText?: string;
+  /** Etapa 1 AS-IS: fuerza monolítico + MDD completo en estimación. */
+  legacyBaselineStage?: boolean;
 };
 
 export interface LegacyDeliverablesStrategyResolution {

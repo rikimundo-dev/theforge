@@ -44,6 +44,20 @@ import { runLegacyStagedDiscoveryMddAgent } from "./legacy-staged-discovery-agen
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
 import { evaluateLegacyIndexSddGate } from "./legacy-index-sdd-alignment.util.js";
 import { isLegacyBaselineStage, pickPrimaryStage } from "../projects/stage-helpers.js";
+import {
+  appendLegacyBaselineBrdDetailPrompt,
+  appendLegacyBaselineDetailPrompt,
+  readLegacyBaselineBrdInventoryRefMaxChars,
+  readLegacyBaselineReverseEngineeringMaxChars,
+} from "../ai/utils/legacy-baseline-detail.util.js";
+import { resolveLegacyBaselineStageFlag } from "../ai/utils/legacy-as-is-spec.util.js";
+import {
+  extractSection5Services,
+  readLogicFlowsBatchSize,
+  scoreLogicFlowsSection5Coverage,
+  toLogicFlowsSection5CoverageReport,
+  type LogicFlowsSection5CoverageReport,
+} from "../ai/utils/legacy-as-is-logic-flows.util.js";
 import { AiService } from "../ai/ai.service.js";
 import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { loadLegacyKnowledgePack } from "./knowledge-loader.js";
@@ -164,6 +178,10 @@ export interface LegacyDeliverablesDebugReport {
   strategyDecisions?: LegacyDeliverablesStrategyResolution[];
   /** Pipeline bulk alineado con regen individual del Workshop. */
   pipelineMode?: LegacyDeliverablesPipelineMode;
+  /** Etapa 1 AS-IS: entregables con MDD completo (sin section merge ni truncado). */
+  legacyBaselineStage?: boolean;
+  /** Cobertura heurística servicios §5 vs flujos generados (etapa 1). */
+  logicFlowsSection5Coverage?: LogicFlowsSection5CoverageReport;
 }
 
 /** Modo de generación en cascada bulk — paridad con endpoints individuales. */
@@ -190,6 +208,7 @@ const REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS = 120_000;
 function buildReverseEngineeringMddForLegacySteps(
   codebaseDoc: string,
   report: LegacyDeliverablesDebugReport,
+  maxChars: number = REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS,
 ): string {
   const compact = compactCodebaseDocForMddPrompt(codebaseDoc);
   const wrapped =
@@ -197,7 +216,7 @@ function buildReverseEngineeringMddForLegacySteps(
     compact;
   report.mddRollupWindows = 0;
   report.mddRollupFailed = false;
-  if (wrapped.length <= REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS) {
+  if (wrapped.length <= maxChars) {
     report.mddLlmStrategy = "full";
     report.mddCharsSentToLlm = wrapped.length;
     report.mddClippedForLlm = false;
@@ -207,9 +226,9 @@ function buildReverseEngineeringMddForLegacySteps(
   report.mddClippedForLlm = true;
   const footer =
     "\n\n---\n\n> **Nota (The Forge — entregables legacy):** El codebaseDoc superó " +
-    String(REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS) +
+    String(maxChars) +
     " caracteres. **Solo se envió el inicio** al modelo; el final fue omitido.\n";
-  const budget = Math.max(0, REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS - footer.length);
+  const budget = Math.max(0, maxChars - footer.length);
   const clipped = wrapped.slice(0, budget) + footer;
   report.mddCharsSentToLlm = clipped.length;
   return clipped;
@@ -607,36 +626,51 @@ export class LegacyCoordinatorService {
       } catch { /* non-critical */ }
     }
     const isInitialLegacyStage = isLegacyBaselineStage(stage);
-    const sourcePrep = prepareLegacyCodebaseDocForBrdPrompt(codebaseDoc);
+    const sourcePrep = prepareLegacyCodebaseDocForBrdPrompt(codebaseDoc, {
+      legacyBaselineStage: isInitialLegacyStage,
+    });
     let brdSourceDocument = sourcePrep.text;
     let sourceTruncated = sourcePrep.truncated;
 
     if (isInitialLegacyStage && sourcePrep.needsInventoryPass) {
       console.log(
-        `[suggestBrdFromCodebaseDoc] inventario previo (truncated=${sourcePrep.truncated} entities=${sourcePrep.entityCount} services=${sourcePrep.serviceCount} len=${sourcePrep.text.length})`,
+        `[suggestBrdFromCodebaseDoc] inventario previo (truncated=${sourcePrep.truncated} entities=${sourcePrep.entityCount} services=${sourcePrep.serviceCount} len=${sourcePrep.text.length} baseline=${isInitialLegacyStage})`,
       );
       const inventoryRaw = await this.ai.generateResponse(
-        buildLegacyBrdBusinessInventoryPrompt(sourcePrep.text),
+        buildLegacyBrdBusinessInventoryPrompt(sourcePrep.text, isInitialLegacyStage),
         [],
-        { systemPrompt: BRD_BUSINESS_INVENTORY_SYSTEM },
+        {
+          systemPrompt: appendLegacyBaselineBrdDetailPrompt(
+            BRD_BUSINESS_INVENTORY_SYSTEM,
+            isInitialLegacyStage,
+          ),
+        },
       );
       const inventory = cleanDocumentContent(inventoryRaw ?? "").trim();
       if (inventory.length >= 400) {
+        const refCap = readLegacyBaselineBrdInventoryRefMaxChars(24_000);
+        const refDoc =
+          refCap >= Number.MAX_SAFE_INTEGER / 2
+            ? sourcePrep.text
+            : sourcePrep.text.slice(0, Math.min(sourcePrep.text.length, refCap));
         brdSourceDocument =
           "## Inventario de negocio (extracción previa — cubrir TODO en el BRD)\n\n" +
           inventory +
           "\n\n---\n\n## Documento de partida (referencia)\n\n" +
-          sourcePrep.text.slice(0, Math.min(sourcePrep.text.length, 24_000));
-        sourceTruncated = sourceTruncated || sourcePrep.text.length > 24_000;
+          refDoc;
+        sourceTruncated = sourceTruncated || refDoc.length < sourcePrep.text.length;
       }
     }
 
-    const brdPromptBase = buildBrdUserPrompt({
-      mode: isInitialLegacyStage ? "legacy-as-is" : "legacy-change",
-      sourceLabel: "DOCUMENTO",
-      sourceDocument: brdSourceDocument,
-      baselineBrdBlock: baselineBrdBlock || undefined,
-    });
+    const brdPromptBase = appendLegacyBaselineBrdDetailPrompt(
+      buildBrdUserPrompt({
+        mode: isInitialLegacyStage ? "legacy-as-is" : "legacy-change",
+        sourceLabel: "DOCUMENTO",
+        sourceDocument: brdSourceDocument,
+        baselineBrdBlock: baselineBrdBlock || undefined,
+      }),
+      isInitialLegacyStage,
+    );
 
     let brd = "";
     let lastFailure: BrdExtractFailure = "no_delimiter";
@@ -1364,9 +1398,15 @@ export class LegacyCoordinatorService {
       );
     }
 
+    const gateStage = stageId?.trim()
+      ? await this.prisma.stage.findUnique({ where: { id: stageId.trim() } })
+      : await this.resolveLegacyGateStage(projectId);
+
     // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos
     const codebaseDoc = String((project as { legacyFlowState?: LegacyFlowState }).legacyFlowState?.codebaseDoc ?? "").trim();
     const mddContent = String(project.mddContent ?? "").trim();
+    const legacyBaselineStage = resolveLegacyBaselineStageFlag(gateStage, mddContent);
+    report.legacyBaselineStage = legacyBaselineStage;
     report.codebaseDocChars = codebaseDoc.length;
     report.mddContentChars = mddContent.length;
     report.mddSource = mddContent ? "mddContent" : codebaseDoc ? "codebaseDoc_fallback" : "none";
@@ -1388,7 +1428,7 @@ export class LegacyCoordinatorService {
       durationMs: 0,
       ok: !!mdd,
       detail:
-        `reverseEngineering=${isReverseEngineering} pipelineMode=${report.pipelineMode} mddSource=${report.mddSource} mddLlmStrategy=${report.mddLlmStrategy ?? "?"} rollupWindows=${report.mddRollupWindows ?? 0} clipped=${report.mddClippedForLlm ?? false} rollupFailed=${report.mddRollupFailed ?? false}`,
+        `legacyBaselineStage=${legacyBaselineStage} reverseEngineering=${isReverseEngineering} pipelineMode=${report.pipelineMode} mddSource=${report.mddSource} mddLlmStrategy=${report.mddLlmStrategy ?? "?"} rollupWindows=${report.mddRollupWindows ?? 0} clipped=${report.mddClippedForLlm ?? false} rollupFailed=${report.mddRollupFailed ?? false}`,
     });
 
     if (!mdd) {
@@ -1430,11 +1470,12 @@ export class LegacyCoordinatorService {
       outChars: theforgeContext.length,
       detail: theforgeContext.trim() ? "non_empty" : "empty_string",
     });
-    const legacyOpts: { theforgeContext?: string; contractSpecs?: string } | undefined =
-      theforgeContext.trim() || contractSpecs.trim()
+    const legacyOpts: { theforgeContext?: string; contractSpecs?: string; legacyBaselineStage?: boolean } | undefined =
+      theforgeContext.trim() || contractSpecs.trim() || legacyBaselineStage
         ? {
             ...(theforgeContext.trim() ? { theforgeContext } : {}),
             ...(contractSpecs.trim() ? { contractSpecs } : {}),
+            ...(legacyBaselineStage ? { legacyBaselineStage: true } : {}),
           }
         : undefined;
 
@@ -1457,6 +1498,7 @@ export class LegacyCoordinatorService {
       const d = await this.legacyDeliverablesStrategy.resolveSectionMergeAttempt(kind, {
         mddText,
         theforgeContextText: theforgeContext,
+        legacyBaselineStage,
         ...fields,
       });
       pushStrategyDecision(d);
@@ -1492,14 +1534,25 @@ export class LegacyCoordinatorService {
         case "mdd_canonical":
           return;
         case "spec": {
-          const sm = await trySectionMergeDeliverable(this.ai, "spec", mddForLlm, legacyOpts, {}, run429, this.logger, {
-            attemptSectionMerge: await resolveSectionMergeAttempt("spec", mddForLlm, {}),
-          });
-          if (sm) {
-            pushSectionMergeTrace(sm.trace);
-            await update({ specContent: cleanDocumentContent(sm.content) });
-            p = await load();
-            return;
+          if (!legacyBaselineStage) {
+            const sm = await trySectionMergeDeliverable(
+              this.ai,
+              "spec",
+              mddForLlm,
+              legacyOpts,
+              {},
+              run429,
+              this.logger,
+              {
+                attemptSectionMerge: await resolveSectionMergeAttempt("spec", mddForLlm, {}),
+              },
+            );
+            if (sm) {
+              pushSectionMergeTrace(sm.trace);
+              await update({ specContent: cleanDocumentContent(sm.content) });
+              p = await load();
+              return;
+            }
           }
           const specContent = await this.ai.generateSpec(mddForLlm, null, "mdd", legacyOpts);
           await update({ specContent: cleanDocumentContent(specContent) });
@@ -1537,25 +1590,27 @@ export class LegacyCoordinatorService {
           return;
         }
         case "use_cases": {
-          const smUc = await trySectionMergeDeliverable(
-            this.ai,
-            "use_cases",
-            mddForLlm,
-            legacyOpts,
-            { spec: p.specContent ?? undefined },
-            run429,
-            this.logger,
-            {
-              attemptSectionMerge: await resolveSectionMergeAttempt("use_cases", mddForLlm, {
-                specText: p.specContent ?? undefined,
-              }),
-            },
-          );
-          if (smUc) {
-            pushSectionMergeTrace(smUc.trace);
-            await update({ useCasesContent: cleanDocumentContent(smUc.content) });
-            p = await load();
-            return;
+          if (!legacyBaselineStage) {
+            const smUc = await trySectionMergeDeliverable(
+              this.ai,
+              "use_cases",
+              mddForLlm,
+              legacyOpts,
+              { spec: p.specContent ?? undefined },
+              run429,
+              this.logger,
+              {
+                attemptSectionMerge: await resolveSectionMergeAttempt("use_cases", mddForLlm, {
+                  specText: p.specContent ?? undefined,
+                }),
+              },
+            );
+            if (smUc) {
+              pushSectionMergeTrace(smUc.trace);
+              await update({ useCasesContent: cleanDocumentContent(smUc.content) });
+              p = await load();
+              return;
+            }
           }
           const useCasesContent = await this.ai.generateUseCases(mddForLlm, p.specContent, legacyOpts);
           await update({ useCasesContent: cleanDocumentContent(useCasesContent) });
@@ -1563,14 +1618,25 @@ export class LegacyCoordinatorService {
           return;
         }
         case "blueprint": {
-          const smBp = await trySectionMergeDeliverable(this.ai, "blueprint", mddForLlm, legacyOpts, {}, run429, this.logger, {
-            attemptSectionMerge: await resolveSectionMergeAttempt("blueprint", mddForLlm, {}),
-          });
-          if (smBp) {
-            pushSectionMergeTrace(smBp.trace);
-            await update({ blueprintContent: cleanDocumentContent(smBp.content) });
-            p = await load();
-            return;
+          if (!legacyBaselineStage) {
+            const smBp = await trySectionMergeDeliverable(
+              this.ai,
+              "blueprint",
+              mddForLlm,
+              legacyOpts,
+              {},
+              run429,
+              this.logger,
+              {
+                attemptSectionMerge: await resolveSectionMergeAttempt("blueprint", mddForLlm, {}),
+              },
+            );
+            if (smBp) {
+              pushSectionMergeTrace(smBp.trace);
+              await update({ blueprintContent: cleanDocumentContent(smBp.content) });
+              p = await load();
+              return;
+            }
           }
           const blueprintContent = await this.ai.generateBlueprint(mddForLlm, undefined, legacyOpts);
           await update({ blueprintContent: cleanDocumentContent(blueprintContent) });
@@ -1605,24 +1671,37 @@ export class LegacyCoordinatorService {
           return;
         }
         case "logic_flows": {
-          const smLf = await trySectionMergeDeliverable(
-            this.ai,
-            "logic_flows",
-            mddForLlm,
-            legacyOpts,
-            {},
-            run429,
-            this.logger,
-            { attemptSectionMerge: await resolveSectionMergeAttempt("logic_flows", mddForLlm, {}) },
-          );
-          if (smLf) {
-            pushSectionMergeTrace(smLf.trace);
-            await update({ logicFlowsContent: cleanDocumentContent(smLf.content) });
-            p = await load();
-            return;
+          if (!legacyBaselineStage) {
+            const smLf = await trySectionMergeDeliverable(
+              this.ai,
+              "logic_flows",
+              mddForLlm,
+              legacyOpts,
+              {},
+              run429,
+              this.logger,
+              { attemptSectionMerge: await resolveSectionMergeAttempt("logic_flows", mddForLlm, {}) },
+            );
+            if (smLf) {
+              pushSectionMergeTrace(smLf.trace);
+              await update({ logicFlowsContent: cleanDocumentContent(smLf.content) });
+              p = await load();
+              return;
+            }
           }
           const logicFlowsContent = await this.ai.generateLogicFlows(mddForLlm, undefined, legacyOpts);
-          await update({ logicFlowsContent: cleanDocumentContent(logicFlowsContent) });
+          const cleaned = cleanDocumentContent(logicFlowsContent);
+          if (legacyBaselineStage) {
+            const services = extractSection5Services(mddForLlm);
+            const batchSize = readLogicFlowsBatchSize();
+            const batchCount =
+              services.length > batchSize ? Math.ceil(services.length / batchSize) : undefined;
+            report.logicFlowsSection5Coverage = toLogicFlowsSection5CoverageReport(
+              scoreLogicFlowsSection5Coverage(mddForLlm, cleaned),
+              batchCount !== undefined ? { batchCount } : undefined,
+            );
+          }
+          await update({ logicFlowsContent: cleaned });
           p = await load();
           return;
         }
@@ -1651,9 +1730,9 @@ export class LegacyCoordinatorService {
           }
           let uxPrompt =
             "Genera la Guía UX/UI en markdown según el system prompt. MDD:\n---\n" +
-            mddForLlm.slice(0, 8000) +
+            (legacyBaselineStage ? mddForLlm : mddForLlm.slice(0, 8000)) +
             "\n---\n\nBlueprint:\n---\n" +
-            bpUx.slice(0, 4000) +
+            (legacyBaselineStage ? bpUx : bpUx.slice(0, 4000)) +
             "\n---";
           if (theforgeContext) {
             uxPrompt =
@@ -1689,37 +1768,43 @@ export class LegacyCoordinatorService {
             // Si falla la extracción, continuar sin tokens — no bloquear la generación
             this.logger.warn("[Legacy UX/UI] Design token extraction via MCP tool skipped (error, continuing without tokens)");
           }
-          const uxUiGuideContent = await this.ai.generateResponse(uxPrompt, [], {
-            systemPrompt: UX_UI_GUIDE_PROMPT,
-            activeTab: "ux-ui-guide",
-            projectTypeForUxGuide: "LEGACY",
-          });
+          const uxUiGuideContent = await this.ai.generateResponse(
+            appendLegacyBaselineDetailPrompt(uxPrompt, legacyBaselineStage),
+            [],
+            {
+              systemPrompt: UX_UI_GUIDE_PROMPT,
+              activeTab: "ux-ui-guide",
+              projectTypeForUxGuide: "LEGACY",
+            },
+          );
           const uxClean = (uxUiGuideContent ?? "").replace(/\n---FIN_UX_UI---.*/s, "").trim();
           await update({ uxUiGuideContent: cleanDocumentContent(uxClean) });
           p = await load();
           return;
         }
         case "user_stories": {
-          const smUs = await trySectionMergeDeliverable(
-            this.ai,
-            "user_stories",
-            mddForLlm,
-            legacyOpts,
-            { spec: p.specContent ?? undefined, useCases: p.useCasesContent ?? undefined },
-            run429,
-            this.logger,
-            {
-              attemptSectionMerge: await resolveSectionMergeAttempt("user_stories", mddForLlm, {
-                specText: p.specContent ?? undefined,
-                useCasesText: p.useCasesContent ?? undefined,
-              }),
-            },
-          );
-          if (smUs) {
-            pushSectionMergeTrace(smUs.trace);
-            await update({ userStoriesContent: cleanDocumentContent(smUs.content) });
-            p = await load();
-            return;
+          if (!legacyBaselineStage) {
+            const smUs = await trySectionMergeDeliverable(
+              this.ai,
+              "user_stories",
+              mddForLlm,
+              legacyOpts,
+              { spec: p.specContent ?? undefined, useCases: p.useCasesContent ?? undefined },
+              run429,
+              this.logger,
+              {
+                attemptSectionMerge: await resolveSectionMergeAttempt("user_stories", mddForLlm, {
+                  specText: p.specContent ?? undefined,
+                  useCasesText: p.useCasesContent ?? undefined,
+                }),
+              },
+            );
+            if (smUs) {
+              pushSectionMergeTrace(smUs.trace);
+              await update({ userStoriesContent: cleanDocumentContent(smUs.content) });
+              p = await load();
+              return;
+            }
           }
           const userStoriesContent = await this.ai.generateUserStories(
             mddForLlm,
@@ -1814,7 +1899,14 @@ export class LegacyCoordinatorService {
     let reverseEngineeringMddForLegacySteps: string | null = null;
     const getReverseEngineeringMddForLegacySteps = (): string => {
       if (reverseEngineeringMddForLegacySteps === null) {
-        reverseEngineeringMddForLegacySteps = buildReverseEngineeringMddForLegacySteps(codebaseDoc, report);
+        const maxChars = legacyBaselineStage
+          ? readLegacyBaselineReverseEngineeringMaxChars(REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS)
+          : REVERSE_ENGINEERING_MDD_PROMPT_MAX_CHARS;
+        reverseEngineeringMddForLegacySteps = buildReverseEngineeringMddForLegacySteps(
+          codebaseDoc,
+          report,
+          maxChars,
+        );
         if (isLegacyDeliverablesDebugVerbose()) {
           this.logger.log(
             `[LegacyDeliverables] reverse_engineering_fallback strategy=${report.mddLlmStrategy ?? "?"} sentChars=${report.mddCharsSentToLlm ?? reverseEngineeringMddForLegacySteps.length}`,
@@ -1891,12 +1983,19 @@ export class LegacyCoordinatorService {
           const fresh = await load();
           const outChars = deliverableFieldCharCount(fresh as Record<string, unknown>, kind);
           const short = outChars < 48;
+          let detail: string | undefined = short ? "output_under_48_chars" : undefined;
+          if (kind === "logic_flows" && report.logicFlowsSection5Coverage) {
+            const c = report.logicFlowsSection5Coverage;
+            detail = `s5_coverage=${c.coveragePercent}% target=${c.targetPercent}% met=${c.metTarget}${
+              c.batchCount ? ` batches=${c.batchCount}` : ""
+            }`;
+          }
           pushStep({
             kind,
             durationMs: Date.now() - t0,
             ok: true,
             outChars,
-            detail: short ? "output_under_48_chars" : undefined,
+            detail,
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

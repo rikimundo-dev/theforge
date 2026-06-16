@@ -32,6 +32,8 @@ Desactivar el guardarraíl: `LEGACY_SDD_INDEX_GATE=0`. Umbrales: `LEGACY_SDD_IND
 ## Servicios
 
 - **LegacyCoordinatorService:** Orquesta start (TheForge), answer, generateMdd, generateAsIsManual, suggestBrdFromCodebaseDoc, generateDeliverables. To-Be/As-Is eliminados (Jul 2026) — solo BRD. Usa knowledge pack y AiService para generación. Inyecta **GraphMemoryService** para el gate índice/SDD (Falkor) y **AgentSupervisorService** para resolver `theforgeProjectId` de etapa en el descubrimiento escalonado... *(resto del detalle de descubrimiento escalonado sin cambios)*
+- **`legacy-generate-options.util.ts`:** `buildLegacyGenerateOptions` — `legacyBaselineStage` + TheForge para cascada legacy y regeneración individual (`ProjectsService.generateBlueprint|ApiContracts|LogicFlows|Infra` en proyectos `LEGACY`).
+- **`legacy-flow-state-debug.util.ts`:** parches parciales a `legacyFlowState.lastDeliverablesDebug` (p. ej. `logicFlowsSection5Coverage` tras regen individual de flujos etapa 1).
 - **LegacyReviewerService:** Revisa lista archivos/preguntas y borrador MDD. Si el MDD casi no cita rutas (menos de 3 referencias tipo `archivo.ts`), antepone aviso SDD al prompt de revisión.
 
 ## Conocimiento

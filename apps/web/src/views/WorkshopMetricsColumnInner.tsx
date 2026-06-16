@@ -123,6 +123,23 @@ export function WorkshopMetricsColumnInner({
     return project?.legacyFlowState ?? null;
   }, [project?.projectType, activeWorkshopStage?.legacyChangeState, project?.legacyFlowState]);
 
+  const lastLegacyDebug = useWorkshopStore((s) => s.lastLegacyDeliverablesDebug);
+  const logicFlowsDocField = useWorkshopStore((s) => s.logicFlowsContent);
+  const logicFlowsDoc = (logicFlowsDocField ?? project?.logicFlowsContent ?? "").trim();
+
+  const isLegacyBaselineStage = useMemo(() => {
+    if (!isLegacyProject) return false;
+    if (lastLegacyDebug?.legacyBaselineStage != null) return lastLegacyDebug.legacyBaselineStage;
+    return (activeWorkshopStage?.ordinal ?? 1) === 1;
+  }, [isLegacyProject, lastLegacyDebug?.legacyBaselineStage, activeWorkshopStage?.ordinal]);
+
+  const logicFlowsS5Coverage = lastLegacyDebug?.logicFlowsSection5Coverage;
+  const logicFlowsCoverageGateActive = useMemo(() => {
+    if (!isLegacyProject || !isLegacyBaselineStage) return false;
+    if (!logicFlowsS5Coverage || logicFlowsDoc.length < 48) return false;
+    return !logicFlowsS5Coverage.metTarget;
+  }, [isLegacyProject, isLegacyBaselineStage, logicFlowsS5Coverage, logicFlowsDoc]);
+
   const canGenerate = useMemo(() => {
     if (isLegacyProject) {
       const hasMdd = effectiveMddTrimmed.length > 0;
@@ -169,6 +186,9 @@ export function WorkshopMetricsColumnInner({
   const cascadeCtaHint = useMemo(() => {
     if (cascadeRunning) return "Generación de entregables en curso…";
     if (mddReviewing) return "Revisión o grabado del MDD en curso; espera a que termine.";
+    if (logicFlowsCoverageGateActive && logicFlowsS5Coverage) {
+      return `Flujos legacy: cobertura §5 ${logicFlowsS5Coverage.coveragePercent}% (objetivo ${logicFlowsS5Coverage.targetPercent}%). Regenera flujos o la cascada legacy.`;
+    }
     if (canGenerate) return null;
     if (
       isLegacyProject &&
@@ -188,6 +208,8 @@ export function WorkshopMetricsColumnInner({
     cascadeRunning,
     mddReviewing,
     canGenerate,
+    logicFlowsCoverageGateActive,
+    logicFlowsS5Coverage,
     isLegacyProject,
     effectiveMddTrimmed,
     activeLegacyState?.codebaseDoc,
@@ -346,6 +368,23 @@ export function WorkshopMetricsColumnInner({
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--muted-foreground)]" aria-hidden />
                   <span className="min-w-0 truncate">Conformance vs MDD</span>
                 </h3>
+                {logicFlowsCoverageGateActive && logicFlowsS5Coverage ? (
+                  <div
+                    role="status"
+                    className="rounded-lg border border-[color-mix(in_oklch,var(--warning)_45%,var(--border))] bg-[color-mix(in_oklch,var(--warning)_10%,var(--card))] px-2.5 py-2 text-[11px] leading-snug text-[color-mix(in_oklch,var(--warning)_88%,var(--foreground))]"
+                  >
+                    <div className="flex gap-2">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <p>
+                        <span className="font-semibold">Legacy etapa 1 — flujos vs §5:</span>{" "}
+                        {logicFlowsS5Coverage.coveragePercent}% documentado (objetivo{" "}
+                        {logicFlowsS5Coverage.targetPercent}%). Pendientes:{" "}
+                        {logicFlowsS5Coverage.missingServices.length} servicios. Regenera con la cascada
+                        legacy o «Regenerar Flujos» (AS-IS por lotes).
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
                 <label
                   htmlFor="workshop-conformance-use-llm"
                   className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-md border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_55%,var(--background))] px-2 py-1.5 text-[11px] font-medium text-[var(--foreground)] hover:bg-[color-mix(in_oklch,var(--muted)_35%,var(--card))] focus-within:ring-2 focus-within:ring-[var(--ring)] focus-within:ring-offset-1 focus-within:ring-offset-[color-mix(in_oklch,var(--card)_40%,var(--background))]"
@@ -558,8 +597,21 @@ export function WorkshopMetricsColumnInner({
                   <div className="flex flex-col gap-1 px-2 py-1.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 truncate font-medium text-[var(--foreground)]">Flujos</span>
-                      <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                      {logicFlowsCoverageGateActive && logicFlowsS5Coverage ? (
+                        <span className={WORKSHOP_METRICS_BADGE_WARN}>
+                          §5 {logicFlowsS5Coverage.coveragePercent}%
+                        </span>
+                      ) : (
+                        <span className={WORKSHOP_METRICS_BADGE_OK}>Cumple</span>
+                      )}
                     </div>
+                    {isLegacyBaselineStage && logicFlowsS5Coverage && logicFlowsDoc.length >= 48 ? (
+                      <p className="text-[10px] leading-snug text-[var(--muted-foreground)]">
+                        Cobertura §5: {logicFlowsS5Coverage.coveredServices}/{logicFlowsS5Coverage.totalServices}{" "}
+                        servicios ({logicFlowsS5Coverage.coveragePercent}% / objetivo{" "}
+                        {logicFlowsS5Coverage.targetPercent}%)
+                      </p>
+                    ) : null}
                   </div>
                 ) : (
                   <details className="group min-w-0">
@@ -591,6 +643,11 @@ export function WorkshopMetricsColumnInner({
                           type="button"
                           onClick={() => generateLogicFlows(projectId!, { gapsFeedback: conformance!.logicFlows.gaps.join("\n") })}
                           disabled={loading || mddReviewing}
+                          title={
+                            isLegacyBaselineStage
+                              ? "Etapa 1 AS-IS: lotes §5 + re-pase de cobertura cuando aplica"
+                              : undefined
+                          }
                           className="self-start text-[11px] font-medium text-[var(--primary)] underline-offset-2 hover:underline disabled:opacity-50"
                         >
                           Regenerar Flujos con gaps

@@ -45,6 +45,55 @@ import {
   buildMddContextForSpec,
   buildMddContextForAgentGovernance,
 } from "./utils/mdd-user-stories-context.util.js";
+import {
+  appendLegacyBaselineDetailPrompt,
+  capTextForLegacyBaseline,
+} from "./utils/legacy-baseline-detail.util.js";
+import {
+  buildLegacyAsIsSpecCoverageChecklist,
+  buildLegacyAsIsSpecUserPreamble,
+  buildMddContextForLegacyAsIsSpec,
+  LEGACY_AS_IS_SPEC_SYSTEM_APPENDIX,
+} from "./utils/legacy-as-is-spec.util.js";
+import {
+  buildLegacyAsIsUseCasesCoverageChecklist,
+  buildLegacyAsIsUseCasesUserPreamble,
+  buildMddContextForLegacyAsIsUseCases,
+  LEGACY_AS_IS_USE_CASES_SYSTEM_APPENDIX,
+} from "./utils/legacy-as-is-use-cases.util.js";
+import {
+  buildLegacyAsIsUserStoriesCoverageChecklist,
+  buildLegacyAsIsUserStoriesUserPreamble,
+  buildMddContextForLegacyAsIsUserStories,
+  LEGACY_AS_IS_USER_STORIES_SYSTEM_APPENDIX,
+} from "./utils/legacy-as-is-user-stories.util.js";
+import {
+  buildLegacyAsIsBlueprintCoverageChecklist,
+  buildLegacyAsIsBlueprintUserPreamble,
+  LEGACY_AS_IS_BLUEPRINT_SYSTEM_APPENDIX,
+  LEGACY_AS_IS_BLUEPRINT_THEFORGE_APPENDIX,
+} from "./utils/legacy-as-is-blueprint.util.js";
+import {
+  buildLegacyAsIsLogicFlowsCoverageChecklist,
+  buildLegacyAsIsLogicFlowsUserPreamble,
+  buildLogicFlowsBatchSystemAppendix,
+  buildLogicFlowsBatchUserPreamble,
+  chunkArray,
+  extractSection5Services,
+  finalizeLogicFlowsDocument,
+  isLegacyAsIsLogicFlowsBatchEnabled,
+  isLegacyAsIsLogicFlowsGapPassEnabled,
+  LEGACY_AS_IS_LOGIC_FLOWS_SYSTEM_APPENDIX,
+  LEGACY_AS_IS_LOGIC_FLOWS_THEFORGE_APPENDIX,
+  readLogicFlowsBatchSize,
+  stripLogicFlowsFragmentWrapper,
+  type MddSection5ServiceRow,
+} from "./utils/legacy-as-is-logic-flows.util.js";
+import type { MddDeliverableContextOptions } from "./utils/mdd-deliverable-context.util.js";
+
+function mddDeliverableCtx(options?: LegacyGenerateOptions): MddDeliverableContextOptions | undefined {
+  return options?.legacyBaselineStage ? { legacyBaselineStage: true } : undefined;
+}
 
 /** Instrucción fija para que ningún documento generado use "militar" (se añade al system prompt en generación de docs). */
 const NO_MILITAR_INSTRUCTION =
@@ -56,6 +105,8 @@ export interface LegacyGenerateOptions {
   theforgeContext?: string;
   /** Contratos de API reales obtenidos vía get_contract_specs del MCP de Ariadne. Props/firmas reales de componentes para alinear endpoints. */
   contractSpecs?: string;
+  /** Etapa 1 legacy (AS-IS): MDD y entregables sin truncar ni resumir. */
+  legacyBaselineStage?: boolean;
 }
 
 export interface AgentGovernanceGenerateOptions extends LegacyGenerateOptions {
@@ -610,33 +661,44 @@ export class AiService {
     options?: LegacyGenerateOptions,
   ): Promise<string> {
     const raw = inputContent?.trim() ?? "";
-    const content =
-      source === "mdd" && raw.length > 0 ? buildMddContextForSpec(raw) : raw.slice(0, 12000);
-    const phase0 = (phase0Summary?.trim() ?? "").slice(0, 4000);
-    const label = source === "mdd" ? "MDD" : "Benchmark (DBGA)";
+    const legacyAsIsSpec = source === "mdd" && raw.length > 0 && options?.legacyBaselineStage === true;
+    const content = legacyAsIsSpec
+      ? buildMddContextForLegacyAsIsSpec(raw)
+      : source === "mdd" && raw.length > 0
+        ? buildMddContextForSpec(raw, mddDeliverableCtx(options))
+        : capTextForLegacyBaseline(raw, 12000, options?.legacyBaselineStage);
+    const phase0 = capTextForLegacyBaseline(phase0Summary ?? "", 4000, options?.legacyBaselineStage);
+    const label = source === "mdd" ? "MDD (extracto AS-IS para Spec)" : "Benchmark (DBGA)";
+    const checklist = legacyAsIsSpec ? buildLegacyAsIsSpecCoverageChecklist(raw) : "";
     let prompt =
       content.length > 0
-        ? `Genera el documento Spec según las instrucciones del system prompt.${
-            source === "mdd"
-              ? " Refleja de forma exhaustiva todas las capacidades, actores y criterios UAT del MDD §1; recorre el CHECKLIST DE COBERTURA si aparece."
-              : ""
-          }\n\n${label}:\n---\n${content}\n---` +
+        ? (legacyAsIsSpec
+            ? buildLegacyAsIsSpecUserPreamble(checklist)
+            : `Genera el documento Spec según las instrucciones del system prompt.${
+                source === "mdd"
+                  ? " Refleja de forma exhaustiva todas las capacidades, actores y criterios UAT del MDD §1; recorre el CHECKLIST DE COBERTURA si aparece."
+                  : ""
+              }\n\n`) +
+          `${label}:\n---\n${content}\n---` +
           (phase0 ? `\n\nResumen fase 0 / alcance:\n---\n${phase0}\n---` : "")
         : "No hay Benchmark ni MDD. Genera un Spec genérico (objetivos, alcance, criterios de éxito, user journeys) en markdown.";
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
-    if (source === "mdd" && content.length > 0) {
+    if (source === "mdd" && content.length > 0 && !legacyAsIsSpec) {
       prompt = appendMddGovernancePatternsToPrompt(prompt, content);
     }
-    return this.generateResponse(prompt, [], { systemPrompt: SPEC_PROMPT });
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
+    const systemPrompt =
+      SPEC_PROMPT + (legacyAsIsSpec ? LEGACY_AS_IS_SPEC_SYSTEM_APPENDIX : "");
+    return this.generateResponse(prompt, [], { systemPrompt });
   }
 
   /**
    * Genera el documento Tasks (breakdown) desde MDD + Blueprint.
    */
   async generateTasks(mddContent: string, blueprintContent?: string | null, options?: LegacyGenerateOptions & { navigationMap?: string }): Promise<string> {
-    const mdd = buildMddContextForTasks(mddContent?.trim() ?? "");
-    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 15000);
-    const navMap = (options?.navigationMap?.trim() ?? "").slice(0, 8000);
+    const mdd = buildMddContextForTasks(mddContent?.trim() ?? "", mddDeliverableCtx(options));
+    const blueprint = capTextForLegacyBaseline(blueprintContent ?? "", 15000, options?.legacyBaselineStage);
+    const navMap = capTextForLegacyBaseline(options?.navigationMap ?? "", 8000, options?.legacyBaselineStage);
     let prompt =
       mdd.length > 0
         ? "Genera el documento Tasks según las instrucciones del system prompt. " +
@@ -650,6 +712,7 @@ export class AiService {
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
     return this.generateResponse(prompt, [], { systemPrompt: TASKS_PROMPT + NO_MILITAR_INSTRUCTION });
   }
 
@@ -662,8 +725,8 @@ export class AiService {
     complexity: ComplexityLevel,
     options?: AgentGovernanceGenerateOptions,
   ): Promise<string> {
-    const mdd = buildMddContextForAgentGovernance(mddContent?.trim() ?? "");
-    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 15000);
+    const mdd = buildMddContextForAgentGovernance(mddContent?.trim() ?? "", mddDeliverableCtx(options));
+    const blueprint = capTextForLegacyBaseline(blueprintContent ?? "", 15000, options?.legacyBaselineStage);
     const constitutionNote =
       "El siguiente documento es la **Constitución del proyecto** (MDD, 7 secciones). " +
       "Deriva gobernanza de agentes únicamente de §1–§7 y patrones [X] del Wizard.\n\n";
@@ -678,12 +741,13 @@ export class AiService {
         : "No hay MDD. Genera un scaffold mínimo LOW (AGENTS.md, CLAUDE.md, docs/agent-onboarding.md, 1 rule git-commits).");
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
     return this.generateResponse(prompt, [], { systemPrompt: AGENT_GOVERNANCE_PROMPT + NO_MILITAR_INSTRUCTION });
   }
 
   async generateArchitecture(mddContent: string, blueprintContent?: string | null, options?: LegacyGenerateOptions): Promise<string> {
-    const mdd = buildMddContextForArchitecture(mddContent?.trim() ?? "");
-    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 15000);
+    const mdd = buildMddContextForArchitecture(mddContent?.trim() ?? "", mddDeliverableCtx(options));
+    const blueprint = capTextForLegacyBaseline(blueprintContent ?? "", 15000, options?.legacyBaselineStage);
     let prompt =
       mdd.length > 0
         ? "Genera el documento de **Arquitectura del sistema** (producto del MDD) según el system prompt. " +
@@ -695,6 +759,7 @@ export class AiService {
         : "No hay MDD. Genera un documento breve de arquitectura genérica (capas, trade-offs) sin inventar dominio ni agentes.";
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
     return this.generateResponse(prompt, [], { systemPrompt: ARCHITECTURE_PROMPT + NO_MILITAR_INSTRUCTION });
   }
 
@@ -707,84 +772,116 @@ export class AiService {
         "Completa el MDD y, si aplica, el **Spec**; luego vuelve a ejecutar **Generar casos de uso** desde el Workshop.\n"
       );
     }
-    const mdd = buildMddContextForUseCases(mddRaw);
-    const spec = (specContent?.trim() ?? "").slice(0, 20000);
-    let prompt =
-      "Genera el documento de Casos de Uso según las instrucciones del system prompt. " +
-      "Cubre de forma exhaustiva cada capacidad MVP, actor, criterio UAT y dominio API del MDD. " +
-      "Cada flujo debe alinearse al texto del MDD y del Spec; no cites archivos ni entidades que no aparezcan en esos documentos.\n\n" +
-      "MDD:\n---\n" +
-      mdd +
-      "\n---\n\n" +
-      (spec ? "Spec (what/why):\n---\n" + spec + "\n---" : "");
+    const legacyAsIsUseCases = options?.legacyBaselineStage === true;
+    const mdd = legacyAsIsUseCases
+      ? buildMddContextForLegacyAsIsUseCases(mddRaw)
+      : buildMddContextForUseCases(mddRaw, mddDeliverableCtx(options));
+    const spec = capTextForLegacyBaseline(specContent ?? "", 20000, options?.legacyBaselineStage);
+    const checklist = legacyAsIsUseCases ? buildLegacyAsIsUseCasesCoverageChecklist(mddRaw) : "";
+    let prompt = legacyAsIsUseCases
+      ? buildLegacyAsIsUseCasesUserPreamble(checklist) +
+        "MDD (extracto AS-IS para Casos de Uso):\n---\n" +
+        mdd +
+        "\n---\n\n" +
+        (spec ? "Spec (what/why — contexto, no sustituye el MDD):\n---\n" + spec + "\n---" : "")
+      : "Genera el documento de Casos de Uso según las instrucciones del system prompt. " +
+        "Cubre de forma exhaustiva cada capacidad MVP, actor, criterio UAT y dominio API del MDD. " +
+        "Cada flujo debe alinearse al texto del MDD y del Spec; no cites archivos ni entidades que no aparezcan en esos documentos.\n\n" +
+        "MDD:\n---\n" +
+        mdd +
+        "\n---\n\n" +
+        (spec ? "Spec (what/why):\n---\n" + spec + "\n---" : "");
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
-    prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
-    return this.generateResponse(prompt, [], { systemPrompt: USE_CASES_PROMPT });
+    if (!legacyAsIsUseCases) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
+    const systemPrompt =
+      USE_CASES_PROMPT + (legacyAsIsUseCases ? LEGACY_AS_IS_USE_CASES_SYSTEM_APPENDIX : "");
+    return this.generateResponse(prompt, [], { systemPrompt });
   }
 
   async generateUserStories(mddContent: string, specContent?: string | null, useCasesContent?: string | null, options?: LegacyGenerateOptions): Promise<string> {
-    const mdd = buildMddContextForUserStories(mddContent?.trim() ?? "");
-    const spec = (specContent?.trim() ?? "").slice(0, 15000);
-    const useCases = (useCasesContent?.trim() ?? "").slice(0, 20000);
+    const mddRaw = mddContent?.trim() ?? "";
+    const legacyAsIsUserStories = options?.legacyBaselineStage === true && mddRaw.length > 0;
+    const mdd = legacyAsIsUserStories
+      ? buildMddContextForLegacyAsIsUserStories(mddRaw)
+      : buildMddContextForUserStories(mddRaw, mddDeliverableCtx(options));
+    const spec = capTextForLegacyBaseline(specContent ?? "", 15000, options?.legacyBaselineStage);
+    const useCases = capTextForLegacyBaseline(useCasesContent ?? "", 20000, options?.legacyBaselineStage);
+    const checklist = legacyAsIsUserStories ? buildLegacyAsIsUserStoriesCoverageChecklist(mddRaw) : "";
     const constitutionNote =
       "El **MDD es la Constitución del proyecto**. Las historias de usuario deben derivarse **únicamente** del MDD, Spec y Casos de Uso. No inventes funcionalidades no descritas en estos documentos.\n\n";
     let prompt: string;
     if (mdd.length > 0) {
-      prompt =
-        "Genera el documento de Historias de Usuario según las instrucciones del system prompt. " +
-        constitutionNote +
-        "MDD:\n---\n" +
-        mdd +
-        "\n---\n\n" +
-        (spec ? "Spec:\n---\n" + spec + "\n---\n\n" : "") +
-        (useCases ? "Casos de Uso:\n---\n" + useCases + "\n---" : "");
+      prompt = legacyAsIsUserStories
+        ? buildLegacyAsIsUserStoriesUserPreamble(checklist) +
+          "MDD (extracto AS-IS para Historias de Usuario):\n---\n" +
+          mdd +
+          "\n---\n\n" +
+          (spec ? "Spec (what/why — contexto):\n---\n" + spec + "\n---\n\n" : "") +
+          (useCases ? "Casos de Uso (flujos — traza HU ↔ CU):\n---\n" + useCases + "\n---" : "")
+        : "Genera el documento de Historias de Usuario según las instrucciones del system prompt. " +
+          constitutionNote +
+          "MDD:\n---\n" +
+          mdd +
+          "\n---\n\n" +
+          (spec ? "Spec:\n---\n" + spec + "\n---\n\n" : "") +
+          (useCases ? "Casos de Uso:\n---\n" + useCases + "\n---" : "");
     } else {
       prompt =
         "No hay MDD disponible. No generes historias inventadas. Responde con un documento markdown que contenga solo un título " +
         "# Historias de Usuario y un párrafo indicando que se requiere el MDD (y opcionalmente Spec y Casos de Uso) para derivar historias de usuario alineadas al alcance del proyecto.";
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
-    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
-    return this.generateResponse(prompt, [], { systemPrompt: USER_STORIES_PROMPT });
+    if (mdd.length > 0 && !legacyAsIsUserStories) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
+    const systemPrompt =
+      USER_STORIES_PROMPT + (legacyAsIsUserStories ? LEGACY_AS_IS_USER_STORIES_SYSTEM_APPENDIX : "");
+    return this.generateResponse(prompt, [], { systemPrompt });
   }
 
   async generateBlueprint(mddContent: string, gapsFeedback?: string | null, options?: LegacyGenerateOptions): Promise<string> {
-    const mdd = buildMddContextForBlueprint(mddContent?.trim() ?? "");
+    const mddRaw = mddContent?.trim() ?? "";
+    const legacyAsIsBlueprint = options?.legacyBaselineStage === true && mddRaw.length > 0;
+    const mdd = buildMddContextForBlueprint(mddRaw, mddDeliverableCtx(options));
+    const checklist = legacyAsIsBlueprint ? buildLegacyAsIsBlueprintCoverageChecklist(mddRaw) : "";
     const constitutionNote =
       "El siguiente documento es la **Constitución del proyecto** (MDD). Tu salida debe adherirse a él en todo momento.\n\n";
     let prompt =
       mdd.length > 0
-        ? "Genera el blueprint.md según las instrucciones del system prompt. " +
-        "Lista **todas** las entidades de §3 y **todos** los endpoints de §4; recorre el CHECKLIST DE COBERTURA si aparece. " +
-        constitutionNote +
-        "MDD:\n\n---\n" +
-        mdd +
-        "\n---"
+        ? (legacyAsIsBlueprint
+            ? buildLegacyAsIsBlueprintUserPreamble(checklist)
+            : "Genera el blueprint.md según las instrucciones del system prompt. " +
+              "Lista **todas** las entidades de §3 y **todos** los endpoints de §4; recorre el CHECKLIST DE COBERTURA si aparece. ") +
+          (legacyAsIsBlueprint ? "" : constitutionNote) +
+          "MDD:\n\n---\n" +
+          mdd +
+          "\n---"
         : "No hay MDD aún. Genera un blueprint.md genérico para un monorepo Turborepo con NestJS, React, Prisma y PostgreSQL.";
     if (gapsFeedback?.trim()) {
       prompt +=
         "\n\n**Los siguientes puntos deben corregirse o incorporarse:**\n---\n" + gapsFeedback.trim() + "\n---";
     }
-    if (mdd.length > 0) {
+    if (mdd.length > 0 && !legacyAsIsBlueprint) {
       prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     }
+    if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
+
+    let systemPrompt = BLUEPRINT_PROMPT + NO_MILITAR_INSTRUCTION;
+    if (legacyAsIsBlueprint) systemPrompt += LEGACY_AS_IS_BLUEPRINT_SYSTEM_APPENDIX;
     if (options?.theforgeContext?.trim()) {
-      prompt = prependTheForgePrompt(prompt, options.theforgeContext);
-      const legacyBlueprintInstruction =
-        "\n\n**CRÍTICO — Proyecto existente (contexto Relic):** El bloque anterior describe el codebase REAL indexado por el MCP. El Blueprint DEBE describir ÚNICAMENTE esta estructura y stack. **PROHIBIDO inventar:** no Turborepo, Nx, NestJS, ni nuevos repos ni directorios que no aparezcan en ese contexto. El sistema puede tener uno o varios repositorios; indica los repos y carpetas reales. Solo añade o modifica lo que el MDD exija para el cambio. Si el contexto no menciona un framework concreto, no lo inventes.";
-      return this.generateResponse(prompt, [], {
-        systemPrompt: BLUEPRINT_PROMPT + NO_MILITAR_INSTRUCTION + legacyBlueprintInstruction,
-      });
+      systemPrompt += legacyAsIsBlueprint
+        ? LEGACY_AS_IS_BLUEPRINT_THEFORGE_APPENDIX
+        : "\n\n**CRÍTICO — Proyecto existente (contexto Relic):** El bloque anterior describe el codebase REAL indexado por el MCP. El Blueprint DEBE describir ÚNICAMENTE esta estructura y stack. **PROHIBIDO inventar:** no Turborepo, Nx, NestJS, ni nuevos repos ni directorios que no aparezcan en ese contexto. El sistema puede tener uno o varios repositorios; indica los repos y carpetas reales. Solo añade o modifica lo que el MDD exija para el cambio. Si el contexto no menciona un framework concreto, no lo inventes.";
     }
-    return this.generateResponse(prompt, [], {
-      systemPrompt: BLUEPRINT_PROMPT + NO_MILITAR_INSTRUCTION,
-    });
+
+    return this.generateResponse(prompt, [], { systemPrompt });
   }
 
   async generateApiContracts(mddContent: string, blueprintContent?: string | null, gapsFeedback?: string | null, brdContent?: string | null, options?: LegacyGenerateOptions): Promise<string> {
-    const mdd = buildMddContextForApiContracts(mddContent?.trim() ?? "");
-    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 16000);
-    const brd = (brdContent?.trim() ?? "").slice(0, 8000);
+    const mdd = buildMddContextForApiContracts(mddContent?.trim() ?? "", mddDeliverableCtx(options));
+    const blueprint = capTextForLegacyBaseline(blueprintContent ?? "", 16000, options?.legacyBaselineStage);
+    const brd = capTextForLegacyBaseline(brdContent ?? "", 8000, options?.legacyBaselineStage);
     const constitutionNote =
       "El siguiente documento es la **Constitución del proyecto** (MDD). Tu salida debe adherirse a él en todo momento.\n\n";
     let prompt =
@@ -804,45 +901,151 @@ export class AiService {
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (options?.contractSpecs?.trim()) {
-      const specsBlock = options.contractSpecs.trim().slice(0, 12000);
+      const specsBlock = capTextForLegacyBaseline(options.contractSpecs, 12000, options?.legacyBaselineStage);
       prompt +=
         "\n\n**Contratos reales desde el codebase (get_contract_specs):** Usa estas firmas, props y tipos reales para alinear los endpoints del documento. No inventes tipos que contradigan esta evidencia.\n---\n" +
         specsBlock +
         "\n---";
     }
     if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
     return this.generateResponse(prompt, [], {
       systemPrompt: API_CONTRACTS_PROMPT + NO_MILITAR_INSTRUCTION,
     });
   }
 
   async generateLogicFlows(mddContent: string, gapsFeedback?: string | null, options?: LegacyGenerateOptions): Promise<string> {
-    const mdd = buildMddContextForLogicFlows(mddContent?.trim() ?? "");
+    const mddRaw = mddContent?.trim() ?? "";
+    const legacyAsIsLogicFlows = options?.legacyBaselineStage === true && mddRaw.length > 0;
+
+    if (legacyAsIsLogicFlows && isLegacyAsIsLogicFlowsBatchEnabled()) {
+      const services = extractSection5Services(mddRaw);
+      const batchSize = readLogicFlowsBatchSize();
+      if (services.length > batchSize) {
+        return this.generateLogicFlowsBatched(mddRaw, gapsFeedback, options, services, batchSize);
+      }
+    }
+
+    return this.invokeLogicFlowsLlm(mddRaw, options, gapsFeedback, {});
+  }
+
+  private async generateLogicFlowsBatched(
+    mddRaw: string,
+    gapsFeedback: string | null | undefined,
+    options: LegacyGenerateOptions | undefined,
+    services: MddSection5ServiceRow[],
+    batchSize: number,
+  ): Promise<string> {
+    const batches = chunkArray(services, batchSize);
+    const parts: string[] = [];
+    let flowNum = 1;
+
+    for (let i = 0; i < batches.length; i++) {
+      const body = await this.invokeLogicFlowsLlm(mddRaw, options, gapsFeedback, {
+        batchServices: batches[i],
+        batchIndex: i,
+        totalBatches: batches.length,
+        startFlowNumber: flowNum,
+        fragmentOnly: true,
+      });
+      parts.push(body);
+      flowNum += batches[i]!.length;
+    }
+
+    let mergedBody = parts.map(stripLogicFlowsFragmentWrapper).filter(Boolean).join("\n\n---\n\n");
+
+    if (isLegacyAsIsLogicFlowsGapPassEnabled()) {
+      let { coverage } = finalizeLogicFlowsDocument(mergedBody, mddRaw);
+      if (!coverage.metTarget && coverage.missingServices.length > 0) {
+        const missingRows = coverage.missingServices.map((service) => ({ service }));
+        const gapChunks = chunkArray(missingRows, batchSize);
+        for (let i = 0; i < gapChunks.length; i++) {
+          const chunk = gapChunks[i]!;
+          const gapFeedback =
+            (gapsFeedback?.trim() ? `${gapsFeedback.trim()}\n\n` : "") +
+            `**Re-pase cobertura §5:** documenta obligatoriamente estos servicios aún sin mención: ${chunk.map((s) => s.service).join(", ")}.`;
+          const body = await this.invokeLogicFlowsLlm(mddRaw, options, gapFeedback, {
+            batchServices: chunk,
+            batchIndex: i,
+            totalBatches: gapChunks.length,
+            startFlowNumber: flowNum,
+            fragmentOnly: true,
+            gapPass: true,
+          });
+          mergedBody += `\n\n---\n\n${stripLogicFlowsFragmentWrapper(body)}`;
+          flowNum += chunk.length;
+        }
+      }
+    }
+
+    return finalizeLogicFlowsDocument(mergedBody, mddRaw).content;
+  }
+
+  private async invokeLogicFlowsLlm(
+    mddRaw: string,
+    options: LegacyGenerateOptions | undefined,
+    gapsFeedback: string | null | undefined,
+    fragment: {
+      batchServices?: MddSection5ServiceRow[];
+      batchIndex?: number;
+      totalBatches?: number;
+      startFlowNumber?: number;
+      fragmentOnly?: boolean;
+      gapPass?: boolean;
+    },
+  ): Promise<string> {
+    const legacyAsIsLogicFlows = options?.legacyBaselineStage === true && mddRaw.length > 0;
+    const mdd = buildMddContextForLogicFlows(mddRaw, mddDeliverableCtx(options));
+
+    let checklist = "";
+    if (fragment.batchServices?.length && fragment.fragmentOnly) {
+      checklist = buildLogicFlowsBatchUserPreamble(
+        mddRaw,
+        fragment.batchServices,
+        fragment.batchIndex ?? 0,
+        fragment.totalBatches ?? 1,
+        fragment.startFlowNumber ?? 1,
+      );
+    } else if (legacyAsIsLogicFlows) {
+      checklist = buildLegacyAsIsLogicFlowsUserPreamble(buildLegacyAsIsLogicFlowsCoverageChecklist(mddRaw));
+    }
+
     const constitutionNote =
       "El siguiente documento es la **Constitución del proyecto** (MDD). Tu salida debe adherirse a él en todo momento.\n\n";
     let prompt =
       mdd.length > 0
-        ? "Genera el documento de Casos de Uso y Flujos de Lógica según las instrucciones del system prompt. " +
-        "Cubre de forma exhaustiva cada criterio UAT, edge case y flujo de seguridad del MDD; recorre el CHECKLIST DE COBERTURA si aparece. " +
-        constitutionNote +
-        "MDD:\n\n---\n" +
-        mdd +
-        "\n---"
+        ? (legacyAsIsLogicFlows
+            ? checklist
+            : "Genera el documento de Casos de Uso y Flujos de Lógica según las instrucciones del system prompt. " +
+              "Cubre de forma exhaustiva cada criterio UAT, edge case y flujo de seguridad del MDD; recorre el CHECKLIST DE COBERTURA si aparece. " +
+              constitutionNote) +
+          "MDD:\n\n---\n" +
+          mdd +
+          "\n---"
         : "No hay MDD. Genera un documento de flujos genérico (diagramas Mermaid, reglas de validación).";
     if (gapsFeedback?.trim()) {
       prompt +=
         "\n\n**Los siguientes puntos deben corregirse o incorporarse:**\n---\n" + gapsFeedback.trim() + "\n---";
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
-    if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
-    return this.generateResponse(prompt, [], {
-      systemPrompt: LOGIC_FLOWS_PROMPT + NO_MILITAR_INSTRUCTION,
-    });
+    if (mdd.length > 0 && !legacyAsIsLogicFlows) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
+
+    let systemPrompt = LOGIC_FLOWS_PROMPT + NO_MILITAR_INSTRUCTION;
+    if (legacyAsIsLogicFlows) systemPrompt += LEGACY_AS_IS_LOGIC_FLOWS_SYSTEM_APPENDIX;
+    if (fragment.fragmentOnly && fragment.startFlowNumber) {
+      systemPrompt += buildLogicFlowsBatchSystemAppendix(fragment.startFlowNumber);
+    }
+    if (options?.theforgeContext?.trim()) {
+      systemPrompt += legacyAsIsLogicFlows ? LEGACY_AS_IS_LOGIC_FLOWS_THEFORGE_APPENDIX : "";
+    }
+
+    return this.generateResponse(prompt, [], { systemPrompt });
   }
 
   async generateInfra(mddContent: string, blueprintContent?: string | null, gapsFeedback?: string | null, options?: LegacyGenerateOptions): Promise<string> {
-    const mdd = buildMddContextForInfra(mddContent?.trim() ?? "");
-    const blueprint = (blueprintContent?.trim() ?? "").slice(0, 6000);
+    const mdd = buildMddContextForInfra(mddContent?.trim() ?? "", mddDeliverableCtx(options));
+    const blueprint = capTextForLegacyBaseline(blueprintContent ?? "", 6000, options?.legacyBaselineStage);
     const constitutionNote =
       "El siguiente documento es la **Constitución del proyecto** (MDD). Tu salida debe adherirse a él en todo momento.\n\n";
     let prompt =
@@ -861,6 +1064,7 @@ export class AiService {
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
     return this.generateResponse(prompt, [], {
       systemPrompt: INFRA_PROMPT + NO_MILITAR_INSTRUCTION,
     });

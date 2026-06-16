@@ -6,7 +6,7 @@ Decide si cada entregable legacy intenta **section merge** (ventanas §1–§7 +
 
 | Valor       | Comportamiento |
 |------------|----------------|
-| `all`      | Section merge en todos los kinds soportados (default histórico). |
+| `all`      | Section merge en todos los kinds soportados (default histórico). **Etapa 1 AS-IS lo ignora** (`legacy_baseline_stage_full_detail`). |
 | `blueprint`| Solo Blueprint por ventanas. |
 | `off` / `0`| Nunca section merge. |
 | `auto`     | Por entregable: si la estimación de tokens del user prompt monolítico supera el umbral → section merge; si no → monolítico. |

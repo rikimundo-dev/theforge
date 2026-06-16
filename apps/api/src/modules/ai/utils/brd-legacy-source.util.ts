@@ -1,5 +1,16 @@
 import { compactCodebaseDocForMddPrompt } from "../../theforge/legacy-mdd-v1-markdown.util.js";
 import { sanitizeSourceDocForBrdPrompt, truncateSourceDocForBrdPrompt } from "./dbga-prompt-context.util.js";
+import {
+  appendLegacyBaselineBrdDetailPrompt,
+  isLegacyBaselineFullDetailEnabled,
+  readLegacyBaselineBrdCodebaseDocMaxChars,
+  readLegacyBaselineBrdEvidencePathCap,
+} from "./legacy-baseline-detail.util.js";
+
+export type PrepareLegacyBrdOptions = {
+  /** Etapa 1 AS-IS: doc de partida completo en prompt BRD. */
+  legacyBaselineStage?: boolean;
+};
 
 /** Tope del codebaseDoc en prompt BRD legacy (post-compactación). Default mayor que DBGA greenfield. */
 export const LEGACY_BRD_CODEBASE_DOC_PROMPT_MAX_CHARS = intEnv(
@@ -65,11 +76,25 @@ export type LegacyBrdSourcePrep = {
  * Prepara codebaseDoc para BRD legacy: compacta evidence_paths masivos y trunca con cabeza/cola
  * solo si aún supera el tope (prioriza secciones estructuradas al inicio del doc).
  */
-export function prepareLegacyCodebaseDocForBrdPrompt(codebaseDoc: string): LegacyBrdSourcePrep {
+export function prepareLegacyCodebaseDocForBrdPrompt(
+  codebaseDoc: string,
+  options?: PrepareLegacyBrdOptions,
+): LegacyBrdSourcePrep {
+  const baseline = options?.legacyBaselineStage === true && isLegacyBaselineFullDetailEnabled();
   const sanitized = sanitizeSourceDocForBrdPrompt(codebaseDoc);
-  const maxChars = LEGACY_BRD_CODEBASE_DOC_PROMPT_MAX_CHARS;
-  const compacted = compactCodebaseDocForMddPrompt(sanitized, maxChars);
-  const { text, truncated } = truncateSourceDocForBrdPrompt(compacted, maxChars);
+  const maxChars = baseline
+    ? readLegacyBaselineBrdCodebaseDocMaxChars(LEGACY_BRD_CODEBASE_DOC_PROMPT_MAX_CHARS)
+    : LEGACY_BRD_CODEBASE_DOC_PROMPT_MAX_CHARS;
+  const pathCap = baseline
+    ? readLegacyBaselineBrdEvidencePathCap(150)
+    : undefined;
+  const compactMax =
+    maxChars >= Number.MAX_SAFE_INTEGER / 2 ? undefined : maxChars;
+  const compacted = compactCodebaseDocForMddPrompt(sanitized, compactMax, pathCap);
+  const { text, truncated } =
+    maxChars >= Number.MAX_SAFE_INTEGER / 2
+      ? { text: compacted, truncated: false }
+      : truncateSourceDocForBrdPrompt(compacted, maxChars);
   const entityCount = countEntityTableRows(sanitized);
   const serviceCount = countBusinessLogicRows(sanitized);
   const needsInventoryPass =
@@ -86,23 +111,27 @@ export const BRD_BUSINESS_INVENTORY_SYSTEM =
   "Traduce a lenguaje corporativo. Prohibido HTTP, rutas API, JSON, SQL y nombres de tablas.";
 
 /** Prompt fase 1: inventario de negocio antes del BRD completo (sistemas grandes). */
-export function buildLegacyBrdBusinessInventoryPrompt(sourceDocument: string): string {
-  return (
+export function buildLegacyBrdBusinessInventoryPrompt(
+  sourceDocument: string,
+  legacyBaselineStage?: boolean,
+): string {
+  return appendLegacyBaselineBrdDetailPrompt(
     "Del **documento de partida** siguiente, extrae un **inventario de negocio exhaustivo** (no resumas ni agrupes en categorías vagas).\n\n" +
-    "**Reglas:**\n" +
-    "- Una viñeta por **entidad** listada en tablas de modelo de datos (nombre comercial, no técnico).\n" +
-    "- Una viñeta por **servicio/proceso** de lógica de negocio documentado.\n" +
-    "- Una viñeta por **capacidad API** inferible (descrita como proceso, no como endpoint).\n" +
-    "- Si hay varios repositorios (`## Repositorio:`), consolida sin duplicar.\n" +
-    "- **Prohibido** omitir ítems por brevedad; si hay 40 entidades, lista 40 capacidades relacionadas.\n\n" +
-    "**Formato de salida (markdown puro, sin delimitadores):**\n\n" +
-    "## Inventario de capacidades de negocio\n" +
-    "(viñetas `-`)\n\n" +
-    "## Entidades de negocio\n" +
-    "(viñetas `-`)\n\n" +
-    "## Procesos y reglas operativas\n" +
-    "(viñetas `-`)\n\n" +
-    "--- DOCUMENTO ---\n\n" +
-    sourceDocument
+      "**Reglas:**\n" +
+      "- Una viñeta por **entidad** listada en tablas de modelo de datos (nombre comercial, no técnico).\n" +
+      "- Una viñeta por **servicio/proceso** de lógica de negocio documentado.\n" +
+      "- Una viñeta por **capacidad API** inferible (descrita como proceso, no como endpoint).\n" +
+      "- Si hay varios repositorios (`## Repositorio:`), consolida sin duplicar.\n" +
+      "- **Prohibido** omitir ítems por brevedad; si hay 40 entidades, lista 40 capacidades relacionadas.\n\n" +
+      "**Formato de salida (markdown puro, sin delimitadores):**\n\n" +
+      "## Inventario de capacidades de negocio\n" +
+      "(viñetas `-`)\n\n" +
+      "## Entidades de negocio\n" +
+      "(viñetas `-`)\n\n" +
+      "## Procesos y reglas operativas\n" +
+      "(viñetas `-`)\n\n" +
+      "--- DOCUMENTO ---\n\n" +
+      sourceDocument,
+    legacyBaselineStage,
   );
 }

@@ -36,6 +36,15 @@ import { ScraperService } from "../scraper/scraper.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import { GraphMemoryService } from "../ai-analysis/graph-memory/graph-memory.service.js";
 import { ChangeLogService } from "../change-log/change-log.service.js";
+import type { LegacyGenerateOptions } from "../ai/ai.service.js";
+import {
+  extractSection5Services,
+  readLogicFlowsBatchSize,
+  scoreLogicFlowsSection5Coverage,
+  toLogicFlowsSection5CoverageReport,
+} from "../ai/utils/legacy-as-is-logic-flows.util.js";
+import { buildLegacyGenerateOptions } from "../legacy-flow/legacy-generate-options.util.js";
+import { patchLegacyDeliverablesDebugReport } from "../legacy-flow/legacy-flow-state-debug.util.js";
 import type { IOrchestratorProjectsPort } from "./projects-service.port.js";
 import { resolveUrls } from "../scraper/url-utils.js";
 import {
@@ -689,6 +698,45 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         gaps: dm.gaps,
       });
     }
+  }
+
+  /** Opciones legacy (etapa 1 AS-IS + TheForge) para regeneración individual en Workshop. */
+  private async resolveLegacyGenerateOptions(
+    project: Project & { stages: StageWithEst[] },
+  ): Promise<LegacyGenerateOptions | undefined> {
+    const p = project as { projectType?: string; theforgeProjectId?: string | null };
+    return buildLegacyGenerateOptions({
+      projectType: p.projectType,
+      theforgeProjectId: p.theforgeProjectId ?? null,
+      mddMarkdown: this.constitutionMarkdown(project),
+      stages: project.stages,
+      theforgeConfigured: this.theforge.isConfigured(),
+      getContextForDeliverables: (id) => this.theforge.getContextForDeliverables(id),
+      gatherContractSpecsForApi: (id) => this.theforge.gatherContractSpecsForApi(id),
+    });
+  }
+
+  /** Tras regen individual de flujos legacy etapa 1: telemetría §5 en `legacyFlowState`. */
+  private async persistLegacyLogicFlowsCoverageDebug(
+    projectId: string,
+    project: Project & { stages: StageWithEst[] },
+    logicFlowsMarkdown: string,
+    legacyOpts: LegacyGenerateOptions | undefined,
+  ): Promise<void> {
+    if (!legacyOpts?.legacyBaselineStage) return;
+    const mdd = this.constitutionMarkdown(project);
+    const services = extractSection5Services(mdd);
+    const batchSize = readLogicFlowsBatchSize();
+    const batchCount =
+      services.length > batchSize ? Math.ceil(services.length / batchSize) : undefined;
+    const coverage = toLogicFlowsSection5CoverageReport(
+      scoreLogicFlowsSection5Coverage(mdd, logicFlowsMarkdown),
+      batchCount !== undefined ? { batchCount } : undefined,
+    );
+    await patchLegacyDeliverablesDebugReport(this.prisma, projectId, {
+      legacyBaselineStage: true,
+      logicFlowsSection5Coverage: coverage,
+    });
   }
 
   async patchStage(projectId: string, stageId: string, body: unknown) {
@@ -1432,12 +1480,7 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
     const project = await this.assertProjectAccess(projectId);
     const mddContent = this.constitutionMarkdown(project);
     const enrichedMdd = this.enrichMddWithEntities(mddContent);
-    const p = project as { projectType?: string; theforgeProjectId?: string | null };
-    let legacyOpts: { theforgeContext: string } | undefined;
-    if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
-      const theforgeContext = await this.theforge.getContextForDeliverables(p.theforgeProjectId);
-      if (theforgeContext.trim()) legacyOpts = { theforgeContext };
-    }
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
     const content = await this.ai.generateBlueprint(enrichedMdd, gapsFeedback, legacyOpts);
     return { content: cleanDocumentContent(content) };
   }
@@ -1446,12 +1489,7 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
     const project = await this.assertProjectAccess(projectId);
     const mddContent = this.constitutionMarkdown(project);
     const enrichedMdd = this.enrichMddWithEntities(mddContent);
-    const p = project as { projectType?: string; theforgeProjectId?: string | null };
-    let legacyOpts: { theforgeContext: string } | undefined;
-    if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
-      const theforgeContext = await this.theforge.getContextForDeliverables(p.theforgeProjectId);
-      if (theforgeContext.trim()) legacyOpts = { theforgeContext };
-    }
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
     let blueprintContent = await this.ai.generateBlueprint(enrichedMdd, gapsFeedback, legacyOpts);
     blueprintContent = cleanDocumentContent(blueprintContent);
 
@@ -1554,21 +1592,8 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
     const mainStage = project.stages?.[0];
     const brdContent = mainStage?.brdContent ?? undefined;
 
-    // Para proyectos legacy con Ariadne configurado, obtener contexto y contract specs
-    const p = project as { projectType?: string; theforgeProjectId?: string | null };
-    let legacyOpts: { theforgeContext?: string; contractSpecs?: string } | undefined;
-    if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
-      const [theforgeContext, contractSpecs] = await Promise.all([
-        this.theforge.getContextForDeliverables(p.theforgeProjectId),
-        this.theforge.gatherContractSpecsForApi(p.theforgeProjectId),
-      ]);
-      if (theforgeContext.trim() || contractSpecs.trim()) {
-        legacyOpts = {
-          ...(theforgeContext.trim() ? { theforgeContext } : {}),
-          ...(contractSpecs.trim() ? { contractSpecs } : {}),
-        };
-      }
-    }
+    // Legacy etapa 1 AS-IS + contexto TheForge cuando aplica
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
     const content = await this.ai.generateApiContracts(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -1581,10 +1606,12 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
 
   async generateInfraPreview(projectId: string, gapsFeedback?: string | null): Promise<{ content: string }> {
     const project = await this.assertProjectAccess(projectId);
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
     const content = await this.ai.generateInfra(
       this.constitutionMarkdown(project),
       project.blueprintContent,
       gapsFeedback,
+      legacyOpts,
     );
     return { content: cleanDocumentContent(content) };
   }
@@ -1597,21 +1624,8 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
     const mainStage = project.stages?.[0];
     const brdContent = mainStage?.brdContent ?? undefined;
 
-    // Para proyectos legacy con Ariadne configurado, obtener contexto y contract specs
-    const p = project as { projectType?: string; theforgeProjectId?: string | null };
-    let legacyOpts: { theforgeContext?: string; contractSpecs?: string } | undefined;
-    if (p.projectType === "LEGACY" && p.theforgeProjectId && this.theforge.isConfigured()) {
-      const [theforgeContext, contractSpecs] = await Promise.all([
-        this.theforge.getContextForDeliverables(p.theforgeProjectId),
-        this.theforge.gatherContractSpecsForApi(p.theforgeProjectId),
-      ]);
-      if (theforgeContext.trim() || contractSpecs.trim()) {
-        legacyOpts = {
-          ...(theforgeContext.trim() ? { theforgeContext } : {}),
-          ...(contractSpecs.trim() ? { contractSpecs } : {}),
-        };
-      }
-    }
+    // Legacy etapa 1 AS-IS + contexto TheForge cuando aplica
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
     const content = await this.ai.generateApiContracts(
       this.constitutionMarkdown(project),
       project.blueprintContent,
@@ -1624,16 +1638,24 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
 
   async generateLogicFlows(projectId: string, gapsFeedback?: string | null) {
     const project = await this.assertProjectAccess(projectId);
-    const content = await this.ai.generateLogicFlows(this.constitutionMarkdown(project), gapsFeedback);
-    return this.update(projectId, { logicFlowsContent: cleanDocumentContent(content) });
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
+    const mdd = this.constitutionMarkdown(project);
+    const content = await this.ai.generateLogicFlows(mdd, gapsFeedback, legacyOpts);
+    const cleaned = cleanDocumentContent(content);
+    if ((project as { projectType?: string }).projectType === "LEGACY") {
+      await this.persistLegacyLogicFlowsCoverageDebug(projectId, project, cleaned, legacyOpts);
+    }
+    return this.update(projectId, { logicFlowsContent: cleaned });
   }
 
   async generateInfra(projectId: string, gapsFeedback?: string | null) {
     const project = await this.assertProjectAccess(projectId);
+    const legacyOpts = await this.resolveLegacyGenerateOptions(project);
     const content = await this.ai.generateInfra(
       this.constitutionMarkdown(project),
       project.blueprintContent,
       gapsFeedback,
+      legacyOpts,
     );
     return this.update(projectId, { infraContent: cleanDocumentContent(content) });
   }

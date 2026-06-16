@@ -1,7 +1,22 @@
 import { extractEntities } from "../../engine/conformance.service.js";
+import {
+  isLegacyBaselineFullDetailEnabled,
+  readLegacyBaselineMddDeliverableBudget,
+} from "./legacy-baseline-detail.util.js";
 
 /** Presupuesto de caracteres del MDD para entregables derivados de la Constitución. */
 export const MDD_DELIVERABLE_BUDGET = 50_000;
+
+export interface MddDeliverableContextOptions {
+  legacyBaselineStage?: boolean;
+}
+
+function resolveMddDeliverableBudget(options?: MddDeliverableContextOptions): number {
+  if (options?.legacyBaselineStage && isLegacyBaselineFullDetailEnabled()) {
+    return readLegacyBaselineMddDeliverableBudget();
+  }
+  return MDD_DELIVERABLE_BUDGET;
+}
 
 /** @deprecated Usar MDD_DELIVERABLE_BUDGET */
 export const USER_STORIES_MDD_BUDGET = MDD_DELIVERABLE_BUDGET;
@@ -249,76 +264,111 @@ function prioritySectionsFor(kind: MddDeliverableKind): typeof PRIORITY_SECTIONS
  * Si el MDD cabe en el presupuesto, lo devuelve íntegro; si no, antepone checklist de cobertura
  * y secciones críticas antes que bloques extensos de §2/§3.
  */
-export function buildMddContextForDeliverable(mddContent: string, kind: MddDeliverableKind): string {
+export function buildMddContextForDeliverable(
+  mddContent: string,
+  kind: MddDeliverableKind,
+  options?: MddDeliverableContextOptions,
+): string {
   const trimmed = (mddContent ?? "").trim();
   if (!trimmed) return "";
-  if (trimmed.length <= MDD_DELIVERABLE_BUDGET) return trimmed;
+  const budget = resolveMddDeliverableBudget(options);
+  if (trimmed.length <= budget) return trimmed;
 
   const parts: string[] = [];
-  let budget = MDD_DELIVERABLE_BUDGET;
+  let remaining = budget;
 
   const checklist = buildCoverageChecklist(trimmed, kind);
   if (checklist) {
     parts.push(checklist);
-    budget -= checklist.length + 2;
+    remaining -= checklist.length + 2;
   }
 
   for (const { label, pattern } of prioritySectionsFor(kind)) {
     const body = extractSection(trimmed, pattern);
     if (!body) continue;
     const block = `### Extracto MDD — ${label}\n\n${body}`;
-    if (block.length > budget) {
-      parts.push(`${block.slice(0, budget)}\n\n…(sección truncada por límite de contexto)`);
+    if (block.length > remaining) {
+      parts.push(`${block.slice(0, remaining)}\n\n…(sección truncada por límite de contexto)`);
       break;
     }
     parts.push(block);
-    budget -= block.length + 2;
+    remaining -= block.length + 2;
   }
 
-  if (parts.length === 0) return trimmed.slice(0, MDD_DELIVERABLE_BUDGET);
+  if (parts.length === 0) return trimmed.slice(0, budget);
 
   parts.push(
     "\n---\n*Nota: MDD completo truncado; se priorizaron checklist de cobertura y secciones críticas del MDD.*",
   );
-  return parts.join("\n\n").slice(0, MDD_DELIVERABLE_BUDGET);
+  return parts.join("\n\n").slice(0, budget);
 }
 
-export function buildMddContextForUserStories(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "user-stories");
+export function buildMddContextForUserStories(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "user-stories", options);
 }
 
-export function buildMddContextForUseCases(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "use-cases");
+export function buildMddContextForUseCases(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "use-cases", options);
 }
 
-export function buildMddContextForBlueprint(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "blueprint");
+export function buildMddContextForBlueprint(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "blueprint", options);
 }
 
-export function buildMddContextForApiContracts(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "api-contracts");
+export function buildMddContextForApiContracts(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "api-contracts", options);
 }
 
-export function buildMddContextForLogicFlows(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "logic-flows");
+export function buildMddContextForLogicFlows(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "logic-flows", options);
 }
 
-export function buildMddContextForArchitecture(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "architecture");
+export function buildMddContextForArchitecture(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "architecture", options);
 }
 
-export function buildMddContextForTasks(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "tasks");
+export function buildMddContextForTasks(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "tasks", options);
 }
 
-export function buildMddContextForInfra(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "infra");
+export function buildMddContextForInfra(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "infra", options);
 }
 
-export function buildMddContextForSpec(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "spec");
+export function buildMddContextForSpec(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "spec", options);
 }
 
-export function buildMddContextForAgentGovernance(mddContent: string): string {
-  return buildMddContextForDeliverable(mddContent, "agent-governance");
+export function buildMddContextForAgentGovernance(
+  mddContent: string,
+  options?: MddDeliverableContextOptions,
+): string {
+  return buildMddContextForDeliverable(mddContent, "agent-governance", options);
 }

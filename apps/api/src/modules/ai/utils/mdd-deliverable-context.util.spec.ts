@@ -45,6 +45,8 @@ CREATE TABLE users (id uuid);
 
 MFA TOTP obligatorio.
 
+## 99. Ruido de prueba
+
 ${filler}`;
 
 describe("buildMddContextForDeliverable", () => {
@@ -85,5 +87,20 @@ describe("buildMddContextForDeliverable", () => {
     const out = buildMddContextForApiContracts(SAMPLE_MDD(filler));
     assert.ok(out.includes("GET /api/v1/auth/login"));
     assert.ok(out.includes("Fila en tabla de endpoints"));
+  });
+
+  it("devuelve MDD íntegro en etapa 1 AS-IS aunque supere presupuesto estándar", () => {
+    const filler = "y".repeat(MDD_DELIVERABLE_BUDGET + 5000);
+    const mdd = SAMPLE_MDD(filler);
+    const prev = process.env.LEGACY_BASELINE_FULL_DETAIL;
+    process.env.LEGACY_BASELINE_FULL_DETAIL = "1";
+    try {
+      const out = buildMddContextForBlueprint(mdd, { legacyBaselineStage: true });
+      assert.equal(out, mdd);
+      assert.ok(out.includes(filler.slice(0, 200)));
+    } finally {
+      if (prev === undefined) delete process.env.LEGACY_BASELINE_FULL_DETAIL;
+      else process.env.LEGACY_BASELINE_FULL_DETAIL = prev;
+    }
   });
 });

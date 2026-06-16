@@ -13,6 +13,7 @@ import type {
   LegacyDeliverablesStrategyResolution,
   LegacyDeliverablesTokenEstimateMethod,
 } from "./legacy-deliverables-strategy.types.js";
+import { isLegacyBaselineFullDetailEnabled } from "../../ai/utils/legacy-baseline-detail.util.js";
 
 function readTheForgePrependMaxChars(): number {
   const n = parseInt(process.env.THEFORGE_CONTEXT_PREPEND_MAX_CHARS ?? "16000", 10);
@@ -68,17 +69,21 @@ export function buildLegacyMonolithicUserPromptSample(
   const bp = ctx.blueprintText ?? "";
   const sp = ctx.specText ?? "";
   const uc = ctx.useCasesText ?? "";
+  const fullDetail = ctx.legacyBaselineStage === true && isLegacyBaselineFullDetailEnabled();
 
   const tfCapStandard = readTheForgePrependMaxChars();
   const tfStandard = tfRaw.length > 0 ? tfRaw.slice(0, tfCapStandard) : "";
+
+  const capMdd = (n: number) => (fullDetail ? mdd : mdd.slice(0, n));
+  const capAux = (text: string, n: number) => (fullDetail ? text : text.slice(0, n));
 
   let parts = "";
 
   if (kind === "ux_ui_guide") {
     const tfUx = tfRaw.length > 0 ? tfRaw.slice(0, mddTheforgeContextMaxCharsForUx()) : "";
     if (tfUx) parts += block("THEFORGE_CONTEXT", tfUx);
-    parts += block("MDD", mdd.slice(0, 8000));
-    parts += block("BLUEPRINT", bp.slice(0, 4000));
+    parts += block("MDD", capMdd(8000));
+    parts += block("BLUEPRINT", capAux(bp, 4000));
     return parts.trimEnd();
   }
 
@@ -86,38 +91,38 @@ export function buildLegacyMonolithicUserPromptSample(
 
   switch (kind) {
     case "spec":
-      parts += block("MDD", mdd.slice(0, 12000));
+      parts += block("MDD", capMdd(12000));
       break;
     case "blueprint":
       parts += block("MDD", mdd);
       break;
     case "architecture":
-      parts += block("MDD", mdd.slice(0, 10000));
-      parts += block("BLUEPRINT", bp.slice(0, 8000));
+      parts += block("MDD", capMdd(10000));
+      parts += block("BLUEPRINT", capAux(bp, 8000));
       break;
     case "use_cases":
-      parts += block("MDD", mdd.slice(0, 12000));
-      parts += block("SPEC", sp.slice(0, 8000));
+      parts += block("MDD", capMdd(12000));
+      parts += block("SPEC", capAux(sp, 8000));
       break;
     case "api_contracts":
       parts += block("MDD", mdd);
-      parts += block("BLUEPRINT", bp.slice(0, 8000));
+      parts += block("BLUEPRINT", capAux(bp, 8000));
       break;
     case "logic_flows":
       parts += block("MDD", mdd);
       break;
     case "user_stories":
-      parts += block("MDD", mdd.slice(0, 10000));
-      parts += block("SPEC", sp.slice(0, 6000));
-      parts += block("USE_CASES", uc.slice(0, 6000));
+      parts += block("MDD", capMdd(10000));
+      parts += block("SPEC", capAux(sp, 6000));
+      parts += block("USE_CASES", capAux(uc, 6000));
       break;
     case "tasks":
-      parts += block("MDD", mdd.slice(0, 10000));
-      parts += block("BLUEPRINT", bp.slice(0, 8000));
+      parts += block("MDD", capMdd(10000));
+      parts += block("BLUEPRINT", capAux(bp, 8000));
       break;
     case "infra":
       parts += block("MDD", mdd);
-      parts += block("BLUEPRINT", bp.slice(0, 6000));
+      parts += block("BLUEPRINT", capAux(bp, 6000));
       break;
     default:
       parts += block("MDD", mdd);
@@ -166,6 +171,23 @@ export async function resolveLegacyDeliverablesSectionMergeAttempt(
   const charsPerToken = readCharsPerToken();
   const threshold = readAutoUserPromptTokenThreshold();
   const sample = buildLegacyMonolithicUserPromptSample(kind, ctx);
+
+  if (ctx.legacyBaselineStage === true && isLegacyBaselineFullDetailEnabled()) {
+    const { tokens, method } = estimateTokens(sample, charsPerToken);
+    return {
+      kind,
+      policy,
+      envelopeStrategy: "monolithic",
+      attemptSectionMerge: false,
+      estimatedMonolithicUserPromptChars: sample.length + 350,
+      estimatedMonolithicUserPromptTokens: tokens,
+      tokenEstimateMethod: method,
+      tiktokenEncoding: method === "tiktoken" ? readTiktokenEncodingLabel() : undefined,
+      autoUserPromptTokenThreshold: threshold,
+      charsPerToken,
+      reason: "legacy_baseline_stage_full_detail",
+    };
+  }
 
   if (!legacyDeliverableKindSupportsSectionMerge(kind)) {
     const { tokens, method } = estimateTokens(sample, charsPerToken);
