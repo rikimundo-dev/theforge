@@ -12,6 +12,7 @@ import {
   GitBranch,
   HelpCircle,
   LayoutTemplate,
+  Link2,
   ListTodo,
   Palette,
   Plug,
@@ -22,6 +23,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import legacyNewIntegrationHelp from "../content/help/legacy-new-integration.md?raw";
 import {
   Button,
   Dialog,
@@ -48,6 +50,7 @@ interface HelpSection {
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
   manual: BookOpen,
+  "legacy-new-integration": Link2,
   sdd: Brain,
   mdd: FileText,
   spec: ClipboardList,
@@ -138,7 +141,14 @@ const SECTIONS: HelpSection[] = [
       "## Más documentación",
       "",
       "En el repositorio: `docs/notebooklm/STAGE-SDD.md`, `docs/notebooklm/THEFORGE-INDEX.md`, `docs/notebooklm/ENTREGABLES-SDD-VALIDACION.md`.",
+      "",
+      "Integración entre monolito legacy y producto nuevo: ver **Integración Legacy ↔ Nuevo** en esta misma ayuda.",
     ].join("\n"),
+  },
+  {
+    id: "legacy-new-integration",
+    label: "Integración Legacy ↔ Nuevo",
+    content: legacyNewIntegrationHelp.trim(),
   },
   {
     id: "sdd",
@@ -701,7 +711,7 @@ const SECTIONS: HelpSection[] = [
 ];
 
 const NAV_GROUPS: { label: string; sectionIds: string[] }[] = [
-  { label: "Guía", sectionIds: ["manual"] },
+  { label: "Guía", sectionIds: ["manual", "legacy-new-integration"] },
   { label: "Metodología", sectionIds: ["sdd"] },
   {
     label: "Documentos",
@@ -809,6 +819,12 @@ const mdComponents = {
     />
   ),
   hr: () => <hr className="my-6 border-[var(--border)]" />,
+  blockquote: (props: ComponentPropsWithoutRef<"blockquote">) => (
+    <blockquote
+      className="mb-4 rounded-[var(--radius)] border border-[color-mix(in_oklch,var(--primary)_22%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_7%,var(--card))] px-4 py-3 text-sm leading-relaxed text-[var(--foreground-muted)] [&>p:last-child]:mb-0"
+      {...props}
+    />
+  ),
   table: (props: ComponentPropsWithoutRef<"table">) => (
     <div className="mb-4 overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_82%,var(--background))] shadow-sm [&_tbody_tr:last-child_td]:border-b-0">
       <table className="w-full border-collapse text-left text-xs" {...props} />
