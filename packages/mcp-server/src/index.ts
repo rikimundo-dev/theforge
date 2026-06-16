@@ -1682,8 +1682,16 @@ async function main(): Promise<void> {
       // Read body
       const body = await readBody(req);
 
-      // Auth: extraer MCP_M2M_SECRET del header del cliente
-      const clientSecret = (req.headers["mcp_m2m_secret"] as string) || "";
+      // Auth: extraer MCP_M2M_SECRET del header del cliente.
+      // Fallback: Authorization: Bearer <token> (soporta clientes como OpenHands SHTTP).
+      let clientSecret = (req.headers["mcp_m2m_secret"] as string) || "";
+      if (!clientSecret) {
+        const authHeader = (req.headers["authorization"] as string) || "";
+        const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+        if (bearerMatch) {
+          clientSecret = bearerMatch[1];
+        }
+      }
       if (!clientSecret) {
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(
