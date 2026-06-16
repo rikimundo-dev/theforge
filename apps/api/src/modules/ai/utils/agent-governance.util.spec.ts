@@ -45,6 +45,7 @@ describe("parseAgentGovernanceResponse", () => {
     assert.ok(paths.includes("docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md"));
     assert.ok(paths.includes("docs/agent-governance/agent-onboarding.md"));
     assert.ok(paths.includes("docs/agent-governance/INSTALACION.md"));
+    assert.ok(paths.includes("docs/agent-governance/references/THEFORGE-DOC-CONSUMPTION-GUIDE.md"));
     assert.ok(paths.includes("PROMPT-INICIAL.md"));
     assert.ok(paths.includes("docs/sdd/PROGRESO.md"));
     const agents = scaffold.files.find((f) => f.path === "AGENTS.md");
@@ -153,7 +154,7 @@ Backend FastAPI, frontend React Native Expo.
     const rule = scaffold.files.find(
       (f) => f.path === "docs/agent-governance/rules/stack-backend.mdc",
     );
-    assert.ok(rule?.content.includes("Hechos del proyecto (TheForge)"));
+    assert.ok(rule?.content.includes("Hechos del proyecto ("));
     assert.ok(
       scaffold.files.some((f) => f.path === "docs/agent-governance/agents/mobile-implementer.md"),
     );
@@ -255,5 +256,31 @@ describe("appendProjectDeliverablesToScaffold", () => {
     assert.ok(paths.includes("docs/sdd/mdd.md"));
     assert.ok(paths.includes("docs/sdd/tasks.md"));
     assert.ok(paths.includes("docs/sdd/blueprint.md"));
+  });
+
+  it("incluye api-contracts, logic-flows e infra cuando hay contenido", () => {
+    const base = parseAgentGovernanceResponse('{"files":{}}', "MEDIUM");
+    const enriched = appendProjectDeliverablesToScaffold(base, {
+      mddMarkdown: "# MDD\n",
+      apiContractsMarkdown: "# API\n",
+      logicFlowsMarkdown: "# Flows\n",
+      infraMarkdown: "# Infra\n",
+    });
+    const paths = enriched.files.map((f) => f.path);
+    assert.ok(paths.includes("docs/sdd/api-contracts.md"));
+    assert.ok(paths.includes("docs/sdd/logic-flows.md"));
+    assert.ok(paths.includes("docs/sdd/infra.md"));
+    const api = enriched.files.find((f) => f.path === "docs/sdd/api-contracts.md");
+    assert.equal(api?.content.trim(), "# API");
+  });
+
+  it("sobrescribe placeholders SDD con contenido del proyecto", () => {
+    const base = parseAgentGovernanceResponse('{"files":{}}', "LOW");
+    base.files.push({ path: "docs/sdd/api-contracts.md", content: "placeholder" });
+    const enriched = appendProjectDeliverablesToScaffold(base, {
+      apiContractsMarkdown: "# Contratos reales\n",
+    });
+    const api = enriched.files.find((f) => f.path === "docs/sdd/api-contracts.md");
+    assert.equal(api?.content.trim(), "# Contratos reales");
   });
 });

@@ -1335,7 +1335,7 @@ name: ${JSON.stringify(name)}
     });
   }
 
-  private buildAgentGovernanceInput(
+    private buildAgentGovernanceInput(
     project: Project,
     mddMarkdown: string,
     complexity: ComplexityLevel,
@@ -1346,6 +1346,13 @@ name: ${JSON.stringify(name)}
       tasksMarkdown: project.tasksContent,
       architectureMarkdown: project.architectureContent,
       specMarkdown: project.specContent,
+      apiContractsMarkdown: project.apiContractsContent,
+      logicFlowsMarkdown: project.logicFlowsContent,
+      uxUiGuideMarkdown: project.uxUiGuideContent,
+      infraMarkdown: project.infraContent,
+      useCasesMarkdown: project.useCasesContent,
+      userStoriesMarkdown: project.userStoriesContent,
+      projectName: project.name,
       complexity,
     };
   }

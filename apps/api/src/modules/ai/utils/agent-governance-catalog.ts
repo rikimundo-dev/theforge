@@ -47,6 +47,7 @@ export const GOVERNANCE_ARCHETYPES = [
   "spa-only",
   "api-only",
   "docker-dokploy",
+  "kubernetes",
   "auth-jwt",
   "mcp-enabled",
 ] as const;
@@ -61,6 +62,41 @@ function ruleFrontmatter(
   if (opts?.globs?.length) lines.push(`globs: ${JSON.stringify(opts.globs)}`);
   if (opts?.alwaysApply) lines.push("alwaysApply: true");
   lines.push("---", "");
+  return lines.join("\n");
+}
+
+function stackBackendGlobs(ctx: ArtifactTemplateContext): string[] {
+  return ctx.projectFacts?.backendGlobs?.length
+    ? ctx.projectFacts.backendGlobs
+    : ["src/**", "packages/**/src/**"];
+}
+
+function stackFrontendGlobs(ctx: ArtifactTemplateContext): string[] {
+  return ctx.projectFacts?.frontendGlobs?.length
+    ? ctx.projectFacts.frontendGlobs
+    : ["apps/web/**", "packages/**/src/**"];
+}
+
+function enrichStackBody(ctx: ArtifactTemplateContext, layer: "backend" | "frontend"): string {
+  const facts = ctx.projectFacts;
+  const lines = [
+    "Deriva comandos exactos (lint, typecheck, tests) del MDD §2 y del repo.",
+    "",
+    "- Ejecuta gates del paquete tocado antes de cerrar tareas.",
+    "- Respeta capas y módulos declarados en Blueprint.",
+  ];
+  if (facts?.blueprintModules.length) {
+    lines.push("", "**Módulos Blueprint:**", ...facts.blueprintModules.slice(0, 6).map((m) => `- \`${m}\``));
+  }
+  if (facts?.npmScripts.length) {
+    lines.push("", "**Scripts detectados:**", ...facts.npmScripts.map((s) => `- \`${s}\``));
+  }
+  if (layer === "backend" && facts?.backendGlobs.length) {
+    lines.push("", "**Globs backend:**", ...facts.backendGlobs.map((g) => `- \`${g}\``));
+  }
+  if (layer === "frontend" && facts?.frontendGlobs.length) {
+    lines.push("", "**Globs frontend:**", ...facts.frontendGlobs.map((g) => `- \`${g}\``));
+  }
   return lines.join("\n");
 }
 
@@ -105,12 +141,11 @@ export const RULE_CATALOG: RuleCatalogEntry[] = [
     archetypes: ["nestjs-react-monorepo", "api-only"],
     template: (ctx) =>
       ruleFrontmatter(`Stack backend (${ctx.backendStack ?? "parametrizar desde MDD §2"})`, {
-        globs: ["apps/api/**", "src/**", "packages/**/src/**"],
+        globs: stackBackendGlobs(ctx),
       }) +
       "# Stack backend\n\n" +
-      "Deriva comandos exactos (lint, typecheck, tests) del MDD §2 y del repo.\n\n" +
-      "- Ejecuta gates del paquete tocado antes de cerrar tareas.\n" +
-      "- Respeta capas y módulos declarados en Blueprint.\n",
+      enrichStackBody(ctx, "backend") +
+      "\n",
   },
   {
     id: "stack-frontend",
@@ -130,10 +165,12 @@ export const RULE_CATALOG: RuleCatalogEntry[] = [
     archetypes: ["nestjs-react-monorepo", "spa-only", "design-system-ui"],
     template: (ctx) =>
       ruleFrontmatter(`Stack frontend (${ctx.frontendStack ?? "parametrizar desde MDD §2"})`, {
-        globs: ["apps/web/**", "src/**", "packages/**/src/**"],
+        globs: stackFrontendGlobs(ctx),
       }) +
       "# Stack frontend\n\n" +
-      "Usa design system y tokens del MDD; no valores ad-hoc.\n\n" +
+      enrichStackBody(ctx, "frontend") +
+      "\n" +
+      "- Usa design system y tokens del MDD; no valores ad-hoc.\n" +
       "- lint + typecheck del paquete UI/SPA antes de merge.\n",
   },
   {
@@ -238,15 +275,19 @@ export const SKILL_CATALOG: SkillCatalogEntry[] = [
     dynamicFolder: true,
     template: (ctx) => {
       const folder = ctx.domainSkillFolder ?? "project-package";
+      const modules = ctx.projectFacts?.blueprintModules ?? [];
       return (
         skillFrontmatter(
           folder,
-          "Trabajo en el paquete o módulo principal del proyecto según MDD/Blueprint.",
+          `Trabajo en ${folder} según MDD/Blueprint.`,
         ) +
         `# Skill: ${folder}\n\n` +
         "## Cuándo cargar\n\n" +
-        "- Edición o depuración en el paquete/módulo principal.\n" +
+        `- Edición o depuración en \`${folder}\` o rutas relacionadas.\n` +
         "- Feature o bug en rutas citadas en Blueprint.\n\n" +
+        (modules.length
+          ? `## Rutas Blueprint\n\n${modules.slice(0, 6).map((m) => `- \`${m}\``).join("\n")}\n\n`
+          : "") +
         "## Checklist\n\n" +
         "1. Lee `AGENTS.md` y rules de stack.\n" +
         "2. Confirma gates (lint, typecheck, tests) del paquete.\n" +
@@ -290,17 +331,39 @@ export const SKILL_CATALOG: SkillCatalogEntry[] = [
     description: "Despliegue contenedores / PaaS (Docker, Dokploy, K8s)",
     triggers: "Infra, Dockerfile, compose, Dokploy o pipeline de deploy.",
     minComplexity: "HIGH",
-    signals: [/docker/i, /dokploy/i, /kubernetes/i, /\bk8s\b/i, /§\s*7/i, /contenedor/i, /paas/i],
+    signals: [/docker/i, /dokploy/i, /§\s*7/i, /contenedor/i, /paas/i],
     archetypes: ["docker-dokploy"],
     template: () =>
       skillFrontmatter("deploy-docker", "Despliegue: Docker, compose y PaaS según MDD §7.") +
       "# Deploy Docker / PaaS\n\n" +
       "## Cuándo cargar\n\n" +
-      "- Cambios en Dockerfile, compose o manifests.\n" +
+      "- Cambios en Dockerfile, compose o manifests PaaS.\n" +
       "- Variables de entorno y healthchecks.\n\n" +
       "## Checklist\n\n" +
       "- Sin secretos en imágenes ni repos.\n" +
       "- Healthchecks alineados al stack real.\n",
+  },
+  {
+    id: "deploy-kubernetes",
+    folder: "deploy-kubernetes",
+    path: "docs/agent-governance/skills/deploy-kubernetes/SKILL.md",
+    description: "Despliegue Kubernetes / Helm según MDD §7",
+    triggers: "Manifests K8s, Helm charts, ingress o operators.",
+    minComplexity: "HIGH",
+    signals: [/kubernetes/i, /\bk8s\b/i, /helm/i, /ingress/i],
+    archetypes: ["kubernetes"],
+    template: () =>
+      skillFrontmatter(
+        "deploy-kubernetes",
+        "Despliegue Kubernetes/Helm según MDD §7 (prioritario sobre Docker/PaaS).",
+      ) +
+      "# Deploy Kubernetes / Helm\n\n" +
+      "## Cuándo cargar\n\n" +
+      "- Cambios en manifests, Helm charts o ingress.\n" +
+      "- ConfigMaps, Secrets y health probes.\n\n" +
+      "## Checklist\n\n" +
+      "- Sin secretos en repos; usa Secret refs.\n" +
+      "- Probes y recursos alineados al MDD §7.\n",
   },
   {
     id: "mcp-ariadne",
@@ -309,7 +372,7 @@ export const SKILL_CATALOG: SkillCatalogEntry[] = [
     description: "MCP Ariadne / grafo de código para legacy",
     triggers: "Refactor legacy, impacto multi-archivo, validate_before_edit.",
     minComplexity: "MEDIUM",
-    signals: [/ariadne/i, /falkor/i, /legacy/i, /código\s+existente/i, /strangler/i],
+    signals: [/ariadne/i, /legacy/i, /código\s+existente/i, /strangler/i, /validate_before_edit/i],
     archetypes: ["legacy-ariadne", "mcp-enabled"],
     template: () =>
       skillFrontmatter(

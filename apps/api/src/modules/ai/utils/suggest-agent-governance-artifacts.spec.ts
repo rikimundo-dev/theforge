@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
+  extractProjectGovernanceFacts,
+  extractTaskCheckboxes,
   inferStacks,
   suggestAgentGovernanceArtifacts,
 } from "./suggest-agent-governance-artifacts.js";
@@ -92,6 +94,98 @@ describe("inferStacks", () => {
     assert.equal(inferStacks("Backend: Cloudflare Workers con Hono").backend, "Cloudflare Workers");
     assert.equal(inferStacks("API en FastAPI con Python").backend, "FastAPI");
     assert.equal(inferStacks("Despliegue serverless en Cloudflare").infra, "Serverless");
+  });
+
+  it("prioriza Kubernetes sobre Docker en infra", () => {
+    assert.equal(
+      inferStacks("Deploy con Kubernetes y Helm charts").infra,
+      "Kubernetes",
+    );
+  });
+});
+
+describe("archetype false positives", () => {
+  it("no activa legacy-ariadne solo por FalkorDB fase 2", () => {
+    const result = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# KMS
+## Roadmap
+Fase 2: índice FalkorDB para análisis futuro.
+Backend NestJS API-only MVP sin dashboard.
+`,
+      complexity: "MEDIUM",
+    });
+    assert.equal(result.archetypes.includes("legacy-ariadne"), false);
+    assert.equal(result.suggestedSkills.some((s) => s.id === "mcp-ariadne"), false);
+  });
+
+  it("omite stack-frontend y design-system-ui en API-only sin UI", () => {
+    const result = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# KMS Backend
+## 2. Stack
+Backend NestJS. API-only MVP sin dashboard ni frontend.
+Monorepo kms-backend/ packages/shared
+`,
+      specMarkdown: "CLI-only para operaciones; sin interfaz web.",
+      blueprintMarkdown: "## Árbol\n- kms-backend/\n- packages/shared/\n",
+      complexity: "HIGH",
+    });
+    const ruleIds = result.suggestedRules.map((r) => r.id);
+    const skillIds = result.suggestedSkills.map((s) => s.id);
+    assert.equal(ruleIds.includes("stack-frontend"), false);
+    assert.equal(skillIds.includes("design-system-ui"), false);
+  });
+
+  it("prefiere deploy-kubernetes sobre deploy-docker con señales K8s", () => {
+    const result = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# Plataforma
+## 7. Infra
+Despliegue en Kubernetes con Helm charts e ingress.
+`,
+      complexity: "HIGH",
+    });
+    assert.ok(result.archetypes.includes("kubernetes"));
+    assert.ok(result.suggestedSkills.some((s) => s.id === "deploy-kubernetes"));
+    assert.equal(result.suggestedSkills.some((s) => s.id === "deploy-docker"), false);
+  });
+});
+
+describe("extractProjectGovernanceFacts", () => {
+  it("usa título del MDD y globs del Blueprint", () => {
+    const facts = extractProjectGovernanceFacts({
+      mddMarkdown: "# KMS Platform\n## 1. Visión\nSistema de llaves.\n",
+      blueprintMarkdown: "## Módulos\n- kms-backend/\n- packages/shared/\n",
+      tasksMarkdown: "- [ ] Configurar monorepo\n- [ ] Primer endpoint\n",
+      complexity: "MEDIUM",
+    });
+    assert.equal(facts.projectTitle, "KMS Platform");
+    assert.ok(facts.backendGlobs.some((g) => g.includes("kms-backend")));
+    assert.ok(facts.docPaths.includes("docs/sdd/api-contracts.md") === false);
+  });
+
+  it("nombra skill de dominio desde carpeta Blueprint", () => {
+    const result = suggestAgentGovernanceArtifacts({
+      mddMarkdown: "# KMS\nBackend NestJS monorepo.",
+      blueprintMarkdown: "- kms-backend/src/\n- packages/kms-shared/\n",
+      complexity: "HIGH",
+    });
+    const domain = result.suggestedSkills.find((s) => s.id === "domain-package");
+    assert.ok(domain);
+    assert.equal(domain.folder, "kms-backend");
+    assert.match(domain.path, /kms-backend/);
+  });
+
+  it("extrae checkboxes concretos para PROMPT-INICIAL", () => {
+    const boxes = extractTaskCheckboxes(`
+## Fase 1
+- [ ] Configurar monorepo pnpm
+- [ ] Crear módulo auth
+- [x] Hecho
+`);
+    assert.equal(boxes.length, 2);
+    assert.match(boxes[0], /Configurar monorepo/);
   });
 });
 

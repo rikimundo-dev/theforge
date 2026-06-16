@@ -1,4 +1,5 @@
 import type { ComplexityLevel } from "@theforge/shared-types";
+import { GOVERNANCE_DOCS_PREFIX } from "@theforge/shared-types";
 import { selectedPatternIdsFromMdd } from "@theforge/shared-types/mdd-governance-patterns";
 import {
   complexityAtLeast,
@@ -39,18 +40,33 @@ export interface SuggestAgentGovernanceInput {
   tasksMarkdown?: string | null;
   architectureMarkdown?: string | null;
   specMarkdown?: string | null;
+  apiContractsMarkdown?: string | null;
+  logicFlowsMarkdown?: string | null;
+  uxUiGuideMarkdown?: string | null;
+  infraMarkdown?: string | null;
+  useCasesMarkdown?: string | null;
+  userStoriesMarkdown?: string | null;
+  /** Nombre del proyecto en TheForge (fallback si MDD §1 no tiene título). */
+  projectName?: string | null;
   complexity: ComplexityLevel;
 }
 
 export interface ProjectGovernanceFacts {
+  projectTitle: string;
   backendStack?: string;
   frontendStack?: string;
   mobileStack?: string;
   infraStack?: string;
   docPaths: string[];
   taskHeadings: string[];
+  taskCheckboxes: string[];
   architectureLayers: string[];
   blueprintModules: string[];
+  backendGlobs: string[];
+  frontendGlobs: string[];
+  npmScripts: string[];
+  sddConflicts: string[];
+  hasUiSurface: boolean;
 }
 
 function corpus(input: SuggestAgentGovernanceInput): string {
@@ -60,9 +76,107 @@ function corpus(input: SuggestAgentGovernanceInput): string {
     input.tasksMarkdown ?? "",
     input.architectureMarkdown ?? "",
     input.specMarkdown ?? "",
+    input.apiContractsMarkdown ?? "",
+    input.logicFlowsMarkdown ?? "",
+    input.uxUiGuideMarkdown ?? "",
+    input.infraMarkdown ?? "",
+    input.useCasesMarkdown ?? "",
+    input.userStoriesMarkdown ?? "",
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** MDD §1 o primer H1 como título del proyecto. */
+export function extractProjectTitle(input: SuggestAgentGovernanceInput): string {
+  const mdd = input.mddMarkdown ?? "";
+  const h1 = mdd.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (h1 && !/^mdd\b|master design/i.test(h1)) return h1.slice(0, 120);
+  const sec1 = mdd.match(/##\s*1\.[^\n]*\n+([^\n#]+)/i)?.[1]?.trim();
+  if (sec1) return sec1.replace(/^\*+|\*+$/g, "").slice(0, 120);
+  const named = mdd.match(/(?:nombre|proyecto|project)[:\s]+([^\n]+)/i)?.[1]?.trim();
+  if (named) return named.slice(0, 120);
+  const fromProject = input.projectName?.trim();
+  if (fromProject) return fromProject.slice(0, 120);
+  return "Proyecto TheForge";
+}
+
+/** Contradicciones frecuentes entre entregables SDD. */
+export function detectSddConflicts(text: string): string[] {
+  const conflicts: string[] = [];
+  if (/typeorm/i.test(text) && /prisma/i.test(text)) {
+    conflicts.push(
+      "TypeORM vs Prisma: prioriza el ORM declarado en MDD §2/Blueprint; no mezcles ambos en el mismo servicio.",
+    );
+  }
+  if (/kafka/i.test(text) && /rabbitmq/i.test(text)) {
+    conflicts.push(
+      "Kafka vs RabbitMQ: usa el broker del MDD §2; no dupliques colas ni consumidores.",
+    );
+  }
+  if (/mysql/i.test(text) && /postgres/i.test(text) && !/mysql.*postgres|postgres.*mysql/i.test(text)) {
+    conflicts.push(
+      "MySQL vs PostgreSQL: confirma el motor en MDD §3 antes de migraciones o schemas.",
+    );
+  }
+  return conflicts;
+}
+
+/** Primeras tareas concretas (checkboxes o headings) para PROMPT-INICIAL. */
+export function extractTaskCheckboxes(tasksMarkdown: string | null | undefined, limit = 5): string[] {
+  const text = tasksMarkdown ?? "";
+  const items: string[] = [];
+  for (const line of text.split("\n")) {
+    const checkbox = line.match(/^[-*]\s+\[ \]\s+(.+)/);
+    if (checkbox?.[1]) {
+      items.push(`- [ ] ${checkbox[1].trim().slice(0, 140)}`);
+      if (items.length >= limit) return items;
+    }
+  }
+  for (const line of text.split("\n")) {
+    const bullet = line.match(/^[-*]\s+(?!\[)(.+)/);
+    if (bullet?.[1] && bullet[1].trim().length > 4) {
+      items.push(`- [ ] ${bullet[1].trim().slice(0, 140)}`);
+      if (items.length >= limit) return items;
+    }
+  }
+  for (const line of text.split("\n")) {
+    const h = line.match(/^#{2,4}\s+(.+)/);
+    if (h?.[1] && !/^(fase|sprint|epic|milestone)\b/i.test(h[1])) {
+      items.push(`- [ ] ${h[1].trim().slice(0, 140)}`);
+      if (items.length >= limit) return items;
+    }
+  }
+  return items;
+}
+
+function hasUiSurface(text: string): boolean {
+  if (
+    /(?:sin|no)\s+(?:dashboard|frontend|ui|interfaz|pantalla)|api[\s-]?only|mvp\s+api|cli[\s-]?only|solo\s+api|backend\s+only|without\s+dashboard|sin\s+interfaz/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+  return /react|vue|svelte|angular|next\.js|dashboard|frontend|\bui\b|mobile|expo|storybook|vite/i.test(
+    text,
+  );
+}
+
+function hasLegacyAriadneSignals(text: string): boolean {
+  if (/ariadne/i.test(text)) return true;
+  if (/legacy|código\s+existente|strangler|validate_before_edit|refactor\s+legacy/i.test(text)) {
+    return true;
+  }
+  if (!/falkor/i.test(text)) return false;
+  if (/falkor[\s\S]{0,120}(?:fase|phase)\s*2/i.test(text)) {
+    const active =
+      /integraci[oó]n\s+mcp|mcp\s+ariadne|validate_before_edit|índice\s+de\s+código|grafo\s+de\s+código/i.test(
+        text,
+      );
+    if (!active) return false;
+  }
+  return /legacy|strangler|refactor|grafo|código\s+existente/i.test(text);
 }
 
 function matchesSignals(text: string, signals: RegExp[]): boolean {
@@ -76,23 +190,25 @@ function detectArchetypes(text: string, complexity: ComplexityLevel): string[] {
     /nestjs|express|fastify|fastapi|django|laravel|spring|hono|cloudflare\s+workers?|workers?\s+api/i.test(
       text,
     );
-  const hasFrontend = /react|vue|svelte|angular|next\.js/i.test(text);
-  const hasMobile = /expo|react\s*native|react-native/i.test(text);
+  const hasFrontend = hasUiSurface(text) && /react|vue|svelte|angular|next\.js/i.test(text);
+  const hasMobile = hasUiSurface(text) && /expo|react\s*native|react-native/i.test(text);
   const isMonorepo = /monorepo|lerna|pnpm\s+workspace|turborepo|packages\//i.test(text);
+  const hasKubernetes = /kubernetes|\bk8s\b|helm/i.test(text);
+  const hasDockerDeploy = /docker|dokploy|contenedor/i.test(text);
 
   if (hasBackend && (hasFrontend || hasMobile) && isMonorepo) found.add("nestjs-react-monorepo");
   if (hasBackend && !hasFrontend && !hasMobile) found.add("api-only");
   if ((hasFrontend || hasMobile) && !hasBackend) found.add("spa-only");
-  if (/design\s+system|paquete\s+ui|@\w+\/ui\b|storybook/i.test(text)) {
+  if (
+    hasUiSurface(text) &&
+    /design\s+system|paquete\s+ui|@\w+\/ui\b|storybook/i.test(text)
+  ) {
     found.add("design-system-ui");
   }
-  if (/ariadne|falkor|legacy|código\s+existente|strangler/i.test(text)) {
-    found.add("legacy-ariadne");
-  }
+  if (hasLegacyAriadneSignals(text)) found.add("legacy-ariadne");
   if (/\bjwt\b|oauth|§\s*6|autenticaci[oó]n/i.test(text)) found.add("auth-jwt");
-  if (/docker|dokploy|kubernetes|\bk8s\b|§\s*7|serverless|cloudflare/i.test(text)) {
-    found.add("docker-dokploy");
-  }
+  if (hasKubernetes) found.add("kubernetes");
+  else if (hasDockerDeploy || /§\s*7|serverless|cloudflare/i.test(text)) found.add("docker-dokploy");
   if (/\bmcp\b|model\s+context\s+protocol|figma\s+mcp/i.test(text)) found.add("mcp-enabled");
 
   if (complexity === "LOW" && found.size === 0) {
@@ -178,12 +294,133 @@ export function inferStacks(text: string): {
   };
 }
 
-function inferDomainSkillFolder(text: string): string | undefined {
+function inferDomainSkillFolder(text: string, blueprintModules: string[]): string | undefined {
+  const scoreModule = (name: string): number => {
+    const n = name.toLowerCase();
+    if (/shared|common|utils|types|config|test|spec/i.test(n)) return 1;
+    if (/backend|api|server|service|core|kms-/i.test(n)) return 10;
+    if (/web|mobile|app|frontend|ui/i.test(n)) return 8;
+    return 5;
+  };
+
+  const candidates: string[] = [];
+  for (const mod of blueprintModules) {
+    const clean = mod.replace(/[`'"\\]/g, "").trim().replace(/\/$/, "");
+    if (!clean) continue;
+    const segments = clean.split("/").filter(Boolean);
+    const leaf = segments[segments.length - 1];
+    if (leaf && !/^(src|lib|app|dist|test|tests)$/i.test(leaf)) {
+      candidates.push(leaf);
+      continue;
+    }
+    if (/^(apps|packages)$/i.test(segments[0] ?? "") && segments[1]) {
+      candidates.push(segments[1]!);
+      continue;
+    }
+    if (segments[0]) candidates.push(segments[0]!);
+  }
+
+  if (candidates.length > 0) {
+    return [...candidates].sort((a, b) => scoreModule(b) - scoreModule(a))[0];
+  }
+
+  const treeDir = text.match(
+    /(?:^|\n)[-*\s`]*([a-z0-9][a-z0-9_-]*(?:\/[a-z0-9_-]+)?)\/(?:src|lib|app)\//im,
+  )?.[1];
+  if (treeDir) {
+    const base = treeDir.split("/").pop() ?? treeDir;
+    if (base) return base;
+  }
   const pkg = text.match(/packages\/([a-z0-9_-]+)/i)?.[1];
-  if (pkg) return `${pkg}-package`;
-  const scope = text.match(/@([\w-]+)\/([\w-]+)/)?.[2];
-  if (scope) return `${scope}-package`;
+  if (pkg && scoreModule(pkg) > 1) return pkg;
+  const app = text.match(/(?:^|\s|`)([a-z0-9_-]+)\/(?:src|lib|app)\//im)?.[1];
+  if (app && !/^(apps|packages|src)$/i.test(app)) return app;
   return undefined;
+}
+
+function extractBlueprintModules(bpText: string): string[] {
+  const modules: string[] = [];
+  for (const line of bpText.split("\n")) {
+    const bullet = line.match(/^[-*]\s+`?([^`\n]+)`?/);
+    if (bullet?.[1] && /[/\\]|^[a-z0-9_-]+$/i.test(bullet[1])) {
+      modules.push(bullet[1].trim().slice(0, 80));
+    }
+    const tree = line.match(/(?:^|\s)([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)\/?(?:\s|$|`)/i);
+    if (tree?.[1] && /backend|frontend|packages|apps|kms-|api|web|mobile/i.test(tree[1])) {
+      modules.push(tree[1].trim());
+    }
+    if (modules.length >= 12) break;
+  }
+  return [...new Set(modules)];
+}
+
+function classifyGlobPath(path: string): "backend" | "frontend" | "both" {
+  const p = path.toLowerCase();
+  if (/web|ui|frontend|mobile|client|dashboard/.test(p)) return "frontend";
+  if (/api|backend|server|kms-|worker|service/.test(p)) return "backend";
+  return "both";
+}
+
+function inferCodebaseGlobs(blueprintModules: string[], text: string): {
+  backend: string[];
+  frontend: string[];
+} {
+  const backend = new Set<string>();
+  const frontend = new Set<string>();
+  const all = new Set<string>();
+
+  for (const mod of blueprintModules) {
+    const clean = mod.replace(/[`'"\\]/g, "").trim().replace(/\/$/, "");
+    if (!clean) continue;
+    all.add(`${clean}/**`);
+    const kind = classifyGlobPath(clean);
+    if (kind === "backend" || kind === "both") backend.add(`${clean}/**`);
+    if (kind === "frontend" || kind === "both") frontend.add(`${clean}/**`);
+  }
+
+  for (const line of text.split("\n")) {
+    const dir = line.match(/(?:^|\s|`)([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)\/?(?:`|$|\s)/i)?.[1];
+    if (!dir || dir.length < 3) continue;
+    if (!/backend|frontend|packages|apps|kms-|api|web|mobile|src/i.test(dir)) continue;
+    all.add(`${dir}/**`);
+    const kind = classifyGlobPath(dir);
+    if (kind === "backend" || kind === "both") backend.add(`${dir}/**`);
+    if (kind === "frontend" || kind === "both") frontend.add(`${dir}/**`);
+  }
+
+  if (backend.size === 0) {
+    backend.add("src/**");
+    backend.add("packages/**/src/**");
+  }
+  if (frontend.size === 0 && hasUiSurface(text)) {
+    frontend.add("apps/web/**");
+    frontend.add("packages/**/src/**");
+  }
+
+  return {
+    backend: [...backend].slice(0, 6),
+    frontend: [...frontend].slice(0, 6),
+  };
+}
+
+function inferNpmScripts(text: string): string[] {
+  const scripts: string[] = [];
+  const patterns: Array<[RegExp, string]> = [
+    [/pnpm\s+(?:run\s+)?(?:test|lint|typecheck|build)/i, "pnpm test / lint / typecheck / build"],
+    [/npm\s+run\s+(test|lint|typecheck|build)/gi, "npm run $1"],
+    [/yarn\s+(test|lint|typecheck|build)/gi, "yarn $1"],
+    [/turbo\s+run\s+(\w+)/i, "turbo run $1"],
+  ];
+  for (const [re, label] of patterns) {
+    if (re.test(text)) scripts.push(label.replace(/\$(\d+)/g, (_, n) => n));
+  }
+  const scriptBlock = text.match(/"scripts"\s*:\s*\{([^}]+)\}/s);
+  if (scriptBlock?.[1]) {
+    for (const m of scriptBlock[1].matchAll(/"(test|lint|typecheck|build)"/g)) {
+      scripts.push(`npm run ${m[1]}`);
+    }
+  }
+  return [...new Set(scripts)].slice(0, 6);
 }
 
 /** Extrae hechos estructurados del proyecto para inyectar en plantillas de gobernanza. */
@@ -192,16 +429,32 @@ export function extractProjectGovernanceFacts(
 ): ProjectGovernanceFacts {
   const text = corpus(input);
   const stacks = inferStacks(text);
+  const projectTitle = extractProjectTitle(input);
+  const blueprintModules = extractBlueprintModules(input.blueprintMarkdown ?? "");
+  const globs = inferCodebaseGlobs(blueprintModules, text);
+  const taskCheckboxes = extractTaskCheckboxes(input.tasksMarkdown);
+  const sddConflicts = detectSddConflicts(text);
+
+  const optionalDocs: Array<[boolean, string]> = [
+    [!!input.blueprintMarkdown?.trim(), "docs/sdd/blueprint.md"],
+    [!!input.specMarkdown?.trim(), "docs/sdd/spec.md"],
+    [!!input.architectureMarkdown?.trim(), "docs/sdd/architecture.md"],
+    [!!input.tasksMarkdown?.trim(), "docs/sdd/tasks.md"],
+    [!!input.useCasesMarkdown?.trim(), "docs/sdd/use-cases.md"],
+    [!!input.userStoriesMarkdown?.trim(), "docs/sdd/user-stories.md"],
+    [!!input.apiContractsMarkdown?.trim(), "docs/sdd/api-contracts.md"],
+    [!!input.logicFlowsMarkdown?.trim(), "docs/sdd/logic-flows.md"],
+    [!!input.uxUiGuideMarkdown?.trim(), "docs/sdd/ux-ui-guide.md"],
+    [!!input.infraMarkdown?.trim(), "docs/sdd/infra.md"],
+  ];
 
   const docPaths = [
     "docs/sdd/mdd.md",
-    input.blueprintMarkdown?.trim() ? "docs/sdd/blueprint.md" : null,
-    input.specMarkdown?.trim() ? "docs/sdd/spec.md" : null,
-    input.architectureMarkdown?.trim() ? "docs/sdd/architecture.md" : null,
-    input.tasksMarkdown?.trim() ? "docs/sdd/tasks.md" : null,
-    "docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md",
+    ...optionalDocs.filter(([ok]) => ok).map(([, p]) => p),
+    `${GOVERNANCE_DOCS_PREFIX}references/THEFORGE-DOC-CONSUMPTION-GUIDE.md`,
+    `${GOVERNANCE_DOCS_PREFIX}COMO-USAR-GOBERNANZA-IA.md`,
     "AGENTS.md",
-  ].filter((p): p is string => !!p);
+  ];
 
   const taskHeadings: string[] = [];
   const tasksText = input.tasksMarkdown ?? "";
@@ -219,25 +472,22 @@ export function extractProjectGovernanceFacts(
     if (architectureLayers.length >= 10) break;
   }
 
-  const blueprintModules: string[] = [];
-  const bpText = input.blueprintMarkdown ?? "";
-  for (const line of bpText.split("\n")) {
-    const bullet = line.match(/^[-*]\s+`?([^`\n]+)`?/);
-    if (bullet?.[1] && /apps\/|packages\/|src\//i.test(bullet[1])) {
-      blueprintModules.push(bullet[1].trim().slice(0, 80));
-    }
-    if (blueprintModules.length >= 8) break;
-  }
-
   return {
+    projectTitle,
     backendStack: stacks.backend,
     frontendStack: stacks.frontend,
     mobileStack: stacks.mobile,
     infraStack: stacks.infra,
     docPaths,
     taskHeadings,
+    taskCheckboxes,
     architectureLayers,
     blueprintModules,
+    backendGlobs: globs.backend,
+    frontendGlobs: globs.frontend,
+    npmScripts: inferNpmScripts(text),
+    sddConflicts,
+    hasUiSurface: hasUiSurface(text),
   };
 }
 
@@ -270,6 +520,8 @@ function ruleStrength(
   if (rule.id === "git-commits") return "strong";
   if (rule.id === "orchestrator" && complexity !== "LOW") return "weak";
 
+  if (rule.id === "stack-frontend" && !hasUiSurface(text)) return null;
+
   const signalHit = matchesSignals(text, rule.signals);
   const archetypeHit = rule.archetypes?.some((a) => archetypes.includes(a)) ?? false;
   const wizardHit = rule.id === "architecture-patterns" && wizardArchitectureActive(text);
@@ -279,7 +531,7 @@ function ruleStrength(
   if (rule.id === "git-commits" || rule.id === "stack-backend" || rule.id === "stack-frontend") {
     return signalHit || archetypeHit ? "strong" : "weak";
   }
-  if (rule.id === "mcp-governance" && /ariadne|falkor/i.test(text)) return "strong";
+  if (rule.id === "mcp-governance" && hasLegacyAriadneSignals(text)) return "strong";
   if (rule.id === "security-auth" && /\bjwt\b|oauth/i.test(text)) return "strong";
   if (wizardHit) return "strong";
 
@@ -294,11 +546,23 @@ function skillStrength(
 ): GovernanceArtifactStrength | null {
   if (!complexityAtLeast(complexity, skill.minComplexity)) return null;
 
+  if (skill.id === "design-system-ui" && !hasUiSurface(text)) return null;
+  if (skill.id === "mcp-ariadne" && !hasLegacyAriadneSignals(text)) return null;
+
   const signalHit = matchesSignals(text, skill.signals);
   const archetypeHit = skill.archetypes?.some((a) => archetypes.includes(a)) ?? false;
 
   if (skill.id === "domain-package" && complexity !== "LOW") {
     return complexity === "HIGH" || signalHit ? "strong" : "weak";
+  }
+
+  if (skill.id === "deploy-docker") {
+    if (archetypes.includes("kubernetes")) return null;
+    if (archetypes.includes("docker-dokploy")) return signalHit ? "strong" : "weak";
+  }
+  if (skill.id === "deploy-kubernetes") {
+    if (!archetypes.includes("kubernetes")) return null;
+    return "strong";
   }
 
   if (!signalHit && !archetypeHit) return null;
@@ -350,7 +614,8 @@ export function suggestAgentGovernanceArtifacts(
   const text = corpus(input);
   const archetypes = detectArchetypes(text, input.complexity);
   const rationale: string[] = [];
-  const domainFolder = inferDomainSkillFolder(text);
+  const facts = extractProjectGovernanceFacts(input);
+  const domainFolder = inferDomainSkillFolder(text, facts.blueprintModules);
 
   if (archetypes.length > 0) {
     rationale.push(`Arquetipos detectados: ${archetypes.join(", ")}.`);
@@ -405,6 +670,9 @@ export function suggestAgentGovernanceArtifacts(
 
   if (input.tasksMarkdown?.trim()) {
     rationale.push("Tasks disponibles: PROMPT-INICIAL y PROGRESO derivados del checklist.");
+  }
+  if (facts.sddConflicts.length > 0) {
+    rationale.push(`Conflictos SDD detectados: ${facts.sddConflicts.length} (ver AGENTS.md / PROMPT-INICIAL).`);
   }
 
   return {
@@ -469,7 +737,7 @@ export function buildArtifactTemplateContext(
   return {
     complexity,
     archetypes: suggestions.archetypes,
-    domainSkillFolder: inferDomainSkillFolder(text),
+    domainSkillFolder: inferDomainSkillFolder(text, facts.blueprintModules),
     backendStack: stacks.backend,
     frontendStack: stacks.frontend ?? stacks.mobile,
     mobileStack: stacks.mobile,
