@@ -94,13 +94,37 @@ function normalizeProjectTitleCandidate(raw: string): string | null {
     .replace(/^[-*]\s+/, "")
     .replace(/^["'`]|["'`]$/g, "");
   if (!trimmed || /^#/.test(trimmed)) return null;
+  if (/^este documento constituye/i.test(trimmed)) return null;
   const beforeBreak = trimmed.split(/\s*[—–-]\s+/)[0]?.split(/:\s+/)[0]?.trim();
   if (!beforeBreak || beforeBreak.length < 3) return null;
+  if (/^master design document$/i.test(beforeBreak)) return null;
   return beforeBreak.slice(0, 120);
 }
 
-/** Extrae título desde §1 Contexto cuando el H1 es genérico (p. ej. Master Design Document). */
+/** Extrae título de alta confianza desde §1 (bold entre paréntesis o em-dash). */
 function extractTitleFromSection1(mdd: string): string | null {
+  const sec1Match = mdd.match(/##\s*1\.[^\n]*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i);
+  if (!sec1Match?.[1]) return null;
+  const sec1 = sec1Match[1];
+
+  const boldParen = sec1.match(/\*\*\(([^)]+)\)\*\*|\*\(([^)]+)\)\*/);
+  if (boldParen) {
+    const fromParen = (boldParen[1] ?? boldParen[2])?.trim();
+    if (fromParen && fromParen.length >= 3) return fromParen.slice(0, 120);
+  }
+
+  for (const line of sec1.split("\n")) {
+    const emDash = line.match(/^([^—–\n]{3,80})\s*[—–]\s+/);
+    if (emDash?.[1]) {
+      const candidate = normalizeProjectTitleCandidate(emDash[1]);
+      if (candidate) return candidate;
+    }
+  }
+
+  return null;
+}
+
+function extractTitleFromSection1Fallback(mdd: string): string | null {
   const sec1Match = mdd.match(/##\s*1\.[^\n]*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i);
   if (!sec1Match?.[1]) return null;
   for (const line of sec1Match[1].split("\n")) {
@@ -113,13 +137,15 @@ function extractTitleFromSection1(mdd: string): string | null {
 /** MDD §1 o primer H1 como título del proyecto. */
 export function extractProjectTitle(input: SuggestAgentGovernanceInput): string {
   const mdd = input.mddMarkdown ?? "";
+  const fromSec1 = extractTitleFromSection1(mdd);
+  if (fromSec1) return fromSec1;
   const h1 = mdd.match(/^#\s+(.+)$/m)?.[1]?.trim();
   if (h1) {
     const fromH1 = normalizeProjectTitleCandidate(h1);
     if (fromH1 && !/^mdd\b|master design document$/i.test(fromH1)) return fromH1;
   }
-  const fromSec1 = extractTitleFromSection1(mdd);
-  if (fromSec1) return fromSec1;
+  const fromSec1Fallback = extractTitleFromSection1Fallback(mdd);
+  if (fromSec1Fallback) return fromSec1Fallback;
   const named = mdd.match(/(?:nombre|proyecto|project)[:\s]+([^\n]+)/i)?.[1]?.trim();
   if (named) {
     const fromNamed = normalizeProjectTitleCandidate(named);
@@ -179,14 +205,12 @@ export function extractTaskCheckboxes(tasksMarkdown: string | null | undefined, 
   return items;
 }
 
-function hasUiSurface(text: string): boolean {
-  if (
-    /(?:sin|no)\s+(?:dashboard|frontend|ui|interfaz|pantalla)|api[\s-]?only|mvp\s+api|cli[\s-]?only|solo\s+api|backend\s+only|without\s+dashboard|sin\s+interfaz/i.test(
-      text,
-    )
-  ) {
-    return false;
-  }
+const NO_UI_SURFACE_PATTERN =
+  /(?:sin|no)\s+(?:dashboard|frontend|ui|interfaz|pantalla)|(?:mvp|fase\s*1)[^\n]{0,48}(?:sin|no\s+incluye)\s+(?:dashboard|frontend|ui)|api[\s-]?only|mvp\s+api|cli[\s-]?only|solo\s+api|backend\s+only|without\s+dashboard|sin\s+interfaz|sin\s+dashboard/i;
+
+function hasUiSurface(text: string, authoritativeText?: string): boolean {
+  const authority = authoritativeText ?? text;
+  if (NO_UI_SURFACE_PATTERN.test(authority)) return false;
   return /react|vue|svelte|angular|next\.js|dashboard|frontend|\bui\b|mobile|expo|storybook|vite/i.test(
     text,
   );
@@ -212,15 +236,20 @@ function matchesSignals(text: string, signals: RegExp[]): boolean {
   return signals.some((re) => re.test(text));
 }
 
-function detectArchetypes(text: string, complexity: ComplexityLevel): string[] {
+function detectArchetypes(
+  text: string,
+  complexity: ComplexityLevel,
+  authoritativeUiText?: string,
+): string[] {
   const found = new Set<string>();
 
   const hasBackend =
     /nestjs|express|fastify|fastapi|django|laravel|spring|hono|cloudflare\s+workers?|workers?\s+api/i.test(
       text,
     );
-  const hasFrontend = hasUiSurface(text) && /react|vue|svelte|angular|next\.js/i.test(text);
-  const hasMobile = hasUiSurface(text) && /expo|react\s*native|react-native/i.test(text);
+  const uiSurface = hasUiSurface(text, authoritativeUiText);
+  const hasFrontend = uiSurface && /react|vue|svelte|angular|next\.js/i.test(text);
+  const hasMobile = uiSurface && /expo|react\s*native|react-native/i.test(text);
   const isMonorepo = /monorepo|lerna|pnpm\s+workspace|turborepo|packages\//i.test(text);
   const hasKubernetes = /kubernetes|\bk8s\b|helm/i.test(text);
   const hasDockerDeploy = /docker|dokploy|contenedor/i.test(text);
@@ -229,7 +258,7 @@ function detectArchetypes(text: string, complexity: ComplexityLevel): string[] {
   if (hasBackend && !hasFrontend && !hasMobile) found.add("api-only");
   if ((hasFrontend || hasMobile) && !hasBackend) found.add("spa-only");
   if (
-    hasUiSurface(text) &&
+    uiSurface &&
     /design\s+system|paquete\s+ui|@\w+\/ui\b|storybook/i.test(text)
   ) {
     found.add("design-system-ui");
@@ -367,20 +396,62 @@ function inferDomainSkillFolder(text: string, blueprintModules: string[]): strin
   return undefined;
 }
 
-function extractBlueprintModules(bpText: string): string[] {
-  const modules: string[] = [];
-  for (const line of bpText.split("\n")) {
-    const bullet = line.match(/^[-*]\s+`?([^`\n]+)`?/);
-    if (bullet?.[1] && /[/\\]|^[a-z0-9_-]+$/i.test(bullet[1])) {
-      modules.push(bullet[1].trim().slice(0, 80));
-    }
-    const tree = line.match(/(?:^|\s)([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)\/?(?:\s|$|`)/i);
-    if (tree?.[1] && /backend|frontend|packages|apps|kms-|api|web|mobile/i.test(tree[1])) {
-      modules.push(tree[1].trim());
-    }
-    if (modules.length >= 12) break;
+/** Valid repo path: kms-backend/, packages/foo/, apps/api/ — not prose bullets. */
+export function isValidBlueprintModulePath(raw: string): boolean {
+  const clean = raw.replace(/[`'"\\]/g, "").trim().replace(/\/$/, "");
+  if (!clean || clean.length < 2 || clean.length > 80) return false;
+  if (/[*:]/.test(raw)) return false;
+  if (/\*\*[^*]+\*\*/.test(raw)) return false;
+  if (/:\s*\S/.test(raw.trim())) return false;
+
+  const segments = clean.split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+  const validSegment = (s: string) => /^[a-z0-9][a-z0-9._-]*$/i.test(s);
+  if (!segments.every(validSegment)) return false;
+
+  if (segments[0] === "apps" || segments[0] === "packages") {
+    return segments.length >= 2;
   }
-  return [...new Set(modules)];
+  if (/^kms-/i.test(segments[0]!) || /^[a-z0-9][a-z0-9_-]*$/i.test(segments[0]!)) {
+    return segments.length <= 3;
+  }
+  return false;
+}
+
+function extractBlueprintModuleFromLine(line: string): string | null {
+  const trimmed = line.trim();
+  if (!trimmed || /^#/.test(trimmed)) return null;
+
+  const backtick = trimmed.match(/^[-*]\s+`([^`\n]+)`/);
+  if (backtick?.[1] && isValidBlueprintModulePath(backtick[1])) {
+    return backtick[1].trim().replace(/\/$/, "");
+  }
+
+  const tree = trimmed.match(
+    /^[-*]?\s*`?([a-z0-9][a-z0-9_-]*(?:\/[a-z0-9_-]+)*)\/?(?:`|$|\s)/i,
+  );
+  if (tree?.[1] && isValidBlueprintModulePath(tree[1])) {
+    return tree[1].trim().replace(/\/$/, "");
+  }
+  return null;
+}
+
+function extractBlueprintModules(bpText: string): string[] {
+  const tree: string[] = [];
+  const bullets: string[] = [];
+
+  for (const line of bpText.split("\n")) {
+    const mod = extractBlueprintModuleFromLine(line);
+    if (!mod) continue;
+    const isTreeLine =
+      /\/$/.test(line.trim()) ||
+      /^\s{2,}/.test(line) ||
+      /^(apps|packages|kms-)/i.test(mod);
+    if (isTreeLine) tree.push(mod);
+    else bullets.push(mod);
+  }
+
+  return [...new Set([...tree, ...bullets])].slice(0, 12);
 }
 
 function classifyGlobPath(path: string): "backend" | "frontend" | "both" {
@@ -400,7 +471,7 @@ function inferCodebaseGlobs(blueprintModules: string[], text: string): {
 
   for (const mod of blueprintModules) {
     const clean = mod.replace(/[`'"\\]/g, "").trim().replace(/\/$/, "");
-    if (!clean) continue;
+    if (!clean || !isValidBlueprintModulePath(clean)) continue;
     all.add(`${clean}/**`);
     const kind = classifyGlobPath(clean);
     if (kind === "backend" || kind === "both") backend.add(`${clean}/**`);
@@ -409,8 +480,7 @@ function inferCodebaseGlobs(blueprintModules: string[], text: string): {
 
   for (const line of text.split("\n")) {
     const dir = line.match(/(?:^|\s|`)([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)\/?(?:`|$|\s)/i)?.[1];
-    if (!dir || dir.length < 3) continue;
-    if (!/backend|frontend|packages|apps|kms-|api|web|mobile|src/i.test(dir)) continue;
+    if (!dir || !isValidBlueprintModulePath(dir)) continue;
     all.add(`${dir}/**`);
     const kind = classifyGlobPath(dir);
     if (kind === "backend" || kind === "both") backend.add(`${dir}/**`);
@@ -457,6 +527,7 @@ export function extractProjectGovernanceFacts(
   input: SuggestAgentGovernanceInput,
 ): ProjectGovernanceFacts {
   const text = corpus(input);
+  const authoritativeUiText = [input.mddMarkdown, input.specMarkdown].filter(Boolean).join("\n\n");
   const stacks = inferStacks(text);
   const projectTitle = extractProjectTitle(input);
   const blueprintModules = extractBlueprintModules(input.blueprintMarkdown ?? "");
@@ -516,7 +587,7 @@ export function extractProjectGovernanceFacts(
     frontendGlobs: globs.frontend,
     npmScripts: inferNpmScripts(text),
     sddConflicts,
-    hasUiSurface: hasUiSurface(text),
+    hasUiSurface: hasUiSurface(text, authoritativeUiText),
   };
 }
 
@@ -543,13 +614,14 @@ function ruleStrength(
   text: string,
   archetypes: string[],
   complexity: ComplexityLevel,
+  authoritativeUiText?: string,
 ): GovernanceArtifactStrength | null {
   if (!complexityAtLeast(complexity, rule.minComplexity)) return null;
 
   if (rule.id === "git-commits") return "strong";
   if (rule.id === "orchestrator" && complexity !== "LOW") return "weak";
 
-  if (rule.id === "stack-frontend" && !hasUiSurface(text)) return null;
+  if (rule.id === "stack-frontend" && !hasUiSurface(text, authoritativeUiText)) return null;
 
   const signalHit = matchesSignals(text, rule.signals);
   const archetypeHit = rule.archetypes?.some((a) => archetypes.includes(a)) ?? false;
@@ -572,10 +644,11 @@ function skillStrength(
   text: string,
   archetypes: string[],
   complexity: ComplexityLevel,
+  authoritativeUiText?: string,
 ): GovernanceArtifactStrength | null {
   if (!complexityAtLeast(complexity, skill.minComplexity)) return null;
 
-  if (skill.id === "design-system-ui" && !hasUiSurface(text)) return null;
+  if (skill.id === "design-system-ui" && !hasUiSurface(text, authoritativeUiText)) return null;
   if (skill.id === "mcp-ariadne" && !hasLegacyAriadneSignals(text)) return null;
 
   const signalHit = matchesSignals(text, skill.signals);
@@ -641,7 +714,8 @@ export function suggestAgentGovernanceArtifacts(
   input: SuggestAgentGovernanceInput,
 ): AgentGovernanceSuggestions {
   const text = corpus(input);
-  const archetypes = detectArchetypes(text, input.complexity);
+  const authoritativeUiText = [input.mddMarkdown, input.specMarkdown].filter(Boolean).join("\n\n");
+  const archetypes = detectArchetypes(text, input.complexity, authoritativeUiText);
   const rationale: string[] = [];
   const facts = extractProjectGovernanceFacts(input);
   const domainFolder = inferDomainSkillFolder(text, facts.blueprintModules);
@@ -658,7 +732,7 @@ export function suggestAgentGovernanceArtifacts(
 
   const suggestedRules: RuleSpec[] = [];
   for (const rule of RULE_CATALOG) {
-    const strength = ruleStrength(rule, text, archetypes, input.complexity);
+    const strength = ruleStrength(rule, text, archetypes, input.complexity, authoritativeUiText);
     if (!strength) continue;
     suggestedRules.push({
       id: rule.id,
@@ -673,7 +747,7 @@ export function suggestAgentGovernanceArtifacts(
 
   const suggestedSkills: SkillSpec[] = [];
   for (const skill of SKILL_CATALOG) {
-    const strength = skillStrength(skill, text, archetypes, input.complexity);
+    const strength = skillStrength(skill, text, archetypes, input.complexity, authoritativeUiText);
     if (!strength) continue;
     const folder = skill.dynamicFolder && domainFolder ? domainFolder : skill.folder;
     const path = resolveSkillPath(skill, folder);

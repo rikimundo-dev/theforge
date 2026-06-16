@@ -309,6 +309,104 @@ Backend NestJS, frontend React, monorepo packages/api packages/web.
     assert.equal(rule?.content.includes("(TheForge)"), false);
     assert.ok((rule?.content.length ?? 0) > 200);
   });
+
+  it("sobrescribe INSTALACION e install script aunque el LLM genere basura", () => {
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: { templateVersion: "1.0.0", files: [] },
+        files: [
+          {
+            path: "docs/agent-governance/INSTALACION.md",
+            content: "# Instalación\n\nCopia todo a `.cursor/workflows.md` (incorrecto).\n",
+          },
+          {
+            path: "scripts/install-agent-governance.sh",
+            content: "#!/bin/bash\necho broken\n",
+          },
+        ],
+      },
+      "MEDIUM",
+    );
+    const instalacion = reconciled.files.find(
+      (f) => f.path === "docs/agent-governance/INSTALACION.md",
+    );
+    const script = reconciled.files.find((f) => f.path === "scripts/install-agent-governance.sh");
+    assert.ok(instalacion?.content.includes(".cursor/references/"));
+    assert.ok(instalacion?.content.includes("Opción C"));
+    assert.ok(instalacion?.content.includes(".cursor/agents"));
+    assert.equal(instalacion?.content.includes("workflows.md"), false);
+    assert.ok(script?.content.includes(".cursor/agents"));
+    assert.ok(script?.content.includes(".cursor/commands"));
+  });
+
+  it("deduplica sección SDD y elimina PROMPT duplicado bajo docs/agent-governance/", () => {
+    const suggestions = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# MDD
+## 2. Stack
+Backend NestJS con TypeORM en borrador; Prisma en blueprint.
+`,
+      complexity: "MEDIUM",
+    });
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: { templateVersion: "1.0.0", files: ["AGENTS.md"] },
+        files: [
+          {
+            path: "AGENTS.md",
+            content:
+              "# AGENTS\n\n## Resolución de conflictos SDD\n\n- TypeORM vs Prisma: prioriza el ORM declarado en MDD §2/Blueprint; no mezcles ambos en el mismo servicio.\n\n## Resolución de conflictos SDD\n\n- duplicado\n",
+          },
+          {
+            path: "docs/agent-governance/PROMPT-INICIAL.md",
+            content: "# Prompt corrupto\n",
+          },
+        ],
+      },
+      "MEDIUM",
+      { suggestions, governanceInput: { mddMarkdown: "TypeORM Prisma NestJS", complexity: "MEDIUM" } },
+    );
+    const agents = reconciled.files.find((f) => f.path === "AGENTS.md");
+    assert.ok(agents?.content.includes("Resolución de conflictos SDD"));
+    assert.equal(
+      (agents?.content.match(/## Resolución de conflictos SDD/gi) ?? []).length,
+      1,
+    );
+    assert.equal(
+      reconciled.files.some((f) => f.path === "docs/agent-governance/PROMPT-INICIAL.md"),
+      false,
+    );
+    assert.ok(reconciled.files.some((f) => f.path === "PROMPT-INICIAL.md"));
+  });
+
+  it("no duplica Módulos/Globs en stack-backend con overlay compacto", () => {
+    const suggestions = suggestAgentGovernanceArtifacts({
+      mddMarkdown: "# KMS\nBackend NestJS monorepo.",
+      blueprintMarkdown: "- kms-backend/\n- packages/shared/\n",
+      complexity: "MEDIUM",
+    });
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: { templateVersion: "1.0.0", files: [] },
+        files: [],
+      },
+      "MEDIUM",
+      {
+        suggestions,
+        governanceInput: {
+          mddMarkdown: "# KMS\nBackend NestJS.",
+          blueprintMarkdown: "- kms-backend/\n",
+          complexity: "MEDIUM",
+        },
+      },
+    );
+    const rule = reconciled.files.find(
+      (f) => f.path === "docs/agent-governance/rules/stack-backend.mdc",
+    );
+    assert.ok(rule?.content.includes("**Módulos Blueprint:**"));
+    assert.equal((rule?.content.match(/\*\*Módulos Blueprint:\*\*/g) ?? []).length, 1);
+    assert.equal((rule?.content.match(/\*\*Globs backend:\*\*/g) ?? []).length, 1);
+  });
 });
 
 describe("appendProjectDeliverablesToScaffold", () => {

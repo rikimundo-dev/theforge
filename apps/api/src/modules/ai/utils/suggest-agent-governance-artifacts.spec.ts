@@ -5,6 +5,7 @@ import {
   extractProjectTitle,
   extractTaskCheckboxes,
   inferStacks,
+  isValidBlueprintModulePath,
   suggestAgentGovernanceArtifacts,
 } from "./suggest-agent-governance-artifacts.js";
 import { parseAgentGovernanceResponse } from "./agent-governance.util.js";
@@ -33,6 +34,33 @@ Proyecto strangler fig sobre monolito.
 
 ## 2. Stack
 Backend Express, refactor incremental.
+`;
+
+const KMS_BLUEPRINT = `
+## Estructura del repositorio
+
+- kms-backend/
+- packages/shared/
+- packages/kms-auth/
+
+## Convenciones
+
+- **Autenticación/Autorización:** OAuth2 con JWT — no es una ruta de código.
+- **Observabilidad:** logs estructurados y métricas Prometheus.
+`;
+
+const KMS_MDD = `# Master Design Document
+
+## 1. Contexto
+
+**(KMS Corporativo)** — plataforma documental API-first.
+
+Este documento constituye el Master Design Document del proyecto.
+
+## 2. Stack técnico
+
+Backend NestJS. MVP API-only sin dashboard ni frontend.
+Monorepo kms-backend/ y packages/shared.
 `;
 
 describe("suggestAgentGovernanceArtifacts", () => {
@@ -160,6 +188,22 @@ describe("extractProjectTitle", () => {
 
 ## 1. Contexto
 
+**(KMS Corporativo)** — plataforma de gestión documental para empresas.
+
+## 2. Arquitectura y Stack
+Backend NestJS.
+`,
+      complexity: "MEDIUM",
+    });
+    assert.equal(title, "KMS Corporativo");
+  });
+
+  it("extrae KMS Corporativo desde §1 cuando el H1 es Master Design Document (em-dash)", () => {
+    const title = extractProjectTitle({
+      mddMarkdown: `# Master Design Document
+
+## 1. Contexto
+
 KMS Corporativo — plataforma de gestión documental para empresas.
 
 ## 2. Arquitectura y Stack
@@ -185,6 +229,37 @@ Backend NestJS.
 });
 
 describe("extractProjectGovernanceFacts", () => {
+  it("filtra bullets prose del Blueprint y mantiene rutas reales", () => {
+    const facts = extractProjectGovernanceFacts({
+      mddMarkdown: KMS_MDD,
+      blueprintMarkdown: KMS_BLUEPRINT,
+      complexity: "HIGH",
+    });
+    assert.ok(facts.blueprintModules.includes("kms-backend"));
+    assert.ok(facts.blueprintModules.includes("packages/shared"));
+    assert.equal(
+      facts.blueprintModules.some((m) => /autenticaci/i.test(m)),
+      false,
+    );
+    assert.ok(facts.backendGlobs.every((g) => /^[\w./-]+\/\*\*$/.test(g)));
+    assert.ok(facts.backendGlobs.some((g) => g.includes("kms-backend")));
+  });
+
+  it("ignora frontend aunque exista ux-ui-guide post-MVP", () => {
+    const result = suggestAgentGovernanceArtifacts({
+      mddMarkdown: KMS_MDD,
+      specMarkdown: "CLI-only para operaciones; sin interfaz web.",
+      blueprintMarkdown: KMS_BLUEPRINT,
+      uxUiGuideMarkdown: "# UX post-MVP\nDashboard React con design system.\n",
+      complexity: "HIGH",
+    });
+    const ruleIds = result.suggestedRules.map((r) => r.id);
+    const skillIds = result.suggestedSkills.map((s) => s.id);
+    assert.equal(ruleIds.includes("stack-frontend"), false);
+    assert.equal(skillIds.includes("design-system-ui"), false);
+    assert.equal(result.archetypes.includes("design-system-ui"), false);
+  });
+
   it("usa título del MDD y globs del Blueprint", () => {
     const facts = extractProjectGovernanceFacts({
       mddMarkdown: "# KMS Platform\n## 1. Visión\nSistema de llaves.\n",
@@ -218,6 +293,16 @@ describe("extractProjectGovernanceFacts", () => {
 `);
     assert.equal(boxes.length, 2);
     assert.match(boxes[0], /Configurar monorepo/);
+  });
+});
+
+describe("isValidBlueprintModulePath", () => {
+  it("acepta apps/packages/kms paths y rechaza prose", () => {
+    assert.equal(isValidBlueprintModulePath("kms-backend/"), true);
+    assert.equal(isValidBlueprintModulePath("packages/shared"), true);
+    assert.equal(isValidBlueprintModulePath("apps/api"), true);
+    assert.equal(isValidBlueprintModulePath("**Autenticación/Autorización:** OAuth2"), false);
+    assert.equal(isValidBlueprintModulePath("Observabilidad: logs"), false);
   });
 });
 

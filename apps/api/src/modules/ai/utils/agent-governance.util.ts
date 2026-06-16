@@ -22,6 +22,17 @@ import {
   type SuggestAgentGovernanceInput,
 } from "./suggest-agent-governance-artifacts.js";
 
+/** Rutas que siempre se regeneran desde plantillas canónicas (inmunes al LLM). */
+const LLM_PROOF_CANONICAL_PATHS = [
+  `${GOVERNANCE_DOCS_PREFIX}INSTALACION.md`,
+  "scripts/install-agent-governance.sh",
+] as const;
+
+const DUPLICATE_PROMPT_PATHS = [
+  `${GOVERNANCE_DOCS_PREFIX}PROMPT-INICIAL.md`,
+  "docs/agent-governance/PROMPT-INICIAL.md",
+] as const;
+
 const DOC_CONSUMPTION_GUIDE_PATH = `${GOVERNANCE_DOCS_PREFIX}references/THEFORGE-DOC-CONSUMPTION-GUIDE.md`;
 
 /** Rutas obligatorias en todos los niveles de complejidad. */
@@ -459,6 +470,69 @@ function buildSddConflictSection(facts: ProjectGovernanceFacts): string {
   return lines.join("");
 }
 
+function stripSddConflictSections(content: string): string {
+  return content
+    .replace(/## Resolución de conflictos SDD[\s\S]*?(?=\n## [^#]|\n#\s|$)/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function contentHasSddConflicts(content: string, facts: ProjectGovernanceFacts): boolean {
+  if (!/Resolución de conflictos SDD/i.test(content)) return false;
+  if (facts.sddConflicts.length === 0) return true;
+  return facts.sddConflicts.every((c) => {
+    const key = c.split(":")[0]?.trim();
+    return key ? content.includes(key) : content.includes(c.slice(0, 40));
+  });
+}
+
+function ruleHasCatalogStackEnrichment(content: string): boolean {
+  return (
+    /\*\*Módulos Blueprint:\*\*/i.test(content) &&
+    (/\*\*Globs backend:\*\*/i.test(content) || /\*\*Globs frontend:\*\*/i.test(content))
+  );
+}
+
+function buildProjectFactsBlock(
+  facts: ProjectGovernanceFacts,
+  options?: { includeSddConflicts?: boolean; compact?: boolean },
+): string {
+  const parts: string[] = [`## Hechos del proyecto (${facts.projectTitle})\n`];
+  const stack = formatStackSection(facts);
+  if (stack) parts.push(stack, "");
+  if (!options?.compact) {
+    if (facts.blueprintModules.length > 0) {
+      parts.push("**Módulos Blueprint:**", ...facts.blueprintModules.map((m) => `- \`${m}\``), "");
+    }
+    if (facts.backendGlobs.length > 0) {
+      parts.push("**Globs backend:**", ...facts.backendGlobs.map((g) => `- \`${g}\``), "");
+    }
+    if (facts.hasUiSurface && facts.frontendGlobs.length > 0) {
+      parts.push("**Globs frontend:**", ...facts.frontendGlobs.map((g) => `- \`${g}\``), "");
+    }
+    if (facts.npmScripts.length > 0) {
+      parts.push("**Scripts npm/pnpm:**", ...facts.npmScripts.map((s) => `- \`${s}\``), "");
+    }
+  }
+  if (facts.architectureLayers.length > 0) {
+    parts.push("**Capas:**", ...facts.architectureLayers.map((l) => `- ${l}`), "");
+  }
+  if (facts.taskCheckboxes.length > 0) {
+    parts.push("**Tasks (extracto):**", ...facts.taskCheckboxes.slice(0, 5), "");
+  } else if (facts.taskHeadings.length > 0) {
+    parts.push("**Tasks (extracto):**", ...facts.taskHeadings.slice(0, 6).map((t) => `- ${t}`), "");
+  }
+  parts.push(
+    "**Docs SDD:**",
+    ...facts.docPaths.filter((p) => p.startsWith("docs/sdd/")).map((p) => `- \`${p}\``),
+    "",
+  );
+  if (facts.sddConflicts.length > 0 && options?.includeSddConflicts !== false) {
+    parts.push(buildSddConflictSection(facts).trim(), "");
+  }
+  return parts.join("\n");
+}
+
 function buildPromptInicialMd(facts: ProjectGovernanceFacts, complexity: ComplexityLevel): string {
   const docList = facts.docPaths.map((p) => `- \`${p}\``).join("\n");
   const tasksPreview =
@@ -530,41 +604,6 @@ function buildProgresoMd(facts: ProjectGovernanceFacts, tasksMarkdown?: string |
 
   lines.push("## Notas\n\n", "_Actualiza este archivo al cerrar tareas o hitos._\n");
   return lines.join("");
-}
-
-function buildProjectFactsBlock(facts: ProjectGovernanceFacts): string {
-  const parts: string[] = [`## Hechos del proyecto (${facts.projectTitle})\n`];
-  const stack = formatStackSection(facts);
-  if (stack) parts.push(stack, "");
-  if (facts.blueprintModules.length > 0) {
-    parts.push("**Módulos Blueprint:**", ...facts.blueprintModules.map((m) => `- \`${m}\``), "");
-  }
-  if (facts.backendGlobs.length > 0) {
-    parts.push("**Globs backend:**", ...facts.backendGlobs.map((g) => `- \`${g}\``), "");
-  }
-  if (facts.hasUiSurface && facts.frontendGlobs.length > 0) {
-    parts.push("**Globs frontend:**", ...facts.frontendGlobs.map((g) => `- \`${g}\``), "");
-  }
-  if (facts.npmScripts.length > 0) {
-    parts.push("**Scripts npm/pnpm:**", ...facts.npmScripts.map((s) => `- \`${s}\``), "");
-  }
-  if (facts.architectureLayers.length > 0) {
-    parts.push("**Capas:**", ...facts.architectureLayers.map((l) => `- ${l}`), "");
-  }
-  if (facts.taskCheckboxes.length > 0) {
-    parts.push("**Tasks (extracto):**", ...facts.taskCheckboxes.slice(0, 5), "");
-  } else if (facts.taskHeadings.length > 0) {
-    parts.push("**Tasks (extracto):**", ...facts.taskHeadings.slice(0, 6).map((t) => `- ${t}`), "");
-  }
-  parts.push(
-    "**Docs SDD:**",
-    ...facts.docPaths.filter((p) => p.startsWith("docs/sdd/")).map((p) => `- \`${p}\``),
-    "",
-  );
-  if (facts.sddConflicts.length > 0) {
-    parts.push(buildSddConflictSection(facts).trim(), "");
-  }
-  return parts.join("\n");
 }
 
 function buildCursorAgentMd(role: string, description: string, loadPaths: string[]): string {
@@ -699,26 +738,41 @@ function overlayProjectFacts(
   content: string,
   facts: ProjectGovernanceFacts,
   overlayOptions?: AgentGovernanceOverlayOptions,
+  artifactPath?: string,
 ): string {
-  const block = buildProjectFactsBlock(facts);
   const forceFreshOverlay = overlayOptions?.forceFreshOverlay === true;
-  if (/## Hechos del proyecto \(/i.test(content)) {
-    if (forceFreshOverlay || isStaleProjectFactsSection(content, facts)) {
+  const compact =
+    ruleHasCatalogStackEnrichment(content) &&
+    (artifactPath?.includes("/rules/stack-backend") ||
+      artifactPath?.includes("/rules/stack-frontend"));
+  const includeSddConflicts = !contentHasSddConflicts(content, facts);
+  const block = buildProjectFactsBlock(facts, { compact, includeSddConflicts });
+  let base = stripSddConflictSections(content);
+  if (/## Hechos del proyecto \(/i.test(base)) {
+    if (forceFreshOverlay || isStaleProjectFactsSection(base, facts)) {
       console.warn(
         `[agent-gov] overlayProjectFacts replacing stale TheForge block projectTitle=${facts.projectTitle} forceFreshOverlay=${forceFreshOverlay}`,
       );
-      const stripped = stripProjectFactsSection(content);
-      return stripped.trim() ? `${stripped.trimEnd()}\n\n${block}` : block;
+      base = stripProjectFactsSection(base);
+      return base.trim() ? `${base.trimEnd()}\n\n${block}` : block;
     }
-    return content;
+    return base;
   }
-  return `${content.trimEnd()}\n\n${block}`;
+  return `${base.trimEnd()}\n\n${block}`;
 }
 
 function appendSddConflictToAgents(content: string, facts: ProjectGovernanceFacts): string {
   const section = buildSddConflictSection(facts);
-  if (!section.trim() || content.includes("Resolución de conflictos SDD")) return content;
-  return `${content.trimEnd()}\n\n${section.trim()}\n`;
+  if (!section.trim()) return stripSddConflictSections(content);
+  if (contentHasSddConflicts(content, facts)) return stripSddConflictSections(content);
+  const base = stripSddConflictSections(content);
+  return `${base.trimEnd()}\n\n${section.trim()}\n`;
+}
+
+function dropDuplicateGovernancePromptPaths(fileMap: Record<string, string>): void {
+  for (const path of DUPLICATE_PROMPT_PATHS) {
+    delete fileMap[path];
+  }
 }
 
 /** Entregables SDD opcionales para incluir en export ZIP bajo docs/sdd/. */
@@ -923,6 +977,19 @@ const FALLBACK_BY_PATH: Record<string, FallbackFactory> = {
   "scripts/install-agent-governance.sh": () => defaultInstallScript(),
 };
 
+function applyCanonicalGovernanceDefaults(
+  fileMap: Record<string, string>,
+  complexity: ComplexityLevel,
+  suggestions?: AgentGovernanceSuggestions | null,
+  governanceInput?: SuggestAgentGovernanceInput,
+): void {
+  for (const path of LLM_PROOF_CANONICAL_PATHS) {
+    const factory = FALLBACK_BY_PATH[path];
+    if (factory) fileMap[path] = factory(complexity, suggestions, governanceInput);
+  }
+  dropDuplicateGovernancePromptPaths(fileMap);
+}
+
 function ensureDocConsumptionGuide(fileMap: Record<string, string>): void {
   if (!fileMap[DOC_CONSUMPTION_GUIDE_PATH]?.trim()) {
     fileMap[DOC_CONSUMPTION_GUIDE_PATH] = defaultDocConsumptionGuide();
@@ -992,12 +1059,22 @@ function enrichGovernanceArtifacts(
     const isRuleOrSkill =
       path.startsWith(`${GOVERNANCE_DOCS_PREFIX}rules/`) ||
       path.includes(`${GOVERNANCE_DOCS_PREFIX}skills/`);
+    const forceFresh = overlayOptions?.forceFreshOverlay === true;
     if (
       isRuleOrSkill &&
       content.trim() &&
-      shouldReplaceGovernanceArtifact(content, facts, overlayOptions?.forceFreshOverlay === true)
+      /## Hechos del proyecto \(/i.test(content) &&
+      !isStaleProjectFactsSection(content, facts) &&
+      !forceFresh
     ) {
-      fileMap[path] = overlayProjectFacts(content, facts, overlayOpts);
+      continue;
+    }
+    if (
+      isRuleOrSkill &&
+      content.trim() &&
+      shouldReplaceGovernanceArtifact(content, facts, forceFresh)
+    ) {
+      fileMap[path] = overlayProjectFacts(content, facts, overlayOpts, path);
     }
   }
   const promptPath = "PROMPT-INICIAL.md";
@@ -1054,12 +1131,15 @@ function mergeSuggestedArtifacts(
     const path = normalizePath(spec.path);
     const rule = getRuleById(spec.id);
     if (!rule) continue;
-    const catalogContent = overlayProjectFacts(renderRuleFromCatalog(rule, ctx), facts, overlayOpts);
+    const catalogContent = overlayProjectFacts(
+      renderRuleFromCatalog(rule, ctx),
+      facts,
+      overlayOpts,
+      path,
+    );
     const existing = fileMap[path]?.trim();
     if (existing && !shouldReplaceGovernanceArtifact(existing, facts, forceFreshOverlay)) continue;
-    fileMap[path] = existing
-      ? overlayProjectFacts(catalogContent, facts, overlayOpts)
-      : catalogContent;
+    fileMap[path] = catalogContent;
     added.push(path);
   }
 
@@ -1071,12 +1151,11 @@ function mergeSuggestedArtifacts(
       renderSkillFromCatalog(skill, ctx, spec.folder),
       facts,
       overlayOpts,
+      path,
     );
     const existing = fileMap[path]?.trim();
     if (existing && !shouldReplaceGovernanceArtifact(existing, facts, forceFreshOverlay)) continue;
-    fileMap[path] = existing
-      ? overlayProjectFacts(catalogContent, facts, overlayOpts)
-      : catalogContent;
+    fileMap[path] = catalogContent;
     added.push(path);
   }
 
@@ -1221,6 +1300,7 @@ export function reconcileAgentGovernanceScaffold(
   enrichGovernanceArtifacts(fileMap, complexity, governanceInput, overlayOptions);
   injectDynamicCursorArtifacts(fileMap, facts, complexity);
   appendSuggestionsToComoUsar(fileMap, suggestions);
+  applyCanonicalGovernanceDefaults(fileMap, complexity, suggestions, governanceInput);
 
   const files = recordToFileEntries(fileMap);
   const paths = files.map((f) => f.path);
