@@ -96,6 +96,7 @@ import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
 import LegacyMcpDebugPanel from "../components/LegacyMcpDebugPanel/LegacyMcpDebugPanel";
 import { BrdStagePanel } from "../components/BrdStagePanel";
 import { AgentGovernancePanel } from "../components/AgentGovernancePanel";
+import { WorkshopAgentProgressPanel } from "../components/WorkshopAgentProgressPanel";
 import { downloadAgentGovernanceZip } from "../utils/downloadAgentGovernanceZip";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
 import { downloadMarkdownFile } from "../utils/downloadMarkdownFile";
@@ -461,6 +462,11 @@ export default function WorkshopView({
   const loading = useWorkshopStore((s) => s.loading);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
   const cascadeRunning = loading && (loadingReason === "deliverables-cascade" || loadingReason === "legacy-deliverables");
+  const agentGovernanceGenerating =
+    loading &&
+    (loadingReason === "agent-governance" ||
+      loadingReason === "deliverables-cascade" ||
+      loadingReason === "legacy-deliverables");
   const cascadeCompleted = useWorkshopStore((s) => s.cascadeCompleted);
   const cascadeTotal = useWorkshopStore((s) => s.cascadeTotal);
   const error = useWorkshopStore((s) => s.error);
@@ -2854,8 +2860,8 @@ export default function WorkshopView({
                 {centralPanel === "agent-governance" && hasAgentGovernance && (
                   <WorkshopRegenButton
                     onClick={() => generateAgentGovernance(projectId)}
-                    disabled={loading || !effectiveMddTrimmed}
-                    loading={loading}
+                    disabled={agentGovernanceGenerating || !effectiveMddTrimmed}
+                    loading={agentGovernanceGenerating}
                     ariaLabel="Regenerar scaffold de gobernanza de agentes desde el MDD"
                   />
                 )}
@@ -3848,7 +3854,21 @@ export default function WorkshopView({
               )
             )}
             {centralPanel === "agent-governance" && (
-              hasAgentGovernance ? (
+              agentGovernanceGenerating ? (
+                <div className="flex min-h-[min(420px,60vh)] flex-1 flex-col items-center justify-center px-4 py-10 sm:px-8">
+                  <WorkshopAgentProgressPanel
+                    title={
+                      loadingReason === "agent-governance"
+                        ? hasAgentGovernance
+                          ? "Regenerando gobernanza de agentes…"
+                          : "Generando gobernanza de agentes…"
+                        : "Generando entregables…"
+                    }
+                    loading
+                    className="w-full max-w-md"
+                  />
+                </div>
+              ) : hasAgentGovernance ? (
                 <AgentGovernancePanel
                   rawContent={agentGovernanceContent}
                   viewMode={agentGovernanceViewMode}

@@ -12,6 +12,7 @@ export type WorkshopAgentsBusySlice = {
     | "brd-from-dbga"
     | "legacy-deliverables"
     | "deliverables-cascade"
+    | "agent-governance"
     | "launch-hermes"
     | null;
   streamingUserMessage: string | null;
@@ -32,6 +33,7 @@ const AGENT_LOADING_REASONS = new Set<NonNullable<WorkshopAgentsBusySlice["loadi
   "brd-from-dbga",
   "legacy-deliverables",
   "deliverables-cascade",
+  "agent-governance",
   "launch-hermes",
 ]);
 

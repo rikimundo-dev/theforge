@@ -7,6 +7,7 @@ import {
   formatDocumentMarkdown,
 } from "@theforge/shared-types/format-document-markdown";
 import { apiFetch, API_BASE, fetchWithRetry, addToOfflineQueue, flushOfflineQueue } from "../utils/apiClient";
+import { queueAndPoll } from "../utils/queueAndPoll";
 import { shouldApplyPersistedFieldContent } from "../utils/persist-field-guard";
 import {
   parseApiErrorPayloadFromResponse,
@@ -17,6 +18,11 @@ import { parseNdjsonLine } from "../utils/ndjson";
 import { mddHasSection6Heading } from "../utils/mddSectionRegen";
 import { isWorkshopAgentsBusy } from "../utils/workshopAgentsBusy";
 import { appendAgentProgressDone, type AgentProgressItem } from "../utils/agentProgress";
+import {
+  advanceAgentGovernanceProgressItems,
+  completeAgentGovernanceProgressItems,
+  createAgentGovernanceProgressItems,
+} from "../constants/agent-governance-loading-steps";
 import {
   buildPlanApprovalChatContents,
   isPlanApprovalResumeMessage,
@@ -105,53 +111,6 @@ function errorStateFromCaught(e: unknown) {
     return streamErrorPatch({ message: e.message, code });
   }
   return streamErrorPatch({ message: String(e) });
-}
-
-/**
- * POST a un generate-* endpoint con ?queue=true y hace polling al job hasta completar.
- * Si el backend no tiene cola (respuesta síncrona directa), retorna el dato directamente.
- */
-async function queueAndPoll<T>(
-  url: string,
-  body: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const r = await apiFetch(`${url}?queue=true`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({}));
-    throw new Error((err as { message?: string }).message ?? "Error");
-  }
-  const data = (await r.json()) as Record<string, unknown>;
-
-  // Si el backend respondió síncrono (sin cola), devolver el dato directamente
-  if (!data.queued) return data as unknown as T;
-
-  // Polling: GET /projects/jobs/:jobId cada 2s
-  const jobId = data.jobId as string;
-  const pollUrl = `${API_BASE}/projects/jobs/${jobId}`;
-  for (let attempt = 0; attempt < 150; attempt++) {
-    if (signal?.aborted) throw new Error("Cancelado por el usuario");
-    await new Promise((r) => setTimeout(r, 2_000));
-    const pr = await apiFetch(pollUrl);
-    if (!pr.ok) {
-      if (pr.status === 404) throw new Error("Job no encontrado");
-      continue;
-    }
-    const status = (await pr.json()) as {
-      status: string;
-      result?: unknown;
-      error?: string;
-      retrying_at?: string;
-    };
-    if (status.status === "completed") return status.result as T;
-    if (status.status === "failed") throw new Error(status.error ?? "Error en la generación");
-    // "queued", "active", "retrying" → seguir esperando
-  }
-  throw new Error("Tiempo de espera agotado (5 min)");
 }
 
 function pickEvaluatorCritique(data: Record<string, unknown>): string | null {
@@ -676,6 +635,7 @@ interface WorkshopState {
     | "brd-from-dbga"
     | "legacy-deliverables"
     | "deliverables-cascade"
+    | "agent-governance"
     | "launch-hermes"
     | null;
   /** Mensaje de usuario en curso (streaming); se muestra hasta recibir "done" */
@@ -932,6 +892,7 @@ const initialState = {
     | "brd-from-dbga"
     | "legacy-deliverables"
     | "deliverables-cascade"
+    | "agent-governance"
     | null,
   streamingUserMessage: null as string | null,
   streamingUserImages: null as ChatImagePart[] | null,
@@ -2625,29 +2586,52 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateAgentGovernance: async (projectId) => {
     if (!projectId?.trim()) return null;
-    set({ loading: true, error: null });
-    try {
-      const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-agent-governance`, {
-        method: "POST",
+    const beforeLen = get().agentGovernanceContent?.length ?? 0;
+    console.warn(
+      `[agent-gov] workshop generateAgentGovernance start projectId=${projectId} force=true beforeLen=${beforeLen}`,
+    );
+    set({
+      loading: true,
+      loadingReason: "agent-governance",
+      error: null,
+      agentProgress: createAgentGovernanceProgressItems(),
+    });
+
+    const stepTimer = setInterval(() => {
+      set((s) => {
+        if (s.loadingReason !== "agent-governance") return s;
+        return { agentProgress: advanceAgentGovernanceProgressItems(s.agentProgress) };
       });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error((err as { message?: string }).message ?? "Error al generar gobernanza de agentes");
-      }
-      const data: Project = await r.json();
+    }, 12_000);
+
+    try {
+      const data = await queueAndPoll<Project>(
+        `${API_BASE}/projects/${projectId}/generate-agent-governance`,
+        { force: true },
+      );
+      const afterLen = data.agentGovernanceContent?.length ?? 0;
+      console.warn(
+        `[agent-gov] workshop generateAgentGovernance complete projectId=${projectId} beforeLen=${beforeLen} afterLen=${afterLen} preview=${(data.agentGovernanceContent ?? "").slice(0, 80)}`,
+      );
       set({
         project: data,
         agentGovernanceContent: data.agentGovernanceContent ?? null,
         error: null,
+        agentProgress: completeAgentGovernanceProgressItems(),
       });
       return data;
     } catch (e) {
+      console.warn(
+        `[agent-gov] workshop generateAgentGovernance failed projectId=${projectId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
       set({
         error: e instanceof Error ? e.message : "Error al generar gobernanza de agentes",
+        agentProgress: [],
       });
       return null;
     } finally {
-      set({ loading: false });
+      clearInterval(stepTimer);
+      set({ loading: false, loadingReason: null, agentProgress: [] });
     }
   },
   fetchAgentGovernanceExport: async (projectId) => {

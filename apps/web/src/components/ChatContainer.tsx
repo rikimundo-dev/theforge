@@ -18,7 +18,7 @@ import {
 } from "../constants/legacy-workshop-loading-steps";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MessageSquare, Send, Loader2, Trash2, Target, Check, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown, Rocket } from "lucide-react";
+import { MessageSquare, Send, Loader2, Trash2, Target, Play, Pencil, X, RefreshCw, ImagePlus, Mic, ChevronDown, Rocket } from "lucide-react";
 import { apiFetch } from "../utils/apiClient";
 import { useInterview } from "../hooks/useInterview";
 import { useWorkshopStore } from "../store/workshopStore";
@@ -26,7 +26,6 @@ import { cn } from "@/lib/utils";
 import type { ChatImagePart } from "@theforge/shared-types";
 import { VISION_CONTEXT_HEADER } from "@theforge/shared-types/session";
 import { MDD_LONG_PASTE_WARN_CHARS } from "@theforge/shared-types/mdd-pipeline-limits";
-import { isAgentProgressActive } from "../utils/agentProgress";
 import {
   Button,
   AlertDialog,
@@ -48,7 +47,8 @@ import {
   WORKSHOP_COLUMN_HEADER_ICON_SLOT,
 } from "@/constants/workshopDocToolbar";
 import { ChatProviderInfoButton } from "@/components/ChatProviderInfoButton";
-import { AiGenerationChatBubble, AiGenerativeDots } from "./AiGenerationLoader";
+import { AiGenerationChatBubble } from "./AiGenerationLoader";
+import { WorkshopAgentProgressPanel } from "./WorkshopAgentProgressPanel";
 import { PLAN_NODE_LABELS } from "@/utils/planApprovalChat";
 import {
   MDD_SECTION_COMMANDS,
@@ -490,14 +490,6 @@ export default function ChatContainer({
   const clearEvaluatorCritique = useWorkshopStore((s) => s.clearEvaluatorCritique);
   const loadingReason = useWorkshopStore((s) => s.loadingReason);
   const agentProgress = useWorkshopStore((s) => s.agentProgress);
-  const completedAgentSteps = useMemo(
-    () => agentProgress.filter((p) => !isAgentProgressActive(p)),
-    [agentProgress],
-  );
-  const activeAgentStep = useMemo(
-    () => agentProgress.find((p) => isAgentProgressActive(p)),
-    [agentProgress],
-  );
   const pendingPlanApproval = useWorkshopStore((s) => s.pendingPlanApproval);
   const isBenchmarkStreaming = activeTab === "benchmark" && loading && loadingReason === "benchmark";
   const isMddStreaming = loading && loadingReason === "mdd";
@@ -505,7 +497,8 @@ export default function ChatContainer({
     isBenchmarkStreaming ||
     isMddStreaming ||
     loadingReason === "deliverables-cascade" ||
-    loadingReason === "legacy-deliverables";
+    loadingReason === "legacy-deliverables" ||
+    loadingReason === "agent-governance";
   /** Generación larga en segundo plano (mismo criterio que el panel central en WorkshopView). */
   const isLegacyLongRun =
     loading &&
@@ -1197,67 +1190,7 @@ export default function ChatContainer({
             ) : null}
 
             {showAgentProgress && (
-              <div
-                className="rounded-xl border border-[color-mix(in_oklch,var(--border)_70%,transparent)] bg-[color-mix(in_oklch,var(--card)_35%,var(--background))] px-3 py-3 shadow-sm"
-                role="status"
-                aria-live="polite"
-              >
-                <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--foreground-subtle)]">
-                  {loading ? "Progreso del flujo" : agentProgress.length > 0 ? "Pasos completados" : "Flujo MDD en curso"}
-                </p>
-                {agentProgress.length > 0 || loading ? (
-                  <ul className="flex flex-col gap-2.5">
-                    {completedAgentSteps.map((p, i) => (
-                      <li
-                        key={`done-${i}-${p.agent}`}
-                        className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-0.5 text-sm text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]"
-                      >
-                        <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5" aria-hidden>
-                          <Check className="h-3.5 w-3.5 text-emerald-500" strokeWidth={2.5} />
-                        </span>
-                        <div className="min-w-0 flex flex-col gap-0.5">
-                          <span className="font-semibold leading-snug tracking-tight text-[var(--foreground)]">
-                            {p.agent}
-                          </span>
-                          <span className="text-xs leading-relaxed text-[var(--foreground-subtle)]">{p.message}</span>
-                        </div>
-                      </li>
-                    ))}
-                    {activeAgentStep ? (
-                      <li className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-0.5 text-sm">
-                        <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
-                          <AiGenerativeDots />
-                        </span>
-                        <div className="min-w-0 flex flex-col gap-0.5 pt-0.5">
-                          <span className="font-semibold leading-snug text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">
-                            {activeAgentStep.agent}
-                          </span>
-                          <span className="text-xs leading-relaxed text-[var(--foreground-subtle)]">
-                            {activeAgentStep.message}
-                          </span>
-                        </div>
-                      </li>
-                    ) : null}
-                    {loading && !activeAgentStep ? (
-                      <li className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 text-sm">
-                        <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
-                          <AiGenerativeDots />
-                        </span>
-                        <span className="min-w-0 pt-0.5 font-semibold leading-snug text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">
-                          Siguiente paso…
-                        </span>
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <div className="grid grid-cols-[1.125rem_minmax(0,1fr)] items-start gap-x-2.5 text-sm text-[var(--muted-foreground)]">
-                    <span className="flex h-5 w-[1.125rem] shrink-0 items-center justify-center pt-0.5 text-[var(--primary)]" aria-hidden>
-                      <AiGenerativeDots />
-                    </span>
-                    <span className="min-w-0 pt-0.5 leading-snug">Manager o agentes procesando…</span>
-                  </div>
-                )}
-              </div>
+              <WorkshopAgentProgressPanel className="mx-0" />
             )}
 
             {activeTab === "mdd" && pendingPlanApproval && pendingPlanApproval.plan.length > 0 && (

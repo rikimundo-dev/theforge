@@ -33,6 +33,7 @@ export interface GenerateJobData {
   preview?: boolean;
   gapsFeedback?: string | null;
   target?: string;
+  forceRegenerate?: boolean;
 }
 
 /** Estado público de un job para polling del frontend. */
@@ -112,7 +113,7 @@ export class DeliverablesQueueService implements OnModuleInit, OnModuleDestroy {
     this.worker = new Worker(
       DELIVERABLES_QUEUE_NAME,
       async (job: Job<GenerateJobData>) => {
-        const { type, projectId, userId, preview, gapsFeedback, target } = job.data;
+        const { type, projectId, userId, preview, gapsFeedback, target, forceRegenerate } = job.data;
         return runWithRequestUserAsync(userId ?? "system", async () => {
           this.logger.log(
             `BullMQ worker: iniciando job ${job.id} type=${type} projectId=${projectId} attempt=${job.attemptsMade + 1}/${this.MAX_ATTEMPTS}`,
@@ -135,8 +136,14 @@ export class DeliverablesQueueService implements OnModuleInit, OnModuleDestroy {
             case "tasks":
               return this.projects.generateTasks(projectId);
             case "agent-governance":
-              if (preview) return this.projects.generateAgentGovernancePreview(projectId, target);
-              return this.projects.generateAgentGovernance(projectId, target);
+              if (preview) {
+                return this.projects.generateAgentGovernancePreview(projectId, target, {
+                  forceRegenerate: forceRegenerate !== false,
+                });
+              }
+              return this.projects.generateAgentGovernance(projectId, target, {
+                forceRegenerate: forceRegenerate !== false,
+              });
             case "infra":
               if (preview) return this.projects.generateInfraPreview(projectId, gapsFeedback);
               return this.projects.generateInfra(projectId, gapsFeedback);

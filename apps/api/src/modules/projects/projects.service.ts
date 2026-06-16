@@ -55,7 +55,6 @@ import {
   parseAgentGovernanceResponse,
   reconcileAgentGovernanceScaffold,
   serializeAgentGovernanceScaffold,
-  suggestionsFromManifest,
 } from "../ai/utils/agent-governance.util.js";
 import {
   suggestAgentGovernanceArtifacts,
@@ -1254,29 +1253,60 @@ name: ${JSON.stringify(name)}
     return this.update(projectId, { specContent: cleanDocumentContent(specContent) });
   }
 
-  async generateAgentGovernance(projectId: string, target?: string) {
+  /** Limpia gobernanza persistida antes de regenerar (polling y UI). */
+  async clearAgentGovernanceContent(projectId: string) {
+    return this.update(projectId, { agentGovernanceContent: null });
+  }
+
+  async generateAgentGovernance(
+    projectId: string,
+    target?: string,
+    options?: { forceRegenerate?: boolean },
+  ) {
+    const forceRegenerate = options?.forceRegenerate !== false;
     const project = await this.assertProjectAccess(projectId);
+    const beforeLen = (project.agentGovernanceContent ?? "").length;
+    console.warn(
+      `[agent-gov] generateAgentGovernance start projectId=${projectId} force=${forceRegenerate} beforeLen=${beforeLen}`,
+    );
+    if (forceRegenerate) {
+      console.warn(`[agent-gov] generateAgentGovernance clearing agentGovernanceContent projectId=${projectId}`);
+      await this.clearAgentGovernanceContent(projectId);
+    }
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
     const governanceInput = this.buildAgentGovernanceInput(project, mdd, complexity);
     const suggestions = suggestAgentGovernanceArtifacts(governanceInput);
+    console.warn(
+      `[agent-gov] generateAgentGovernance input keys=${Object.keys(governanceInput).join(",")} archetypes=${suggestions.archetypes.length} rules=${suggestions.suggestedRules.length} skills=${suggestions.suggestedSkills.length}`,
+    );
     const raw = await this.ai.generateAgentGovernance(mdd, project.blueprintContent, complexity, {
       suggestions,
       tasksContent: project.tasksContent,
       architectureContent: project.architectureContent,
       specContent: project.specContent,
     });
+    const forceFreshOverlay = forceRegenerate;
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       governanceInput,
       target,
+      forceFreshOverlay,
     });
+    const serialized = serializeAgentGovernanceScaffold(scaffold);
+    console.warn(
+      `[agent-gov] generateAgentGovernance done projectId=${projectId} beforeLen=${beforeLen} afterLen=${serialized.length} files=${scaffold.files.length} rawPreview=${raw.slice(0, 80)}`,
+    );
     return this.update(projectId, {
-      agentGovernanceContent: serializeAgentGovernanceScaffold(scaffold),
+      agentGovernanceContent: serialized,
     });
   }
 
-  async generateAgentGovernancePreview(projectId: string, target?: string): Promise<{ content: string }> {
+  async generateAgentGovernancePreview(
+    projectId: string,
+    target?: string,
+    options?: { forceRegenerate?: boolean },
+  ): Promise<{ content: string }> {
     const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
@@ -1288,10 +1318,12 @@ name: ${JSON.stringify(name)}
       architectureContent: project.architectureContent,
       specContent: project.specContent,
     });
+    const forceFreshOverlay = options?.forceRegenerate !== false;
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       governanceInput,
       target,
+      forceFreshOverlay,
     });
     return { content: serializeAgentGovernanceScaffold(scaffold) };
   }
@@ -1309,18 +1341,23 @@ name: ${JSON.stringify(name)}
       throw new BadRequestException("El scaffold de gobernanza no contiene archivos válidos.");
     }
 
+    const filesBefore = scaffold.files.length;
+    console.warn(
+      `[agent-gov] getAgentGovernanceForExport start projectId=${projectId} rawLen=${raw.length} filesBefore=${filesBefore}`,
+    );
+
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
     const governanceInput = this.buildAgentGovernanceInput(project, mdd, complexity);
-    // NO llamar a suggestAgentGovernanceArtifacts() aquí — es un LLM call que timeouta.
-    const suggestions = suggestionsFromManifest(scaffold.manifest?.suggestions) ?? null;
+    const suggestions = suggestAgentGovernanceArtifacts(governanceInput);
 
     const reconciled = reconcileAgentGovernanceScaffold(scaffold, complexity, {
       suggestions,
       governanceInput,
+      forceFreshOverlay: true,
     });
 
-    return appendProjectDeliverablesToScaffold(reconciled, {
+    const exportScaffold = appendProjectDeliverablesToScaffold(reconciled, {
       mddMarkdown: mdd,
       blueprintMarkdown: project.blueprintContent,
       specMarkdown: project.specContent,
@@ -1333,9 +1370,20 @@ name: ${JSON.stringify(name)}
       uxUiGuideMarkdown: project.uxUiGuideContent,
       infraMarkdown: project.infraContent,
     });
+
+    const serialized = serializeAgentGovernanceScaffold(exportScaffold);
+    const persisted = serialized !== raw;
+    console.warn(
+      `[agent-gov] getAgentGovernanceForExport done projectId=${projectId} filesAfter=${exportScaffold.files.length} serializedLen=${serialized.length} persisted=${persisted}`,
+    );
+    if (persisted) {
+      await this.update(projectId, { agentGovernanceContent: serialized });
+    }
+
+    return exportScaffold;
   }
 
-  private buildAgentGovernanceInput(
+    private buildAgentGovernanceInput(
     project: Project,
     mddMarkdown: string,
     complexity: ComplexityLevel,
@@ -1346,6 +1394,13 @@ name: ${JSON.stringify(name)}
       tasksMarkdown: project.tasksContent,
       architectureMarkdown: project.architectureContent,
       specMarkdown: project.specContent,
+      apiContractsMarkdown: project.apiContractsContent,
+      logicFlowsMarkdown: project.logicFlowsContent,
+      uxUiGuideMarkdown: project.uxUiGuideContent,
+      infraMarkdown: project.infraContent,
+      useCasesMarkdown: project.useCasesContent,
+      userStoriesMarkdown: project.userStoriesContent,
+      projectName: project.name,
       complexity,
     };
   }

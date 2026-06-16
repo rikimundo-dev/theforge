@@ -214,11 +214,23 @@ export class ProjectsController {
   @Post(":id/generate-agent-governance")
   generateAgentGovernance(
     @Param("id") id: string,
-    @Body() body: { preview?: boolean; target?: string },
+    @Body() body: { preview?: boolean; target?: string; force?: boolean },
     @Query("queue") queue?: string,
   ) {
-    if (body?.preview) return this.projects.generateAgentGovernancePreview(id, body?.target);
-    return this.queueOrSync(id, "agent-governance", { preview: false, target: body?.target }, queue);
+    console.warn(
+      `[agent-gov] POST generate-agent-governance projectId=${id} force=${body?.force} queue=${queue ?? "(sync)"} preview=${body?.preview ?? false}`,
+    );
+    if (body?.preview) {
+      return this.projects.generateAgentGovernancePreview(id, body?.target, {
+        forceRegenerate: body?.force !== false,
+      });
+    }
+    return this.queueOrSync(
+      id,
+      "agent-governance",
+      { preview: false, target: body?.target, forceRegenerate: body?.force !== false },
+      queue,
+    );
   }
 
   @Get(":id/agent-governance-export")
@@ -357,12 +369,24 @@ export class ProjectsController {
         preview: (extra.preview as boolean) ?? false,
         gapsFeedback: (extra.gapsFeedback as string | null) ?? null,
         target: (extra.target as string | undefined) ?? undefined,
+        forceRegenerate: extra.forceRegenerate !== false,
       });
       return { queued: true, jobId, statusPath: `/projects/jobs/${jobId}` };
     }
 
     // Cliente pidió queue pero Redis no está → fire-and-forget para no timeout
     if (wantQueue) {
+      if (type === "agent-governance" && extra.forceRegenerate !== false) {
+        console.warn(
+          `[agent-gov] queueOrSync fire-and-forget clearing content projectId=${projectId} forceRegenerate=true`,
+        );
+        await this.projects.clearAgentGovernanceContent(projectId);
+      }
+      if (type === "agent-governance") {
+        console.warn(
+          `[agent-gov] queueOrSync fire-and-forget agent-governance projectId=${projectId} forceRegenerate=${extra.forceRegenerate !== false}`,
+        );
+      }
       // Disparamos en background sin await — la respuesta HTTP sale ya
       void this.fireAndForget(type, projectId, extra).catch((err) => {
         console.error(`[fire-and-forget] ${type} falló para ${projectId}: ${err instanceof Error ? err.message : err}`);
@@ -386,7 +410,9 @@ export class ProjectsController {
       case "tasks":
         return this.projects.generateTasks(projectId);
       case "agent-governance":
-        return this.projects.generateAgentGovernance(projectId, extra.target as string | undefined);
+        return this.projects.generateAgentGovernance(projectId, extra.target as string | undefined, {
+          forceRegenerate: extra.forceRegenerate !== false,
+        });
       case "infra":
         return this.projects.generateInfra(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
       case "architecture":
@@ -404,7 +430,9 @@ export class ProjectsController {
   private async fireAndForget(type: GenerateJobType, projectId: string, extra: Record<string, unknown>): Promise<void> {
     switch (type) {
       case "agent-governance":
-        await this.projects.generateAgentGovernance(projectId, extra.target as string | undefined);
+        await this.projects.generateAgentGovernance(projectId, extra.target as string | undefined, {
+          forceRegenerate: extra.forceRegenerate !== false,
+        });
         return;
       case "blueprint":
         await this.projects.generateBlueprint(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
