@@ -214,11 +214,11 @@ export class ProjectsController {
   @Post(":id/generate-agent-governance")
   generateAgentGovernance(
     @Param("id") id: string,
-    @Body() body: { preview?: boolean },
+    @Body() body: { preview?: boolean; target?: string },
     @Query("queue") queue?: string,
   ) {
-    if (body?.preview) return this.projects.generateAgentGovernancePreview(id);
-    return this.queueOrSync(id, "agent-governance", { preview: false }, queue);
+    if (body?.preview) return this.projects.generateAgentGovernancePreview(id, body?.target);
+    return this.queueOrSync(id, "agent-governance", { preview: false, target: body?.target }, queue);
   }
 
   @Get(":id/agent-governance-export")
@@ -353,6 +353,7 @@ export class ProjectsController {
         projectId,
         preview: (extra.preview as boolean) ?? false,
         gapsFeedback: (extra.gapsFeedback as string | null) ?? null,
+        target: (extra.target as string | undefined) ?? undefined,
       });
       return { queued: true, jobId, statusPath: `/projects/jobs/${jobId}` };
     }
@@ -367,7 +368,7 @@ export class ProjectsController {
       case "tasks":
         return this.projects.generateTasks(projectId);
       case "agent-governance":
-        return this.projects.generateAgentGovernance(projectId);
+        return this.projects.generateAgentGovernance(projectId, extra.target as string | undefined);
       case "infra":
         return this.projects.generateInfra(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
       case "architecture":

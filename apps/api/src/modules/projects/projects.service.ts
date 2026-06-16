@@ -1250,7 +1250,7 @@ name: ${JSON.stringify(name)}
     return this.update(projectId, { specContent: cleanDocumentContent(specContent) });
   }
 
-  async generateAgentGovernance(projectId: string) {
+  async generateAgentGovernance(projectId: string, target?: string) {
     const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
@@ -1265,13 +1265,14 @@ name: ${JSON.stringify(name)}
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       mddMarkdown: mdd,
+      target,
     });
     return this.update(projectId, {
       agentGovernanceContent: serializeAgentGovernanceScaffold(scaffold),
     });
   }
 
-  async generateAgentGovernancePreview(projectId: string): Promise<{ content: string }> {
+  async generateAgentGovernancePreview(projectId: string, target?: string): Promise<{ content: string }> {
     const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
@@ -1286,6 +1287,7 @@ name: ${JSON.stringify(name)}
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       mddMarkdown: mdd,
+      target,
     });
     return { content: serializeAgentGovernanceScaffold(scaffold) };
   }

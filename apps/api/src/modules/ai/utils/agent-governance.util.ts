@@ -28,6 +28,82 @@ export const AGENT_GOVERNANCE_REQUIRED_ALL = [
   `${GOVERNANCE_DOCS_PREFIX}INSTALACION.md`,
 ] as const;
 
+// ── Multi-target path mapping ────────────────────────────────────────
+
+export type GovernanceTarget = "cursor" | "openhands" | "hermes";
+
+/** Reglas de renombre de paths por target. Se aplican en orden. */
+const TARGET_PATH_MAP: Record<GovernanceTarget, Array<{ from: RegExp; to: string | ((match: RegExpMatchArray) => string) }>> = {
+  cursor: [
+    // Cursor es el default — solo normaliza paths de LLM
+    { from: /^\.cursor\//, to: `${GOVERNANCE_DOCS_PREFIX}` },
+  ],
+  openhands: [
+    // OpenHands: reglas → .openhands/rules/, skills → .openhands/skills/
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}rules/(.+\\.mdc)$`), to: ".openhands/rules/$1" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}skills/(.+)/SKILL\\.md$`), to: ".openhands/skills/$1/SKILL.md" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}references/`), to: ".openhands/references/" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}mcp\\.json\\.example$`), to: ".openhands/mcp.json" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}`), to: ".openhands/" },
+    // Omitir shims de Cursor
+    { from: /^CLAUDE\.md$/, to: "" }, // omitido
+    { from: /^\.cursor\//, to: ".openhands/" },
+  ],
+  hermes: [
+    // Hermes: skills → .hermes/skills/, reglas se convierten en skills
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}rules/(.+)\\.mdc$`), to: ".hermes/skills/$1/SKILL.md" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}skills/(.+)/SKILL\\.md$`), to: ".hermes/skills/$1/SKILL.md" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}references/`), to: ".hermes/references/" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}mcp\\.json\\.example$`), to: ".hermes/mcp.json.example" },
+    { from: new RegExp(`^${GOVERNANCE_DOCS_PREFIX}`), to: ".hermes/" },
+    // Omitir shims de Cursor
+    { from: /^CLAUDE\.md$/, to: "" }, // omitido
+    { from: /^\.cursor\//, to: ".hermes/" },
+  ],
+};
+
+/** Aplica el mapeo de paths según el target. Retorna nuevo path (o "" para omitir). */
+function remapPathForTarget(rawPath: string, target: GovernanceTarget): string {
+  const normalized = rawPath.trim();
+  const rules = TARGET_PATH_MAP[target];
+  for (const rule of rules) {
+    const match = normalized.match(rule.from);
+    if (match) {
+      if (typeof rule.to === "function") return rule.to(match);
+      return rule.to; // "" => omitir
+    }
+  }
+  // Sin match = mantener el path original
+  return normalized;
+}
+
+/**
+ * Transforma todos los paths de un scaffold al target especificado.
+ * Omite archivos cuyo path queda vacío (ej. CLAUDE.md en openhands/hermes).
+ */
+function remapGovernanceScaffold(scaffold: AgentGovernanceScaffold, target: GovernanceTarget): AgentGovernanceScaffold {
+  if (target === "cursor") return scaffold; // no-op
+
+  const remappedFiles: AgentGovernanceFile[] = [];
+  const remappedManifestPaths: string[] = [];
+
+  for (const file of scaffold.files) {
+    const newPath = remapPathForTarget(file.path, target);
+    if (!newPath) continue; // omitir
+    remappedFiles.push({ ...file, path: newPath });
+    remappedManifestPaths.push(newPath);
+  }
+
+  return {
+    ...scaffold,
+    manifest: {
+      ...scaffold.manifest,
+      files: remappedManifestPaths,
+    },
+    files: remappedFiles,
+  };
+}
+
 /** Rutas obligatorias a partir de MEDIUM. */
 export const AGENT_GOVERNANCE_REQUIRED_MEDIUM = [
   `${GOVERNANCE_DOCS_PREFIX}references/workflows.md`,
@@ -580,6 +656,7 @@ export function reconcileAgentGovernanceScaffold(
   options?: {
     suggestions?: AgentGovernanceSuggestions | null;
     mddMarkdown?: string;
+    target?: GovernanceTarget;
   },
 ): AgentGovernanceScaffold {
   const suggestions =
@@ -587,6 +664,7 @@ export function reconcileAgentGovernanceScaffold(
     suggestionsFromManifest(scaffold.manifest.suggestions) ??
     null;
   const mddMarkdown = options?.mddMarkdown ?? "";
+  const target = options?.target ?? "cursor";
 
   const fileMap: Record<string, string> = {};
   for (const file of scaffold.files) {
@@ -606,7 +684,7 @@ export function reconcileAgentGovernanceScaffold(
   const files = recordToFileEntries(fileMap);
   const paths = files.map((f) => f.path);
 
-  return {
+  const reconciled: AgentGovernanceScaffold = {
     manifest: {
       ...scaffold.manifest,
       templateVersion: scaffold.manifest.templateVersion || AGENT_GOVERNANCE_TEMPLATE_VERSION,
@@ -616,6 +694,9 @@ export function reconcileAgentGovernanceScaffold(
     },
     files,
   };
+
+  // Aplicar adaptador multi-target
+  return remapGovernanceScaffold(reconciled, target);
 }
 
 /**
@@ -625,6 +706,7 @@ export function reconcileAgentGovernanceScaffold(
 export interface ParseAgentGovernanceOptions {
   suggestions?: AgentGovernanceSuggestions | null;
   mddMarkdown?: string;
+  target?: string;
 }
 
 export function parseAgentGovernanceResponse(
@@ -642,6 +724,7 @@ export function parseAgentGovernanceResponse(
 
   const suggestions = options?.suggestions ?? null;
   const mddMarkdown = options?.mddMarkdown ?? "";
+  const target = (options?.target as GovernanceTarget) ?? "cursor";
 
   const fileMap = capRulesAndSkills(parseLlmFilesPayload(parsed));
   const merged = mergeSuggestedArtifacts(fileMap, complexity, suggestions, mddMarkdown);
@@ -673,7 +756,7 @@ export function parseAgentGovernanceResponse(
       files,
     },
     complexity,
-    { suggestions, mddMarkdown },
+    { suggestions, mddMarkdown, target },
   );
 }
 

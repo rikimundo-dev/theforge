@@ -23,6 +23,19 @@ const TIMEOUT_MS = Number(process.env.THEFORGE_MCP_TIMEOUT) || 120_000;
 const PORT = Number(process.env.PORT) || 3000;
 const USE_HTTP = process.argv.includes("--http");
 
+// ── Client auto-detection ─────────────────────────────────────────────
+/** Nombre del cliente detectado en `initialize` (\"hermes\", \"openhands\", etc.). */
+let clientName = "";
+
+/** Resuelve el target de gobernanza: explícito > auto-detectado > \"cursor\". */
+function resolveGovernanceTarget(explicit?: string): string {
+  if (explicit) return explicit;
+  const name = clientName.toLowerCase();
+  if (name.includes("hermes")) return "hermes";
+  if (name.includes("openhands")) return "openhands";
+  return "cursor";
+}
+
 // ── Local Types ────────────────────────────────────────────────────────
 
 interface Tool {
@@ -418,7 +431,7 @@ const TOOLS: Tool[] = [
   {
     name: "generate_agent_governance",
     description:
-      "Genera el scaffold de Gobernanza IA (AGENTS.md, rules, skills, mcp.json.example) desde MDD + Blueprint + complejidad",
+      "Genera el scaffold de Gobernanza IA (AGENTS.md, rules, skills, mcp.json.example) desde MDD + Blueprint + complejidad. Auto-detecta el cliente (cursor, openhands, hermes) vía initialize; usa 'target' para forzar.",
     inputSchema: {
       type: "object",
       properties: {
@@ -430,6 +443,12 @@ const TOOLS: Tool[] = [
         queue: {
           type: "boolean",
           description: "Si true y la cola de entregables está activa, encola el job async",
+        },
+        target: {
+          type: "string",
+          enum: ["cursor", "openhands", "hermes"],
+          description:
+            "Target para el scaffold: 'cursor' (.cursor/rules/, .cursor/skills/), 'openhands' (.openhands/instructions.md), 'hermes' (.hermes/skills/). Si se omite, se auto-detecta del clientInfo enviado en initialize.",
         },
       },
       required: ["projectId"],
@@ -1200,9 +1219,11 @@ const handlers: Record<string, Handler> = {
   },
   async generate_agent_governance(args) {
     const queue = args.queue === true ? "?queue=true" : "";
+    const target = resolveGovernanceTarget(args.target as string | undefined);
     return JSON.stringify(
       await apiPost(`/projects/${args.projectId}/generate-agent-governance${queue}`, {
         preview: args.preview ?? false,
+        target,
       }),
     );
   },
@@ -1570,6 +1591,9 @@ async function handleJSONRPC(request: JSONRPCRequest): Promise<JSONRPCResponse> 
   try {
     switch (method) {
       case "initialize": {
+        // Guardar clientInfo para auto-detección
+        const info = (params as any)?.clientInfo as { name?: string; version?: string } | undefined;
+        if (info?.name) clientName = info.name;
         return {
           jsonrpc: "2.0",
           id,
