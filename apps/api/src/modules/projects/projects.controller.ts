@@ -338,7 +338,9 @@ export class ProjectsController {
   /**
    * Helper: si la cola está habilitada y el cliente envió `?queue=true`,
    * encola el job y devuelve `{ queued: true, jobId }`.
-   * Si no, ejecuta síncrono (comportamiento actual).
+   * Si no hay Redis pero el cliente pidió queue, ejecuta fire-and-forget
+   * (responde instantáneo, el job corre en background).
+   * Solo cae a síncrono si NO se pidió queue explícitamente.
    */
   private async queueOrSync(
     projectId: string,
@@ -346,8 +348,9 @@ export class ProjectsController {
     extra: Record<string, unknown>,
     queueParam?: string,
   ): Promise<unknown> {
-    const shouldQueue = queueParam === "true" && this.deliverablesQueue.isEnabled();
-    if (shouldQueue) {
+    const wantQueue = queueParam === "true";
+    const canQueue = wantQueue && this.deliverablesQueue.isEnabled();
+    if (canQueue) {
       const jobId = await this.deliverablesQueue.enqueue({
         type,
         projectId,
@@ -357,7 +360,22 @@ export class ProjectsController {
       });
       return { queued: true, jobId, statusPath: `/projects/jobs/${jobId}` };
     }
-    // Fallback síncrono
+
+    // Cliente pidió queue pero Redis no está → fire-and-forget para no timeout
+    if (wantQueue) {
+      // Disparamos en background sin await — la respuesta HTTP sale ya
+      void this.fireAndForget(type, projectId, extra).catch((err) => {
+        console.error(`[fire-and-forget] ${type} falló para ${projectId}: ${err instanceof Error ? err.message : err}`);
+      });
+      return {
+        queued: true,
+        jobId: `bg-${Date.now()}`,
+        statusPath: null,
+        note: "Queue no disponible (sin Redis). El job se ejecuta en background. Usa get_agent_governance_export cuando termine (~60-90s).",
+      };
+    }
+
+    // Fallback síncrono (sin ?queue=true explícito)
     switch (type) {
       case "blueprint":
         return this.projects.generateBlueprint(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
@@ -379,6 +397,24 @@ export class ProjectsController {
         return this.projects.generateUserStories(projectId);
       default:
         return this.projects.generateBlueprint(projectId);
+    }
+  }
+
+  /** Fire-and-forget: ejecuta la generación en background sin esperar respuesta. */
+  private async fireAndForget(type: GenerateJobType, projectId: string, extra: Record<string, unknown>): Promise<void> {
+    switch (type) {
+      case "agent-governance":
+        await this.projects.generateAgentGovernance(projectId, extra.target as string | undefined);
+        return;
+      case "blueprint":
+        await this.projects.generateBlueprint(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
+        return;
+      case "tasks":
+        await this.projects.generateTasks(projectId);
+        return;
+      default:
+        // Para otros tipos no críticos, ignorar
+        console.warn(`[fire-and-forget] Tipo no soportado: ${type}`);
     }
   }
 }
