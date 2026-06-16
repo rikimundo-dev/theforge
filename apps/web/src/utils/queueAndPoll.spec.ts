@@ -72,4 +72,16 @@ describe("queueAndPoll helpers", () => {
       true,
     );
   });
+
+  it("marca completa en regeneración forzada con baseline null aunque el JSON sea igual", () => {
+    const content = '{"files":[{"path":"same"}]}';
+    assert.equal(
+      isProjectGenerationComplete(
+        { agentGovernanceContent: content },
+        "agentGovernanceContent",
+        null,
+      ),
+      true,
+    );
+  });
 });

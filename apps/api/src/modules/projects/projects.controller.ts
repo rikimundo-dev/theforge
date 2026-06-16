@@ -366,12 +366,16 @@ export class ProjectsController {
         preview: (extra.preview as boolean) ?? false,
         gapsFeedback: (extra.gapsFeedback as string | null) ?? null,
         target: (extra.target as string | undefined) ?? undefined,
+        forceRegenerate: extra.forceRegenerate !== false,
       });
       return { queued: true, jobId, statusPath: `/projects/jobs/${jobId}` };
     }
 
     // Cliente pidió queue pero Redis no está → fire-and-forget para no timeout
     if (wantQueue) {
+      if (type === "agent-governance" && extra.forceRegenerate !== false) {
+        await this.projects.clearAgentGovernanceContent(projectId);
+      }
       // Disparamos en background sin await — la respuesta HTTP sale ya
       void this.fireAndForget(type, projectId, extra).catch((err) => {
         console.error(`[fire-and-forget] ${type} falló para ${projectId}: ${err instanceof Error ? err.message : err}`);

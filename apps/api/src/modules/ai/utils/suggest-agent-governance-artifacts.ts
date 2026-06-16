@@ -87,15 +87,44 @@ function corpus(input: SuggestAgentGovernanceInput): string {
     .join("\n\n");
 }
 
+function normalizeProjectTitleCandidate(raw: string): string | null {
+  const trimmed = raw
+    .trim()
+    .replace(/^\*+|\*+$/g, "")
+    .replace(/^[-*]\s+/, "")
+    .replace(/^["'`]|["'`]$/g, "");
+  if (!trimmed || /^#/.test(trimmed)) return null;
+  const beforeBreak = trimmed.split(/\s*[—–-]\s+/)[0]?.split(/:\s+/)[0]?.trim();
+  if (!beforeBreak || beforeBreak.length < 3) return null;
+  return beforeBreak.slice(0, 120);
+}
+
+/** Extrae título desde §1 Contexto cuando el H1 es genérico (p. ej. Master Design Document). */
+function extractTitleFromSection1(mdd: string): string | null {
+  const sec1Match = mdd.match(/##\s*1\.[^\n]*\n([\s\S]*?)(?=\n##\s|\n#\s|$)/i);
+  if (!sec1Match?.[1]) return null;
+  for (const line of sec1Match[1].split("\n")) {
+    const candidate = normalizeProjectTitleCandidate(line);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
 /** MDD §1 o primer H1 como título del proyecto. */
 export function extractProjectTitle(input: SuggestAgentGovernanceInput): string {
   const mdd = input.mddMarkdown ?? "";
   const h1 = mdd.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  if (h1 && !/^mdd\b|master design/i.test(h1)) return h1.slice(0, 120);
-  const sec1 = mdd.match(/##\s*1\.[^\n]*\n+([^\n#]+)/i)?.[1]?.trim();
-  if (sec1) return sec1.replace(/^\*+|\*+$/g, "").slice(0, 120);
+  if (h1) {
+    const fromH1 = normalizeProjectTitleCandidate(h1);
+    if (fromH1 && !/^mdd\b|master design document$/i.test(fromH1)) return fromH1;
+  }
+  const fromSec1 = extractTitleFromSection1(mdd);
+  if (fromSec1) return fromSec1;
   const named = mdd.match(/(?:nombre|proyecto|project)[:\s]+([^\n]+)/i)?.[1]?.trim();
-  if (named) return named.slice(0, 120);
+  if (named) {
+    const fromNamed = normalizeProjectTitleCandidate(named);
+    if (fromNamed) return fromNamed;
+  }
   const fromProject = input.projectName?.trim();
   if (fromProject) return fromProject.slice(0, 120);
   return "Proyecto TheForge";

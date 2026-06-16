@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert";
 import {
   extractProjectGovernanceFacts,
+  extractProjectTitle,
   extractTaskCheckboxes,
   inferStacks,
   suggestAgentGovernanceArtifacts,
@@ -149,6 +150,37 @@ Despliegue en Kubernetes con Helm charts e ingress.
     assert.ok(result.archetypes.includes("kubernetes"));
     assert.ok(result.suggestedSkills.some((s) => s.id === "deploy-kubernetes"));
     assert.equal(result.suggestedSkills.some((s) => s.id === "deploy-docker"), false);
+  });
+});
+
+describe("extractProjectTitle", () => {
+  it("extrae KMS Corporativo desde §1 cuando el H1 es Master Design Document", () => {
+    const title = extractProjectTitle({
+      mddMarkdown: `# Master Design Document
+
+## 1. Contexto
+
+KMS Corporativo — plataforma de gestión documental para empresas.
+
+## 2. Arquitectura y Stack
+Backend NestJS.
+`,
+      complexity: "MEDIUM",
+    });
+    assert.equal(title, "KMS Corporativo");
+  });
+
+  it("prefiere projectName si §1 no tiene línea útil", () => {
+    const title = extractProjectTitle({
+      mddMarkdown: `# Master Design Document
+
+## 1. Contexto
+
+`,
+      projectName: "Portal Clientes",
+      complexity: "LOW",
+    });
+    assert.equal(title, "Portal Clientes");
   });
 });
 

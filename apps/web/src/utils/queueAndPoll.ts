@@ -61,9 +61,10 @@ export async function queueAndPoll<T extends Record<string, unknown>>(
 ): Promise<T> {
   const projectId = extractProjectIdFromGenerateUrl(url);
   const contentField = contentFieldForGenerateUrl(url);
+  const forceRegenerate = body.force === true;
   let baseline: string | null = null;
 
-  if (projectId && contentField) {
+  if (projectId && contentField && !forceRegenerate) {
     const baselineRes = await apiFetch(`${API_BASE}/projects/${projectId}`);
     if (baselineRes.ok) {
       const baselineProject = (await baselineRes.json()) as Record<string, unknown>;

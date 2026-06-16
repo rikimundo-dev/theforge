@@ -1253,11 +1253,20 @@ name: ${JSON.stringify(name)}
     return this.update(projectId, { specContent: cleanDocumentContent(specContent) });
   }
 
+  /** Limpia gobernanza persistida antes de regenerar (polling y UI). */
+  async clearAgentGovernanceContent(projectId: string) {
+    return this.update(projectId, { agentGovernanceContent: null });
+  }
+
   async generateAgentGovernance(
     projectId: string,
     target?: string,
     options?: { forceRegenerate?: boolean },
   ) {
+    const forceRegenerate = options?.forceRegenerate !== false;
+    if (forceRegenerate) {
+      await this.clearAgentGovernanceContent(projectId);
+    }
     const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
@@ -1269,7 +1278,7 @@ name: ${JSON.stringify(name)}
       architectureContent: project.architectureContent,
       specContent: project.specContent,
     });
-    const forceFreshOverlay = options?.forceRegenerate !== false;
+    const forceFreshOverlay = forceRegenerate;
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       governanceInput,
@@ -1331,7 +1340,7 @@ name: ${JSON.stringify(name)}
       forceFreshOverlay: true,
     });
 
-    return appendProjectDeliverablesToScaffold(reconciled, {
+    const exportScaffold = appendProjectDeliverablesToScaffold(reconciled, {
       mddMarkdown: mdd,
       blueprintMarkdown: project.blueprintContent,
       specMarkdown: project.specContent,
@@ -1344,6 +1353,13 @@ name: ${JSON.stringify(name)}
       uxUiGuideMarkdown: project.uxUiGuideContent,
       infraMarkdown: project.infraContent,
     });
+
+    const serialized = serializeAgentGovernanceScaffold(exportScaffold);
+    if (serialized !== raw) {
+      await this.update(projectId, { agentGovernanceContent: serialized });
+    }
+
+    return exportScaffold;
   }
 
     private buildAgentGovernanceInput(
