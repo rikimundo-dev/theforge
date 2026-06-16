@@ -2586,6 +2586,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
   },
   generateAgentGovernance: async (projectId) => {
     if (!projectId?.trim()) return null;
+    const beforeLen = get().agentGovernanceContent?.length ?? 0;
+    console.warn(
+      `[agent-gov] workshop generateAgentGovernance start projectId=${projectId} force=true beforeLen=${beforeLen}`,
+    );
     set({
       loading: true,
       loadingReason: "agent-governance",
@@ -2605,6 +2609,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         `${API_BASE}/projects/${projectId}/generate-agent-governance`,
         { force: true },
       );
+      const afterLen = data.agentGovernanceContent?.length ?? 0;
+      console.warn(
+        `[agent-gov] workshop generateAgentGovernance complete projectId=${projectId} beforeLen=${beforeLen} afterLen=${afterLen} preview=${(data.agentGovernanceContent ?? "").slice(0, 80)}`,
+      );
       set({
         project: data,
         agentGovernanceContent: data.agentGovernanceContent ?? null,
@@ -2613,6 +2621,9 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       });
       return data;
     } catch (e) {
+      console.warn(
+        `[agent-gov] workshop generateAgentGovernance failed projectId=${projectId}: ${e instanceof Error ? e.message : String(e)}`,
+      );
       set({
         error: e instanceof Error ? e.message : "Error al generar gobernanza de agentes",
         agentProgress: [],

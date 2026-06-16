@@ -1264,14 +1264,22 @@ name: ${JSON.stringify(name)}
     options?: { forceRegenerate?: boolean },
   ) {
     const forceRegenerate = options?.forceRegenerate !== false;
+    const project = await this.assertProjectAccess(projectId);
+    const beforeLen = (project.agentGovernanceContent ?? "").length;
+    console.warn(
+      `[agent-gov] generateAgentGovernance start projectId=${projectId} force=${forceRegenerate} beforeLen=${beforeLen}`,
+    );
     if (forceRegenerate) {
+      console.warn(`[agent-gov] generateAgentGovernance clearing agentGovernanceContent projectId=${projectId}`);
       await this.clearAgentGovernanceContent(projectId);
     }
-    const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
     const governanceInput = this.buildAgentGovernanceInput(project, mdd, complexity);
     const suggestions = suggestAgentGovernanceArtifacts(governanceInput);
+    console.warn(
+      `[agent-gov] generateAgentGovernance input keys=${Object.keys(governanceInput).join(",")} archetypes=${suggestions.archetypes.length} rules=${suggestions.suggestedRules.length} skills=${suggestions.suggestedSkills.length}`,
+    );
     const raw = await this.ai.generateAgentGovernance(mdd, project.blueprintContent, complexity, {
       suggestions,
       tasksContent: project.tasksContent,
@@ -1285,8 +1293,12 @@ name: ${JSON.stringify(name)}
       target,
       forceFreshOverlay,
     });
+    const serialized = serializeAgentGovernanceScaffold(scaffold);
+    console.warn(
+      `[agent-gov] generateAgentGovernance done projectId=${projectId} beforeLen=${beforeLen} afterLen=${serialized.length} files=${scaffold.files.length} rawPreview=${raw.slice(0, 80)}`,
+    );
     return this.update(projectId, {
-      agentGovernanceContent: serializeAgentGovernanceScaffold(scaffold),
+      agentGovernanceContent: serialized,
     });
   }
 
@@ -1329,6 +1341,11 @@ name: ${JSON.stringify(name)}
       throw new BadRequestException("El scaffold de gobernanza no contiene archivos válidos.");
     }
 
+    const filesBefore = scaffold.files.length;
+    console.warn(
+      `[agent-gov] getAgentGovernanceForExport start projectId=${projectId} rawLen=${raw.length} filesBefore=${filesBefore}`,
+    );
+
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
     const governanceInput = this.buildAgentGovernanceInput(project, mdd, complexity);
@@ -1355,7 +1372,11 @@ name: ${JSON.stringify(name)}
     });
 
     const serialized = serializeAgentGovernanceScaffold(exportScaffold);
-    if (serialized !== raw) {
+    const persisted = serialized !== raw;
+    console.warn(
+      `[agent-gov] getAgentGovernanceForExport done projectId=${projectId} filesAfter=${exportScaffold.files.length} serializedLen=${serialized.length} persisted=${persisted}`,
+    );
+    if (persisted) {
       await this.update(projectId, { agentGovernanceContent: serialized });
     }
 

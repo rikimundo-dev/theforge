@@ -217,6 +217,9 @@ export class ProjectsController {
     @Body() body: { preview?: boolean; target?: string; force?: boolean },
     @Query("queue") queue?: string,
   ) {
+    console.warn(
+      `[agent-gov] POST generate-agent-governance projectId=${id} force=${body?.force} queue=${queue ?? "(sync)"} preview=${body?.preview ?? false}`,
+    );
     if (body?.preview) {
       return this.projects.generateAgentGovernancePreview(id, body?.target, {
         forceRegenerate: body?.force !== false,
@@ -374,7 +377,15 @@ export class ProjectsController {
     // Cliente pidió queue pero Redis no está → fire-and-forget para no timeout
     if (wantQueue) {
       if (type === "agent-governance" && extra.forceRegenerate !== false) {
+        console.warn(
+          `[agent-gov] queueOrSync fire-and-forget clearing content projectId=${projectId} forceRegenerate=true`,
+        );
         await this.projects.clearAgentGovernanceContent(projectId);
+      }
+      if (type === "agent-governance") {
+        console.warn(
+          `[agent-gov] queueOrSync fire-and-forget agent-governance projectId=${projectId} forceRegenerate=${extra.forceRegenerate !== false}`,
+        );
       }
       // Disparamos en background sin await — la respuesta HTTP sale ya
       void this.fireAndForget(type, projectId, extra).catch((err) => {

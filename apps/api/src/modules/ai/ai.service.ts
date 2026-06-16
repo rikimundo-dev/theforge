@@ -692,6 +692,12 @@ export class AiService {
         : "No hay MDD. Genera un scaffold mínimo LOW (AGENTS.md, CLAUDE.md, docs/agent-onboarding.md, 1 rule git-commits).");
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (mdd.length > 0) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
+    const suggestionsCount = options?.suggestions
+      ? options.suggestions.suggestedRules.length + options.suggestions.suggestedSkills.length
+      : 0;
+    console.warn(
+      `[agent-gov] ai.generateAgentGovernance promptLen=${prompt.length} suggestions=${suggestionsCount} archetypes=${options?.suggestions?.archetypes.length ?? 0} complexity=${complexity}`,
+    );
     return this.generateResponse(prompt, [], { systemPrompt: AGENT_GOVERNANCE_PROMPT + NO_MILITAR_INSTRUCTION });
   }
 

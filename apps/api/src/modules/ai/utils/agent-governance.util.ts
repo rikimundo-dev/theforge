@@ -704,6 +704,9 @@ function overlayProjectFacts(
   const forceFreshOverlay = overlayOptions?.forceFreshOverlay === true;
   if (/## Hechos del proyecto \(/i.test(content)) {
     if (forceFreshOverlay || isStaleProjectFactsSection(content, facts)) {
+      console.warn(
+        `[agent-gov] overlayProjectFacts replacing stale TheForge block projectTitle=${facts.projectTitle} forceFreshOverlay=${forceFreshOverlay}`,
+      );
       const stripped = stripProjectFactsSection(content);
       return stripped.trim() ? `${stripped.trimEnd()}\n\n${block}` : block;
     }
@@ -760,11 +763,21 @@ export function appendProjectDeliverablesToScaffold(
     fileMap[normalizePath(file.path)] = file.content;
   }
 
+  const written: string[] = [];
+  const skipped: string[] = [];
   for (const { key, path } of SDD_EXPORT_ENTRIES) {
     const content = deliverables[key]?.trim();
-    if (!content) continue;
+    if (!content) {
+      skipped.push(path);
+      continue;
+    }
+    const hadExisting = Boolean(fileMap[path]?.trim());
     fileMap[path] = content;
+    written.push(hadExisting ? `${path} (overwrite)` : path);
   }
+  console.warn(
+    `[agent-gov] appendProjectDeliverablesToScaffold written=${written.join(", ") || "none"} skipped=${skipped.join(", ") || "none"}`,
+  );
 
   const files = recordToFileEntries(fileMap);
   const paths = files.map((f) => f.path);
@@ -965,6 +978,9 @@ function enrichGovernanceArtifacts(
 ): void {
   const facts = extractProjectGovernanceFacts(governanceInput);
   const overlayOpts = overlayOptions;
+  console.warn(
+    `[agent-gov] enrichGovernanceArtifacts projectTitle=${facts.projectTitle} forceFreshOverlay=${overlayOptions?.forceFreshOverlay === true} fileCount=${Object.keys(fileMap).length}`,
+  );
   const agentsPath = "AGENTS.md";
   if (fileMap[agentsPath]?.trim()) {
     fileMap[agentsPath] = appendSddConflictToAgents(
@@ -1176,6 +1192,7 @@ export function reconcileAgentGovernanceScaffold(
   const overlayOptions: AgentGovernanceOverlayOptions = {
     forceFreshOverlay: options?.forceFreshOverlay === true,
   };
+  const filesBefore = scaffold.files.length;
 
   const fileMap: Record<string, string> = {};
   for (const file of scaffold.files) {
@@ -1192,7 +1209,11 @@ export function reconcileAgentGovernanceScaffold(
   );
   if (merged.length > 0) {
     console.warn(
-      `[agent-governance] Reconcile: artefactos añadidos desde catálogo: ${merged.join(", ")}`,
+      `[agent-gov] reconcileAgentGovernanceScaffold addedPaths=${merged.join(", ")} forceFreshOverlay=${overlayOptions.forceFreshOverlay}`,
+    );
+  } else {
+    console.warn(
+      `[agent-gov] reconcileAgentGovernanceScaffold no catalog paths added forceFreshOverlay=${overlayOptions.forceFreshOverlay} filesBefore=${filesBefore}`,
     );
   }
 
@@ -1203,6 +1224,9 @@ export function reconcileAgentGovernanceScaffold(
 
   const files = recordToFileEntries(fileMap);
   const paths = files.map((f) => f.path);
+  console.warn(
+    `[agent-gov] reconcileAgentGovernanceScaffold filesBefore=${filesBefore} filesAfter=${files.length}`,
+  );
 
   const reconciled: AgentGovernanceScaffold = {
     manifest: {
@@ -1258,6 +1282,7 @@ export function parseAgentGovernanceResponse(
   };
 
   const fileMap = capRulesAndSkills(parseLlmFilesPayload(parsed));
+  const llmFileCount = Object.keys(fileMap).length;
   const facts = extractProjectGovernanceFacts(governanceInput);
   const merged = mergeSuggestedArtifacts(
     fileMap,
@@ -1266,16 +1291,19 @@ export function parseAgentGovernanceResponse(
     governanceInput,
     overlayOptions,
   );
+  console.warn(
+    `[agent-gov] parseAgentGovernanceResponse llmFiles=${llmFileCount} forceFreshOverlay=${overlayOptions.forceFreshOverlay} mergedCatalog=${merged.join(", ") || "none"}`,
+  );
   if (merged.length > 0) {
     console.warn(
-      `[agent-governance] Artefactos sugeridos añadidos desde catálogo (LLM omitió o contenido fino): ${merged.join(", ")}`,
+      `[agent-gov] parseAgentGovernanceResponse catalog paths added: ${merged.join(", ")}`,
     );
   }
 
   const missing = applyRequiredFileFallbacks(fileMap, complexity, suggestions, governanceInput);
   if (missing.length > 0) {
     console.warn(
-      `[agent-governance] Rutas obligatorias omitidas por LLM (${complexity}); fallback aplicado: ${missing.join(", ")}`,
+      `[agent-gov] parseAgentGovernanceResponse required fallbacks (${complexity}): ${missing.join(", ")}`,
     );
   }
 

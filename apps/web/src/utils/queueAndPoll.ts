@@ -17,10 +17,23 @@ async function pollProjectUntilComplete<T extends Record<string, unknown>>(
     if (signal?.aborted) throw new Error("Cancelado por el usuario");
     await new Promise((r) => setTimeout(r, 2_000));
     const pr = await apiFetch(pollUrl);
-    if (!pr.ok) continue;
+    if (!pr.ok) {
+      console.warn(`[agent-gov] pollProject attempt=${attempt + 1} fetch failed status=${pr.status}`);
+      continue;
+    }
     const project = (await pr.json()) as T;
-    if (isProjectGenerationComplete(project, field, baseline)) return project;
+    const value = project[field];
+    const currentLen = typeof value === "string" ? value.length : 0;
+    const complete = isProjectGenerationComplete(project, field, baseline);
+    console.warn(
+      `[agent-gov] pollProject attempt=${attempt + 1} field=${field} len=${currentLen} baselineLen=${baseline?.length ?? 0} complete=${complete}`,
+    );
+    if (complete) {
+      console.warn(`[agent-gov] pollProject complete projectId=${projectId} attempts=${attempt + 1}`);
+      return project;
+    }
   }
+  console.warn(`[agent-gov] pollProject timeout projectId=${projectId} field=${field}`);
   throw new Error("Tiempo de espera agotado (5 min)");
 }
 
@@ -70,7 +83,12 @@ export async function queueAndPoll<T extends Record<string, unknown>>(
       const baselineProject = (await baselineRes.json()) as Record<string, unknown>;
       const value = baselineProject[contentField];
       baseline = typeof value === "string" ? value : null;
+      console.warn(
+        `[agent-gov] queueAndPoll baseline captured field=${contentField} len=${baseline?.length ?? 0}`,
+      );
     }
+  } else if (forceRegenerate && contentField) {
+    console.warn(`[agent-gov] queueAndPoll baseline skipped force=true field=${contentField}`);
   }
 
   const r = await apiFetch(`${url}?queue=true`, {
@@ -85,9 +103,17 @@ export async function queueAndPoll<T extends Record<string, unknown>>(
   }
   const data = (await r.json()) as Record<string, unknown>;
 
-  if (!data.queued) return data as unknown as T;
+  console.warn(
+    `[agent-gov] queueAndPoll response queued=${Boolean(data.queued)} jobId=${String(data.jobId ?? "n/a")} statusPath=${String(data.statusPath ?? "n/a")}`,
+  );
+
+  if (!data.queued) {
+    console.warn("[agent-gov] queueAndPoll branch sync (no queue)");
+    return data as unknown as T;
+  }
 
   if (isFireAndForgetQueueResponse(data)) {
+    console.warn("[agent-gov] queueAndPoll branch fire-and-forget bg-*");
     if (!projectId || !contentField) {
       throw new Error("Cola no disponible: no se puede sondear el proyecto");
     }
@@ -95,5 +121,6 @@ export async function queueAndPoll<T extends Record<string, unknown>>(
   }
 
   const jobId = data.jobId as string;
+  console.warn(`[agent-gov] queueAndPoll branch bullmq jobId=${jobId}`);
   return pollJobUntilComplete<T>(jobId, signal);
 }
