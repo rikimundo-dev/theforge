@@ -55,7 +55,6 @@ import {
   parseAgentGovernanceResponse,
   reconcileAgentGovernanceScaffold,
   serializeAgentGovernanceScaffold,
-  suggestionsFromManifest,
 } from "../ai/utils/agent-governance.util.js";
 import {
   suggestAgentGovernanceArtifacts,
@@ -1254,7 +1253,11 @@ name: ${JSON.stringify(name)}
     return this.update(projectId, { specContent: cleanDocumentContent(specContent) });
   }
 
-  async generateAgentGovernance(projectId: string, target?: string) {
+  async generateAgentGovernance(
+    projectId: string,
+    target?: string,
+    options?: { forceRegenerate?: boolean },
+  ) {
     const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
@@ -1266,17 +1269,23 @@ name: ${JSON.stringify(name)}
       architectureContent: project.architectureContent,
       specContent: project.specContent,
     });
+    const forceFreshOverlay = options?.forceRegenerate !== false;
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       governanceInput,
       target,
+      forceFreshOverlay,
     });
     return this.update(projectId, {
       agentGovernanceContent: serializeAgentGovernanceScaffold(scaffold),
     });
   }
 
-  async generateAgentGovernancePreview(projectId: string, target?: string): Promise<{ content: string }> {
+  async generateAgentGovernancePreview(
+    projectId: string,
+    target?: string,
+    options?: { forceRegenerate?: boolean },
+  ): Promise<{ content: string }> {
     const project = await this.assertProjectAccess(projectId);
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
@@ -1288,10 +1297,12 @@ name: ${JSON.stringify(name)}
       architectureContent: project.architectureContent,
       specContent: project.specContent,
     });
+    const forceFreshOverlay = options?.forceRegenerate !== false;
     const scaffold = parseAgentGovernanceResponse(raw, complexity, {
       suggestions,
       governanceInput,
       target,
+      forceFreshOverlay,
     });
     return { content: serializeAgentGovernanceScaffold(scaffold) };
   }
@@ -1312,12 +1323,12 @@ name: ${JSON.stringify(name)}
     const complexity = project.complexity ?? ComplexityLevel.HIGH;
     const mdd = this.constitutionMarkdown(project);
     const governanceInput = this.buildAgentGovernanceInput(project, mdd, complexity);
-    // NO llamar a suggestAgentGovernanceArtifacts() aquí — es un LLM call que timeouta.
-    const suggestions = suggestionsFromManifest(scaffold.manifest?.suggestions) ?? null;
+    const suggestions = suggestAgentGovernanceArtifacts(governanceInput);
 
     const reconciled = reconcileAgentGovernanceScaffold(scaffold, complexity, {
       suggestions,
       governanceInput,
+      forceFreshOverlay: true,
     });
 
     return appendProjectDeliverablesToScaffold(reconciled, {

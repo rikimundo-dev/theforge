@@ -2629,6 +2629,8 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     try {
       const r = await apiFetch(`${API_BASE}/projects/${projectId}/generate-agent-governance`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));

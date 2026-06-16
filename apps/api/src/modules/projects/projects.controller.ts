@@ -214,11 +214,20 @@ export class ProjectsController {
   @Post(":id/generate-agent-governance")
   generateAgentGovernance(
     @Param("id") id: string,
-    @Body() body: { preview?: boolean; target?: string },
+    @Body() body: { preview?: boolean; target?: string; force?: boolean },
     @Query("queue") queue?: string,
   ) {
-    if (body?.preview) return this.projects.generateAgentGovernancePreview(id, body?.target);
-    return this.queueOrSync(id, "agent-governance", { preview: false, target: body?.target }, queue);
+    if (body?.preview) {
+      return this.projects.generateAgentGovernancePreview(id, body?.target, {
+        forceRegenerate: body?.force !== false,
+      });
+    }
+    return this.queueOrSync(
+      id,
+      "agent-governance",
+      { preview: false, target: body?.target, forceRegenerate: body?.force !== false },
+      queue,
+    );
   }
 
   @Get(":id/agent-governance-export")
@@ -386,7 +395,9 @@ export class ProjectsController {
       case "tasks":
         return this.projects.generateTasks(projectId);
       case "agent-governance":
-        return this.projects.generateAgentGovernance(projectId, extra.target as string | undefined);
+        return this.projects.generateAgentGovernance(projectId, extra.target as string | undefined, {
+          forceRegenerate: extra.forceRegenerate !== false,
+        });
       case "infra":
         return this.projects.generateInfra(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);
       case "architecture":
@@ -404,7 +415,9 @@ export class ProjectsController {
   private async fireAndForget(type: GenerateJobType, projectId: string, extra: Record<string, unknown>): Promise<void> {
     switch (type) {
       case "agent-governance":
-        await this.projects.generateAgentGovernance(projectId, extra.target as string | undefined);
+        await this.projects.generateAgentGovernance(projectId, extra.target as string | undefined, {
+          forceRegenerate: extra.forceRegenerate !== false,
+        });
         return;
       case "blueprint":
         await this.projects.generateBlueprint(projectId, (extra.gapsFeedback as string | undefined) ?? undefined);

@@ -1752,6 +1752,7 @@ export class LegacyCoordinatorService {
           const scaffold = parseAgentGovernanceResponse(raw, complexity, {
             suggestions: govSuggestions,
             governanceInput,
+            forceFreshOverlay: true,
           });
           await update({ agentGovernanceContent: serializeAgentGovernanceScaffold(scaffold) });
           p = await load();

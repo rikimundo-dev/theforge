@@ -626,6 +626,11 @@ function buildDynamicCursorCommands(facts: ProjectGovernanceFacts): Record<strin
 
 const THIN_CONTENT_MIN_CHARS = 140;
 
+/** Opciones para reconciliar/parsear sin reutilizar bloques genéricos obsoletos. */
+export interface AgentGovernanceOverlayOptions {
+  forceFreshOverlay?: boolean;
+}
+
 function isThinGovernanceContent(content: string): boolean {
   const trimmed = content.trim();
   if (trimmed.length < THIN_CONTENT_MIN_CHARS) return true;
@@ -634,9 +639,76 @@ function isThinGovernanceContent(content: string): boolean {
   return false;
 }
 
-function overlayProjectFacts(content: string, facts: ProjectGovernanceFacts): string {
+function isStaleProjectFactsSection(content: string, facts: ProjectGovernanceFacts): boolean {
+  const match = content.match(/## Hechos del proyecto \(([^)]+)\)/i);
+  if (!match) return false;
+  const embeddedTitle = match[1].trim();
+  if (/^theforge$/i.test(embeddedTitle) || /^proyecto theforge$/i.test(embeddedTitle)) {
+    return true;
+  }
+  if (facts.projectTitle && embeddedTitle !== facts.projectTitle) return true;
+  if (/parametrizar desde MDD/i.test(content)) return true;
+  if (facts.backendGlobs.length > 0 && /\*\*Globs backend:\*\*/i.test(content)) {
+    const hasCurrentGlob = facts.backendGlobs.some((g) => content.includes(g));
+    if (!hasCurrentGlob) return true;
+  }
+  if (facts.blueprintModules.length > 0 && /\*\*Módulos Blueprint:\*\*/i.test(content)) {
+    const hasModule = facts.blueprintModules.some((m) => content.includes(m));
+    if (!hasModule) return true;
+  }
+  return false;
+}
+
+function stripProjectFactsSection(content: string): string {
+  const lines = content.split("\n");
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## Hechos del proyecto \(/i.test(lines[i] ?? "")) {
+      start = i;
+      break;
+    }
+  }
+  if (start < 0) return content;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^## [^#]/.test(lines[i] ?? "")) {
+      end = i;
+      break;
+    }
+  }
+  const before = lines.slice(0, start).join("\n").trimEnd();
+  const after = lines.slice(end).join("\n").trimStart();
+  if (before && after) return `${before}\n\n${after}`;
+  return before || after || "";
+}
+
+function shouldReplaceGovernanceArtifact(
+  existing: string | undefined,
+  facts: ProjectGovernanceFacts,
+  forceFreshOverlay: boolean,
+): boolean {
+  if (!existing?.trim()) return true;
+  if (forceFreshOverlay) return true;
+  if (isThinGovernanceContent(existing)) return true;
+  if (/Hechos del proyecto \(TheForge\)/i.test(existing)) return true;
+  if (isStaleProjectFactsSection(existing, facts)) return true;
+  return false;
+}
+
+function overlayProjectFacts(
+  content: string,
+  facts: ProjectGovernanceFacts,
+  overlayOptions?: AgentGovernanceOverlayOptions,
+): string {
   const block = buildProjectFactsBlock(facts);
-  if (/## Hechos del proyecto \(/i.test(content)) return content;
+  const forceFreshOverlay = overlayOptions?.forceFreshOverlay === true;
+  if (/## Hechos del proyecto \(/i.test(content)) {
+    if (forceFreshOverlay || isStaleProjectFactsSection(content, facts)) {
+      const stripped = stripProjectFactsSection(content);
+      return stripped.trim() ? `${stripped.trimEnd()}\n\n${block}` : block;
+    }
+    return content;
+  }
   return `${content.trimEnd()}\n\n${block}`;
 }
 
@@ -889,12 +961,14 @@ function enrichGovernanceArtifacts(
   fileMap: Record<string, string>,
   complexity: ComplexityLevel,
   governanceInput: SuggestAgentGovernanceInput,
+  overlayOptions?: AgentGovernanceOverlayOptions,
 ): void {
   const facts = extractProjectGovernanceFacts(governanceInput);
+  const overlayOpts = overlayOptions;
   const agentsPath = "AGENTS.md";
   if (fileMap[agentsPath]?.trim()) {
     fileMap[agentsPath] = appendSddConflictToAgents(
-      overlayProjectFacts(fileMap[agentsPath], facts),
+      overlayProjectFacts(fileMap[agentsPath], facts, overlayOpts),
       facts,
     );
   }
@@ -902,16 +976,24 @@ function enrichGovernanceArtifacts(
     const isRuleOrSkill =
       path.startsWith(`${GOVERNANCE_DOCS_PREFIX}rules/`) ||
       path.includes(`${GOVERNANCE_DOCS_PREFIX}skills/`);
-    if (isRuleOrSkill && content.trim() && isThinGovernanceContent(content)) {
-      fileMap[path] = overlayProjectFacts(content, facts);
+    if (
+      isRuleOrSkill &&
+      content.trim() &&
+      shouldReplaceGovernanceArtifact(content, facts, overlayOptions?.forceFreshOverlay === true)
+    ) {
+      fileMap[path] = overlayProjectFacts(content, facts, overlayOpts);
     }
   }
   const promptPath = "PROMPT-INICIAL.md";
-  if (!fileMap[promptPath]?.trim() || isThinGovernanceContent(fileMap[promptPath])) {
+  if (
+    shouldReplaceGovernanceArtifact(fileMap[promptPath], facts, overlayOptions?.forceFreshOverlay === true)
+  ) {
     fileMap[promptPath] = buildPromptInicialMd(facts, complexity);
   }
   const progresoPath = "docs/sdd/PROGRESO.md";
-  if (!fileMap[progresoPath]?.trim() || isThinGovernanceContent(fileMap[progresoPath])) {
+  if (
+    shouldReplaceGovernanceArtifact(fileMap[progresoPath], facts, overlayOptions?.forceFreshOverlay === true)
+  ) {
     fileMap[progresoPath] = buildProgresoMd(facts, governanceInput.tasksMarkdown);
   }
 }
@@ -942,21 +1024,26 @@ function mergeSuggestedArtifacts(
   complexity: ComplexityLevel,
   suggestions: AgentGovernanceSuggestions | null | undefined,
   governanceInput: SuggestAgentGovernanceInput,
+  overlayOptions?: AgentGovernanceOverlayOptions,
 ): string[] {
   if (!suggestions) return [];
 
   const added: string[] = [];
   const ctx = buildArtifactTemplateContext(suggestions, complexity, governanceInput);
   const facts = ctx.projectFacts ?? extractProjectGovernanceFacts(governanceInput);
+  const forceFreshOverlay = overlayOptions?.forceFreshOverlay === true;
+  const overlayOpts = overlayOptions;
 
   for (const spec of suggestions.suggestedRules) {
     const path = normalizePath(spec.path);
     const rule = getRuleById(spec.id);
     if (!rule) continue;
-    const catalogContent = overlayProjectFacts(renderRuleFromCatalog(rule, ctx), facts);
+    const catalogContent = overlayProjectFacts(renderRuleFromCatalog(rule, ctx), facts, overlayOpts);
     const existing = fileMap[path]?.trim();
-    if (existing && !isThinGovernanceContent(existing)) continue;
-    fileMap[path] = existing ? overlayProjectFacts(catalogContent, facts) : catalogContent;
+    if (existing && !shouldReplaceGovernanceArtifact(existing, facts, forceFreshOverlay)) continue;
+    fileMap[path] = existing
+      ? overlayProjectFacts(catalogContent, facts, overlayOpts)
+      : catalogContent;
     added.push(path);
   }
 
@@ -967,10 +1054,13 @@ function mergeSuggestedArtifacts(
     const catalogContent = overlayProjectFacts(
       renderSkillFromCatalog(skill, ctx, spec.folder),
       facts,
+      overlayOpts,
     );
     const existing = fileMap[path]?.trim();
-    if (existing && !isThinGovernanceContent(existing)) continue;
-    fileMap[path] = existing ? overlayProjectFacts(catalogContent, facts) : catalogContent;
+    if (existing && !shouldReplaceGovernanceArtifact(existing, facts, forceFreshOverlay)) continue;
+    fileMap[path] = existing
+      ? overlayProjectFacts(catalogContent, facts, overlayOpts)
+      : catalogContent;
     added.push(path);
   }
 
@@ -1069,6 +1159,7 @@ export function reconcileAgentGovernanceScaffold(
     /** @deprecated use governanceInput */
     mddMarkdown?: string;
     target?: GovernanceTarget;
+    forceFreshOverlay?: boolean;
   },
 ): AgentGovernanceScaffold {
   const suggestions =
@@ -1082,6 +1173,9 @@ export function reconcileAgentGovernanceScaffold(
       complexity,
     } satisfies SuggestAgentGovernanceInput);
   const target = options?.target ?? "cursor";
+  const overlayOptions: AgentGovernanceOverlayOptions = {
+    forceFreshOverlay: options?.forceFreshOverlay === true,
+  };
 
   const fileMap: Record<string, string> = {};
   for (const file of scaffold.files) {
@@ -1089,7 +1183,13 @@ export function reconcileAgentGovernanceScaffold(
   }
 
   const facts = extractProjectGovernanceFacts(governanceInput);
-  const merged = mergeSuggestedArtifacts(fileMap, complexity, suggestions, governanceInput);
+  const merged = mergeSuggestedArtifacts(
+    fileMap,
+    complexity,
+    suggestions,
+    governanceInput,
+    overlayOptions,
+  );
   if (merged.length > 0) {
     console.warn(
       `[agent-governance] Reconcile: artefactos añadidos desde catálogo: ${merged.join(", ")}`,
@@ -1097,7 +1197,7 @@ export function reconcileAgentGovernanceScaffold(
   }
 
   applyRequiredFileFallbacks(fileMap, complexity, suggestions, governanceInput);
-  enrichGovernanceArtifacts(fileMap, complexity, governanceInput);
+  enrichGovernanceArtifacts(fileMap, complexity, governanceInput, overlayOptions);
   injectDynamicCursorArtifacts(fileMap, facts, complexity);
   appendSuggestionsToComoUsar(fileMap, suggestions);
 
@@ -1129,6 +1229,7 @@ export interface ParseAgentGovernanceOptions {
   /** @deprecated use governanceInput */
   mddMarkdown?: string;
   target?: string;
+  forceFreshOverlay?: boolean;
 }
 
 export function parseAgentGovernanceResponse(
@@ -1152,10 +1253,19 @@ export function parseAgentGovernanceResponse(
       complexity,
     } satisfies SuggestAgentGovernanceInput);
   const target = (options?.target as GovernanceTarget) ?? "cursor";
+  const overlayOptions: AgentGovernanceOverlayOptions = {
+    forceFreshOverlay: options?.forceFreshOverlay === true,
+  };
 
   const fileMap = capRulesAndSkills(parseLlmFilesPayload(parsed));
   const facts = extractProjectGovernanceFacts(governanceInput);
-  const merged = mergeSuggestedArtifacts(fileMap, complexity, suggestions, governanceInput);
+  const merged = mergeSuggestedArtifacts(
+    fileMap,
+    complexity,
+    suggestions,
+    governanceInput,
+    overlayOptions,
+  );
   if (merged.length > 0) {
     console.warn(
       `[agent-governance] Artefactos sugeridos añadidos desde catálogo (LLM omitió o contenido fino): ${merged.join(", ")}`,
@@ -1169,7 +1279,7 @@ export function parseAgentGovernanceResponse(
     );
   }
 
-  enrichGovernanceArtifacts(fileMap, complexity, governanceInput);
+  enrichGovernanceArtifacts(fileMap, complexity, governanceInput, overlayOptions);
   injectDynamicCursorArtifacts(fileMap, facts, complexity);
   appendSuggestionsToComoUsar(fileMap, suggestions);
 
@@ -1186,7 +1296,7 @@ export function parseAgentGovernanceResponse(
       files,
     },
     complexity,
-    { suggestions, governanceInput, target },
+    { suggestions, governanceInput, target, forceFreshOverlay: overlayOptions.forceFreshOverlay },
   );
 }
 

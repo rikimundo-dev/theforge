@@ -242,6 +242,73 @@ REST con validación Zod y OpenAPI.
     assert.ok(paths.includes("docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md"));
     assert.equal(paths.some((p) => p.startsWith(".cursor/")), false);
   });
+
+  it("reemplaza hechos obsoletos (TheForge) con título del proyecto", () => {
+    const staleRule =
+      "# Stack backend\n\n" +
+      "## Hechos del proyecto (TheForge)\n\n" +
+      "**Globs backend:**\n- `packages/api/**`\n\n" +
+      "Contenido largo del LLM que no debe bloquear el overlay cuando el título es genérico " +
+      "y los globs no coinciden con el blueprint actual del proyecto KMS Platform.\n".repeat(3);
+
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: {
+          templateVersion: "1.0.0",
+          files: ["docs/agent-governance/rules/stack-backend.mdc"],
+        },
+        files: [{ path: "docs/agent-governance/rules/stack-backend.mdc", content: staleRule }],
+      },
+      "MEDIUM",
+      {
+        forceFreshOverlay: true,
+        governanceInput: {
+          mddMarkdown: "# KMS Platform\n## 2. Stack\nBackend FastAPI en services/api/",
+          blueprintMarkdown: "## Estructura\n- services/api\n- apps/mobile",
+          projectName: "KMS Platform",
+          complexity: "MEDIUM",
+        },
+      },
+    );
+    const rule = reconciled.files.find(
+      (f) => f.path === "docs/agent-governance/rules/stack-backend.mdc",
+    );
+    assert.ok(rule?.content.includes("Hechos del proyecto (KMS Platform)"));
+    assert.equal(rule?.content.includes("Hechos del proyecto (TheForge)"), false);
+  });
+
+  it("forceFreshOverlay reemplaza reglas largas obsoletas al regenerar", () => {
+    const suggestions = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# MDD
+## 2. Stack
+Backend NestJS, frontend React, monorepo packages/api packages/web.
+`,
+      complexity: "MEDIUM",
+    });
+    const staleLongRule = "# Orchestrator\n\n".padEnd(200, "x") + "\n## Hechos del proyecto (TheForge)\n";
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: {
+          templateVersion: "1.0.0",
+          files: ["docs/agent-governance/rules/orchestrator.mdc"],
+        },
+        files: [{ path: "docs/agent-governance/rules/orchestrator.mdc", content: staleLongRule }],
+      },
+      "MEDIUM",
+      {
+        suggestions,
+        forceFreshOverlay: true,
+        governanceInput: { mddMarkdown: "NestJS React monorepo", complexity: "MEDIUM" },
+      },
+    );
+    const rule = reconciled.files.find(
+      (f) => f.path === "docs/agent-governance/rules/orchestrator.mdc",
+    );
+    assert.ok(rule?.content.includes("Hechos del proyecto ("));
+    assert.equal(rule?.content.includes("(TheForge)"), false);
+    assert.ok((rule?.content.length ?? 0) > 200);
+  });
 });
 
 describe("appendProjectDeliverablesToScaffold", () => {
@@ -282,5 +349,38 @@ describe("appendProjectDeliverablesToScaffold", () => {
     });
     const api = enriched.files.find((f) => f.path === "docs/sdd/api-contracts.md");
     assert.equal(api?.content.trim(), "# Contratos reales");
+  });
+
+  it("incluye todos los entregables SDD presentes en el proyecto", () => {
+    const base = parseAgentGovernanceResponse('{"files":{}}', "HIGH");
+    const enriched = appendProjectDeliverablesToScaffold(base, {
+      mddMarkdown: "# MDD\n",
+      blueprintMarkdown: "# Blueprint\n",
+      specMarkdown: "# Spec\n",
+      architectureMarkdown: "# Arch\n",
+      tasksMarkdown: "# Tasks\n",
+      useCasesMarkdown: "# UC\n",
+      userStoriesMarkdown: "# US\n",
+      apiContractsMarkdown: "# API\n",
+      logicFlowsMarkdown: "# Flows\n",
+      uxUiGuideMarkdown: "# UX\n",
+      infraMarkdown: "# Infra\n",
+    });
+    const paths = enriched.files.map((f) => f.path);
+    for (const expected of [
+      "docs/sdd/mdd.md",
+      "docs/sdd/blueprint.md",
+      "docs/sdd/spec.md",
+      "docs/sdd/architecture.md",
+      "docs/sdd/tasks.md",
+      "docs/sdd/use-cases.md",
+      "docs/sdd/user-stories.md",
+      "docs/sdd/api-contracts.md",
+      "docs/sdd/logic-flows.md",
+      "docs/sdd/ux-ui-guide.md",
+      "docs/sdd/infra.md",
+    ]) {
+      assert.ok(paths.includes(expected), `falta ${expected}`);
+    }
   });
 });
