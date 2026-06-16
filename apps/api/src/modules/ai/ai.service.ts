@@ -1047,7 +1047,7 @@ export class AiService {
       prompt +=
         "\n\n**Los siguientes puntos deben corregirse o incorporarse:**\n---\n" + gapsFeedback.trim() + "\n---";
     }
-    const diagramHint = buildLogicFlowsDiagramHint(mddContent?.trim() ?? "");
+    const diagramHint = buildLogicFlowsDiagramHint(mddRaw);
     if (diagramHint) prompt += `\n\n${diagramHint}\n`;
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
     if (mdd.length > 0 && !legacyAsIsLogicFlows) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);

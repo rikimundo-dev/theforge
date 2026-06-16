@@ -6,7 +6,7 @@ import {
   isProjectGenerationComplete,
 } from "./queueAndPollHelpers";
 
-async function pollProjectUntilComplete<T extends Record<string, unknown>>(
+async function pollProjectUntilComplete<T extends object>(
   projectId: string,
   field: string,
   baseline: string | null,
@@ -22,9 +22,9 @@ async function pollProjectUntilComplete<T extends Record<string, unknown>>(
       continue;
     }
     const project = (await pr.json()) as T;
-    const value = project[field];
+    const value = (project as Record<string, unknown>)[field];
     const currentLen = typeof value === "string" ? value.length : 0;
-    const complete = isProjectGenerationComplete(project, field, baseline);
+    const complete = isProjectGenerationComplete(project as Record<string, unknown>, field, baseline);
     console.warn(
       `[agent-gov] pollProject attempt=${attempt + 1} field=${field} len=${currentLen} baselineLen=${baseline?.length ?? 0} complete=${complete}`,
     );
@@ -67,7 +67,7 @@ async function pollJobUntilComplete<T>(
  * Sin Redis pero con ?queue=true, el API usa fire-and-forget (jobId bg-*) y hay que
  * sondear el proyecto hasta que el campo del entregable cambie.
  */
-export async function queueAndPoll<T extends Record<string, unknown>>(
+export async function queueAndPoll<T extends object>(
   url: string,
   body: Record<string, unknown>,
   signal?: AbortSignal,
