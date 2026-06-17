@@ -28,3 +28,4 @@ export * from "./legacy-codebase-doc.js";
 export * from "./document-changelog.js";
 export * from "./mdd-governance-patterns.js";
 export * from "./phase0-content.js";
+export * from "./project-integration.js";

@@ -44,6 +44,8 @@ import {
   toLogicFlowsSection5CoverageReport,
 } from "../ai/utils/legacy-as-is-logic-flows.util.js";
 import { buildLegacyGenerateOptions } from "../legacy-flow/legacy-generate-options.util.js";
+import { ProjectIntegrationService } from "./integration/project-integration.service.js";
+import { buildHandoffUserStoriesAppendix } from "./integration/integration-context.util.js";
 import { patchLegacyDeliverablesDebugReport } from "../legacy-flow/legacy-flow-state-debug.util.js";
 import type { IOrchestratorProjectsPort } from "./projects-service.port.js";
 import { resolveUrls } from "../scraper/url-utils.js";
@@ -132,6 +134,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     private readonly theforge: TheForgeService,
     private readonly graphMemory: GraphMemoryService,
     private readonly changeLog: ChangeLogService,
+    private readonly projectIntegration: ProjectIntegrationService,
   ) {}
 
   private buildSemaphoreBase(
@@ -1516,22 +1519,37 @@ name: ${JSON.stringify(name)}
 
   async generateUserStoriesPreview(projectId: string): Promise<{ content: string }> {
     const project = await this.assertProjectAccess(projectId);
+    const intOpts = await this.buildIntegrationGenerateOptions(projectId);
     const content = await this.ai.generateUserStories(
       this.constitutionMarkdown(project),
       project.specContent,
       project.useCasesContent,
+      intOpts,
     );
-    return { content: cleanDocumentContent(content) };
+    const appendix = buildHandoffUserStoriesAppendix(intOpts?.integrationHandoffItems ?? []);
+    return { content: cleanDocumentContent(content + appendix) };
   }
 
   async generateUserStories(projectId: string) {
     const project = await this.assertProjectAccess(projectId);
+    const intOpts = await this.buildIntegrationGenerateOptions(projectId);
     const content = await this.ai.generateUserStories(
       this.constitutionMarkdown(project),
       project.specContent,
       project.useCasesContent,
+      intOpts,
     );
-    return this.update(projectId, { userStoriesContent: cleanDocumentContent(content) });
+    const appendix = buildHandoffUserStoriesAppendix(intOpts?.integrationHandoffItems ?? []);
+    return this.update(projectId, { userStoriesContent: cleanDocumentContent(content + appendix) });
+  }
+
+  private async buildIntegrationGenerateOptions(projectId: string): Promise<LegacyGenerateOptions | undefined> {
+    const ctx = await this.projectIntegration.resolvePromptContext(projectId, null);
+    if (!ctx.externalBlock && !ctx.handoffForNew.length) return undefined;
+    return {
+      ...(ctx.externalBlock ? { externalLegacyContextBlock: ctx.externalBlock } : {}),
+      ...(ctx.handoffForNew.length ? { integrationHandoffItems: ctx.handoffForNew } : {}),
+    };
   }
 
   /** Pre-extrae entidades del MDD §3 y las agrega como texto literal en el prompt para la IA. */

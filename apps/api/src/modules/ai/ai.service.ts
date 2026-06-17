@@ -108,6 +108,12 @@ export interface LegacyGenerateOptions {
   contractSpecs?: string;
   /** Etapa 1 legacy (AS-IS): MDD y entregables sin truncar ni resumir. */
   legacyBaselineStage?: boolean;
+  /** Bloque markdown: dependencia externa legacy AS-IS (proyectos NEW). */
+  externalLegacyContextBlock?: string;
+  /** Handoff NEW-LEG para inyectar en prompts (NEW o legacy etapa 2+). */
+  integrationHandoffItems?: { id: string; title: string; description: string; actor?: string; acceptanceCriteria?: string[] }[];
+  /** Metadatos del proyecto NEW origen (legacy etapa 2+). */
+  integrationNewProject?: { id: string; name: string };
 }
 
 export interface AgentGovernanceGenerateOptions extends LegacyGenerateOptions {
@@ -852,6 +858,32 @@ export class AiService {
         "# Historias de Usuario y un párrafo indicando que se requiere el MDD (y opcionalmente Spec y Casos de Uso) para derivar historias de usuario alineadas al alcance del proyecto.";
     }
     if (options?.theforgeContext?.trim()) prompt = prependTheForgePrompt(prompt, options.theforgeContext);
+    if (options?.externalLegacyContextBlock?.trim()) {
+      prompt = options.externalLegacyContextBlock.trim() + "\n\n---\n\n" + prompt;
+    }
+    if (options?.integrationHandoffItems?.length && !legacyAsIsUserStories) {
+      const handoffBlock =
+        options.integrationNewProject
+          ? "**Integración legacy (MDD de cambio):** implementa handoff del proyecto NEW `" +
+            options.integrationNewProject.id +
+            "` (" +
+            options.integrationNewProject.name +
+            ").\n\n"
+          : "";
+      const rows = options.integrationHandoffItems
+        .map(
+          (i) =>
+            `- **${i.id}** — ${i.title}: ${i.description.slice(0, 500)}` +
+            (options.integrationNewProject ? " → incluir **Satisface:** `" + i.id + "` en la HU legacy correspondiente" : ""),
+        )
+        .join("\n");
+      prompt +=
+        "\n\n---\n\n" +
+        handoffBlock +
+        "**Handoff de integración (obligatorio en el backlog):**\n" +
+        rows +
+        "\n";
+    }
     if (mdd.length > 0 && !legacyAsIsUserStories) prompt = appendMddGovernancePatternsToPrompt(prompt, mdd);
     prompt = appendLegacyBaselineDetailPrompt(prompt, options?.legacyBaselineStage);
     const systemPrompt =

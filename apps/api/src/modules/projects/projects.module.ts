@@ -4,6 +4,8 @@ import { PROJECTS_ORCHESTRATOR_PORT } from "./projects-service.port.js";
 import { ProjectsService } from "./projects.service.js";
 import { ProjectMergeService } from "./project-merge.service.js";
 import { ProjectsController } from "./projects.controller.js";
+import { ProjectIntegrationController } from "./integration/project-integration.controller.js";
+import { ProjectIntegrationService } from "./integration/project-integration.service.js";
 import { ProjectEstimationRecalcService } from "./project-estimation-recalc.service.js";
 import { EngineModule } from "../engine/engine.module.js";
 import { AiModule } from "../ai/ai.module.js";
@@ -15,14 +17,15 @@ import { ChangeLogModule } from "../change-log/change-log.module.js";
 
 @Module({
   imports: [EngineModule, AiModule, Phase0Module, ScraperModule, TheForgeModule, GraphMemoryModule, ChangeLogModule],
-  controllers: [ProjectsController],
+  controllers: [ProjectsController, ProjectIntegrationController],
   providers: [
     ProjectsService,
+    ProjectIntegrationService,
     ProjectMergeService,
     { provide: PROJECTS_ORCHESTRATOR_PORT, useExisting: ProjectsService },
     ProjectEstimationRecalcService,
     DeliverablesQueueService,
   ],
-  exports: [ProjectsService, ProjectMergeService, PROJECTS_ORCHESTRATOR_PORT, DeliverablesQueueService],
+  exports: [ProjectsService, ProjectIntegrationService, ProjectMergeService, PROJECTS_ORCHESTRATOR_PORT, DeliverablesQueueService],
 })
 export class ProjectsModule { }

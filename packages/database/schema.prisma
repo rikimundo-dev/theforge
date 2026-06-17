@@ -149,6 +149,11 @@ model Stage {
   /// Estado del flujo legacy para esta etapa: { description?, filesToModify?, questions?, answers? }
   /// Cada etapa de un proyecto legacy tiene su propio cambio (CHANGE) o es la línea base (BASELINE).
   legacyChangeState Json?
+  /// Proyecto NEW enlazado (integración cross-project; etapa 2+ legacy).
+  linkedNewProjectId String?
+  /// Copia congelada del handoff importado desde el proyecto NEW.
+  handoffSnapshot Json?
+  handoffImportedAt DateTime?
   estimation       Estimation?
   /// Redundancia intencional con `Project.projectType === LEGACY` para queries y checkpoints por etapa.
   isLegacy         Boolean      @default(false)
@@ -251,11 +256,54 @@ model Project {
   parentProjectId      String?
   parentProject        Project?  @relation("ProjectSuite", fields: [parentProjectId], references: [id], onDelete: SetNull)
   childProjects        Project[] @relation("ProjectSuite")
+  /// Proyecto LEGACY AS-IS del que depende este producto NEW (integración).
+  linkedLegacyProjectId String?
+  linkedLegacyProject   Project?  @relation("ProjectLinksLegacy", fields: [linkedLegacyProjectId], references: [id], onDelete: SetNull)
+  linkedFromNewProjects Project[] @relation("ProjectLinksLegacy")
+  /// Proyecto NEW que solicita cambios en este legacy.
+  linkedNewProjectId String?
+  linkedNewProject   Project?  @relation("ProjectLinksNew", fields: [linkedNewProjectId], references: [id], onDelete: SetNull)
+  linkedFromLegacyProjects Project[] @relation("ProjectLinksNew")
+  /// Handoff estructurado { items: IntegrationHandoffItem[] } desde NEW hacia legacy.
+  integrationHandoff Json?
+  integrationHandoffUpdatedAt DateTime?
+  integrationTracesAsNew IntegrationTrace[] @relation("IntegrationTraceNew")
+  integrationTracesAsLegacy IntegrationTrace[] @relation("IntegrationTraceLegacy")
   createdAt            DateTime  @default(now())
 
   @@index([userId])
   @@index([archivedAt])
   @@index([parentProjectId])
+  @@index([linkedLegacyProjectId])
+  @@index([linkedNewProjectId])
+}
+
+enum IntegrationTraceStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  IMPLEMENTED
+  REJECTED
+}
+
+/// Trazabilidad NEW-LEG ↔ LEG entre proyectos Workshop enlazados.
+model IntegrationTrace {
+  id               String                 @id @default(uuid())
+  newProjectId     String
+  newProject       Project                @relation("IntegrationTraceNew", fields: [newProjectId], references: [id], onDelete: Cascade)
+  legacyProjectId  String
+  legacyProject    Project                @relation("IntegrationTraceLegacy", fields: [legacyProjectId], references: [id], onDelete: Cascade)
+  newLegId         String
+  legacyStoryId    String?
+  legacyStageId    String?
+  screenOrEndpoint String?
+  status           IntegrationTraceStatus @default(DRAFT)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([newProjectId, legacyProjectId, newLegId])
+  @@index([legacyProjectId])
+  @@index([newProjectId])
 }
 
 model FavoriteProject {

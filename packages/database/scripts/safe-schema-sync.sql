@@ -123,7 +123,14 @@ ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "phase0Questions" INTEGER NOT NUL
 -- 6. Project: gobernanza de agentes (migración 20260609120000; db push puede adelantarla)
 ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "agentGovernanceContent" TEXT;
 
--- 7. Project: fusión / suite (migración 20260612120000)
+-- 8. Project integration NEW ↔ LEGACY (migración 20260616120000)
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "linkedLegacyProjectId" TEXT;
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "linkedNewProjectId" TEXT;
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "integrationHandoff" JSONB;
+ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "integrationHandoffUpdatedAt" TIMESTAMP(3);
+ALTER TABLE "Stage" ADD COLUMN IF NOT EXISTS "linkedNewProjectId" TEXT;
+ALTER TABLE "Stage" ADD COLUMN IF NOT EXISTS "handoffSnapshot" JSONB;
+ALTER TABLE "Stage" ADD COLUMN IF NOT EXISTS "handoffImportedAt" TIMESTAMP(3);
 ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
 ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "mergedFrom" JSONB;
 ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "parentProjectId" TEXT;

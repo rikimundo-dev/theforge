@@ -11,6 +11,7 @@ import { Brain,
   FileText,
   GitBranch,
   LayoutTemplate,
+  Link2,
   ListOrdered,
   ListTodo,
   Package,
@@ -202,6 +203,15 @@ export function buildWorkshopDocNavItems(ctx: WorkshopDocNavBuildContext): Works
       content: ctx.aemContent,
     });
   }
+  if (visible("integration")) {
+    items.push({
+      id: "integration",
+      label: "Integración",
+      title: "Handoff NEW ↔ LEGACY y trazabilidad",
+      Icon: Link2,
+      content: "integration-panel",
+    });
+  }
   if (visible("api-contracts")) {
     items.push({
       id: "api-contracts",
@@ -371,6 +381,11 @@ export function getWorkshopDocPanelHeader(
       title: "Architecture Decision Records",
       subtitle: "Decisiones arquitectónicas guardadas",
       Icon: Brain,
+    },
+    integration: {
+      title: "Integración Legacy ↔ Nuevo",
+      subtitle: "Handoff, enlace de proyectos y matriz NEW-LEG ↔ LEG",
+      Icon: Link2,
     },
   };
 

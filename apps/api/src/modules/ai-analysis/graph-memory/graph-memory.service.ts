@@ -759,4 +759,58 @@ export class GraphMemoryService implements OnModuleInit, OnModuleDestroy {
             this.logger.error(`[GraphMemory] clearLegacyStage falló: ${err instanceof Error ? err.message : String(err)}`);
         }
     }
+
+    /**
+     * Enlace cross-project NEW ↔ LEGACY en grafo SDD local.
+     */
+    async syncProjectIntegrationLink(newProjectId: string, legacyProjectId: string) {
+        if (!this.graph) return;
+        const ts = Date.now();
+        try {
+            await this.graph.query(
+                `
+          MERGE (n:ForgeProject {id: $newProjectId})
+          SET n.kind = 'NEW', n.updatedAt = $ts
+          MERGE (l:ForgeProject {id: $legacyProjectId})
+          SET l.kind = 'LEGACY', l.updatedAt = $ts
+          MERGE (n)-[:INTEGRATES_WITH]->(l)
+        `,
+                { params: { newProjectId, legacyProjectId, ts } },
+            );
+            this.logger.log(`[GraphMemory] INTEGRATES_WITH ${newProjectId} → ${legacyProjectId}`);
+        } catch (err) {
+            this.logger.error(
+                `[GraphMemory] syncProjectIntegrationLink falló: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
+
+    /**
+     * Trazabilidad handoff NEW-LEG satisfecho por LEG-XX.
+     */
+    async syncHandoffSatisfies(
+        newProjectId: string,
+        legacyProjectId: string,
+        newLegId: string,
+        legacyStoryId: string,
+    ) {
+        if (!this.graph) return;
+        const ts = Date.now();
+        try {
+            await this.graph.query(
+                `
+          MERGE (h:HandoffItem {id: $newLegId, newProjectId: $newProjectId})
+          SET h.updatedAt = $ts
+          MERGE (s:UserStory {id: $legacyStoryId, projectId: $legacyProjectId})
+          SET s.updatedAt = $ts
+          MERGE (h)-[:SATISFIES]->(s)
+        `,
+                { params: { newProjectId, legacyProjectId, newLegId, legacyStoryId, ts } },
+            );
+        } catch (err) {
+            this.logger.error(
+                `[GraphMemory] syncHandoffSatisfies falló: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }
 }

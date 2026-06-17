@@ -17,7 +17,8 @@ export type WorkshopDocTab =
   | "user-stories"
   | "infra"
   | "adrs"
-  | "aem";
+  | "aem"
+  | "integration";
 
 export type ProjectTypeForTabs = "NEW" | "LEGACY";
 
@@ -40,6 +41,9 @@ export function isTabVisibleForComplexity(
 
   // AEM siempre visible, sin importar complejidad ni tipo de proyecto
   if (tab === "aem") return true;
+
+  // Integración cross-project NEW ↔ LEGACY
+  if (tab === "integration") return true;
 
   if (c === "HIGH") return true;
 

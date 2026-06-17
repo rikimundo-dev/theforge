@@ -112,6 +112,7 @@ import {
 } from "../utils/printDocument";
 import { isTabVisibleForComplexity, type WorkshopDocTab } from "../utils/complexityTabs";
 import { StandardDocPanel } from "../components/StandardDocPanel";
+import { IntegrationPanel } from "../components/IntegrationPanel";
 import { DocEmptyState } from "../components/DocEmptyState";
 import { WorkshopRegenButton } from "../components/WorkshopRegenButton";
 import { WorkshopDownloadZipButton } from "../components/WorkshopDownloadZipButton";
@@ -950,7 +951,8 @@ export default function WorkshopView({
     | "infra"
     | "aem"
     | "agent-governance"
-    | "adrs";
+    | "adrs"
+    | "integration";
   const centralPanel = useWorkshopStore((s) => s.workshopActiveDocPanel) as DocPanel;
   const setCentralPanel = useWorkshopStore((s) => s.setWorkshopActiveDocPanel);
 
@@ -1588,7 +1590,7 @@ export default function WorkshopView({
 
   /** Preview/source (or design) toggle — header toolbar on desktop; not in the bubble menu. */
   const docEditToolbarToggle = useMemo(() => {
-    if (centralPanel === "legacy" || centralPanel === "adrs") return null;
+    if (centralPanel === "legacy" || centralPanel === "adrs" || centralPanel === "integration") return null;
 
     const editableDocPanels = new Set([
       "spec",
@@ -1698,7 +1700,7 @@ export default function WorkshopView({
   ]);
 
   const docBubbleMenuItems = useMemo((): WorkshopDocBubbleMenuItem[] => {
-    if (centralPanel === "legacy" || centralPanel === "adrs") return [];
+    if (centralPanel === "legacy" || centralPanel === "adrs" || centralPanel === "integration") return [];
 
     const ordered: WorkshopDocBubbleMenuItem[] = [];
 
@@ -3076,6 +3078,19 @@ export default function WorkshopView({
                   </div>
                 )}
               </div>
+            )}
+            {centralPanel === "integration" && projectId && project && (
+              <IntegrationPanel
+                projectId={projectId}
+                projectType={project.projectType === "LEGACY" ? "LEGACY" : "NEW"}
+                activeStageId={activeStageId}
+                activeStageOrdinal={
+                  workshopStagesList.find((s) => s.id === activeStageId)?.ordinal ?? 1
+                }
+                onProjectRefresh={() => {
+                  void fetchProject(projectId);
+                }}
+              />
             )}
             {centralPanel === "legacy" && project?.projectType === "LEGACY" && projectId && (
               <div className="rounded-lg bg-[color-mix(in_oklch,var(--card)_88%,transparent)] border border-[var(--border)] p-6 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] text-sm space-y-6">

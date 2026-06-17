@@ -16,6 +16,8 @@ import {
 } from "@theforge/shared-types";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { ProjectsService } from "../projects/projects.service.js";
+import { ProjectIntegrationService } from "../projects/integration/project-integration.service.js";
+import { buildHandoffPromptBlockForLegacyChange } from "../projects/integration/integration-context.util.js";
 import type { TheForgeFileToModify } from "../theforge/theforge.service.js";
 import { TheForgeService } from "../theforge/theforge.service.js";
 import {
@@ -468,6 +470,7 @@ export class LegacyCoordinatorService {
     private readonly graphMemory: GraphMemoryService,
     private readonly agentSupervisor: AgentSupervisorService,
     private readonly legacyDeliverablesStrategy: LegacyDeliverablesStrategyService,
+    private readonly projectIntegration: ProjectIntegrationService,
   ) {}
 
   /**
@@ -1074,6 +1077,30 @@ export class LegacyCoordinatorService {
       .join("\n");
 
     const isInitialMdd = isLegacyBaselineStage(gateStage);
+    if (gateStage) {
+      const dbProject = await this.prisma.project.findFirst({
+        where: { id: projectId },
+        include: { stages: { orderBy: { ordinal: "asc" } } },
+      });
+      if (dbProject) {
+        this.projectIntegration.assertHandoffGateForLegacyMdd(dbProject, {
+          ordinal: gateStage.ordinal,
+          handoffImportedAt: gateStage.handoffImportedAt ?? null,
+        });
+      }
+    }
+    const integrationPromptCtx = await this.projectIntegration.resolvePromptContext(
+      projectId,
+      gateStage?.id,
+    );
+    const handoffMddBlock =
+      !isInitialMdd && integrationPromptCtx.handoffItems.length && integrationPromptCtx.newProjectMeta
+        ? buildHandoffPromptBlockForLegacyChange({
+            newProjectId: integrationPromptCtx.newProjectMeta.id,
+            newProjectName: integrationPromptCtx.newProjectMeta.name,
+            items: integrationPromptCtx.handoffItems,
+          }) + "\n\n---\n\n"
+        : "";
     const descTermsGate = description.slice(0, 160).replace(/[^\w\s]/g, " ").trim();
     const gateSemanticQueries =
       !isInitialMdd && descTermsGate.length > 2
@@ -1245,6 +1272,7 @@ export class LegacyCoordinatorService {
         : "";
       prompt =
         (brdPre ? brdPre + "\n\n" : "") +
+        handoffMddBlock +
         codebaseDocBlock +
         baselineBlock +
         "Genera un documento MDD de cambio (Markdown) para un proyecto legacy. " +
@@ -1783,6 +1811,10 @@ export class LegacyCoordinatorService {
           return;
         }
         case "user_stories": {
+          const integrationPromptCtx = await this.projectIntegration.resolvePromptContext(
+            projectId,
+            gateStage?.id ?? undefined,
+          );
           if (!legacyBaselineStage) {
             const smUs = await trySectionMergeDeliverable(
               this.ai,
@@ -1810,9 +1842,19 @@ export class LegacyCoordinatorService {
             mddForLlm,
             p.specContent,
             p.useCasesContent,
-            legacyOpts,
+            {
+              ...legacyOpts,
+              integrationHandoffItems: integrationPromptCtx.handoffItems,
+              integrationNewProject: integrationPromptCtx.newProjectMeta,
+            },
           );
-          await update({ userStoriesContent: cleanDocumentContent(userStoriesContent) });
+          const cleanedUs = cleanDocumentContent(userStoriesContent);
+          if (gateStage?.id) {
+            await this.projectIntegration
+              .syncTracesFromUserStories(projectId, gateStage.id, cleanedUs)
+              .catch(() => {});
+          }
+          await update({ userStoriesContent: cleanedUs });
           p = await load();
           return;
         }
