@@ -1,174 +1,166 @@
-# Integración Legacy ↔ Proyecto nuevo
+# Integración entre sistema viejo y producto nuevo
 
-Guía operativa cuando **dos sistemas conviven**: un monolito **LEGACY** (documentado en TheForge como proyecto legacy) y un **producto nuevo** (proyecto NEW de alta complejidad) que se conecta a él. Suele trabajar **dos personas distintas** — una en el repo nuevo y otra en pantallas/API del legacy.
+A veces construyes un **producto nuevo** y, al mismo tiempo, hay que **cambiar pantallas o APIs del sistema que ya está en producción** (el “legacy”). Normalmente lo hacen **dos personas**: una en el proyecto nuevo y otra en el sistema viejo.
 
-> **Idea clave:** no mantienes dos constituciones ni dos backlogs sincronizados a mano. Cada proyecto tiene **su dueño** y **su fuente de verdad**; el puente es un **handoff** explícito con trazabilidad en texto.
+TheForge te ayuda a **no perder el hilo** entre ambos: qué pidió el equipo nuevo, qué debe hacer el equipo legacy y cómo va quedando cada cosa.
 
----
-
-## Los tres artefactos (no confundir)
-
-| Capa | Proyecto | Dueño | Qué documenta | SSOT para… |
-|------|----------|-------|---------------|------------|
-| **Contrato AS-IS** | LEGACY — **etapa 1** | Equipo legacy (cerrada) | Sistema **tal como existe hoy** (MDD §3–§5, API, reglas) | Entender el monolito antes de integrar |
-| **Handoff de integración** | **NEW** | Persona del producto nuevo | Qué debe cambiar en legacy **por la integración** (`NEW-LEG-*`) | Acordar alcance entre equipos |
-| **Delta implementable** | LEGACY — **etapa 2+** | Persona que toca pantallas legacy | MDD de **cambio** + Casos de Uso + H.U. (`LEG-*`) | Implementar y probar en el repo legacy |
-
-El proyecto **NEW** no edita el Workshop legacy. La persona legacy **no implementa** desde las H.U. crudas del NEW: las usa como **entrada** y regenera las suyas desde su MDD de cambio.
+> **En una frase:** cada proyecto tiene su documentación; el enlace entre ellos es la pestaña **Integración** del Workshop y una lista clara de “lo que el viejo debe cambiar por el nuevo”.
 
 ---
 
-## Flujo recomendado (vista general)
+## ¿Para qué sirve esto?
 
-`Legacy etapa 1 (AS-IS) → NEW (MDD + handoff) → Legacy etapa 2 (MDD cambio + H.U.) → Implementación en paralelo`
+Imagina que el **portal nuevo** necesita que el **cotizador viejo** muestre un botón o devuelva un dato por API. El equipo del portal sabe *qué* necesita; el equipo del cotizador sabe *cómo* tocar su código.
+
+Sin un puente, acaban dos Word distintos, dos listas de tareas y nadie sabe si `NEW-LEG-03` ya está hecho en legacy.
+
+Con este flujo:
+
+- El **proyecto nuevo** describe qué cambios pide al legacy (lista **NEW-LEG-01**, **NEW-LEG-02**, …).
+- El **proyecto legacy** documenta solo el **cambio** (etapa 2 en adelante) y genera sus propias historias (**LEG-07**, etc.).
+- La **matriz de trazabilidad** une cada petición del nuevo con la historia del viejo.
+
+---
+
+## Tres documentos, tres roles (no mezclar)
+
+| Qué es | Dónde | Quién lo cuida | Para qué sirve |
+|--------|-------|----------------|----------------|
+| **Foto del sistema hoy** | Legacy — **etapa 1** | Equipo legacy (cuando ya está cerrada) | Saber cómo funciona el viejo *antes* de tocar nada |
+| **Lista de cambios pedidos** | Proyecto **nuevo** — pestaña **Integración** | Quien diseña el producto nuevo | Acordar con legacy *qué* hay que modificar |
+| **Plan de cambio en el viejo** | Legacy — **etapa 2 o más** | Quien modifica pantallas/API legacy | Trabajar e implementar en el repo real |
+
+**Regla simple:** el nuevo **no edita** el Workshop del legacy. El legacy **no copia a ciegas** las historias del nuevo: las **importa**, genera su MDD de cambio y sus historias propias.
+
+---
+
+## Cómo se ve el flujo (de punta a punta)
+
+`Sistema viejo documentado (etapa 1) → Proyecto nuevo + lista de cambios → Legacy etapa 2 implementa`
 
 ```text
-┌─────────────────────┐     referencia §4/§5      ┌─────────────────────┐
-│  LEGACY  Etapa 1    │ ────────────────────────► │  Proyecto NEW       │
-│  MDD AS-IS (cerrado)│                             │  MDD + Spec + H.U.  │
-└─────────────────────┘                             │  + NEW-LEG-* handoff│
-                                                    └──────────┬──────────┘
-                                                               │ handoff (1 vez)
-                                                               ▼
-                                                    ┌─────────────────────┐
-                                                    │  LEGACY  Etapa 2+   │
-                                                    │  MDD cambio + LEG-* │
-                                                    └─────────────────────┘
+  ┌──────────────────┐         consulta cómo está hoy
+  │  Legacy etapa 1  │ ─────────────────────────────────►  Proyecto nuevo
+  │  (sistema actual)│                                      + lista NEW-LEG
+  └──────────────────┘
+           ▲
+           │ importar lista y generar cambio
+           │
+  ┌──────────────────┐
+  │  Legacy etapa 2+ │
+  │  (solo el delta) │
+  └──────────────────┘
 ```
 
 ---
 
-## Paso a paso
+## Paso a paso en el Workshop
 
-### 0. Precondición — Legacy etapa 1 cerrada
+### Antes de empezar (equipo legacy)
 
-En el proyecto **LEGACY**, **etapa 1** (`ordinal === 1`):
+En el proyecto **Legacy**, **etapa 1** debe estar lista:
 
-1. **MDD Inicial** (doc. partida desde Ariadne) → pestaña *MDD Inicial*.
-2. **MDD** canónico AS-IS → `generate-mdd` (no lenguaje de “modificación pendiente”).
-3. **Entregables** etapa 1: Spec, Casos de Uso, H.U., Blueprint, API, Flujos, etc.
+1. Pestaña **MDD Inicial** — documentación de partida del código.
+2. Pestaña **MDD** — descripción del sistema **tal como está hoy** (sin “pendiente de modificar”).
+3. Resto de entregables de esa etapa si los usáis (Spec, historias, API, etc.).
 
-Esa etapa es la **fotografía del sistema en producción**. El equipo NEW la usa como **dependencia externa** (contratos API, entidades, reglas §5).
-
----
-
-### 1. Persona NEW — producto nuevo
-
-En el proyecto **NEW** (complejidad alta):
-
-| Paso | Acción en Workshop | Resultado |
-|------|-------------------|-----------|
-| 1 | MDD §1 — declarar dependencia externa | Texto: “Integración con legacy *{nombre}* — contrato según proyecto `{uuid}` etapa 1” |
-| 2 | Cascada habitual | `BRD → To-Be → MDD → Spec → … → H.U.` del **producto nuevo** |
-| 3 | Bloque **handoff legacy** al final de Spec o H.U. | Historias etiquetadas **`[Legacy handoff]`** con prefijo `NEW-LEG-01`, `NEW-LEG-02`, … |
-| 4 | Entregar handoff al compañero legacy | Copiar markdown, export ZIP o enlace al proyecto NEW |
-
-**Ejemplo de H.U. handoff:**
-
-> **`[Legacy handoff] NEW-LEG-01`** — Como usuario del cotizador legacy, necesito que la pantalla X exponga un token OAuth para el callback del portal nuevo, para completar el login federado.
-
-Esas H.U. describen **intención de integración**, no la implementación final en React/Strapi del legacy.
+Eso es la **referencia**: el equipo del producto nuevo la usa para saber qué APIs y pantallas existen hoy.
 
 ---
 
-### 2. Handoff — una sola vez (no sync continuo)
+### Equipo del producto nuevo
 
-La persona NEW entrega:
+1. Abrí el Workshop del proyecto **nuevo**.
+2. Entrá a la pestaña **Integración**.
+3. **Enlazá** el proyecto Legacy correspondiente (botón *Enlazar proyecto*).
+4. Añadí ítems en **Handoff NEW-LEG-*** — cada uno es un cambio concreto que el viejo debe hacer.  
+   Ejemplo: *“La pantalla de cotización debe devolver un token para que el portal nuevo complete el login.”*
+5. Cuando la lista esté acordada, pulsá **Enviar al legacy**.
 
-- Lista `NEW-LEG-*` (alcance de negocio)
-- ID del proyecto NEW en TheForge
-- 2–3 párrafos de contexto (qué sistema nuevo, qué flujo cruza el límite)
-
-La persona **legacy** crea **etapa 2** en su proyecto LEGACY:
-
-- Botón **Nueva etapa** → modal → etapa con `ordinal === 2`
-- En el tab **Modificación**, pegar el handoff en la **descripción del cambio**
-- Añadir: *“Origen: integración con proyecto NEW `{uuid}`”*
-- Opcional: BRD de la iniciativa en esa etapa
-
-**No** hace falta duplicar el MDD AS-IS ni editar las H.U. de la etapa 1.
+Opcional: seguí el flujo habitual del proyecto nuevo (MDD, Spec, historias del producto nuevo). La pestaña Integración no sustituye eso; complementa el puente con legacy.
 
 ---
 
-### 3. Persona legacy — pantallas y API del monolito
+### Equipo legacy (sistema viejo)
 
-En **LEGACY etapa 2+**:
+1. En el Workshop **Legacy**, pestaña **Integración**, **enlazá** el proyecto nuevo (si no quedó enlazado al revés).
+2. Creá **etapa 2** (botón *Nueva etapa* arriba a la derecha) — cada etapa grande de cambio puede ser una etapa nueva.
+3. Con la **etapa 2** seleccionada, en **Integración** pulsá **Importar handoff**.  
+   Eso copia la lista del nuevo a **Modificación** y deja constancia de cuándo se importó.
+4. Generá el **MDD de cambio** (pestaña MDD → Regenerar) — solo describe **qué cambia**, no todo el sistema otra vez.
+5. Generá **historias de usuario** y el resto de entregables de esa etapa como siempre.
 
-| Paso | Acción | Resultado |
-|------|--------|-----------|
-| 1 | `generate-mdd` | MDD de **cambio** (línea base = etapa anterior; preámbulo BRD si aplica) |
-| 2 | §1 del MDD | Debe citar proyecto NEW + handoff: *“Implementa integración con NEW `{id}`; satisface NEW-LEG-01..05”* |
-| 3 | `generate-deliverables` o regeneración individual | Casos de Uso + **H.U. `LEG-*`** desde el MDD de cambio |
-| 4 | Trazabilidad en cada `LEG-*` | Campo o nota: *“Satisface NEW-LEG-03”* |
-
-Las **`LEG-*`** son la **lista de trabajo real** del dev legacy (rutas, componentes y permisos del repo indexado en Ariadne).
-
-Regeneración en legacy etapa 2+: las H.U. usan el pipeline estándar de **cambio** (solo el delta del MDD), no el modo AS-IS de etapa 1.
+En las historias del legacy conviene indicar de qué petición del nuevo vienen, por ejemplo: *Satisface: NEW-LEG-01*.
 
 ---
 
-### 4. Trabajo en paralelo
+### Trabajar en paralelo (ejemplo de calendario)
 
-| Semana | Persona NEW | Persona legacy |
-|--------|-------------|------------------|
-| 1 | MDD NEW + H.U. `NEW-*` + handoff `NEW-LEG-*` | Abre etapa 2; absorbe handoff en Modificación |
-| 2 | Implementa app nueva contra §4 AS-IS + contrato acordado | `generate-mdd` + H.U. `LEG-*` |
-| 3+ | Consume legacy ya modificado | Implementa `LEG-*` en el repo |
+| Cuándo | Producto nuevo | Sistema legacy |
+|--------|----------------|----------------|
+| Semana 1 | Enlazar legacy + armar lista NEW-LEG + enviar | Crear etapa 2 + importar handoff |
+| Semana 2 | Avanzar el producto nuevo usando la doc de etapa 1 como referencia | Generar MDD de cambio + historias LEG-* |
+| Semana 3+ | Probar contra el legacy ya modificado | Implementar en código las historias LEG-* |
 
-El cuello de botella suele ser **acordar contrato** (API/pantalla), no mantener dos Word en sync.
-
----
-
-## Matriz de trazabilidad (recomendada)
-
-Mantenla fuera del MDD o como tabla al final del Spec NEW — una sola fila por ítem de integración:
-
-| NEW-LEG | LEG | Pantalla / endpoint | Estado |
-|---------|-----|---------------------|--------|
-| NEW-LEG-01 | LEG-07 | `/cotizador` — token OAuth | En progreso |
-| NEW-LEG-02 | LEG-08 | `POST /api/...` header Y | Hecho |
-
-Cuando el alcance NEW cambie: la persona NEW actualiza el handoff → legacy abre **etapa 3** si el delta es grande, o actualiza la etapa 2 y regenera MDD/H.U.
+Lo que suele frenar no es la herramienta, sino **acordar** pantalla o API exacta — por eso la lista NEW-LEG y la matriz ayudan.
 
 ---
 
-## Qué evitar
+## Pestaña Integración — qué encontrás
 
-| ❌ Anti-patrón | ✅ En su lugar |
-|----------------|----------------|
-| Dos personas editando `userStoriesContent` en ambos proyectos como la misma lista | Handoff NEW → MDD cambio legacy → H.U. `LEG-*` propias |
-| H.U. de integración en **legacy etapa 1** (AS-IS) | Etapa 1 = producto en uso; integración en **etapa 2+** |
-| Implementar legacy desde H.U. `NEW-LEG-*` sin regenerar | Regenerar H.U. desde MDD de cambio en legacy |
-| Reescribir todo el AS-IS en etapa 2 | Solo **delta** en MDD de cambio |
-| Esperar un documento único “cross-project” automático | Trazabilidad manual en §1 + matriz (hoy) |
-
----
-
-## Qué hace TheForge hoy (y qué no)
-
-| Disponible | Limitación actual |
-|------------|-------------------|
-| Proyectos LEGACY con **etapas** (`DERIVED_FROM` en Falkor) | No hay enlace automático `linkedLegacyProjectId` entre NEW y LEGACY |
-| Etapa 1 AS-IS vs etapa 2+ **MDD de cambio** | No importa handoff NEW al crear etapa 2 |
-| Tab **Modificación** + AriadneSpecs en legacy | `parentProjectId` (suite) es organizacional, no sincroniza docs |
-| H.U. con prompt de **solo delta** en MDD de cambio | Copy/paste del handoff sigue siendo manual |
-
-**Workaround operativo:** descripción etapa 2 + §1 MDD + matriz NEW-LEG ↔ LEG. Futuro posible: campo de enlace entre proyectos y bloque auto en §1 al generar MDD.
+| Sección | Qué hace |
+|---------|----------|
+| **Proyecto enlazado** | Une el Workshop nuevo con el legacy (y viceversa) |
+| **Handoff NEW-LEG-*** (solo en proyecto nuevo) | Crear, editar y enviar la lista de cambios pedidos al viejo |
+| **Importar handoff** (legacy, etapa 2+) | Traer esa lista a Modificación de una vez |
+| **Extracto AS-IS** (proyecto nuevo) | Vista de cómo está hoy el legacy (contexto y APIs) sin abrir el otro proyecto |
+| **Matriz de trazabilidad** | Tabla NEW-LEG ↔ LEG para ver qué está hecho |
+| **Avisos** (tarjetas amarillas) | Te recuerdan pasos que faltan (enlazar, enviar, importar, etc.) |
 
 ---
 
-## Referencia rápida por rol
+## Matriz de seguimiento
 
-| Rol | Proyecto | Etapa | Documentos que toca |
-|-----|----------|-------|---------------------|
-| Arquitecto / dev **NEW** | NEW | — | MDD, Spec, H.U. (`NEW-*` + `NEW-LEG-*`) |
-| Dev **legacy** | LEGACY | 1 (solo lectura tras cierre) | MDD AS-IS como contrato |
-| Dev **legacy** | LEGACY | 2+ | Modificación → MDD cambio → CU → H.U. `LEG-*` |
+En la misma pestaña **Integración** ves una tabla como esta:
+
+| NEW-LEG | LEG | Pantalla o API | Estado |
+|---------|-----|----------------|--------|
+| NEW-LEG-01 | LEG-07 | Cotizador — login | En progreso |
+| NEW-LEG-02 | LEG-08 | API de guardado | Hecho |
+
+Si el producto nuevo cambia el alcance: actualizá la lista, volvé a **Enviar al legacy** y, si el cambio es grande, abrí **etapa 3** en legacy en lugar de mezclar todo en la misma etapa.
 
 ---
 
-## Más documentación en el repositorio
+## Errores habituales (y qué hacer)
 
-- `docs/notebooklm/LEGACY-FLOW-AS-IS-MDD.md` — etapa 1 AS-IS y etapas 2+ cambio
-- `docs/notebooklm/THEFORGE-INDEX.md` — índice general del producto
-- `apps/api/src/modules/legacy-flow/README.md` — API legacy (`generate-mdd`, `generate-deliverables`)
+| Evitá | Mejor |
+|-------|-------|
+| Dos personas editando las mismas historias en ambos proyectos | Cada uno en su proyecto; el puente es Integración |
+| Meter integración en **legacy etapa 1** (sistema “como está”) | Integración solo en **etapa 2+** |
+| Programar en legacy leyendo solo la lista del nuevo sin regenerar doc | Importar handoff → MDD de cambio → historias LEG-* |
+| Reescribir todo el sistema en etapa 2 | Solo lo que **cambia** |
+| Olvidar enlazar proyectos antes de enviar/importar | Siempre **Enlazar** primero en Integración |
+
+---
+
+## Glosario mínimo
+
+| Término | Significado en plata llana |
+|---------|----------------------------|
+| **Legacy** | Proyecto en TheForge ligado a un sistema **ya existente** |
+| **Etapa 1** | Documentación del sistema **hoy**, sin cambios pendientes |
+| **Etapa 2+** | Un **cambio concreto** (por ejemplo, por una integración) |
+| **Handoff** | La lista de cambios que el **nuevo** pide al **viejo** |
+| **NEW-LEG-XX** | Código de cada ítem de esa lista (lado producto nuevo) |
+| **LEG-XX** | Historia de usuario generada en el legacy para implementar |
+| **MDD** | Documento maestro que ordena el resto de la documentación del proyecto |
+
+---
+
+## Más detalle técnico (opcional)
+
+Si necesitás profundizar en etapas AS-IS, APIs o el motor legacy:
+
+- `docs/notebooklm/LEGACY-FLOW-AS-IS-MDD.md`
+- `docs/plans/PLAN-LEGACY-NEW-INTEGRATION.md`
