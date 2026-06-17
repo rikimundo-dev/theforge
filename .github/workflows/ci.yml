@@ -21,7 +21,14 @@ jobs:
           cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        timeout-minutes: 10
+        env:
+          PRISMA_SKIP_POSTINSTALL_GENERATE: "true"
+        run: |
+          pnpm install --frozen-lockfile \
+            --filter @theforge/api... \
+            --filter @theforge/web... \
+            --filter theforge
 
       - name: Agent governance API specs
         working-directory: apps/api
