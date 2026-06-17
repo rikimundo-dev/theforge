@@ -3082,6 +3082,7 @@ export default function WorkshopView({
             {centralPanel === "integration" && projectId && project && (
               <IntegrationPanel
                 projectId={projectId}
+                projectName={project.name}
                 projectType={project.projectType === "LEGACY" ? "LEGACY" : "NEW"}
                 activeStageId={activeStageId}
                 activeStageOrdinal={

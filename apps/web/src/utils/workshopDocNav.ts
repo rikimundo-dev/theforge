@@ -384,7 +384,7 @@ export function getWorkshopDocPanelHeader(
     },
     integration: {
       title: "Integración Legacy ↔ Nuevo",
-      subtitle: "Handoff, enlace de proyectos y matriz NEW-LEG ↔ LEG",
+      subtitle: "Conecta proyectos para compartir contexto AS-IS y gestionar módulos enlazados",
       Icon: Link2,
     },
   };
