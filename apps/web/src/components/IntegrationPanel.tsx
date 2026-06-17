@@ -1,22 +1,41 @@
 /**
  * Workshop panel: cross-project integration NEW ↔ LEGACY (handoff, traces, link picker).
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
 import {
-  AlertTriangle,
+  ArrowLeftRight,
+  CheckCircle2,
+  Download,
+  GitBranch,
   Link2,
   Loader2,
   Plus,
   Send,
+  Sparkles,
   Trash2,
-  Download,
+  Unlink,
 } from "lucide-react";
 import type {
   IntegrationHandoffItem,
   IntegrationStatusResponse,
   IntegrationTraceRow,
 } from "@theforge/shared-types";
-import { Button, Input } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  EmptyState,
+  Input,
+} from "@/components/ui";
+import { WorkshopPanelButton } from "@/components/WorkshopButtons";
 import { cn } from "@/lib/utils";
 import { apiFetch, API_BASE } from "@/utils/apiClient";
 
@@ -29,14 +48,18 @@ interface PickerProject {
 
 export interface IntegrationPanelProps {
   projectId: string;
+  projectName: string;
   projectType: "NEW" | "LEGACY";
   activeStageId: string | null;
   activeStageOrdinal: number;
   onProjectRefresh: () => void | Promise<void>;
 }
 
+type StepStatus = "done" | "active" | "pending";
+
 export function IntegrationPanel({
   projectId,
+  projectName,
   projectType,
   activeStageId,
   activeStageOrdinal,
@@ -51,6 +74,8 @@ export function IntegrationPanel({
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [legacyContextPreview, setLegacyContextPreview] = useState<string | null>(null);
+  const handoffTitleId = useId();
+  const handoffDescriptionId = useId();
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -154,7 +179,7 @@ export function IntegrationPanel({
       method: "POST",
     });
     if (!r.ok) {
-      setError("Envía handoff falló — ¿legacy enlazado?");
+      setError("Envío de handoff falló — verifica que el legacy esté enlazado.");
       return;
     }
     await loadStatus();
@@ -195,154 +220,445 @@ export function IntegrationPanel({
 
   const linked =
     projectType === "NEW" ? status?.linkedLegacyProject : status?.linkedNewProject;
+  const handoffItems = status?.handoff.items ?? [];
+  const linkStepStatus: StepStatus = linked ? "done" : "active";
+  const contextStepStatus: StepStatus = !linked
+    ? "pending"
+    : legacyContextPreview
+      ? "done"
+      : "active";
+  const handoffStepStatus: StepStatus = !linked
+    ? "pending"
+    : handoffItems.length > 0
+      ? "done"
+      : "active";
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 px-1 py-2 sm:px-2">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color-mix(in_oklch,var(--primary)_12%,var(--card))] text-[var(--primary)]">
-            <Link2 className="h-4 w-4" aria-hidden />
-          </span>
-          <div>
-            <h2 className="text-base font-semibold text-[var(--foreground)]">Integración Legacy ↔ Nuevo</h2>
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Handoff estructurado, trazabilidad NEW-LEG ↔ LEG y contrato AS-IS.
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="mx-auto max-w-3xl space-y-6 px-2 py-4 sm:px-3">
+      <IntegrationOverview
+        projectType={projectType}
+        projectName={projectName}
+        linked={linked ?? null}
+        warnings={status?.warnings ?? []}
+      />
 
       {error ? (
-        <p className="rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-3 py-2 text-sm text-[var(--destructive)]">
+        <div
+          role="alert"
+          className="rounded-lg border border-[color-mix(in_oklch,var(--destructive)_35%,var(--border))] bg-[color-mix(in_oklch,var(--destructive)_10%,var(--card))] px-3.5 py-2.5 text-sm text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
+        >
           {error}
-        </p>
+        </div>
       ) : null}
 
-      {status?.warnings.length ? (
-        <ul className="space-y-2">
-          {status.warnings.map((w) => (
-            <li
-              key={w}
-              className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200"
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              {w}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <ol className="space-y-6" aria-label="Pasos de integración">
+        <IntegrationStep
+          step={1}
+          status={linkStepStatus}
+          title="Enlazar proyectos"
+          description={
+            projectType === "NEW"
+              ? "Conecta este módulo nuevo con el proyecto legacy que documenta el sistema actual."
+              : "Conecta el sistema legacy con el proyecto nuevo que solicitará cambios o compartirá contexto."
+          }
+        >
+          {linked ? (
+            <LinkedProjectCard linked={linked} onUnlink={() => void unlink()} />
+          ) : (
+            <UnlinkedProjectCard
+              targetLabel={projectType === "NEW" ? "proyecto LEGACY" : "proyecto NEW"}
+              onLink={() => void openPicker()}
+            />
+          )}
+        </IntegrationStep>
 
-      <section className="rounded-xl bg-[color-mix(in_oklch,var(--muted)_18%,var(--card))] p-4">
-        <h3 className="mb-3 text-sm font-medium text-[var(--foreground)]">Proyecto enlazado</h3>
-        {linked ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-medium text-[var(--foreground)]">{linked.name}</p>
-              <p className="text-xs text-[var(--muted-foreground)]">
-                {linked.projectType} · {linked.id}
-                {linked.hasBaselineMdd ? " · MDD AS-IS ✓" : " · sin MDD etapa 1"}
+        {projectType === "NEW" ? (
+          <IntegrationStep
+            step={2}
+            status={contextStepStatus}
+            title="Contexto compartido"
+            description="El módulo nuevo consulta la documentación AS-IS del legacy sin duplicar el Workshop."
+          >
+            {linked ? (
+              legacyContextPreview ? (
+                <pre className="max-h-52 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_16%,var(--card))] p-4 text-xs leading-relaxed text-[var(--foreground-muted)]">
+                  {legacyContextPreview.slice(0, 4000)}
+                  {legacyContextPreview.length > 4000 ? "\n…" : ""}
+                </pre>
+              ) : (
+                <p className="rounded-lg border border-dashed border-[var(--border)] px-4 py-8 text-center text-sm leading-relaxed text-[var(--foreground-muted)]">
+                  Enlace activo. El extracto AS-IS aparecerá cuando el legacy tenga MDD de etapa 1.
+                </p>
+              )
+            ) : (
+              <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
+                Enlaza un proyecto legacy para acceder a su contexto y APIs actuales.
               </p>
+            )}
+          </IntegrationStep>
+        ) : null}
+
+        {projectType === "NEW" ? (
+          <IntegrationStep
+            step={projectType === "NEW" ? 3 : 2}
+            status={handoffStepStatus}
+            title="Handoff al legacy"
+            description="Define qué debe cambiar el sistema legacy para soportar este módulo nuevo. Cada ítem se rastrea como NEW-LEG."
+          >
+            <HandoffEditor
+              items={handoffItems}
+              newTitle={newTitle}
+              newDescription={newDescription}
+              titleId={handoffTitleId}
+              descriptionId={handoffDescriptionId}
+              onTitleChange={setNewTitle}
+              onDescriptionChange={setNewDescription}
+              onAdd={() => void addHandoffItem()}
+              onDelete={(id) => void deleteItem(id)}
+              onSend={() => void sendHandoff()}
+              linked={!!linked}
+            />
+          </IntegrationStep>
+        ) : null}
+
+        {projectType === "LEGACY" && activeStageOrdinal >= 2 ? (
+          <IntegrationStep
+            step={2}
+            status={status?.handoffImportedAt ? "done" : linked ? "active" : "pending"}
+            title={`Recibir handoff · etapa ${activeStageOrdinal}`}
+            description="Importa las solicitudes del proyecto NEW enlazado y genera el MDD de cambio con trazabilidad."
+          >
+            <div className="space-y-4">
+              {status?.handoffImportedAt ? (
+                <p className="flex items-center gap-2.5 text-sm leading-relaxed text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                  Importado: {new Date(status.handoffImportedAt).toLocaleString()}
+                </p>
+              ) : null}
+              <WorkshopPanelButton
+                tone="primary"
+                disabled={!linked}
+                className="inline-flex items-center gap-2"
+                onClick={() => void importHandoff()}
+              >
+                <Download className="h-3.5 w-3.5" aria-hidden />
+                Importar handoff del proyecto NEW
+              </WorkshopPanelButton>
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void unlink()}>
-              Desvincular
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-[var(--muted-foreground)]">
-              {projectType === "NEW"
-                ? "Selecciona el proyecto LEGACY (etapa 1 AS-IS)."
-                : "Selecciona el proyecto NEW que solicita cambios."}
-            </p>
-            <Button type="button" size="sm" onClick={() => void openPicker()}>
-              Enlazar proyecto
-            </Button>
-          </div>
-        )}
-      </section>
-
-      {projectType === "NEW" && legacyContextPreview ? (
-        <section className="rounded-xl bg-[color-mix(in_oklch,var(--muted)_18%,var(--card))] p-4">
-          <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">
-            Extracto AS-IS legacy (§1 + §4)
-          </h3>
-          <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md bg-[var(--muted)]/40 p-3 text-xs text-[var(--foreground-muted)]">
-            {legacyContextPreview.slice(0, 4000)}
-            {legacyContextPreview.length > 4000 ? "\n…" : ""}
-          </pre>
-        </section>
-      ) : null}
-
-      {projectType === "NEW" ? (
-        <HandoffEditor
-          items={status?.handoff.items ?? []}
-          newTitle={newTitle}
-          newDescription={newDescription}
-          onTitleChange={setNewTitle}
-          onDescriptionChange={setNewDescription}
-          onAdd={() => void addHandoffItem()}
-          onDelete={(id) => void deleteItem(id)}
-          onSend={() => void sendHandoff()}
-          linked={!!linked}
-        />
-      ) : null}
-
-      {projectType === "LEGACY" && activeStageOrdinal >= 2 ? (
-        <section className="rounded-xl bg-[color-mix(in_oklch,var(--muted)_18%,var(--card))] p-4">
-          <h3 className="mb-2 text-sm font-medium text-[var(--foreground)]">Importar handoff (etapa {activeStageOrdinal})</h3>
-          <p className="mb-3 text-sm text-[var(--muted-foreground)]">
-            Copia el handoff del proyecto NEW a Modificación y genera MDD/H.U. con trazabilidad.
-          </p>
-          {status?.handoffImportedAt ? (
-            <p className="mb-2 text-xs text-emerald-400">
-              Importado: {new Date(status.handoffImportedAt).toLocaleString()}
-            </p>
-          ) : null}
-          <Button type="button" size="sm" onClick={() => void importHandoff()} disabled={!linked}>
-            <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-            Importar handoff
-          </Button>
-        </section>
-      ) : null}
+          </IntegrationStep>
+        ) : null}
+      </ol>
 
       <TraceMatrix traces={status?.traces ?? []} />
 
-      {pickerOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[80vh] w-full max-w-md overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-xl">
-            <div className="border-b border-[var(--border)] px-4 py-3">
-              <h3 className="font-medium text-[var(--foreground)]">Seleccionar proyecto</h3>
-            </div>
-            <div className="max-h-96 overflow-y-auto p-2">
-              {pickerLoading ? (
-                <p className="p-4 text-center text-sm text-[var(--muted-foreground)]">Cargando…</p>
-              ) : pickerProjects.length === 0 ? (
-                <p className="p-4 text-center text-sm text-[var(--muted-foreground)]">Sin proyectos</p>
-              ) : (
-                <ul className="space-y-1">
-                  {pickerProjects.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--muted)]"
-                        onClick={() => void linkProject(p.id).catch(() => setError("Enlace fallido"))}
-                      >
-                        <span className="font-medium text-[var(--foreground)]">{p.name}</span>
-                        <span className="ml-2 text-xs text-[var(--muted-foreground)]">{p.projectType}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="border-t border-[var(--border)] p-3">
-              <Button type="button" variant="outline" className="w-full" onClick={() => setPickerOpen(false)}>
-                Cerrar
-              </Button>
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent size="md" className="gap-0 p-0">
+          <DialogHeader className="border-b border-[var(--border)] px-4 py-3 text-left">
+            <DialogTitle>
+              {projectType === "NEW" ? "Enlazar proyecto legacy" : "Enlazar proyecto nuevo"}
+            </DialogTitle>
+            <DialogDescription>
+              {projectType === "NEW"
+                ? "Elige el sistema existente cuya documentación AS-IS alimentará este módulo."
+                : "Elige el proyecto nuevo que gestionará cambios sobre este legacy."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto p-2">
+            {pickerLoading ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-[var(--muted-foreground)]">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Cargando proyectos…
+              </div>
+            ) : pickerProjects.length === 0 ? (
+              <EmptyState
+                className="min-h-[220px] border-none bg-transparent"
+                title="Sin proyectos disponibles"
+                description={
+                  projectType === "NEW"
+                    ? "Crea primero un proyecto LEGACY con documentación de etapa 1."
+                    : "No hay proyectos NEW compatibles para enlazar."
+                }
+                icon={Link2}
+              />
+            ) : (
+              <ul className="space-y-1">
+                {pickerProjects.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[color-mix(in_oklch,var(--muted)_45%,var(--card))]"
+                      onClick={() => void linkProject(p.id).catch(() => setError("Enlace fallido"))}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-[var(--foreground)]">{p.name}</span>
+                        <span className="mt-0.5 block font-mono text-[10px] text-[var(--foreground-subtle)]">
+                          {p.id}
+                        </span>
+                      </span>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        {p.hasBaselineMdd ? (
+                          <Badge variant="success" className="text-[10px]">
+                            AS-IS
+                          </Badge>
+                        ) : null}
+                        <Badge variant="outline" className="text-[10px] uppercase">
+                          {p.projectType}
+                        </Badge>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function IntegrationOverview({
+  projectType,
+  projectName,
+  linked,
+  warnings,
+}: {
+  projectType: "NEW" | "LEGACY";
+  projectName: string;
+  linked: { name: string; projectType: string } | null;
+  warnings: string[];
+}) {
+  const purposeCopy =
+    projectType === "NEW"
+      ? "Gestiona este módulo como proyecto independiente, conectado al legacy para heredar contexto AS-IS y coordinar cambios."
+      : "Recibe solicitudes de proyectos nuevos enlazados y mantén trazabilidad entre lo existente y lo que se construye.";
+
+  return (
+    <Card className="overflow-hidden border-[color-mix(in_oklch,var(--primary)_22%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_4%,var(--card))]">
+      <CardContent className="space-y-5 p-5 sm:p-6">
+        <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">{purposeCopy}</p>
+
+        <ConnectionDiagram
+          currentName={projectName}
+          currentType={projectType}
+          linkedName={linked?.name ?? null}
+          linkedType={linked?.projectType ?? (projectType === "NEW" ? "LEGACY" : "NEW")}
+          isLinked={!!linked}
+        />
+
+        {warnings.length > 0 ? (
+          <ul
+            className="space-y-2 rounded-lg border border-[color-mix(in_oklch,var(--info)_30%,var(--border))] bg-[color-mix(in_oklch,var(--info)_7%,var(--card))] px-4 py-3"
+            role="list"
+            aria-label="Siguientes pasos"
+          >
+            {warnings.map((warning) => (
+              <li
+                key={warning}
+                className="flex items-start gap-2 text-sm leading-snug text-[color-mix(in_oklch,var(--info)_88%,var(--foreground))]"
+              >
+                <span
+                  className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[color-mix(in_oklch,var(--info)_75%,var(--foreground))]"
+                  aria-hidden
+                />
+                {warning}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConnectionDiagram({
+  currentName,
+  currentType,
+  linkedName,
+  linkedType,
+  isLinked,
+}: {
+  currentName: string;
+  currentType: string;
+  linkedName: string | null;
+  linkedType: string;
+  isLinked: boolean;
+}) {
+  return (
+    <div
+      className="grid gap-3 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_88%,var(--background))] p-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center sm:gap-4 sm:p-4"
+      aria-label="Diagrama de enlace entre proyectos"
+    >
+      <ProjectNode name={currentName} type={currentType} emphasis />
+      <div className="flex flex-col items-center justify-center gap-1 px-1 text-[var(--foreground-subtle)]">
+        <ArrowLeftRight
+          className={cn(
+            "h-5 w-5",
+            isLinked ? "text-[var(--primary)]" : "text-[var(--foreground-subtle)]",
+          )}
+          aria-hidden
+        />
+        <span className="text-[10px] font-medium uppercase tracking-wide">
+          {isLinked ? "Enlazados" : "Sin enlace"}
+        </span>
+      </div>
+      <ProjectNode
+        name={linkedName ?? (linkedType === "LEGACY" ? "Legacy por enlazar" : "Nuevo por enlazar")}
+        type={linkedType}
+        muted={!isLinked}
+      />
+    </div>
+  );
+}
+
+function ProjectNode({
+  name,
+  type,
+  emphasis = false,
+  muted = false,
+}: {
+  name: string;
+  type: string;
+  emphasis?: boolean;
+  muted?: boolean;
+}) {
+  const isNew = type === "NEW";
+  const Icon = isNew ? Sparkles : GitBranch;
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 items-start gap-3 rounded-lg border px-3 py-2.5",
+        emphasis
+          ? "border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_8%,var(--card))]"
+          : "border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_12%,var(--card))]",
+        muted && "opacity-70",
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+          isNew
+            ? "bg-[color-mix(in_oklch,var(--success)_14%,var(--card))] text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]"
+            : "bg-[color-mix(in_oklch,var(--primary)_12%,var(--card))] text-[var(--primary)]",
+        )}
+      >
+        <Icon className="h-4 w-4" aria-hidden />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-[var(--foreground)]">{name}</p>
+        <Badge variant="outline" className="mt-1 text-[10px] uppercase tracking-wide">
+          {type}
+        </Badge>
+      </div>
+    </div>
+  );
+}
+
+function IntegrationStep({
+  step,
+  status,
+  title,
+  description,
+  children,
+}: {
+  step: number;
+  status: StepStatus;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <li>
+      <Card className="overflow-hidden">
+        <div className="px-5 pt-5 sm:px-6 sm:pt-6">
+          <div className="flex items-start gap-3.5">
+            <StepIndicator step={step} status={status} />
+            <div className="min-w-0 flex-1 space-y-1.5 pt-0.5">
+              <h3 className="text-sm font-semibold leading-snug text-[var(--foreground)]">{title}</h3>
+              <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">{description}</p>
             </div>
           </div>
         </div>
-      ) : null}
+        <div className="mx-5 my-5 border-t border-[var(--border)] sm:mx-6" />
+        <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+          <div className="sm:pl-[2.875rem]">{children}</div>
+        </div>
+      </Card>
+    </li>
+  );
+}
+
+function StepIndicator({ step, status }: { step: number; status: StepStatus }) {
+  return (
+    <span
+      className={cn(
+        "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+        status === "done" &&
+          "bg-[color-mix(in_oklch,var(--success)_16%,var(--card))] text-[color-mix(in_oklch,var(--success)_90%,var(--foreground))]",
+        status === "active" &&
+          "bg-[color-mix(in_oklch,var(--primary)_14%,var(--card))] text-[var(--primary)] ring-2 ring-[color-mix(in_oklch,var(--primary)_28%,transparent)]",
+        status === "pending" &&
+          "bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] text-[var(--foreground-subtle)]",
+      )}
+      aria-label={`Paso ${step}${status === "done" ? ", completado" : status === "active" ? ", en curso" : ", pendiente"}`}
+    >
+      {status === "done" ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : step}
+    </span>
+  );
+}
+
+function LinkedProjectCard({
+  linked,
+  onUnlink,
+}: {
+  linked: { id: string; name: string; projectType: string; hasBaselineMdd: boolean };
+  onUnlink: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="truncate text-sm font-medium text-[var(--foreground)]">{linked.name}</p>
+          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+            {linked.projectType}
+          </Badge>
+          {linked.hasBaselineMdd ? (
+            <Badge variant="success" className="text-[10px]">
+              MDD AS-IS
+            </Badge>
+          ) : (
+            <Badge variant="warning" className="text-[10px]">
+              Sin MDD etapa 1
+            </Badge>
+          )}
+        </div>
+        <p className="truncate font-mono text-xs text-[var(--foreground-subtle)]">{linked.id}</p>
+      </div>
+      <Button type="button" variant="outline" size="sm" className="inline-flex shrink-0 gap-2" onClick={onUnlink}>
+        <Unlink className="h-3.5 w-3.5" aria-hidden />
+        Desvincular
+      </Button>
+    </div>
+  );
+}
+
+function UnlinkedProjectCard({
+  targetLabel,
+  onLink,
+}: {
+  targetLabel: string;
+  onLink: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
+        Aún no hay un {targetLabel} conectado a este Workshop.
+      </p>
+      <WorkshopPanelButton tone="primary" onClick={onLink} className="inline-flex shrink-0 items-center gap-2">
+        <Link2 className="h-3.5 w-3.5" aria-hidden />
+        Enlazar proyecto
+      </WorkshopPanelButton>
     </div>
   );
 }
@@ -351,6 +667,8 @@ function HandoffEditor({
   items,
   newTitle,
   newDescription,
+  titleId,
+  descriptionId,
   onTitleChange,
   onDescriptionChange,
   onAdd,
@@ -361,6 +679,8 @@ function HandoffEditor({
   items: IntegrationHandoffItem[];
   newTitle: string;
   newDescription: string;
+  titleId: string;
+  descriptionId: string;
   onTitleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onAdd: () => void;
@@ -368,50 +688,81 @@ function HandoffEditor({
   onSend: () => void;
   linked: boolean;
 }) {
+  const canAdd = newTitle.trim().length > 0 && newDescription.trim().length > 0;
+
   return (
-    <section className="rounded-xl bg-[color-mix(in_oklch,var(--muted)_18%,var(--card))] p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-[var(--foreground)]">Handoff NEW-LEG-*</h3>
-        <Button type="button" size="sm" variant="default" disabled={!linked || !items.length} onClick={onSend}>
-          <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Enviar al legacy
-        </Button>
+    <div className="space-y-5">
+      <div className="space-y-4 rounded-lg border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_12%,var(--card))] p-4 sm:p-5">
+        <div className="space-y-2">
+          <label htmlFor={titleId} className="text-xs font-medium text-[var(--foreground)]">
+            Título del cambio
+          </label>
+          <Input
+            id={titleId}
+            placeholder="Ej. Token OAuth para el cotizador"
+            value={newTitle}
+            onChange={(e) => onTitleChange(e.target.value)}
+            disabled={!linked}
+          />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor={descriptionId} className="text-xs font-medium text-[var(--foreground)]">
+            Qué debe hacer el legacy
+          </label>
+          <textarea
+            id={descriptionId}
+            className="flex min-h-[100px] w-full rounded-md border border-[var(--input-border)] bg-[var(--input)] px-3 py-2.5 text-sm text-[var(--foreground)] shadow-sm placeholder:text-[var(--foreground-muted)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60"
+            placeholder="Describe el cambio que el equipo legacy debe implementar para soportar este módulo…"
+            value={newDescription}
+            onChange={(e) => onDescriptionChange(e.target.value)}
+            rows={4}
+            disabled={!linked}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5 pt-1">
+          <Button type="button" size="sm" variant="outline" className="gap-2" disabled={!linked || !canAdd} onClick={onAdd}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            Añadir ítem
+          </Button>
+          <Button type="button" size="sm" className="gap-2" disabled={!linked || !items.length} onClick={onSend}>
+            <Send className="h-3.5 w-3.5" aria-hidden />
+            Enviar al legacy
+          </Button>
+        </div>
       </div>
-      <div className="mb-4 space-y-2">
-        <Input placeholder="Título (p. ej. Token OAuth cotizador)" value={newTitle} onChange={(e) => onTitleChange(e.target.value)} />
-        <textarea
-          className="flex min-h-[80px] w-full rounded-md border border-[var(--input-border)] bg-[var(--input)] px-3 py-2 text-sm text-[var(--foreground)] shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--ring)]"
-          placeholder="Descripción de la historia handoff…"
-          value={newDescription}
-          onChange={(e) => onDescriptionChange(e.target.value)}
-          rows={3}
-        />
-        <Button type="button" size="sm" variant="outline" onClick={onAdd}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-          Añadir ítem
-        </Button>
-      </div>
+
       {items.length === 0 ? (
-        <p className="text-sm text-[var(--muted-foreground)]">Sin ítems handoff.</p>
+        <EmptyState
+          className="min-h-[168px] rounded-lg border border-dashed border-[var(--border)] bg-transparent px-4 py-8"
+          title="Sin solicitudes aún"
+          description={
+            linked
+              ? "Añade ítems que describan qué debe cambiar el legacy para este módulo."
+              : "Enlaza un proyecto legacy antes de crear solicitudes handoff."
+          }
+          icon={Send}
+        />
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2" role="list">
           {items.map((item) => (
             <li
               key={item.id}
-              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm"
+              className="rounded-lg border border-[var(--border)] bg-[color-mix(in_oklch,var(--card)_92%,var(--background))] px-3 py-3"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <span className="font-mono text-xs text-[var(--primary)]">{item.id}</span>
-                  <span className={cn("ml-2 rounded px-1.5 py-0.5 text-[10px] uppercase", statusBadge(item.status))}>
-                    {item.status}
-                  </span>
-                  <p className="mt-1 font-medium text-[var(--foreground)]">{item.title}</p>
-                  <p className="mt-0.5 text-[var(--muted-foreground)]">{item.description}</p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs text-[var(--primary)]">{item.id}</span>
+                    <HandoffStatusBadge status={item.status} />
+                  </div>
+                  <p className="mt-1.5 font-medium text-[var(--foreground)]">{item.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--foreground-muted)]">
+                    {item.description}
+                  </p>
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 text-[var(--muted-foreground)] hover:text-[var(--destructive)]"
+                  className="shrink-0 rounded-md p-1.5 text-[var(--foreground-subtle)] transition-colors hover:bg-[color-mix(in_oklch,var(--destructive)_10%,transparent)] hover:text-[color-mix(in_oklch,var(--destructive)_88%,var(--foreground))]"
                   onClick={() => onDelete(item.id)}
                   aria-label={`Eliminar ${item.id}`}
                 >
@@ -422,43 +773,73 @@ function HandoffEditor({
           ))}
         </ul>
       )}
-    </section>
+
+      {items.length > 0 ? (
+        <p className="text-xs text-[var(--foreground-muted)]">
+          {items.length} solicitud{items.length === 1 ? "" : "es"} · cada módulo NEW puede evolucionar de forma
+          independiente mientras coordina cambios con el legacy.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function HandoffStatusBadge({ status }: { status: string }) {
+  if (status === "sent" || status === "accepted") {
+    return (
+      <Badge variant="success" className="text-[10px] uppercase">
+        {status}
+      </Badge>
+    );
+  }
+  if (status === "implemented") {
+    return (
+      <Badge variant="default" className="text-[10px] uppercase">
+        {status}
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="text-[10px] uppercase">
+      {status}
+    </Badge>
   );
 }
 
 function TraceMatrix({ traces }: { traces: IntegrationTraceRow[] }) {
   if (!traces.length) return null;
   return (
-    <section className="rounded-xl bg-[color-mix(in_oklch,var(--muted)_18%,var(--card))] p-4">
-      <h3 className="mb-3 text-sm font-medium text-[var(--foreground)]">Matriz de trazabilidad</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-xs">
+    <Card>
+      <div className="px-5 pt-5 sm:px-6 sm:pt-6">
+        <CardTitle className="text-sm font-semibold">Trazabilidad NEW-LEG ↔ LEG</CardTitle>
+        <CardDescription className="mt-1.5">
+          Seguimiento entre solicitudes del módulo nuevo e historias implementadas en legacy.
+        </CardDescription>
+      </div>
+      <CardContent className="overflow-x-auto px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+        <table className="w-full min-w-[28rem] border-collapse text-left text-xs">
           <thead>
-            <tr className="border-b border-[var(--border)] text-[var(--muted-foreground)]">
-              <th className="py-2 pr-3">NEW-LEG</th>
-              <th className="py-2 pr-3">LEG</th>
-              <th className="py-2 pr-3">Estado</th>
-              <th className="py-2">Título</th>
+            <tr className="border-b border-[var(--border)] text-[var(--foreground-muted)]">
+              <th className="py-2 pr-3 font-medium">NEW-LEG</th>
+              <th className="py-2 pr-3 font-medium">LEG</th>
+              <th className="py-2 pr-3 font-medium">Estado</th>
+              <th className="py-2 font-medium">Título</th>
             </tr>
           </thead>
           <tbody>
             {traces.map((t) => (
-              <tr key={t.id} className="border-b border-[var(--border)]/60">
-                <td className="py-2 pr-3 font-mono text-[var(--primary)]">{t.newLegId}</td>
-                <td className="py-2 pr-3 font-mono">{t.legacyStoryId ?? "—"}</td>
-                <td className="py-2 pr-3">{t.status}</td>
-                <td className="py-2 text-[var(--foreground-muted)]">{t.title}</td>
+              <tr key={t.id} className="border-b border-[color-mix(in_oklch,var(--border)_70%,transparent)]">
+                <td className="py-2.5 pr-3 font-mono text-[var(--primary)]">{t.newLegId}</td>
+                <td className="py-2.5 pr-3 font-mono text-[var(--foreground)]">{t.legacyStoryId ?? "—"}</td>
+                <td className="py-2.5 pr-3">
+                  <HandoffStatusBadge status={t.status} />
+                </td>
+                <td className="py-2.5 text-[var(--foreground-muted)]">{t.title}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   );
-}
-
-function statusBadge(status: string): string {
-  if (status === "sent" || status === "accepted") return "bg-emerald-500/20 text-emerald-300";
-  if (status === "implemented") return "bg-blue-500/20 text-blue-300";
-  return "bg-[var(--muted)] text-[var(--muted-foreground)]";
 }
