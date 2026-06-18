@@ -6,6 +6,7 @@ Punto de entrada para humanos y agentes. **Arquitectura y producto (NotebookLM):
 
 | Necesitas… | Documento |
 |------------|-------------|
+| Comparativa spec-kit vs The Forge (SDD, gaps, alineación) | [speckit-vs-theforge.md](speckit-vs-theforge.md) |
 | Agente IA implementando desde docs TheForge | [THEFORGE-DOC-CONSUMPTION-GUIDE.md](THEFORGE-DOC-CONSUMPTION-GUIDE.md) |
 || Visión técnica única (flujo, semáforo, costos, Docker) | [notebooklm/THEFORGE-INDEX.md](notebooklm/THEFORGE-INDEX.md) |
 | Etapas `Stage`, API aplanada, Falkor | [notebooklm/STAGE-SDD.md](notebooklm/STAGE-SDD.md) |

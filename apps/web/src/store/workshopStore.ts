@@ -651,6 +651,8 @@ interface WorkshopState {
     | "deliverables-cascade"
     | "agent-governance"
     | "launch-hermes"
+    | "converge"
+    | "tasks-to-issues"
     | null;
   /** Mensaje de usuario en curso (streaming); se muestra hasta recibir "done" */
   streamingUserMessage: string | null;
@@ -866,6 +868,14 @@ interface WorkshopState {
   ) => Promise<void>;
   /** Notifica a Hermes Agent que el proyecto está listo para desarrollo. */
   launchHermes: (projectId: string) => Promise<{ success: boolean; status: number } | undefined>;
+  convergeTasks: (
+    projectId: string,
+    persist?: boolean,
+  ) => Promise<{ convergeSection: string; persisted: boolean; openTaskCount: number } | null>;
+  tasksToIssues: (
+    projectId: string,
+    body: { owner: string; repo: string; milestone?: number; dryRun?: boolean },
+  ) => Promise<{ created: Array<{ number: number; html_url: string }>; errors: string[] } | null>;
   reset: () => void;
 }
 
@@ -3955,6 +3965,68 @@ if (prog && prog.step && prog.step !== "done") {
       }
       const data = (await r.json()) as { success: boolean; status: number };
       return data;
+    } finally {
+      set({ loading: false, loadingReason: null });
+    }
+  },
+  convergeTasks: async (projectId, persist = false) => {
+    if (!projectId?.trim()) return null;
+    set({ loading: true, loadingReason: "converge", error: null });
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/converge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ persist }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message ?? "Error en converge");
+      }
+      const data = (await r.json()) as {
+        convergeSection: string;
+        persisted: boolean;
+        openTaskCount: number;
+        suggestedTasksMarkdown: string;
+      };
+      if (data.persisted) {
+        set({ tasksContent: data.suggestedTasksMarkdown, error: null });
+      } else {
+        set({ error: null });
+      }
+      return {
+        convergeSection: data.convergeSection,
+        persisted: data.persisted,
+        openTaskCount: data.openTaskCount,
+      };
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Error en converge" });
+      return null;
+    } finally {
+      set({ loading: false, loadingReason: null });
+    }
+  },
+  tasksToIssues: async (projectId, body) => {
+    if (!projectId?.trim()) return null;
+    set({ loading: true, loadingReason: "tasks-to-issues", error: null });
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId.trim()}/tasks-to-issues`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message ?? "Error al crear issues");
+      }
+      const data = (await r.json()) as {
+        created: Array<{ number: number; html_url: string }>;
+        errors: string[];
+      };
+      set({ error: null });
+      return data;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "Error al crear issues" });
+      return null;
     } finally {
       set({ loading: false, loadingReason: null });
     }

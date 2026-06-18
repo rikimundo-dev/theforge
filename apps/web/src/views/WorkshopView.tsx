@@ -62,6 +62,7 @@ import {
 } from "../constants/workshopHeaderToolbar";
 import {
   agentGovernanceScaffoldHasContent,
+  buildSpecKitBundleFiles,
   isPhase0BorradorJson,
   parseAgentGovernanceScaffold,
 } from "@theforge/shared-types";
@@ -99,6 +100,10 @@ import { AgentGovernancePanel } from "../components/AgentGovernancePanel";
 import { WorkshopAgentProgressPanel } from "../components/WorkshopAgentProgressPanel";
 import { downloadAgentGovernanceZip } from "../utils/downloadAgentGovernanceZip";
 import { downloadDocumentsZip } from "../utils/downloadDocumentsZip";
+import {
+  downloadSpecKitBundleFromApi,
+} from "../utils/downloadSpecKitBundle";
+import { buildSpecKitBundleFiles } from "@theforge/shared-types";
 import { downloadMarkdownFile } from "../utils/downloadMarkdownFile";
 import { resolveWorkshopActiveDocumentDownload } from "../utils/workshopActiveDocumentDownload";
 import {
@@ -116,6 +121,7 @@ import { IntegrationPanel } from "../components/IntegrationPanel";
 import { DocEmptyState } from "../components/DocEmptyState";
 import { WorkshopRegenButton } from "../components/WorkshopRegenButton";
 import { WorkshopDownloadZipButton } from "../components/WorkshopDownloadZipButton";
+import { WorkshopExportSddButton } from "../components/WorkshopExportSddButton";
 import {
   WorkshopDirtySaveBar,
   WorkshopDocToolbarIcon,
@@ -475,6 +481,8 @@ export default function WorkshopView({
   const modelsUnavailableModalOpen = useWorkshopStore((s) => s.modelsUnavailableModalOpen);
   const setModelsUnavailableModalOpen = useWorkshopStore((s) => s.setModelsUnavailableModalOpen);
   const launchHermes = useWorkshopStore((s) => s.launchHermes);
+  const convergeTasks = useWorkshopStore((s) => s.convergeTasks);
+  const tasksToIssues = useWorkshopStore((s) => s.tasksToIssues);
   const fetchProject = useWorkshopStore((s) => s.fetchProject);
   const adrsRaw = useWorkshopStore((s) => s.adrs);
   const adrs = useMemo(() => adrsRaw || [], [adrsRaw]);
@@ -1915,6 +1923,20 @@ export default function WorkshopView({
             await downloadAgentGovernanceZip(
               exportScaffold,
               projectName ?? project?.name ?? "Workshop",
+              buildSpecKitBundleFiles({
+                projectName: projectName ?? project?.name ?? "Workshop",
+                featureOrdinal: activeWorkshopStage?.ordinal ?? 1,
+                mddContent: effectiveMddTrimmed || mddContent || "",
+                specContent: specContent ?? project?.specContent,
+                blueprintContent: blueprintContent ?? project?.blueprintContent,
+                tasksContent: tasksContent ?? project?.tasksContent,
+                apiContractsContent: apiContractsContent ?? project?.apiContractsContent,
+                logicFlowsContent: logicFlowsContent ?? project?.logicFlowsContent,
+                infraContent: infraContent ?? project?.infraContent,
+                phase0SummaryContent: phase0SummaryContent ?? project?.phase0SummaryContent,
+                dbgaContent: dbgaContent ?? project?.dbgaContent,
+                uxUiGuideContent: uxUiGuideContent ?? project?.uxUiGuideContent,
+              }),
             );
           })();
           return;
@@ -2254,6 +2276,19 @@ export default function WorkshopView({
                   }}
                 />
 
+                <WorkshopExportSddButton
+                  disabled={!effectiveMddTrimmed || !projectId}
+                  onClick={async () => {
+                    if (!projectId) return;
+                    const ok = await downloadSpecKitBundleFromApi(
+                      projectId,
+                      projectName ?? project?.name ?? "Workshop",
+                    );
+                    if (ok) setError(null);
+                    else setError("No hay contenido MDD para exportar bundle SDD.");
+                  }}
+                />
+
                 {hermesConfigured === true ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2318,6 +2353,19 @@ export default function WorkshopView({
                     );
                     if (ok) setError(null);
                     else setError("No hay documentos con contenido para descargar.");
+                  }}
+                />
+
+                <WorkshopExportSddButton
+                  disabled={!effectiveMddTrimmed || !projectId}
+                  onClick={async () => {
+                    if (!projectId) return;
+                    const ok = await downloadSpecKitBundleFromApi(
+                      projectId,
+                      projectName ?? project?.name ?? "Workshop",
+                    );
+                    if (ok) setError(null);
+                    else setError("No hay contenido MDD para exportar bundle SDD.");
                   }}
                 />
 
@@ -2858,6 +2906,75 @@ export default function WorkshopView({
                     loading={loading}
                     ariaLabel="Regenerar Tasks desde MDD y Blueprint"
                   />
+                )}
+                {centralPanel === "tasks" && !!tasksContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <WorkshopDocToolbarIconButton
+                        onClick={() => {
+                          const persist = window.confirm(
+                            "¿Ejecutar converge brownfield? OK = guardar nuevas tareas en tasks.md. Cancelar = solo vista previa en mensaje.",
+                          );
+                          void convergeTasks(projectId, persist).then((res) => {
+                            if (res && !persist) {
+                              setError(`Converge (${res.openTaskCount} abiertas). Revisa el panel de errores/info.`);
+                            } else if (res?.persisted) {
+                              setError("✅ Converge aplicado en tasks.md");
+                            }
+                          });
+                        }}
+                        disabled={loading || !projectId}
+                        aria-label="Converge: alinear tasks con codebase y conformidad"
+                      >
+                        <WorkshopDocToolbarIcon icon={GitBranch} />
+                      </WorkshopDocToolbarIconButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Converge brownfield (Ariadne + conformidad → tareas pendientes)
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+                {centralPanel === "tasks" && !!tasksContent?.trim() && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <WorkshopDocToolbarIconButton
+                        onClick={() => {
+                          const owner = window.prompt("GitHub owner (org o usuario)");
+                          if (!owner?.trim()) return;
+                          const repo = window.prompt("GitHub repo");
+                          if (!repo?.trim()) return;
+                          const milestoneRaw = window.prompt("Milestone number (opcional, Enter para omitir)");
+                          const milestone =
+                            milestoneRaw?.trim() && /^\d+$/.test(milestoneRaw.trim())
+                              ? Number(milestoneRaw.trim())
+                              : undefined;
+                          void tasksToIssues(projectId, {
+                            owner: owner.trim(),
+                            repo: repo.trim(),
+                            milestone,
+                          }).then((res) => {
+                            if (!res) return;
+                            const n = res.created.length;
+                            const errN = res.errors.length;
+                            setError(
+                              n > 0
+                                ? `✅ ${n} issue(s) creadas en GitHub${errN ? ` (${errN} errores)` : ""}`
+                                : errN
+                                  ? `No se crearon issues: ${res.errors[0]}`
+                                  : "Sin issues creadas",
+                            );
+                          });
+                        }}
+                        disabled={loading || !projectId}
+                        aria-label="Crear GitHub Issues desde tareas abiertas"
+                      >
+                        <WorkshopDocToolbarIcon icon={ListTodo} />
+                      </WorkshopDocToolbarIconButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Tasks → GitHub Issues (requiere GITHUB_TOKEN en servidor)
+                    </TooltipContent>
+                  </Tooltip>
                 )}
                 {centralPanel === "agent-governance" && hasAgentGovernance && (
                   <WorkshopRegenButton

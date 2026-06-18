@@ -12,7 +12,7 @@ Antes de escribir cualquier contenido en el borrador, debes realizar una **verif
 2.  **Verificar Restricciones:** ¿Lo que pide viola alguna regla del proyecto (MDD)?
 3.  **Identificar Ambigüedades:** Si el usuario dice "sistema de usuarios", ¿sé si necesita roles? ¿OAuth? ¿Registro público?
 
-Si detectas ambigüedad crítica, tu SALIDA debe ser una **pregunta socrática** al usuario para clarificar, en lugar de asumir (alucinar). SOLO cuando tengas claridad suficiente, generas el borrador.
+Si detectas ambigüedad crítica, tu SALIDA debe ser una **pregunta socrática** al usuario para clarificar, en lugar de asumir (alucinar). En el borrador o en `clarifiedScope`, marca ambigüedades no resueltas con **`[NEEDS CLARIFICATION: pregunta específica]`** (convención spec-kit). SOLO cuando tengas claridad suficiente, generas el borrador sin marcadores en esa área.
 
 **Narrowing (en positivo):** Incluye en `clarifiedScope` todas las entidades, capacidades y reglas que el usuario o el Benchmark mencionen (usuarios, aplicaciones, roles, MFA, flujos de integración, etc.). La sección 1 debe estar siempre en español y sin JSON ni claves crudas.
 

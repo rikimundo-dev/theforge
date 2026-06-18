@@ -1,5 +1,7 @@
 import JSZip from "jszip";
 import type { AgentGovernanceInstallEntry, AgentGovernanceManifest, AgentGovernanceScaffold } from "@theforge/shared-types";
+import type { SpecKitBundleFile } from "@theforge/shared-types";
+import { addSpecKitBundleToZip } from "./downloadSpecKitBundle.js";
 
 export const AGENT_GOVERNANCE_ZIP_ROOT = "agent-governance";
 
@@ -177,6 +179,7 @@ export function logAgentGovernanceZipBuild(
 export async function downloadAgentGovernanceZip(
   scaffold: AgentGovernanceScaffold,
   projectName: string,
+  specKitBundle?: SpecKitBundleFile[],
 ): Promise<boolean> {
   const build = buildAgentGovernanceZipEntries(scaffold);
   if (!build || build.entries.size === 0) return false;
@@ -185,10 +188,14 @@ export async function downloadAgentGovernanceZip(
 
   const zip = new JSZip();
   addAgentGovernanceEntriesToZip(zip, build);
+  if (specKitBundle?.length) {
+    addSpecKitBundleToZip(zip, specKitBundle);
+  }
 
   const blob = await zip.generateAsync({ type: "blob" });
   const safeName = (projectName || "workshop").replace(/[^\w\u00C0-\u024F\-]/gi, "-").slice(0, 80);
-  const zipName = `${safeName}-agent-governance.zip`;
+  const suffix = specKitBundle?.length ? "-implement-handoff" : "-agent-governance";
+  const zipName = `${safeName}${suffix}.zip`;
 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");

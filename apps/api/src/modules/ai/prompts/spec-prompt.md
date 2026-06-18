@@ -38,6 +38,7 @@ Producto, arquitectura y equipos que usarán el Spec para alinear el MDD y el de
 
 - **Extrae y consolida** solo la información de las entradas (Benchmark, alcance clarificado, resumen fase 0).
 - **No inventes** objetivos, alcance ni criterios que no estén respaldados por el Benchmark o el alcance proporcionado.
+- **Marcadores de ambigüedad (convención spec-kit):** Si falta información crítica para un requisito, usa `[NEEDS CLARIFICATION: pregunta concreta]` en la sección afectada (Objetivos, Alcance o Criterios). No adivines. Al final del documento, si quedan marcadores, añade una sección `## Pendientes de clarificación` listando cada `[NEEDS CLARIFICATION]` con viñeta.
 
 # Proyecto legacy (mensaje con contexto TheForge) #
 

@@ -20,7 +20,10 @@ import {
   createProjectSchema,
   updateProjectSchema,
   phase0DeepResearchBodySchema,
+  convergeBodySchema,
+  tasksToIssuesBodySchema,
 } from "@theforge/shared-types";
+import { SddIntegrationService } from "./sdd-integration.service.js";
 
 @Controller("projects")
 export class ProjectsController {
@@ -28,6 +31,7 @@ export class ProjectsController {
     private readonly projects: ProjectsService,
     private readonly projectMerge: ProjectMergeService,
     private readonly deliverablesQueue: DeliverablesQueueService,
+    private readonly sddIntegration: SddIntegrationService,
   ) {}
 
   @Post("merge")
@@ -137,6 +141,32 @@ export class ProjectsController {
   @Get(":id/conformance")
   getConformance(@Param("id") id: string, @Query("useLlm") useLlm?: string) {
     return this.projects.getConformance(id, { useLlm: useLlm === "true" });
+  }
+
+  /** Bundle SDD compatible con spec-kit (JSON para cliente o integraciones). */
+  @Get(":id/export/sdd-bundle")
+  exportSddBundle(@Param("id") id: string) {
+    return this.sddIntegration.getExportBundle(id);
+  }
+
+  /**
+   * Converge brownfield: tareas abiertas + conformidad + Ariadne → nuevas tareas.
+   * Body opcional: `{ "persist": true }` para guardar en `tasksContent`.
+   */
+  @Post(":id/converge")
+  converge(@Param("id") id: string, @Body() body: unknown) {
+    const { persist } = convergeBodySchema.parse(body ?? {});
+    return this.sddIntegration.converge(id, persist);
+  }
+
+  /**
+   * Crea GitHub Issues desde tareas abiertas de `tasks.md`.
+   * Requiere `GITHUB_TOKEN` en el servidor. `dryRun: true` solo planifica.
+   */
+  @Post(":id/tasks-to-issues")
+  tasksToIssues(@Param("id") id: string, @Body() body: unknown) {
+    const parsed = tasksToIssuesBodySchema.parse(body ?? {});
+    return this.sddIntegration.tasksToIssues(id, parsed);
   }
 
   @Patch(":id")

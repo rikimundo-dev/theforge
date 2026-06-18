@@ -29,3 +29,6 @@ export * from "./document-changelog.js";
 export * from "./mdd-governance-patterns.js";
 export * from "./phase0-content.js";
 export * from "./project-integration.js";
+export * from "./spec-kit-bundle.js";
+export * from "./tasks-parse.js";
+export * from "./sdd-integrations.js";

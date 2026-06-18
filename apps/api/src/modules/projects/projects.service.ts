@@ -81,6 +81,7 @@ import {
 import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.util.js";
 
 import { flattenStageDeliverables, pickPrimaryStage } from "./stage-helpers.js";
+import { SddIntegrationService } from "./sdd-integration.service.js";
 
 import {
   BRD_GENERATION_SYSTEM,
@@ -135,6 +136,7 @@ export class ProjectsService implements IOrchestratorProjectsPort {
     private readonly graphMemory: GraphMemoryService,
     private readonly changeLog: ChangeLogService,
     private readonly projectIntegration: ProjectIntegrationService,
+    private readonly sddIntegration: SddIntegrationService,
   ) {}
 
   private buildSemaphoreBase(
@@ -1913,6 +1915,12 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
       );
     }
 
+    const stages = (project as { stages?: StageWithEst[] }).stages ?? [];
+    const sddBundle = this.sddIntegration.buildHermesSddPayload({
+      ...(project as Project),
+      stages,
+    });
+
     const payload = {
       event_type: "project.ready",
       project: {
@@ -1920,6 +1928,13 @@ PROHIBIDO escribir los nombres como texto plano suelto. DEBEN ser cabeceras ### 
         name: project.name,
         type: project.projectType,
         sessionId: null as string | null,
+      },
+      sddBundle,
+      implementHandoff: {
+        readme: "IMPLEMENT.md",
+        consumptionGuide: "THEFORGE-DOC-CONSUMPTION-GUIDE.md",
+        agentGovernanceZip: "Descargar agent-governance desde Workshop o usar agentGovernanceContent",
+        specKitLayout: sddBundle.featureDir,
       },
     };
 

@@ -14,6 +14,7 @@ import { ScraperModule } from "../scraper/scraper.module.js";
 import { TheForgeModule } from "../theforge/theforge.module.js";
 import { GraphMemoryModule } from "../ai-analysis/graph-memory/graph-memory.module.js";
 import { ChangeLogModule } from "../change-log/change-log.module.js";
+import { SddIntegrationService } from "./sdd-integration.service.js";
 
 @Module({
   imports: [EngineModule, AiModule, Phase0Module, ScraperModule, TheForgeModule, GraphMemoryModule, ChangeLogModule],
@@ -22,6 +23,7 @@ import { ChangeLogModule } from "../change-log/change-log.module.js";
     ProjectsService,
     ProjectIntegrationService,
     ProjectMergeService,
+    SddIntegrationService,
     { provide: PROJECTS_ORCHESTRATOR_PORT, useExisting: ProjectsService },
     ProjectEstimationRecalcService,
     DeliverablesQueueService,
