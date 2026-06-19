@@ -5,6 +5,7 @@ import {
   buildMddContextForUserStories,
   buildMddContextForBlueprint,
   buildMddContextForApiContracts,
+  buildMddContextForTasks,
   buildLogicFlowsDiagramHint,
   MDD_DELIVERABLE_BUDGET,
 } from "./mdd-deliverable-context.util.js";
@@ -88,6 +89,25 @@ describe("buildMddContextForDeliverable", () => {
     const out = buildMddContextForApiContracts(SAMPLE_MDD(filler));
     assert.ok(out.includes("GET /api/v1/auth/login"));
     assert.ok(out.includes("Fila en tabla de endpoints"));
+  });
+
+  it("prioriza checklist §3/§4/§6/§7 para tasks", () => {
+    const mdd = `${SAMPLE_MDD("")}
+## 5. Lógica y edge cases
+
+- **Timeout en webhook Stripe:** Reintentos con backoff.
+
+## 7. Infraestructura
+
+- **Postgres 16** en Docker.
+`;
+    const filler = "z".repeat(MDD_DELIVERABLE_BUDGET + 5000);
+    const out = buildMddContextForTasks(mdd + filler);
+    assert.ok(out.includes("Tarea comprobable"));
+    assert.ok(out.includes("tenants"));
+    assert.ok(out.includes("GET /api/v1/auth/login"));
+    assert.ok(out.includes("Timeout en webhook Stripe"));
+    assert.ok(out.includes("Postgres 16"));
   });
 
   it("devuelve MDD íntegro en etapa 1 AS-IS aunque supere presupuesto estándar", () => {

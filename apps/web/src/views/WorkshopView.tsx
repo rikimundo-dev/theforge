@@ -1146,6 +1146,7 @@ export default function WorkshopView({
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [flowOrderModalOpen, setFlowOrderModalOpen] = useState(false);
+  const [clarifySpecDialogOpen, setClarifySpecDialogOpen] = useState(false);
   const [showStageModal, setShowStageModal] = useState(false);
   const initialPanelSetForProject = useRef<string | null>(null);
   /** Flujo legacy: descripción y respuestas locales antes de enviar */
@@ -1762,14 +1763,23 @@ export default function WorkshopView({
         disabled: loading || !projectId,
         onClick: () => void handleRegenerateLegacyCodebaseDoc(),
       };
-    } else if (centralPanel === "spec" && !!specContent?.trim()) {
-      regenItem = {
-        id: "regen",
-        label: "Regenerar Spec",
-        icon: RefreshCw,
+    } else if (centralPanel === "spec") {
+      ordered.push({
+        id: "clarify",
+        label: "Aclarar Spec",
+        icon: HelpCircle,
         disabled: loading || !projectId,
-        onClick: () => void generateSpec(projectId),
-      };
+        onClick: () => setClarifySpecDialogOpen(true),
+      });
+      if (!!specContent?.trim()) {
+        regenItem = {
+          id: "regen",
+          label: "Regenerar Spec",
+          icon: RefreshCw,
+          disabled: loading || !projectId,
+          onClick: () => void generateSpec(projectId),
+        };
+      }
     } else if (centralPanel === "architecture" && !!architectureContent?.trim()) {
       regenItem = {
         id: "regen",
@@ -2609,6 +2619,22 @@ export default function WorkshopView({
               />
               {docEditToolbarToggle ? (
                 <div className="hidden shrink-0 items-center gap-1.5 lg:flex">
+                  {centralPanel === "spec" ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <WorkshopDocToolbarIconButton
+                          onClick={() => setClarifySpecDialogOpen(true)}
+                          disabled={loading || !projectId}
+                          aria-label="Aclarar Spec antes del plan (speckit.clarify)"
+                        >
+                          <HelpCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
+                        </WorkshopDocToolbarIconButton>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                        Aclarar Spec — marca ambigüedades con [NEEDS CLARIFICATION]
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -2892,15 +2918,22 @@ export default function WorkshopView({
                   </Tooltip>
                 )}
                 {/* to-be save button removed */}
-                {centralPanel === "spec" && (
-                  <ClarifySpecPanel
-                    projectId={projectId}
-                    disabled={loading}
-                    onClarify={clarifySpec}
-                    onApplied={(content) => setSpecContent(content)}
-                    onMessage={(msg) => setError(msg)}
-                  />
-                )}
+                {centralPanel === "spec" ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <WorkshopDocToolbarIconButton
+                        onClick={() => setClarifySpecDialogOpen(true)}
+                        disabled={loading || !projectId}
+                        aria-label="Aclarar Spec antes del plan (speckit.clarify)"
+                      >
+                        <HelpCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
+                      </WorkshopDocToolbarIconButton>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+                      Aclarar Spec — marca ambigüedades con [NEEDS CLARIFICATION]
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
                 {centralPanel === "spec" && !!specContent?.trim() && (
                   <WorkshopRegenButton
                     onClick={() => generateSpec(projectId)}
@@ -3878,7 +3911,26 @@ export default function WorkshopView({
               </ErrorBoundary>
             )}
             {centralPanel === "spec" && (
-              <StandardDocPanel
+              <>
+                <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_8%,var(--card))] px-3 py-2.5">
+                  <p className="min-w-0 flex-1 text-xs leading-relaxed text-[color-mix(in_oklch,var(--primary)_62%,var(--foreground))]">
+                    <strong>Aclarar Spec</strong> antes del MDD: detecta ambigüedades y marca{" "}
+                    <code className="text-[10px]">[NEEDS CLARIFICATION]</code> (equivalente a{" "}
+                    <code className="text-[10px]">/speckit.clarify</code>).
+                  </p>
+                  <ClarifySpecPanel
+                    projectId={projectId}
+                    disabled={loading}
+                    onClarify={clarifySpec}
+                    onApplied={(content) => setSpecContent(content)}
+                    onMessage={(msg) => setError(msg)}
+                    open={clarifySpecDialogOpen}
+                    onOpenChange={setClarifySpecDialogOpen}
+                    showTrigger
+                    triggerVariant="button"
+                  />
+                </div>
+                <StandardDocPanel
                 icon={ListOrdered}
                 title="Spec"
                 description="Spec = Benchmark + alcance. Alimenta el MDD; revísalo antes de dar por cerrado el MDD."
@@ -3896,6 +3948,7 @@ export default function WorkshopView({
                 onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "spec", activeStageId ?? undefined) : undefined}
                 legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
               />
+              </>
             )}
             {centralPanel === "aem" && (
               <StandardDocPanel

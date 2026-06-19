@@ -83,6 +83,10 @@
  *
  * - **`list_theforge_projects`**: `GET /theforge/projects` (índice multi-root en Ariadne)
  *
+ * ### Spec-kit / SDD implement
+ *
+ * - **`get_next_implementation_task`**: `GET /projects/:projectId/next-task` (siguiente tarea abierta en tasks.md; `[P]`, rutas, checkpoint)
+ *
  * @see {@link ./index.ts} constantes `TOOLS` y `handlers`
  */
 
@@ -90,4 +94,4 @@
  * Revisión del catálogo; incrementar si cambia el conjunto de tools.
  * @constant
  */
-export const MCP_THEFORGE_TOOLS_DOC_REVISION = 3;
+export const MCP_THEFORGE_TOOLS_DOC_REVISION = 4;

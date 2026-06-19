@@ -20,6 +20,13 @@ interface ClarifySpecPanelProps {
   ) => Promise<{ clarifiedSpec: string; clarificationMarkerCount: number } | null>;
   onApplied: (content: string) => void;
   onMessage?: (msg: string) => void;
+  /** Controlled dialog open state (e.g. bubble menu on desktop). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** When false, only renders the dialog (trigger elsewhere). Default true. */
+  showTrigger?: boolean;
+  /** Icon-only toolbar button (default) or labeled CTA. */
+  triggerVariant?: "icon" | "button";
 }
 
 /**
@@ -31,8 +38,14 @@ export function ClarifySpecPanel({
   onClarify,
   onApplied,
   onMessage,
+  open: controlledOpen,
+  onOpenChange,
+  showTrigger = true,
+  triggerVariant = "icon",
 }: ClarifySpecPanelProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -69,20 +82,35 @@ export function ClarifySpecPanel({
 
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <WorkshopDocToolbarIconButton
+      {showTrigger ? (
+        triggerVariant === "button" ? (
+          <button
+            type="button"
             onClick={() => setOpen(true)}
             disabled={disabled || !projectId}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--card))] px-3 py-1.5 text-xs font-semibold text-[color-mix(in_oklch,var(--primary)_70%,var(--foreground))] disabled:opacity-50"
             aria-label="Aclarar Spec antes del plan (speckit.clarify)"
           >
-            <HelpCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
-          </WorkshopDocToolbarIconButton>
-        </TooltipTrigger>
-        <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
-          Aclarar Spec — marca ambigüedades con [NEEDS CLARIFICATION]
-        </TooltipContent>
-      </Tooltip>
+            <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            Aclarar Spec
+          </button>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <WorkshopDocToolbarIconButton
+                onClick={() => setOpen(true)}
+                disabled={disabled || !projectId}
+                aria-label="Aclarar Spec antes del plan (speckit.clarify)"
+              >
+                <HelpCircle className="h-4 w-4" strokeWidth={2} aria-hidden />
+              </WorkshopDocToolbarIconButton>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end" className="max-w-[16rem]">
+              Aclarar Spec — marca ambigüedades con [NEEDS CLARIFICATION]
+            </TooltipContent>
+          </Tooltip>
+        )
+      ) : null}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="xl" className="max-h-[85vh] max-w-2xl overflow-hidden">

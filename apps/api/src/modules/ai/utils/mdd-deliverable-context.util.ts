@@ -159,8 +159,12 @@ function buildCoverageChecklist(md: string, kind: MddDeliverableKind): string {
     "",
   ];
 
-  if (kind === "blueprint" && entities.length) {
-    lines.push("**Entidades / tablas (MDD §3) — cada una en ### nombre_tabla o viñeta -:**");
+  if (entities.length && (kind === "blueprint" || kind === "tasks")) {
+    const entityLabel =
+      kind === "blueprint"
+        ? "Entidades / tablas (MDD §3) — cada una en ### nombre_tabla o viñeta -:"
+        : "Entidades / tablas (MDD §3) — persistencia, DTOs y validación:";
+    lines.push(`**${entityLabel}**`);
     for (const e of entities) lines.push(`- [ ] ${e}`);
     lines.push("");
   }
@@ -184,8 +188,8 @@ function buildCoverageChecklist(md: string, kind: MddDeliverableKind): string {
   }
 
   if (routes.length && ["api-contracts", "blueprint", "tasks", "user-stories", "use-cases"].includes(kind)) {
-    if (kind === "api-contracts") {
-      lines.push("**Endpoints (§4) — una fila por ruta:**");
+    if (kind === "api-contracts" || kind === "tasks") {
+      lines.push(`**Endpoints (§4) — ${kind === "tasks" ? "una tarea Backend por ruta" : "una fila por ruta"}:**`);
       for (const r of routes) lines.push(`- [ ] ${r}`);
     } else {
       lines.push(`**Grupos API (§4) — cubrir con ${itemLabel}:**`);
@@ -200,14 +204,25 @@ function buildCoverageChecklist(md: string, kind: MddDeliverableKind): string {
     lines.push("");
   }
 
-  if (edgeCases.length && ["logic-flows", "architecture"].includes(kind)) {
+  if (edgeCases.length && ["logic-flows", "architecture", "tasks"].includes(kind)) {
     lines.push("**Edge cases / riesgos (§5):**");
     for (const e of edgeCases) lines.push(`- [ ] ${e}`);
     lines.push("");
   }
 
-  if (infraItems.length && kind === "infra") {
-    lines.push("**Infra / servicios (§7):**");
+  const securityItems = extractBulletsAfterHeading(
+    md,
+    /(?:^|\n)#{1,4}\s*(?:seguridad|security)/im,
+    16,
+  );
+  if (securityItems.length && kind === "tasks") {
+    lines.push("**Seguridad (MDD §6):**");
+    for (const s of securityItems) lines.push(`- [ ] ${s}`);
+    lines.push("");
+  }
+
+  if (infraItems.length && (kind === "infra" || kind === "tasks")) {
+    lines.push("**Infra / servicios (MDD §7):**");
     for (const i of infraItems) lines.push(`- [ ] ${i}`);
     lines.push("");
   }
@@ -254,6 +269,17 @@ function prioritySectionsFor(kind: MddDeliverableKind): typeof PRIORITY_SECTIONS
       PRIORITY_SECTIONS[1]!,
       PRIORITY_SECTIONS[2]!,
       PRIORITY_SECTIONS[4]!,
+    ];
+  }
+  if (kind === "tasks") {
+    return [
+      PRIORITY_SECTIONS[0]!,
+      PRIORITY_SECTIONS[4]!,
+      PRIORITY_SECTIONS[1]!,
+      PRIORITY_SECTIONS[2]!,
+      PRIORITY_SECTIONS[3]!,
+      PRIORITY_SECTIONS[5]!,
+      PRIORITY_SECTIONS[6]!,
     ];
   }
   return PRIORITY_SECTIONS;

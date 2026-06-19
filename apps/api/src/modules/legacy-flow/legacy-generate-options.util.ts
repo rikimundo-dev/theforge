@@ -19,6 +19,43 @@ export interface BuildLegacyGenerateOptionsParams {
   gatherContractSpecsForApi: (theforgeProjectId: string) => Promise<string>;
 }
 
+/** Project fields passed to `AiService.generateTasks` for MDD-aligned task breakdown. */
+export interface ProjectDeliverablesForTasks {
+  specContent?: string | null;
+  userStoriesContent?: string | null;
+  apiContractsContent?: string | null;
+  logicFlowsContent?: string | null;
+  infraContent?: string | null;
+}
+
+export type TasksGenerateOptions = LegacyGenerateOptions & {
+  navigationMap?: string;
+  specContent?: string | null;
+  userStoriesContent?: string | null;
+  apiContractsContent?: string | null;
+  logicFlowsContent?: string | null;
+  infraContent?: string | null;
+};
+
+/**
+ * Merges legacy TheForge options with supplemental SDD deliverables (Workshop parity).
+ */
+export function mergeLegacyTasksGenerateOptions(
+  legacyOpts: LegacyGenerateOptions | undefined,
+  project: ProjectDeliverablesForTasks,
+  navigationMap?: string,
+): TasksGenerateOptions {
+  return {
+    ...(legacyOpts ?? {}),
+    ...(navigationMap ? { navigationMap } : {}),
+    specContent: project.specContent,
+    userStoriesContent: project.userStoriesContent,
+    apiContractsContent: project.apiContractsContent,
+    logicFlowsContent: project.logicFlowsContent,
+    infraContent: project.infraContent,
+  };
+}
+
 /** Contexto LLM legacy (TheForge + etapa 1 AS-IS). `undefined` si el proyecto no es LEGACY. */
 export async function buildLegacyGenerateOptions(
   params: BuildLegacyGenerateOptionsParams,

@@ -16,7 +16,7 @@ Prompts del módulo AI. Están estructurados según marcos de ingeniería de pro
 | **architecture-prompt.md** | Entregable **Arquitectura del sistema**: cobertura exhaustiva de capacidades, entidades y dominios API; `buildMddContextForArchitecture`. Pie **Proyecto legacy** si hay contexto TheForge. |
 | **infra-prompt.md** | Infra / Docker / env / volúmenes al MDD; cobertura exhaustiva §7; `buildMddContextForInfra`. Pie **Proyecto legacy**. |
 | **logic-flows-prompt.md** | Flujos Mermaid al MDD §4–§5; `buildMddContextForLogicFlows`. **Legacy etapa 1 AS-IS:** `legacy-as-is-logic-flows.util` — flujo por servicio §5, rutas §4 literales, inferencias marcadas; monolítico. Pie **Proyecto legacy**. |
-| **tasks-prompt.md** | Breakdown Backend / Front / Infra / QA; cobertura exhaustiva; `buildMddContextForTasks`. Pie **Proyecto legacy**. |
+| **tasks-prompt.md** | Breakdown Backend / Front / Infra / QA; alineación MDD §1–§7 con trazabilidad **MDD:** / **Story:**; cobertura exhaustiva; `buildMddContextForTasks` + artefactos Spec/HU/API/Flujos/Infra en `generateTasks`. Pie **Proyecto legacy**. |
 | **agent-governance-prompt.md** | Scaffold `agent-governance/` (JSON `files`) desde MDD §1–§7 + Blueprint; plantillas LOW/MEDIUM/HIGH; derivación stack-agnóstica; `generateAgentGovernance()`. |
 | **spec-prompt.md** | Spec what/why desde DBGA o MDD (`buildMddContextForSpec`). **Legacy etapa 1 AS-IS:** `legacy-as-is-spec.util` — extracto §1/§3/§5, sin §4 API; sin section merge. |
 | **use-cases-prompt.md** | Casos de uso desde MDD+Spec; cobertura exhaustiva; `buildMddContextForUseCases`. **Legacy etapa 1 AS-IS:** `legacy-as-is-use-cases.util` — flujos de negocio, checklist actores/dominios, matriz única; sin section merge. Pie **Proyecto legacy**. |

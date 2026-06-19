@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Flame, Loader2, Mail, Shield } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { LoginScreenChrome, LoginThemeSwitcher } from "@/components/login/LoginChrome";
 import { API_BASE, setAccessToken } from "@/utils/apiClient";
 import { parseErrorBodyText } from "@/utils/httpError";
+import { isCompleteOtpCode, normalizeOtpCode } from "@/utils/otpCode";
 import { cn } from "@/lib/utils";
 
 interface LoginViewProps {
@@ -20,6 +21,7 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ssoEnabled, setSsoEnabled] = useState(false);
+  const codeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const ssoUrl = import.meta.env.VITE_SSO_URL as string;
@@ -33,6 +35,23 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
       handleSsoLogin(ssoToken);
     }
   }, []);
+
+  useEffect(() => {
+    if (step !== "code") return;
+    const frame = requestAnimationFrame(() => {
+      codeInputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [step]);
+
+  function handleCodeChange(ev: React.ChangeEvent<HTMLInputElement>) {
+    setCode(normalizeOtpCode(ev.target.value));
+  }
+
+  function handleCodePaste(ev: React.ClipboardEvent<HTMLInputElement>) {
+    ev.preventDefault();
+    setCode(normalizeOtpCode(ev.clipboardData.getData("text")));
+  }
 
   async function handleSsoLogin(token: string) {
     setLoading(true);
@@ -105,7 +124,10 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
       const r = await fetch(`${API_BASE}/auth/otp/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim() }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          code: normalizeOtpCode(code),
+        }),
       });
       const rawText = await r.text();
       let data = {} as {
@@ -239,7 +261,18 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
                 </div>
               </>
             ) : (
-              <form id={verifyFormId} onSubmit={verifyOtp} className="space-y-5">
+              <form id={verifyFormId} onSubmit={verifyOtp} className="space-y-5" autoComplete="on">
+                {/* Hidden email helps iOS/macOS associate SMS/mail OTP autofill with this step */}
+                <input
+                  type="email"
+                  name="email"
+                  autoComplete="username"
+                  value={email}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden
+                  className="pointer-events-none absolute h-0 w-0 opacity-0"
+                />
                 <p className="break-words text-center text-sm text-[var(--foreground-muted)]">
                   {devOtpHint
                     ? "Código OTP (OTP_DEV_EXPOSE_CODE=1, sin correo)"
@@ -261,7 +294,9 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
                     Código de 6 dígitos
                   </label>
                   <Input
+                    ref={codeInputRef}
                     id="login-code"
+                    name="one-time-code"
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -270,10 +305,10 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
                     spellCheck={false}
                     enterKeyHint="done"
                     placeholder="000000"
-                    maxLength={6}
                     pattern="\d{6}"
                     value={code}
-                    onChange={(ev) => setCode(ev.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onChange={handleCodeChange}
+                    onPaste={handleCodePaste}
                     required
                     className="h-12 min-h-[48px] rounded-xl text-center text-base tracking-[0.28em] sm:h-11 sm:min-h-0 sm:text-lg sm:tracking-[0.3em]"
                     disabled={loading}
@@ -350,7 +385,7 @@ export default function LoginView({ onLoggedIn }: LoginViewProps) {
               type="submit"
               form={verifyFormId}
               className="h-12 min-h-[48px] flex-1 touch-manipulation rounded-xl text-base font-semibold active:scale-[0.99] sm:min-h-0 sm:active:scale-100"
-              disabled={loading}
+              disabled={loading || !isCompleteOtpCode(code)}
             >
               {loading ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : "Entrar"}
             </Button>

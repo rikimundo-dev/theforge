@@ -1471,7 +1471,14 @@ name: ${JSON.stringify(name)}
     const tasksContent = await this.ai.generateTasks(
       this.constitutionMarkdown(project),
       project.blueprintContent,
-      { navigationMap },
+      {
+        navigationMap,
+        specContent: project.specContent,
+        userStoriesContent: project.userStoriesContent,
+        apiContractsContent: project.apiContractsContent,
+        logicFlowsContent: project.logicFlowsContent,
+        infraContent: project.infraContent,
+      },
     );
     return this.update(projectId, { tasksContent: cleanDocumentContent(tasksContent) });
   }

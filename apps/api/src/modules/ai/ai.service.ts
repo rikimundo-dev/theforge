@@ -727,18 +727,50 @@ export class AiService {
   /**
    * Genera el documento Tasks (breakdown) desde MDD + Blueprint.
    */
-  async generateTasks(mddContent: string, blueprintContent?: string | null, options?: LegacyGenerateOptions & { navigationMap?: string }): Promise<string> {
+  async generateTasks(
+    mddContent: string,
+    blueprintContent?: string | null,
+    options?: LegacyGenerateOptions & {
+      navigationMap?: string;
+      specContent?: string | null;
+      userStoriesContent?: string | null;
+      apiContractsContent?: string | null;
+      logicFlowsContent?: string | null;
+      infraContent?: string | null;
+    },
+  ): Promise<string> {
     const mdd = buildMddContextForTasks(mddContent?.trim() ?? "", mddDeliverableCtx(options));
     const blueprint = capTextForLegacyBaseline(blueprintContent ?? "", 15000, options?.legacyBaselineStage);
     const navMap = capTextForLegacyBaseline(options?.navigationMap ?? "", 8000, options?.legacyBaselineStage);
+    const spec = capTextForLegacyBaseline(options?.specContent ?? "", 8000, options?.legacyBaselineStage);
+    const userStories = capTextForLegacyBaseline(options?.userStoriesContent ?? "", 10000, options?.legacyBaselineStage);
+    const apiContracts = capTextForLegacyBaseline(options?.apiContractsContent ?? "", 12000, options?.legacyBaselineStage);
+    const logicFlows = capTextForLegacyBaseline(options?.logicFlowsContent ?? "", 10000, options?.legacyBaselineStage);
+    const infra = capTextForLegacyBaseline(options?.infraContent ?? "", 8000, options?.legacyBaselineStage);
     let prompt =
       mdd.length > 0
         ? "Genera el documento Tasks según las instrucciones del system prompt. " +
-        "Deriva tareas comprobables para **cada** capacidad MVP, dominio API y entidad del MDD; recorre el CHECKLIST DE COBERTURA si aparece en el mensaje.\n\nMDD:\n---\n" +
+        "Deriva tareas comprobables para **cada** capacidad MVP, entidad §3, endpoint §4, flujo §5, control §6 e ítem §7 del MDD; recorre el CHECKLIST DE COBERTURA si aparece en el mensaje. " +
+        "Incluye trazabilidad **MDD:** y **Story:** en cada ítem.\n\nMDD:\n---\n" +
         mdd +
         "\n---\n\n" +
-        (blueprint ? "Blueprint:\n---\n" + blueprint + "\n---" : "")
+        (blueprint ? "Blueprint:\n---\n" + blueprint + "\n---\n\n" : "")
         : "No hay MDD. Genera un documento Tasks genérico (Backend, Frontend, Infra) con ítems comprobables.";
+    if (spec.length > 0) {
+      prompt += "Spec (alcance what/why — alinear user stories):\n---\n" + spec + "\n---\n\n";
+    }
+    if (userStories.length > 0) {
+      prompt += "User Stories (backlog — una sección ## por HU cuando aplique):\n---\n" + userStories + "\n---\n\n";
+    }
+    if (apiContracts.length > 0) {
+      prompt += "Contratos API (generar tarea Backend por endpoint listado):\n---\n" + apiContracts + "\n---\n\n";
+    }
+    if (logicFlows.length > 0) {
+      prompt += "Flujos de lógica (generar tareas por flujo Mermaid o regla):\n---\n" + logicFlows + "\n---\n\n";
+    }
+    if (infra.length > 0) {
+      prompt += "Infraestructura (generar tareas Infra por servicio/env):\n---\n" + infra + "\n---\n\n";
+    }
     if (navMap.length > 0) {
       prompt += "\n\n## Mapa de Navegación del Proyecto\n\n" + navMap;
     }

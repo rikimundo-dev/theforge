@@ -24,6 +24,10 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function normalizeOtpCode(raw: string): string {
+  return raw.replace(/\D/g, "").slice(0, 6);
+}
+
 /** Quita comillas envoltorio que a veces vienen en `.env` / Dokploy. */
 function stripEnvQuotes(s: string | undefined): string | undefined {
   if (s == null) return undefined;
@@ -384,7 +388,10 @@ export class AuthService {
     if (!email) {
       throw new BadRequestException("email requerido");
     }
-    const code = rawCode.trim();
+    const code = normalizeOtpCode(rawCode);
+    if (code.length !== 6) {
+      throw new BadRequestException("code inválido");
+    }
 
     const entry = this.otpByEmail.get(email);
     if (!entry || Date.now() > entry.expiresAt || entry.code !== code) {

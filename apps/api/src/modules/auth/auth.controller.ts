@@ -25,7 +25,7 @@ const requestOtpSchema = z.object({
 
 const verifyOtpSchema = z.object({
   email: z.string().email(),
-  code: z.string().min(6).max(8),
+  code: z.string().min(1).max(32),
 }).strict();
 
 const mcpLoginSchema = z.object({
