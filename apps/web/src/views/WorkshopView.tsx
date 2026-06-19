@@ -64,8 +64,10 @@ import {
   agentGovernanceScaffoldHasContent,
   buildSpecKitBundleFiles,
   isLegacyChangeGateSatisfied,
+  isLegacyIntegrationHandoffGatePending,
   isPhase0BorradorJson,
   LEGACY_CHANGE_GATE_MESSAGE,
+  LEGACY_INTEGRATION_HANDOFF_GATE_MESSAGE,
   parseAgentGovernanceScaffold,
 } from "@theforge/shared-types";
 import {
@@ -463,6 +465,36 @@ export default function WorkshopView({
   ]);
   const legacyChangeGateBlocked =
     isLegacyProject && (activeWorkshopStage?.ordinal ?? 1) >= 2 && !legacyChangeGateSatisfied;
+
+  const HANDOFF_GATE_STORAGE_KEY = "workshop:legacyHandoffGateStrict";
+  const [handoffGateStrict, setHandoffGateStrict] = useState(() => {
+    try {
+      const v = localStorage.getItem(HANDOFF_GATE_STORAGE_KEY);
+      return v === null ? true : v === "1";
+    } catch {
+      return true;
+    }
+  });
+  const legacyHandoffGatePending = useMemo(() => {
+    if (!isLegacyProject) return false;
+    return isLegacyIntegrationHandoffGatePending({
+      ordinal: activeWorkshopStage?.ordinal ?? 1,
+      linkedNewProjectId:
+        project?.linkedNewProjectId ?? activeWorkshopStage?.linkedNewProjectId ?? null,
+      handoffImportedAt: activeWorkshopStage?.handoffImportedAt ?? null,
+      handoffSnapshot: activeWorkshopStage?.handoffSnapshot ?? null,
+      enforceHandoffGate: true,
+    });
+  }, [
+    isLegacyProject,
+    activeWorkshopStage?.ordinal,
+    activeWorkshopStage?.handoffImportedAt,
+    activeWorkshopStage?.handoffSnapshot,
+    project?.linkedNewProjectId,
+    activeWorkshopStage?.linkedNewProjectId,
+  ]);
+  const legacyHandoffGateBlocked = legacyHandoffGatePending && handoffGateStrict;
+  const legacyGenerateBlocked = legacyChangeGateBlocked || legacyHandoffGateBlocked;
 
   // ─── Generación secuencial multi-sección del DESIGN.md ─────
   const [uxGenerating, setUxGenerating] = useState(false);
@@ -3323,6 +3355,34 @@ export default function WorkshopView({
             {centralPanel === "legacy" && project?.projectType === "LEGACY" && projectId && (
               <div className="rounded-lg bg-[color-mix(in_oklch,var(--card)_88%,transparent)] border border-[var(--border)] p-6 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] text-sm space-y-6">
                 <p className="font-medium text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">Flujo de modificación (Legacy)</p>
+                {legacyHandoffGatePending ? (
+                  <div
+                    className="flex gap-2 rounded-lg bg-[color-mix(in_oklch,var(--warning)_10%,transparent)] px-4 py-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]"
+                    role="status"
+                  >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <div className="space-y-2">
+                      <p>{LEGACY_INTEGRATION_HANDOFF_GATE_MESSAGE}</p>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={handoffGateStrict}
+                          onChange={(e) => {
+                            const next = e.target.checked;
+                            setHandoffGateStrict(next);
+                            try {
+                              localStorage.setItem(HANDOFF_GATE_STORAGE_KEY, next ? "1" : "0");
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        />
+                        Bloquear generate-mdd / entregables hasta importar handoff (equiv.{" "}
+                        <code className="text-[10px]">LEGACY_INTEGRATION_HANDOFF_GATE=1</code>)
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
                 {legacyChangeGateBlocked ? (
                   <div
                     className="flex gap-2 rounded-lg bg-[color-mix(in_oklch,var(--warning)_12%,transparent)] px-4 py-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]"
@@ -3463,9 +3523,15 @@ export default function WorkshopView({
                           const ok = await legacyGenerateMdd(projectId, activeStageId ?? undefined);
                           if (ok) setCentralPanel("mdd");
                         }}
-                        disabled={loading || legacyChangeGateBlocked}
+                        disabled={loading || legacyGenerateBlocked}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50"
-                        title={legacyChangeGateBlocked ? LEGACY_CHANGE_GATE_MESSAGE : undefined}
+                        title={
+                          legacyHandoffGateBlocked
+                            ? LEGACY_INTEGRATION_HANDOFF_GATE_MESSAGE
+                            : legacyChangeGateBlocked
+                              ? LEGACY_CHANGE_GATE_MESSAGE
+                              : undefined
+                        }
                       >
                         {loading ? (
                           <span className="text-[var(--primary)]" aria-hidden>
@@ -3763,6 +3829,34 @@ export default function WorkshopView({
                     </button>
                   </div>
                 )}
+                {legacyHandoffGatePending ? (
+                  <div
+                    className="flex gap-2 rounded-lg bg-[color-mix(in_oklch,var(--warning)_10%,transparent)] px-4 py-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]"
+                    role="status"
+                  >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <div className="space-y-2">
+                      <p>{LEGACY_INTEGRATION_HANDOFF_GATE_MESSAGE}</p>
+                      <label className="flex items-center gap-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={handoffGateStrict}
+                          onChange={(e) => {
+                            const next = e.target.checked;
+                            setHandoffGateStrict(next);
+                            try {
+                              localStorage.setItem(HANDOFF_GATE_STORAGE_KEY, next ? "1" : "0");
+                            } catch {
+                              /* ignore */
+                            }
+                          }}
+                        />
+                        Bloquear generate-mdd / entregables hasta importar handoff (equiv.{" "}
+                        <code className="text-[10px]">LEGACY_INTEGRATION_HANDOFF_GATE=1</code>)
+                      </label>
+                    </div>
+                  </div>
+                ) : null}
                 {legacyChangeGateBlocked ? (
                   <div
                     className="shrink-0 flex gap-2 items-start rounded-lg bg-[color-mix(in_oklch,var(--warning)_12%,transparent)] px-4 py-3 mb-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]"
@@ -3794,13 +3888,19 @@ export default function WorkshopView({
                           onClick={() => void requestGenerateMdd()}
                           disabled={
                             legacyMddNeedsCodebaseDoc ||
-                            legacyChangeGateBlocked ||
+                            legacyGenerateBlocked ||
                             (loading &&
                               (loadingReason === "mdd" ||
                                 loadingReason === "legacy-mdd" ||
                                 loadingReason === "legacy-codebase-doc"))
                           }
-                          title={legacyChangeGateBlocked ? LEGACY_CHANGE_GATE_MESSAGE : undefined}
+                          title={
+                            legacyHandoffGateBlocked
+                              ? LEGACY_INTEGRATION_HANDOFF_GATE_MESSAGE
+                              : legacyChangeGateBlocked
+                                ? LEGACY_CHANGE_GATE_MESSAGE
+                                : undefined
+                          }
                         >
                           {mddContent?.trim() ? (
                             <>

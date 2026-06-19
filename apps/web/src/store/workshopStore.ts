@@ -445,6 +445,7 @@ export interface WorkshopStage {
   legacyChangeState?: LegacyFlowState | null;
   handoffImportedAt?: string | null;
   handoffSnapshot?: { items?: unknown[] | null } | null;
+  linkedNewProjectId?: string | null;
 }
 
 /** Propuesta HITL hasta confirmación en chat o `POST .../confirm-complexity`. */
@@ -486,6 +487,8 @@ export interface Project {
   aemContent: string | null;
   agentGovernanceContent: string | null;
   legacyFlowState?: LegacyFlowState | null;
+  linkedLegacyProjectId?: string | null;
+  linkedNewProjectId?: string | null;
   estimation: Estimation | null;
   /** Presente en respuesta API completa; el front usa `activeStageId` para foco MDD. */
   stages?: WorkshopStage[];

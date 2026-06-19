@@ -41,8 +41,10 @@ Alinear etapas legacy brownfield con snapshots de entregables, gate de cambio en
 ## Diferido / fuera de P0
 
 - Eliminar columna `Project.legacyFlowState` (migración de datos masiva).
-- Snapshot en promote-to-stage manual (fuente `manual`) — usar API dedicada si se requiere.
-- Falkor `INTEGRATES_WITH` enriquecido post-promote (P2 integración).
+- ~~Snapshot en promote-to-stage manual (fuente `manual`) — usar API dedicada si se requiere.~~ → **P1** ✅
+- ~~Falkor `INTEGRATES_WITH` enriquecido post-promote (P2 integración).~~ → **P2** ✅
+
+Ver checklist completo P1–P3: `docs/plans/PLAN-BROWNFIELD-P1-P2-P3.md`.
 
 ## Referencias
 
