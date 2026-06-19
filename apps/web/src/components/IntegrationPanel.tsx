@@ -1,7 +1,7 @@
 /**
  * Workshop panel: cross-project integration NEW ↔ LEGACY (handoff, traces, link picker).
  */
-import { useCallback, useEffect, useId, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   CheckCircle2,
@@ -20,6 +20,7 @@ import type {
   IntegrationStatusResponse,
   IntegrationTraceRow,
 } from "@theforge/shared-types";
+import { buildHandoffImportDescription } from "@theforge/shared-types";
 import {
   Badge,
   Button,
@@ -74,6 +75,10 @@ export function IntegrationPanel({
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [legacyContextPreview, setLegacyContextPreview] = useState<string | null>(null);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteStageName, setPromoteStageName] = useState("");
+  const [promoteSelectedIds, setPromoteSelectedIds] = useState<string[]>([]);
+  const [promoteSubmitting, setPromoteSubmitting] = useState(false);
   const handoffTitleId = useId();
   const handoffDescriptionId = useId();
 
@@ -199,6 +204,51 @@ export function IntegrationPanel({
     await onProjectRefresh();
   }, [projectId, activeStageId, loadStatus, onProjectRefresh]);
 
+  const promotableIds = status?.promotableItemIds ?? [];
+  const linkedNewHandoffItems = status?.linkedNewHandoff?.items ?? [];
+
+  useEffect(() => {
+    if (!promoteOpen) return;
+    setPromoteStageName(
+      status?.linkedNewProject ? `Integración — ${status.linkedNewProject.name}` : "Integración",
+    );
+    setPromoteSelectedIds(promotableIds);
+  }, [promoteOpen, status?.linkedNewProject, promotableIds]);
+
+  const promotePreviewDescription = useMemo(() => {
+    if (!status?.linkedNewProject || promoteSelectedIds.length === 0) return "";
+    const selected = linkedNewHandoffItems.filter((item) => promoteSelectedIds.includes(item.id));
+    return buildHandoffImportDescription(selected, status.linkedNewProject.name);
+  }, [status?.linkedNewProject, promoteSelectedIds, linkedNewHandoffItems]);
+
+  const submitPromoteToStage = useCallback(async () => {
+    if (!promoteSelectedIds.length) return;
+    setPromoteSubmitting(true);
+    setError(null);
+    try {
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}/integration/promote-to-stage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemIds: promoteSelectedIds,
+          stageName: promoteStageName.trim() || undefined,
+          activate: true,
+        }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(err?.message ?? "Promover handoff a etapa falló");
+      }
+      setPromoteOpen(false);
+      await loadStatus();
+      await onProjectRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Promover handoff a etapa falló");
+    } finally {
+      setPromoteSubmitting(false);
+    }
+  }, [projectId, promoteSelectedIds, promoteStageName, loadStatus, onProjectRefresh]);
+
   const deleteItem = useCallback(
     async (itemId: string) => {
       await apiFetch(`${API_BASE}/projects/${projectId}/integration/handoff/items/${itemId}`, {
@@ -321,9 +371,28 @@ export function IntegrationPanel({
           </IntegrationStep>
         ) : null}
 
-        {projectType === "LEGACY" && activeStageOrdinal >= 2 ? (
+        {projectType === "LEGACY" && promotableIds.length > 0 ? (
           <IntegrationStep
             step={2}
+            status={linked ? "active" : "pending"}
+            title="Nueva etapa desde integración"
+            description="Promueve ítems handoff SENT a una etapa dedicada con trazabilidad NEW-LEG."
+          >
+            <WorkshopPanelButton
+              tone="primary"
+              disabled={!linked}
+              className="inline-flex items-center gap-2"
+              onClick={() => setPromoteOpen(true)}
+            >
+              <GitBranch className="h-3.5 w-3.5" aria-hidden />
+              Nueva etapa desde integración
+            </WorkshopPanelButton>
+          </IntegrationStep>
+        ) : null}
+
+        {projectType === "LEGACY" && activeStageOrdinal >= 2 ? (
+          <IntegrationStep
+            step={promotableIds.length > 0 ? 3 : 2}
             status={status?.handoffImportedAt ? "done" : linked ? "active" : "pending"}
             title={`Recibir handoff · etapa ${activeStageOrdinal}`}
             description="Importa las solicitudes del proyecto NEW enlazado y genera el MDD de cambio con trazabilidad."
@@ -350,6 +419,83 @@ export function IntegrationPanel({
       </ol>
 
       <TraceMatrix traces={status?.traces ?? []} />
+
+      <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
+        <DialogContent size="lg" className="gap-0 p-0">
+          <DialogHeader className="border-b border-[var(--border)] px-4 py-3 text-left">
+            <DialogTitle>Nueva etapa desde integración</DialogTitle>
+            <DialogDescription>
+              Selecciona ítems SENT, revisa la descripción de cambio y crea una etapa legacy dedicada.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-4">
+            <div className="space-y-2">
+              <label htmlFor="promote-stage-name" className="text-xs font-medium text-[var(--foreground)]">
+                Nombre de etapa
+              </label>
+              <Input
+                id="promote-stage-name"
+                value={promoteStageName}
+                onChange={(e) => setPromoteStageName(e.target.value)}
+              />
+            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-medium text-[var(--foreground)]">Ítems handoff</legend>
+              <ul className="space-y-2">
+                {linkedNewHandoffItems
+                  .filter((item) => promotableIds.includes(item.id))
+                  .map((item) => (
+                    <li key={item.id} className="flex items-start gap-2 rounded-lg px-2 py-1.5">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={promoteSelectedIds.includes(item.id)}
+                        onChange={(e) => {
+                          setPromoteSelectedIds((prev) =>
+                            e.target.checked
+                              ? [...new Set([...prev, item.id])]
+                              : prev.filter((id) => id !== item.id),
+                          );
+                        }}
+                      />
+                      <span className="min-w-0">
+                        <span className="font-mono text-xs text-[var(--primary)]">{item.id}</span>
+                        <span className="mt-0.5 block text-sm font-medium text-[var(--foreground)]">
+                          {item.title}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </fieldset>
+            {promotePreviewDescription ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-[var(--foreground)]">Vista previa descripción</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[color-mix(in_oklch,var(--muted)_16%,var(--card))] p-3 text-xs text-[var(--foreground-muted)]">
+                  {promotePreviewDescription}
+                </pre>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setPromoteOpen(false)}>
+                Cancelar
+              </Button>
+              <WorkshopPanelButton
+                tone="primary"
+                disabled={promoteSubmitting || promoteSelectedIds.length === 0}
+                onClick={() => void submitPromoteToStage()}
+              >
+                {promoteSubmitting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <GitBranch className="h-3.5 w-3.5" aria-hidden />
+                )}
+                Confirmar nueva etapa
+              </WorkshopPanelButton>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent size="md" className="gap-0 p-0">

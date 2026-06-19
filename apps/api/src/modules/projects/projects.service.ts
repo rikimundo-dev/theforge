@@ -82,6 +82,8 @@ import {
 import { truncateSourceDocForBrdPrompt } from "../ai/utils/dbga-prompt-context.util.js";
 
 import { flattenStageDeliverables, pickPrimaryStage } from "./stage-helpers.js";
+import { resolveStageDeliverables } from "./stage-deliverables.util.js";
+import { persistStageDeliverableSnapshotFromProject } from "./stage-deliverable-snapshot.util.js";
 import { SddIntegrationService } from "./sdd-integration.service.js";
 
 import {
@@ -676,16 +678,17 @@ export class ProjectsService implements IOrchestratorProjectsPort {
         name: out.name ?? "",
         theforgeProjectId: project.theforgeProjectId ?? undefined,
       }).catch(() => {});
-      // Relacionar con Stage 1 (línea base) si no es Stage 1
+      // Relacionar con etapa anterior (ordinal N-1) para FalkorDB DERIVED_FROM
       if (out.ordinal > 1) {
-        const baselineStage = project.stages.find((s) => s.ordinal === 1);
-        if (baselineStage) {
+        const parentOrdinal = out.ordinal - 1;
+        const parentStage = project.stages.find((s) => s.ordinal === parentOrdinal);
+        if (parentStage) {
           this.graphMemory.syncLegacyStage({
             stageId: out.id,
             projectId,
             ordinal: out.ordinal,
             name: out.name ?? "",
-            parentStageId: baselineStage.id,
+            parentStageId: parentStage.id,
             theforgeProjectId: project.theforgeProjectId ?? undefined,
           }).catch(() => {});
         }
@@ -703,6 +706,13 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       include: { estimation: true },
     });
     return { stages };
+  }
+
+  async getStageDeliverables(projectId: string, stageId: string) {
+    const project = await this.assertProjectAccess(projectId);
+    const stage = project.stages.find((s) => s.id === stageId);
+    if (!stage) throw new NotFoundException("Etapa no encontrada");
+    return resolveStageDeliverables(project, stage, "workshop");
   }
 
   private assertBlueprintCoversMddDataModel(project: Project & { stages: StageWithEst[] }): void {
@@ -1254,7 +1264,18 @@ name: ${JSON.stringify(name)}
         `[Cascade] Completada con ${errors.length}/${total} paso(s) saltado(s): ${errors.map((e) => `${e.step}: ${e.error}`).join("; ")}`,
       );
     }
-    return this.findOne(projectId);
+    const result = await this.findOne(projectId);
+    const activeStage = pickPrimaryStage(result.stages ?? []);
+    if (activeStage?.id) {
+      await persistStageDeliverableSnapshotFromProject(this.prisma, activeStage.id, result, {
+        source: "cascade",
+      }).catch((err) =>
+        this.logger.warn(
+          `[Cascade] deliverableSnapshot: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
+    return result;
   }
 
   async phase0DeepResearch(

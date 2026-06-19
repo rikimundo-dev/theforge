@@ -68,6 +68,11 @@ export class ProjectIntegrationController {
     return this.integration.updateTrace(projectId, traceId, body);
   }
 
+  @Post("promote-to-stage")
+  promoteToStage(@Param("projectId") projectId: string, @Body() body: unknown) {
+    return this.integration.promoteHandoffToStage(projectId, body);
+  }
+
   @Post("stages/:stageId/import-handoff")
   importHandoff(
     @Param("projectId") projectId: string,

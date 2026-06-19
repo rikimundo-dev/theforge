@@ -69,6 +69,14 @@ export class ProjectsController {
     return this.projects.patchStage(projectId, stageId, body ?? {});
   }
 
+  @Get(":projectId/stages/:stageId/deliverables")
+  getStageDeliverables(
+    @Param("projectId") projectId: string,
+    @Param("stageId") stageId: string,
+  ) {
+    return this.projects.getStageDeliverables(projectId, stageId);
+  }
+
   /** Estado de un job de cola (polling). */
   @Get(":id/deliverables-jobs/:jobId")
   async deliverablesJobStatus(
@@ -162,8 +170,8 @@ export class ProjectsController {
    * Análisis unificado cross-artifact (`/speckit.analyze` + conformidad MDD).
    */
   @Get(":id/analyze")
-  analyzeArtifacts(@Param("id") id: string) {
-    return this.sddIntegration.analyzeArtifacts(id);
+  analyzeArtifacts(@Param("id") id: string, @Query("stageId") stageId?: string) {
+    return this.sddIntegration.analyzeArtifacts(id, stageId?.trim() || undefined);
   }
 
   /**
@@ -188,9 +196,13 @@ export class ProjectsController {
    * Body opcional: `{ "persist": true }` para guardar en `tasksContent`.
    */
   @Post(":id/converge")
-  converge(@Param("id") id: string, @Body() body: unknown) {
+  converge(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @Query("stageId") stageId?: string,
+  ) {
     const { persist } = convergeBodySchema.parse(body ?? {});
-    return this.sddIntegration.converge(id, persist);
+    return this.sddIntegration.converge(id, persist, stageId?.trim() || undefined);
   }
 
   /**

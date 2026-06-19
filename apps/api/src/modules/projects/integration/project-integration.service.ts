@@ -1,10 +1,11 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, forwardRef, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import {
   createHandoffItemBodySchema,
   integrationHandoffItemSchema,
   integrationLinkBodySchema,
   parseIntegrationHandoff,
   nextNewLegId,
+  promoteHandoffToStageBodySchema,
   updateHandoffItemBodySchema,
   updateIntegrationTraceBodySchema,
   type IntegrationContextResponse,
@@ -12,11 +13,13 @@ import {
   type IntegrationHandoffItem,
   type IntegrationStatusResponse,
   type IntegrationTraceRow,
+  type PromoteHandoffToStageResponse,
 } from "@theforge/shared-types";
 import { PrismaService } from "../../../prisma/prisma.service.js";
 import { getRequestUserId } from "../../../common/request-user.store.js";
 import { ChangeLogService } from "../../change-log/change-log.service.js";
 import { GraphMemoryService } from "../../ai-analysis/graph-memory/graph-memory.service.js";
+import { ProjectsService } from "../projects.service.js";
 import {
   buildExternalLegacyContextBlock,
   buildHandoffImportDescription,
@@ -25,6 +28,10 @@ import {
   mergeHandoffIntoLegacyDescription,
   parseSatisfiesLinksFromUserStories,
 } from "./integration-context.util.js";
+import {
+  pickHandoffItemsForPromotion,
+  selectPromotableHandoffItemIds,
+} from "./promote-handoff.util.js";
 
 type ProjectRow = {
   id: string;
@@ -45,6 +52,8 @@ export class ProjectIntegrationService {
     private readonly prisma: PrismaService,
     private readonly changeLog: ChangeLogService,
     private readonly graphMemory: GraphMemoryService,
+    @Inject(forwardRef(() => ProjectsService))
+    private readonly projectsService: ProjectsService,
   ) {}
 
   private async assertAccess(projectId: string): Promise<ProjectRow> {
@@ -72,15 +81,25 @@ export class ProjectIntegrationService {
     const project = await this.assertAccess(projectId);
     const warnings = this.buildWarnings(project);
     const handoff = this.handoffFromProject(project);
-    const traces = await this.listTraceRows(projectId, handoff);
     const stage2 = project.stages.find((s) => s.ordinal >= 2);
+    const linkedNewHandoff =
+      project.projectType === "LEGACY" && project.linkedNewProjectId
+        ? this.handoffFromProject(await this.assertAccess(project.linkedNewProjectId))
+        : handoff;
+    const traceHandoff = project.projectType === "LEGACY" ? linkedNewHandoff : handoff;
+    const tracesForProject = await this.listTraceRows(projectId, traceHandoff);
     return {
       linkedLegacyProject: await this.summarizeLinked(project.linkedLegacyProjectId),
       linkedNewProject: await this.summarizeLinked(project.linkedNewProjectId),
       handoff,
-      traces,
+      traces: tracesForProject,
       warnings,
       handoffImportedAt: stage2?.handoffImportedAt?.toISOString() ?? null,
+      promotableItemIds:
+        project.projectType === "LEGACY"
+          ? selectPromotableHandoffItemIds(tracesForProject)
+          : undefined,
+      linkedNewHandoff: project.projectType === "LEGACY" ? linkedNewHandoff : undefined,
     };
   }
 
@@ -326,8 +345,94 @@ export class ProjectIntegrationService {
       throw new BadRequestException("El proyecto NEW no tiene handoff enviado");
     }
 
-    const snapshot = { items: activeItems, importedAt: new Date().toISOString(), fromProjectId: newProjectId };
+    const snapshot = {
+      items: activeItems,
+      importedAt: new Date().toISOString(),
+      fromProjectId: newProjectId,
+    };
     const handoffDesc = buildHandoffImportDescription(activeItems, newProject.name);
+
+    await this.applyHandoffPayloadToStage(stageId, newProjectId, snapshot, handoffDesc);
+    await this.syncTracesFromHandoff(newProjectId, projectId, { items: activeItems }, stageId);
+    await this.persistHandoffItemsLegacyStage(newProjectId, activeItems.map((i) => i.id), stageId);
+    await this.changeLog.log(projectId, "handoffSnapshot", handoffDesc);
+    return this.getStatus(projectId);
+  }
+
+  async promoteHandoffToStage(
+    projectId: string,
+    body: unknown,
+  ): Promise<PromoteHandoffToStageResponse> {
+    const dto = promoteHandoffToStageBodySchema.parse(body ?? {});
+    const project = await this.assertAccess(projectId);
+    if (project.projectType !== "LEGACY") {
+      throw new BadRequestException("promote-to-stage solo en proyectos LEGACY");
+    }
+    const newProjectId = project.linkedNewProjectId;
+    if (!newProjectId) {
+      throw new BadRequestException("Vincula un proyecto NEW antes de promover handoff a etapa");
+    }
+
+    const newProject = await this.assertAccess(newProjectId);
+    const handoff = this.handoffFromProject(newProject);
+    const traces = await this.listTraceRows(projectId, handoff);
+    const itemIds = selectPromotableHandoffItemIds(traces, dto.itemIds);
+    if (!itemIds.length) {
+      throw new BadRequestException("No hay ítems handoff SENT disponibles para promover");
+    }
+
+    const activeItems = pickHandoffItemsForPromotion(handoff.items, itemIds);
+    if (!activeItems.length) {
+      throw new BadRequestException("Los ítems seleccionados no están en estado sent/accepted en el NEW");
+    }
+
+    const stageName = dto.stageName?.trim() || `Integración — ${newProject.name}`;
+    const snapshot = {
+      items: activeItems,
+      importedAt: new Date().toISOString(),
+      fromProjectId: newProjectId,
+      promotedFromSendAt: new Date().toISOString(),
+    };
+    const handoffDesc = buildHandoffImportDescription(activeItems, newProject.name);
+
+    const { stage } = await this.projectsService.createStage(projectId, {
+      name: stageName,
+      activate: dto.activate,
+    });
+
+    await this.applyHandoffPayloadToStage(stage.id, newProjectId, snapshot, handoffDesc);
+    await this.syncTracesFromHandoff(newProjectId, projectId, { items: activeItems }, stage.id);
+    await this.persistHandoffItemsLegacyStage(newProjectId, activeItems.map((i) => i.id), stage.id);
+    await this.changeLog.log(projectId, "handoffSnapshot", `Promovido a etapa ${stage.ordinal}: ${handoffDesc}`);
+
+    const updatedStage = await this.prisma.stage.findUniqueOrThrow({ where: { id: stage.id } });
+    const updatedTraces = await this.listTraceRows(projectId, handoff);
+
+    return {
+      stage: {
+        id: updatedStage.id,
+        ordinal: updatedStage.ordinal,
+        name: updatedStage.name,
+        workflowStatus: updatedStage.workflowStatus,
+        handoffImportedAt: updatedStage.handoffImportedAt?.toISOString() ?? null,
+        linkedNewProjectId: updatedStage.linkedNewProjectId,
+      },
+      traces: updatedTraces,
+      promotedItemIds: activeItems.map((i) => i.id),
+    };
+  }
+
+  private async applyHandoffPayloadToStage(
+    stageId: string,
+    newProjectId: string,
+    snapshot: {
+      items: IntegrationHandoffItem[];
+      importedAt: string;
+      fromProjectId: string;
+      promotedFromSendAt?: string;
+    },
+    handoffDesc: string,
+  ) {
     const existingState =
       (await this.prisma.stage.findUnique({ where: { id: stageId }, select: { legacyChangeState: true } }))
         ?.legacyChangeState as { description?: string } | null;
@@ -345,10 +450,21 @@ export class ProjectIntegrationService {
         },
       },
     });
+  }
 
-    await this.syncTracesFromHandoff(newProjectId, projectId, { items: activeItems });
-    await this.changeLog.log(projectId, "handoffSnapshot", handoffDesc);
-    return this.getStatus(projectId);
+  private async persistHandoffItemsLegacyStage(
+    newProjectId: string,
+    itemIds: string[],
+    legacyStageId: string,
+  ) {
+    if (!itemIds.length) return;
+    const project = await this.assertAccess(newProjectId);
+    const handoff = this.handoffFromProject(project);
+    const idSet = new Set(itemIds);
+    handoff.items = handoff.items.map((item) =>
+      idSet.has(item.id) ? { ...item, legacyStageId } : item,
+    );
+    await this.persistHandoff(newProjectId, handoff);
   }
 
   async updateTrace(projectId: string, traceId: string, body: unknown) {
@@ -475,6 +591,7 @@ export class ProjectIntegrationService {
     newProjectId: string,
     legacyProjectId: string,
     handoff: IntegrationHandoff,
+    legacyStageId?: string,
   ) {
     for (const item of handoff.items) {
       await this.prisma.integrationTrace.upsert({
@@ -486,8 +603,12 @@ export class ProjectIntegrationService {
           legacyProjectId,
           newLegId: item.id,
           status: item.status === "sent" ? "SENT" : "DRAFT",
+          legacyStageId: legacyStageId ?? undefined,
         },
-        update: { status: item.status === "sent" ? "SENT" : undefined },
+        update: {
+          status: item.status === "sent" ? "SENT" : undefined,
+          ...(legacyStageId ? { legacyStageId } : {}),
+        },
       });
     }
   }
