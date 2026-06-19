@@ -32,6 +32,7 @@ export interface StandardDocPanelProps {
   generateBlockedReason?: string;
   /** Oculta completamente los botones de generar (panel manual como AEM). */
   hideGenerate?: boolean;
+  readOnly?: boolean;
 }
 
 /**
@@ -61,6 +62,7 @@ export function StandardDocPanel({
   generateBlocked,
   generateBlockedReason,
   hideGenerate,
+  readOnly = false,
 }: StandardDocPanelProps) {
   const IconComp = icon;
   // Estado 1: preview vacío → DocEmptyState
@@ -103,17 +105,20 @@ export function StandardDocPanel({
         /* Estado 3: source mode */
         <>
           <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <WorkshopDocSourceSaveBar onSave={onSave} disabled={!isDirty} />
+            <WorkshopDocSourceSaveBar onSave={onSave} disabled={!isDirty || readOnly} />
             <WorkshopDocTextarea
               value={content ?? ""}
-              onChange={(v) => onContentChange(v || null)}
+              onChange={(v) => {
+                if (!readOnly) onContentChange(v || null);
+              }}
               onBlur={onBlur}
+              disabled={readOnly}
               placeholder={placeholder ?? `# ${title}\n\nEl contenido se genera aquí o puedes escribirlo manualmente...`}
               className="min-h-0 w-full flex-1 bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))] border border-[var(--border)] rounded-lg p-4 text-sm font-mono text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent outline-none resize-none"
               spellCheck={false}
             />
           </div>
-          {!content?.trim() && !hideGenerate && (
+          {!content?.trim() && !hideGenerate && !readOnly && (
             <div className="shrink-0 mt-4 flex min-h-[200px] w-full justify-center sm:justify-end">
               {isLoading ? (
                 <AiDocumentBuildingPlaceholder documentTitle={title} />

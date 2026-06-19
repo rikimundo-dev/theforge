@@ -3,7 +3,13 @@
  */
 
 import { extractSectionByNumber } from "../../engine/mdd-markdown-parser.js";
-import type { IntegrationHandoffItem } from "@theforge/shared-types";
+import {
+  buildHandoffImportDescription,
+  mergeHandoffIntoLegacyDescription,
+  type IntegrationHandoffItem,
+} from "@theforge/shared-types";
+
+export { buildHandoffImportDescription, mergeHandoffIntoLegacyDescription };
 
 export function extractLegacyAsIsApiSection(mddMarkdown: string, maxChars = 12000): string {
   const s4 = extractSectionByNumber(mddMarkdown, 4)?.trim() ?? "";
@@ -105,25 +111,4 @@ export function parseSatisfiesLinksFromUserStories(markdown: string): Map<string
     }
   }
   return map;
-}
-
-export function buildHandoffImportDescription(items: IntegrationHandoffItem[], newProjectName: string): string {
-  const lines: string[] = [
-    `Integración con proyecto NEW: ${newProjectName}`,
-    "",
-    "Handoff importado:",
-    "",
-  ];
-  for (const item of items) {
-    lines.push(`- **${item.id}** — ${item.title}: ${item.description.replace(/\n/g, " ")}`);
-  }
-  return lines.join("\n");
-}
-
-export function mergeHandoffIntoLegacyDescription(existing: string | undefined, handoffBlock: string): string {
-  const marker = "## Handoff importado";
-  const base = (existing ?? "").trim();
-  const idx = base.indexOf(marker);
-  const withoutOld = idx >= 0 ? base.slice(0, idx).trim() : base;
-  return [withoutOld, handoffBlock].filter(Boolean).join("\n\n").trim();
 }

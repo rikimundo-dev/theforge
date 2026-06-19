@@ -107,6 +107,8 @@ import type {
 import {
   composeBrdPreamble,
 } from "../ai-analysis/utils/brd-tobe-gate.util.js";
+import { assertLegacyChangeGate } from "./legacy-change-gate.util.js";
+import { persistStageDeliverableSnapshotFromProject } from "../projects/stage-deliverable-snapshot.util.js";
 
 const KNOWLEDGE = loadLegacyKnowledgePack();
 
@@ -519,21 +521,13 @@ export class LegacyCoordinatorService {
     return ((project as { legacyFlowState?: LegacyFlowState | null }).legacyFlowState ?? {}) as LegacyFlowState;
   }
 
-  /**
-   * Persiste el estado de cambio legacy en stage.legacyChangeState Y project.legacyFlowState
-   * (dual-write durante migración; luego se eliminará project.legacyFlowState).
-   */
+  /** Persists legacy change state on the active stage (single write). */
   async persistLegacyChangeState(projectId: string, stageId: string, state: LegacyFlowState): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.stage.update({
-        where: { id: stageId },
-        data: { legacyChangeState: state as object },
-      }),
-      this.prisma.project.update({
-        where: { id: projectId },
-        data: { legacyFlowState: state as object },
-      }),
-    ]);
+    void projectId;
+    await this.prisma.stage.update({
+      where: { id: stageId },
+      data: { legacyChangeState: state as object },
+    });
   }
 
   // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos del sistema
@@ -1091,6 +1085,7 @@ export class LegacyCoordinatorService {
       .join("\n");
 
     const isInitialMdd = isLegacyBaselineStage(gateStage);
+    assertLegacyChangeGate(gateStage, project);
     if (gateStage) {
       const dbProject = await this.prisma.project.findFirst({
         where: { id: projectId },
@@ -1346,36 +1341,36 @@ export class LegacyCoordinatorService {
     return response;
   }
 
-  /** Persiste `lastDeliverablesDebug` en `legacyFlowState` (no lanza si Prisma falla). */
+  /** Persists `lastDeliverablesDebug` on stage legacyChangeState (fallback: project without stages). */
   private async persistDeliverablesDebugReport(
     projectId: string,
     report: LegacyDeliverablesDebugReport,
+    stageId?: string | null,
   ): Promise<void> {
     try {
+      if (stageId?.trim()) {
+        const stage = await this.prisma.stage.findUnique({
+          where: { id: stageId.trim() },
+          select: { legacyChangeState: true },
+        });
+        const state = (stage?.legacyChangeState as LegacyFlowState | null | undefined) ?? {};
+        const next = { ...state, lastDeliverablesDebug: report } as LegacyFlowState;
+        await this.prisma.stage.update({
+          where: { id: stageId.trim() },
+          data: { legacyChangeState: next as object },
+        });
+        return;
+      }
       const row = await this.prisma.project.findUnique({
         where: { id: projectId },
-        select: { legacyFlowState: true, stages: { orderBy: { ordinal: "asc" }, take: 1, select: { id: true } } },
+        select: { legacyFlowState: true },
       });
       const state = (row?.legacyFlowState as LegacyFlowState | null | undefined) ?? {};
       const next = { ...state, lastDeliverablesDebug: report } as LegacyFlowState;
-      const stageId = row?.stages?.[0]?.id;
-      if (stageId) {
-        await this.prisma.$transaction([
-          this.prisma.stage.update({
-            where: { id: stageId },
-            data: { legacyChangeState: next as object },
-          }),
-          this.prisma.project.update({
-            where: { id: projectId },
-            data: { legacyFlowState: next as object },
-          }),
-        ]);
-      } else {
-        await this.prisma.project.update({
-          where: { id: projectId },
-          data: { legacyFlowState: next as object },
-        });
-      }
+      await this.prisma.project.update({
+        where: { id: projectId },
+        data: { legacyFlowState: next as object },
+      });
     } catch (err) {
       this.logger.warn(
         `[LegacyDeliverables] persistDeliverablesDebugReport: ${err instanceof Error ? err.message : String(err)}`,
@@ -1444,6 +1439,8 @@ export class LegacyCoordinatorService {
       ? await this.prisma.stage.findUnique({ where: { id: stageId.trim() } })
       : await this.resolveLegacyGateStage(projectId);
 
+    assertLegacyChangeGate(gateStage, project);
+
     // enforceLegacyBrdTobeGate eliminado — To-Be y As-Is removidos
     const codebaseDoc = String((project as { legacyFlowState?: LegacyFlowState }).legacyFlowState?.codebaseDoc ?? "").trim();
     const mddContent = String(project.mddContent ?? "").trim();
@@ -1475,7 +1472,7 @@ export class LegacyCoordinatorService {
 
     if (!mdd) {
       markFatal(new Error("missing_mdd_and_codebaseDoc"));
-      await this.persistDeliverablesDebugReport(projectId, report);
+      await this.persistDeliverablesDebugReport(projectId, report, gateStage?.id);
       throw new BadRequestException("Genera la documentación de partida (MDD Inicial) o el MDD de cambio antes de generar entregables.");
     }
 
@@ -1494,7 +1491,7 @@ export class LegacyCoordinatorService {
         error: clipDebug(err instanceof Error ? err.message : String(err), 800),
       });
       markFatal(err);
-      await this.persistDeliverablesDebugReport(projectId, report);
+      await this.persistDeliverablesDebugReport(projectId, report, gateStage?.id);
       if (isLegacyDeliverablesDebugVerbose()) this.logger.error(err);
       throw err;
     }
@@ -2019,7 +2016,22 @@ export class LegacyCoordinatorService {
       });
       report.finishedAt = new Date().toISOString();
       report.ok = true;
-      await this.persistDeliverablesDebugReport(projectId, report);
+      await this.persistDeliverablesDebugReport(projectId, report, gateStage?.id);
+      if (gateStage?.id) {
+        const snapProject = await this.prisma.project.findUnique({ where: { id: projectId } });
+        if (snapProject) {
+          await persistStageDeliverableSnapshotFromProject(
+            this.prisma,
+            gateStage.id,
+            snapProject,
+            { source: "cascade" },
+          ).catch((err) =>
+            this.logger.warn(
+              `[LegacyDeliverables] deliverableSnapshot: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          );
+        }
+      }
       options?.onProgress?.({ step: "done", index: 0, total: 0 });
       return { ok: true, lastDeliverablesDebug: report };
     }
@@ -2099,7 +2111,7 @@ export class LegacyCoordinatorService {
 
     if (report.upstreamRateLimited) {
       markFatal(new Error("UPSTREAM_LLM_RATE_LIMIT"));
-      await this.persistDeliverablesDebugReport(projectId, report);
+      await this.persistDeliverablesDebugReport(projectId, report, gateStage?.id);
       const rateLimited = upstreamLlmRateLimitHttpException(new Error("UPSTREAM_LLM_RATE_LIMIT"), report);
       if (rateLimited) throw rateLimited;
     }
@@ -2116,7 +2128,16 @@ export class LegacyCoordinatorService {
         s.kind !== "mdd_canonical",
     ).length;
 
-    await this.persistDeliverablesDebugReport(projectId, report);
+    await this.persistDeliverablesDebugReport(projectId, report, gateStage?.id);
+    if (gateStage?.id) {
+      await persistStageDeliverableSnapshotFromProject(this.prisma, gateStage.id, p, {
+        source: "cascade",
+      }).catch((err) =>
+        this.logger.warn(
+          `[LegacyDeliverables] deliverableSnapshot: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
+    }
     const elapsed = Date.parse(report.finishedAt) - Date.parse(report.startedAt);
     this.logger.log(
       `[LegacyDeliverables] cascade_ok project=${projectId.slice(0, 8)}… steps=${report.steps.length} withBody=${report.deliverablesWithBody} tfCtxChars=${report.theforgeContextChars} elapsedMs=${elapsed}`,

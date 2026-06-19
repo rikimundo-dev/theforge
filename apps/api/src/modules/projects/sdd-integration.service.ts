@@ -24,8 +24,9 @@ import { loadConsumptionGuideMarkdown } from "./consumption-guide.util.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { pickPrimaryStage } from "./stage-helpers.js";
+import { resolveStageDeliverables } from "./stage-deliverables.util.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
-import type { ClarifySpecBody } from "@theforge/shared-types";
+import type { ClarifySpecBody, ProjectDeliverableSource } from "@theforge/shared-types";
 
 type ProjectWithStages = Project & {
   stages: Array<Stage & { estimation?: unknown }>;
@@ -195,31 +196,32 @@ export class SddIntegrationService {
   /**
    * Unified cross-artifact analyze report (`/speckit.analyze` + ConformanceService).
    */
-  async analyzeArtifacts(projectId: string): Promise<SddAnalyzeReport> {
+  async analyzeArtifacts(projectId: string, stageId?: string): Promise<SddAnalyzeReport> {
     const project = await this.loadProject(projectId);
-    const stage = pickPrimaryStage(project.stages);
+    const stage = this.resolveAnalysisStage(project, stageId);
+    const deliverables = resolveStageDeliverables(project, stage, "analyze").deliverables;
     const mdd = (stage?.mddContent ?? "").trim();
     const featureDir = specKitFeatureDir(stage?.ordinal ?? 1, project.name);
 
     const conformance = {
-      blueprint: this.conformance.checkBlueprint(mdd, project.blueprintContent),
-      blueprintDataModel: this.conformance.checkBlueprintDataModel(mdd, project.blueprintContent),
-      api: this.conformance.checkApi(mdd, project.apiContractsContent),
-      logicFlows: this.conformance.checkLogicFlows(mdd, project.logicFlowsContent),
-      infra: this.conformance.checkInfra(mdd, project.infraContent),
+      blueprint: this.conformance.checkBlueprint(mdd, deliverables.blueprintContent ?? null),
+      blueprintDataModel: this.conformance.checkBlueprintDataModel(mdd, deliverables.blueprintContent ?? null),
+      api: this.conformance.checkApi(mdd, deliverables.apiContractsContent ?? null),
+      logicFlows: this.conformance.checkLogicFlows(mdd, deliverables.logicFlowsContent ?? null),
+      infra: this.conformance.checkInfra(mdd, deliverables.infraContent ?? null),
     };
 
-    const tasksMd = project.tasksContent ?? "";
+    const tasksMd = deliverables.tasksContent ?? "";
     const parsed = parseTasksMarkdown(tasksMd);
     const open = filterOpenTasks(parsed);
-    const spec = project.specContent ?? "";
+    const spec = deliverables.specContent ?? "";
 
     const wordCount = (s: string | null | undefined) =>
       (s ?? "").trim() ? (s ?? "").trim().split(/\s+/).length : 0;
 
     const crossArtifactGaps: string[] = [];
     if (!spec.trim()) crossArtifactGaps.push("Spec ausente — generar antes del plan");
-    if (!project.blueprintContent?.trim()) crossArtifactGaps.push("Blueprint/plan ausente");
+    if (!deliverables.blueprintContent?.trim()) crossArtifactGaps.push("Blueprint/plan ausente");
     if (!tasksMd.trim()) crossArtifactGaps.push("Tasks ausente — requerido para implementación");
     if (countClarificationMarkers(spec) > 0) {
       crossArtifactGaps.push(
@@ -266,8 +268,8 @@ export class SddIntegrationService {
           hasPendingClarificationSection: specHasPendingClarificationSection(spec),
         },
         blueprint: {
-          present: !!(project.blueprintContent ?? "").trim(),
-          wordCount: wordCount(project.blueprintContent),
+          present: !!(deliverables.blueprintContent ?? "").trim(),
+          wordCount: wordCount(deliverables.blueprintContent),
         },
         tasks: {
           present: tasksMd.trim().length > 0,
@@ -278,16 +280,16 @@ export class SddIntegrationService {
           checkpoints: extractTaskCheckpoints(tasksMd),
         },
         apiContracts: {
-          present: !!(project.apiContractsContent ?? "").trim(),
-          wordCount: wordCount(project.apiContractsContent),
+          present: !!(deliverables.apiContractsContent ?? "").trim(),
+          wordCount: wordCount(deliverables.apiContractsContent),
         },
         logicFlows: {
-          present: !!(project.logicFlowsContent ?? "").trim(),
-          wordCount: wordCount(project.logicFlowsContent),
+          present: !!(deliverables.logicFlowsContent ?? "").trim(),
+          wordCount: wordCount(deliverables.logicFlowsContent),
         },
         infra: {
-          present: !!(project.infraContent ?? "").trim(),
-          wordCount: wordCount(project.infraContent),
+          present: !!(deliverables.infraContent ?? "").trim(),
+          wordCount: wordCount(deliverables.infraContent),
         },
       },
       conformance,
@@ -336,19 +338,20 @@ export class SddIntegrationService {
     };
   }
 
-  async converge(projectId: string, persist = false): Promise<ConvergeResult> {
+  async converge(projectId: string, persist = false, stageId?: string): Promise<ConvergeResult> {
     const project = await this.loadProject(projectId);
-    const tasksMd = (project.tasksContent ?? "").trim();
+    const stage = this.resolveAnalysisStage(project, stageId);
+    const deliverables = resolveStageDeliverables(project, stage, "analyze").deliverables;
+    const tasksMd = (deliverables.tasksContent ?? "").trim();
     if (!tasksMd) {
       throw new BadRequestException("Genera tasks.md antes de ejecutar converge");
     }
 
-    const stage = pickPrimaryStage(project.stages);
     const mdd = (stage?.mddContent ?? "").trim();
     const featureDir = specKitFeatureDir(stage?.ordinal ?? 1, project.name);
 
     const openTasks = filterOpenTasks(parseTasksMarkdown(tasksMd));
-    const conformanceGaps = this.collectConformanceGaps(mdd, project);
+    const conformanceGaps = this.collectConformanceGaps(mdd, deliverables);
 
     let codebaseEvidence: string | null = null;
     const tfId = stage?.theforgeProjectId ?? project.theforgeProjectId;
@@ -509,21 +512,32 @@ export class SddIntegrationService {
     return { dryRun: false, planned, created, errors };
   }
 
-  private collectConformanceGaps(mdd: string, project: Project): string[] {
+  private collectConformanceGaps(mdd: string, project: ProjectDeliverableSource): string[] {
     if (!mdd) return ["MDD vacío: no se puede verificar conformidad"];
     const gaps: string[] = [];
-    const bp = this.conformance.checkBlueprint(mdd, project.blueprintContent);
+    const bp = this.conformance.checkBlueprint(mdd, project.blueprintContent ?? null);
     if (!bp.ok) gaps.push(...bp.gaps.map((g) => `[Blueprint] ${g}`));
-    const api = this.conformance.checkApi(mdd, project.apiContractsContent);
+    const api = this.conformance.checkApi(mdd, project.apiContractsContent ?? null);
     if (!api.ok) {
       gaps.push(...api.missingInApi.map((g) => `[API falta] ${g}`));
       gaps.push(...api.extraInApi.map((g) => `[API extra] ${g}`));
     }
-    const lf = this.conformance.checkLogicFlows(mdd, project.logicFlowsContent);
+    const lf = this.conformance.checkLogicFlows(mdd, project.logicFlowsContent ?? null);
     if (!lf.ok) gaps.push(...lf.gaps.map((g) => `[Flujos] ${g}`));
-    const inf = this.conformance.checkInfra(mdd, project.infraContent);
+    const inf = this.conformance.checkInfra(mdd, project.infraContent ?? null);
     if (!inf.ok) gaps.push(...inf.gaps.map((g) => `[Infra] ${g}`));
     return gaps;
+  }
+
+  private resolveAnalysisStage(project: ProjectWithStages, stageId?: string) {
+    if (stageId) {
+      const found = project.stages.find((s) => s.id === stageId);
+      if (!found) throw new NotFoundException("Etapa no encontrada");
+      return found;
+    }
+    const primary = pickPrimaryStage(project.stages);
+    if (!primary) throw new BadRequestException("El proyecto no tiene etapas");
+    return primary;
   }
 
   private async loadProject(projectId: string): Promise<ProjectWithStages> {

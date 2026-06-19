@@ -443,6 +443,8 @@ export interface WorkshopStage {
   estimation: Estimation | null;
   /** Estado del flujo legacy para esta etapa (cambio) */
   legacyChangeState?: LegacyFlowState | null;
+  handoffImportedAt?: string | null;
+  handoffSnapshot?: { items?: unknown[] | null } | null;
 }
 
 /** Propuesta HITL hasta confirmación en chat o `POST .../confirm-complexity`. */

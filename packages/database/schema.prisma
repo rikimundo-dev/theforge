@@ -154,6 +154,8 @@ model Stage {
   /// Copia congelada del handoff importado desde el proyecto NEW.
   handoffSnapshot Json?
   handoffImportedAt DateTime?
+  /// Snapshot JSON of SDD deliverables captured for this stage (P0.1).
+  deliverableSnapshot Json?
   estimation       Estimation?
   /// Redundancia intencional con `Project.projectType === LEGACY` para queries y checkpoints por etapa.
   isLegacy         Boolean      @default(false)

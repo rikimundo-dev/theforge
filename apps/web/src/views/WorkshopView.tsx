@@ -63,7 +63,9 @@ import {
 import {
   agentGovernanceScaffoldHasContent,
   buildSpecKitBundleFiles,
+  isLegacyChangeGateSatisfied,
   isPhase0BorradorJson,
+  LEGACY_CHANGE_GATE_MESSAGE,
   parseAgentGovernanceScaffold,
 } from "@theforge/shared-types";
 import {
@@ -91,6 +93,10 @@ import {
   WorkshopDocumentIslandToc,
   isWorkshopMarkdownPreviewActive,
 } from "../components/WorkshopDocumentIslandToc";
+import {
+  resolveWorkshopDeliverableContent,
+  useStageDeliverableView,
+} from "../hooks/useStageDeliverableView";
 import { replaceYamlFrontMatter } from "../components/DesignMdPreview";
 import WorkshopHelpModal from "../components/WorkshopHelpModal";
 import { WorkshopMetricsColumnInner } from "./WorkshopMetricsColumnInner";
@@ -331,6 +337,8 @@ export default function WorkshopView({
     () => workshopStagesList.find((s) => s.id === activeStageId),
     [workshopStagesList, activeStageId],
   );
+  const { view: stageDeliverableView } = useStageDeliverableView(projectId ?? null, activeStageId);
+  const deliverablesReadOnly = stageDeliverableView?.readOnly === true;
   const patchWorkshopStage = useWorkshopStore((s) => s.patchWorkshopStage);
   const generateMddFromBenchmark = useWorkshopStore((s) => s.generateMddFromBenchmark);
   const persistMddContent = useWorkshopStore((s) => s.persistMddContent);
@@ -376,15 +384,39 @@ export default function WorkshopView({
   const setAemContent = useWorkshopStore((s) => s.setAemContent);
   const persistAemContent = useWorkshopStore((s) => s.persistAemContent);
 
-  const specContent = specContentField ?? project?.specContent ?? null;
+  const specContent = resolveWorkshopDeliverableContent(
+    "specContent",
+    specContentField ?? project?.specContent ?? null,
+    stageDeliverableView,
+  );
   const dbgaContent = dbgaContentField ?? project?.dbgaContent ?? null;
   /** Contenido visible en el panel Fase 0: usa dbgaContent o specContent legacy como fallback */
   const fase0Content = dbgaContent ?? specContent ?? null;
-  const blueprintContent = blueprintContentField ?? project?.blueprintContent ?? null;
-  const apiContractsContent = apiContractsContentField ?? project?.apiContractsContent ?? null;
-  const logicFlowsContent = logicFlowsContentField ?? project?.logicFlowsContent ?? null;
-  const infraContent = infraContentField ?? project?.infraContent ?? null;
-  const tasksContent = tasksContentField ?? project?.tasksContent ?? null;
+  const blueprintContent = resolveWorkshopDeliverableContent(
+    "blueprintContent",
+    blueprintContentField ?? project?.blueprintContent ?? null,
+    stageDeliverableView,
+  );
+  const apiContractsContent = resolveWorkshopDeliverableContent(
+    "apiContractsContent",
+    apiContractsContentField ?? project?.apiContractsContent ?? null,
+    stageDeliverableView,
+  );
+  const logicFlowsContent = resolveWorkshopDeliverableContent(
+    "logicFlowsContent",
+    logicFlowsContentField ?? project?.logicFlowsContent ?? null,
+    stageDeliverableView,
+  );
+  const infraContent = resolveWorkshopDeliverableContent(
+    "infraContent",
+    infraContentField ?? project?.infraContent ?? null,
+    stageDeliverableView,
+  );
+  const tasksContent = resolveWorkshopDeliverableContent(
+    "tasksContent",
+    tasksContentField ?? project?.tasksContent ?? null,
+    stageDeliverableView,
+  );
   const agentGovernanceContent =
     agentGovernanceContentField ?? project?.agentGovernanceContent ?? null;
   const agentGovernanceScaffold = useMemo(
@@ -410,6 +442,27 @@ export default function WorkshopView({
   const hasSpec = (specContent ?? "").trim().length > 0;
   const complexity = project?.complexity ?? "HIGH";
   const isLegacyProject = project?.projectType === "LEGACY";
+  const legacyChangeGateSatisfied = useMemo(() => {
+    if (!isLegacyProject) return true;
+    const ordinal = activeWorkshopStage?.ordinal ?? 1;
+    if (ordinal < 2) return true;
+    return isLegacyChangeGateSatisfied({
+      ordinal,
+      legacyChangeState:
+        activeWorkshopStage?.legacyChangeState ?? activeLegacyState ?? null,
+      handoffImportedAt: activeWorkshopStage?.handoffImportedAt ?? null,
+      handoffSnapshot: activeWorkshopStage?.handoffSnapshot ?? null,
+    });
+  }, [
+    isLegacyProject,
+    activeWorkshopStage?.ordinal,
+    activeWorkshopStage?.legacyChangeState,
+    activeWorkshopStage?.handoffImportedAt,
+    activeWorkshopStage?.handoffSnapshot,
+    activeLegacyState,
+  ]);
+  const legacyChangeGateBlocked =
+    isLegacyProject && (activeWorkshopStage?.ordinal ?? 1) >= 2 && !legacyChangeGateSatisfied;
 
   // ─── Generación secuencial multi-sección del DESIGN.md ─────
   const [uxGenerating, setUxGenerating] = useState(false);
@@ -2256,6 +2309,15 @@ export default function WorkshopView({
                   />
                 </div>
 
+                {stageDeliverableView?.source === "snapshot" ? (
+                  <div
+                    role="status"
+                    className="hidden shrink-0 rounded-lg bg-[color-mix(in_oklch,var(--info)_8%,var(--card))] px-2 py-1 text-[10px] leading-snug text-[color-mix(in_oklch,var(--info)_88%,var(--foreground))] sm:block sm:max-w-[14rem]"
+                  >
+                    Entregables congelados · etapa {stageDeliverableView.ordinal}
+                  </div>
+                ) : null}
+
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <WorkshopHeaderIconButton
@@ -3261,6 +3323,15 @@ export default function WorkshopView({
             {centralPanel === "legacy" && project?.projectType === "LEGACY" && projectId && (
               <div className="rounded-lg bg-[color-mix(in_oklch,var(--card)_88%,transparent)] border border-[var(--border)] p-6 text-[color-mix(in_oklch,var(--foreground)_88%,var(--muted-foreground))] text-sm space-y-6">
                 <p className="font-medium text-[color-mix(in_oklch,var(--primary)_88%,var(--foreground))]">Flujo de modificación (Legacy)</p>
+                {legacyChangeGateBlocked ? (
+                  <div
+                    className="flex gap-2 rounded-lg bg-[color-mix(in_oklch,var(--warning)_12%,transparent)] px-4 py-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]"
+                    role="status"
+                  >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <p>{LEGACY_CHANGE_GATE_MESSAGE}</p>
+                  </div>
+                ) : null}
                 {!activeLegacyState?.codebaseDoc?.trim() ? (
                   <div className="rounded-lg border border-[color-mix(in_oklch,var(--primary)_35%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_10%,var(--background))] px-4 py-3 space-y-3 text-sm text-[color-mix(in_oklch,var(--primary)_55%,var(--foreground))]">
                     <p>
@@ -3392,8 +3463,9 @@ export default function WorkshopView({
                           const ok = await legacyGenerateMdd(projectId, activeStageId ?? undefined);
                           if (ok) setCentralPanel("mdd");
                         }}
-                        disabled={loading}
+                        disabled={loading || legacyChangeGateBlocked}
                         className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[color-mix(in_oklch,var(--primary)_18%,transparent)] text-[var(--primary)] hover:bg-[color-mix(in_oklch,var(--primary)_26%,transparent)] disabled:opacity-50"
+                        title={legacyChangeGateBlocked ? LEGACY_CHANGE_GATE_MESSAGE : undefined}
                       >
                         {loading ? (
                           <span className="text-[var(--primary)]" aria-hidden>
@@ -3691,6 +3763,15 @@ export default function WorkshopView({
                     </button>
                   </div>
                 )}
+                {legacyChangeGateBlocked ? (
+                  <div
+                    className="shrink-0 flex gap-2 items-start rounded-lg bg-[color-mix(in_oklch,var(--warning)_12%,transparent)] px-4 py-3 mb-3 text-sm text-[color-mix(in_oklch,var(--warning)_75%,var(--foreground))]"
+                    role="status"
+                  >
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <p>{LEGACY_CHANGE_GATE_MESSAGE}</p>
+                  </div>
+                ) : null}
                 <WorkshopPanelActionRegion role="region" aria-label="Generar o regenerar el MDD">
                   {loading && (loadingReason === "mdd" || loadingReason === "legacy-mdd") ? (
                     <AiGenerationPanel
@@ -3713,11 +3794,13 @@ export default function WorkshopView({
                           onClick={() => void requestGenerateMdd()}
                           disabled={
                             legacyMddNeedsCodebaseDoc ||
+                            legacyChangeGateBlocked ||
                             (loading &&
                               (loadingReason === "mdd" ||
                                 loadingReason === "legacy-mdd" ||
                                 loadingReason === "legacy-codebase-doc"))
                           }
+                          title={legacyChangeGateBlocked ? LEGACY_CHANGE_GATE_MESSAGE : undefined}
                         >
                           {mddContent?.trim() ? (
                             <>
@@ -3917,6 +4000,17 @@ export default function WorkshopView({
             )}
             {centralPanel === "spec" && (
               <>
+                {stageDeliverableView?.source === "snapshot" ? (
+                  <div
+                    role="status"
+                    className="mb-3 rounded-lg bg-[color-mix(in_oklch,var(--info)_8%,var(--card))] px-3 py-2 text-xs leading-relaxed text-[color-mix(in_oklch,var(--info)_88%,var(--foreground))]"
+                  >
+                    Viendo entregables congelados de etapa {stageDeliverableView.ordinal}
+                    {stageDeliverableView.snapshotCapturedAt
+                      ? ` · ${new Date(stageDeliverableView.snapshotCapturedAt).toLocaleString()}`
+                      : ""}
+                  </div>
+                ) : null}
                 <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-[color-mix(in_oklch,var(--primary)_28%,var(--border))] bg-[color-mix(in_oklch,var(--primary)_8%,var(--card))] px-3 py-2.5">
                   <p className="min-w-0 flex-1 text-xs leading-relaxed text-[color-mix(in_oklch,var(--primary)_62%,var(--foreground))]">
                     <strong>Aclarar Spec</strong> antes del MDD: detecta ambigüedades y marca{" "}
@@ -3952,6 +4046,7 @@ export default function WorkshopView({
                 legacyGenerateLabel={canGenerateFromCodebase ? "Generar Spec desde MDD Inicial" : undefined}
                 onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "spec", activeStageId ?? undefined) : undefined}
                 legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+                readOnly={deliverablesReadOnly}
               />
               </>
             )}
@@ -4035,6 +4130,7 @@ export default function WorkshopView({
                 legacyGenerateLabel={canGenerateFromCodebase ? "Generar Blueprint desde MDD Inicial" : undefined}
                 onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "blueprint", activeStageId ?? undefined) : undefined}
                 legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+                readOnly={deliverablesReadOnly}
               />
             )}
             {centralPanel === "tasks" && (
@@ -4110,6 +4206,7 @@ export default function WorkshopView({
                 legacyGenerateLabel={canGenerateFromCodebase ? "Generar API Contracts desde MDD Inicial" : undefined}
                 onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "api-contracts", activeStageId ?? undefined) : undefined}
                 legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+                readOnly={deliverablesReadOnly}
               />
             )}
             {centralPanel === "logic-flows" && (
@@ -4127,6 +4224,7 @@ export default function WorkshopView({
                 isLoading={loading || mddReviewing}
                 placeholder="# Casos de Uso y Flujos de Lógica\n\n..."
                 onBlur={handleLogicFlowsBlur}
+                readOnly={deliverablesReadOnly}
               />
             )}
             {centralPanel === "infra" && (
@@ -4147,6 +4245,7 @@ export default function WorkshopView({
                 legacyGenerateLabel={canGenerateFromCodebase ? "Generar Infra desde MDD Inicial" : undefined}
                 onLegacyGenerate={canGenerateFromCodebase ? () => legacyGenerateFromCodebaseDoc(projectId, "infra", activeStageId ?? undefined) : undefined}
                 legacyGenerateLoading={loading && loadingReason === "legacy-brd-suggest"}
+                readOnly={deliverablesReadOnly}
               />
             )}
             {centralPanel === "adrs" && (
