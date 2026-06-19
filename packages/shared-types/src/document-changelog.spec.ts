@@ -4,9 +4,11 @@ import {
   appendDocumentChangelogEntry,
   bumpDocumentMinorVersion,
   bumpDocumentPatchVersion,
+  documentBodyWithoutChangelog,
   ensureDocumentChangelog,
   formatDocumentChangelogDate,
   hasDocumentChangelogSection,
+  isChangelogOnlyDocument,
   parseLatestDocumentVersion,
 } from "./document-changelog.js";
 
@@ -64,5 +66,24 @@ describe("document-changelog", () => {
     });
     assert.match(out, /\| 1\.0 \| Mayo 2026 \| Creación inicial del MDD \|/);
     assert.match(out, /\| 1\.1 \| Mayo 2026 \| Añadir §5 edge cases \|/);
+  });
+
+  it("documentBodyWithoutChangelog separa cuerpo y changelog", () => {
+    const doc = `# Spec
+
+Alcance MVP.
+
+## Registro de cambios del documento
+
+| Versión | Fecha | Descripción del cambio |
+| --- | --- | --- |
+| 1.0 | Junio 2026 | Creación inicial del documento |`;
+    assert.equal(documentBodyWithoutChangelog(doc), "# Spec\n\nAlcance MVP.");
+    assert.equal(isChangelogOnlyDocument(doc), false);
+  });
+
+  it("isChangelogOnlyDocument detecta shell vacío post ensureDocumentChangelog", () => {
+    const shell = ensureDocumentChangelog("");
+    assert.equal(isChangelogOnlyDocument(shell), true);
   });
 });

@@ -65,6 +65,10 @@ import { LegacyReviewerService } from "./legacy-reviewer.service.js";
 import { loadLegacyKnowledgePack } from "./knowledge-loader.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
 import {
+  documentPersistFieldLabel,
+  validateDocumentForPersist,
+} from "../sessions/document-shrink.util.js";
+import {
   parseAgentGovernanceResponse,
   serializeAgentGovernanceScaffold,
 } from "../ai/utils/agent-governance.util.js";
@@ -2256,6 +2260,18 @@ export class LegacyCoordinatorService {
       });
 
       content = cleanDocumentContent(raw ?? "");
+    }
+
+    const fieldKey = String(field);
+    const currentContent = String(
+      (project as Record<string, unknown>)[fieldKey] ?? "",
+    ).trim();
+    const persistValidation = validateDocumentForPersist(currentContent, content, {
+      fieldLabel: documentPersistFieldLabel(fieldKey),
+      minBodyChars: currentContent.length > 0 ? 80 : 120,
+    });
+    if (!persistValidation.ok) {
+      throw new BadRequestException(persistValidation.message);
     }
 
     // Persistir en el proyecto

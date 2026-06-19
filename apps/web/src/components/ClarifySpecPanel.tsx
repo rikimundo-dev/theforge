@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { HelpCircle, Loader2 } from "lucide-react";
+import { isChangelogOnlyDocument } from "@theforge/shared-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui";
 import { WorkshopDocToolbarIconButton } from "@/components/WorkshopButtons";
 import {
@@ -49,6 +50,7 @@ export function ClarifySpecPanel({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const previewIsUnsafe = preview != null && isChangelogOnlyDocument(preview);
 
   const handleRun = async (persist: boolean) => {
     if (!projectId) return;
@@ -137,6 +139,11 @@ export function ClarifySpecPanel({
             />
             {preview ? (
               <div className="max-h-48 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--muted)]/30 p-2">
+                {previewIsUnsafe ? (
+                  <p className="mb-2 text-xs font-medium text-[var(--destructive)]">
+                    Vista previa inválida: solo registro de cambios o contenido vacío. No uses «Aplicar al Spec».
+                  </p>
+                ) : null}
                 <pre className="whitespace-pre-wrap text-xs">{preview.slice(0, 4000)}</pre>
               </div>
             ) : null}
@@ -154,7 +161,7 @@ export function ClarifySpecPanel({
             <button
               type="button"
               onClick={() => void handleRun(true)}
-              disabled={busy}
+              disabled={busy || previewIsUnsafe}
               className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-[var(--primary-foreground)] disabled:opacity-50"
             >
               {busy ? <Loader2 className="inline h-3 w-3 animate-spin" /> : null} Aplicar al Spec

@@ -65,6 +65,19 @@ export function hasDocumentChangelogSection(content: string): boolean {
   return CHANGELOG_HEADING_RE.test(content.trim());
 }
 
+/** Markdown sin la sección «Registro de cambios del documento» (y su tabla). */
+export function documentBodyWithoutChangelog(content: string): string {
+  const trimmed = content.trimEnd();
+  const match = CHANGELOG_HEADING_RE.exec(trimmed);
+  if (!match || match.index === undefined) return trimmed.trim();
+  return trimmed.slice(0, match.index).trim();
+}
+
+/** True cuando solo queda la tabla de changelog (o casi nada de cuerpo). */
+export function isChangelogOnlyDocument(content: string, minBodyChars = 80): boolean {
+  return documentBodyWithoutChangelog(content).length < minBodyChars;
+}
+
 /** Última versión semver simple (major.minor) encontrada en la tabla, o null. */
 export function parseLatestDocumentVersion(content: string): string | null {
   let latest: { major: number; minor: number; raw: string } | null = null;

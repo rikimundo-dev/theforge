@@ -5,6 +5,7 @@ import { getRequestUserId, getRequestUserRole } from "../../common/request-user.
 import { isAdminOrAbove } from "../../common/roles.js";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
+import { validateDocumentForPersist } from "../sessions/document-shrink.util.js";
 import { enrichBlueprintWithUiDesignSystem } from "../engine/blueprint-enrich-ui-system.js";
 import { MddUpdatePipelineService } from "../engine/mdd-update-pipeline.service.js";
 import { SemaphoreService, type SemaphoreEvaluationInput } from "../engine/semaphore.service.js";
@@ -388,6 +389,15 @@ export class ProjectsService implements IOrchestratorProjectsPort {
       (parsedStageId?.trim() && existingRaw.stages.find((s) => s.id === parsedStageId.trim())) ||
       pickPrimaryStage(existingRaw.stages);
     if (!targetStage) throw new BadRequestException("El proyecto no tiene etapas");
+
+    if (rest.specContent !== undefined) {
+      const specValidation = validateDocumentForPersist(existingRaw.specContent, rest.specContent, {
+        fieldLabel: "Spec",
+      });
+      if (!specValidation.ok) {
+        throw new BadRequestException(specValidation.message);
+      }
+    }
 
     let mddGovernancePatternsReverted = false;
     let mddForPipeline: string | null | undefined = parsedMdd;
