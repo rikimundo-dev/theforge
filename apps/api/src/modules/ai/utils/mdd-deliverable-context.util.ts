@@ -1,5 +1,3 @@
-import { extractEntities } from "../../engine/conformance.service.js";
-
 /**
  * @deprecated Ya no se trunca el MDD por entregable; se conserva por compatibilidad de imports.
  */
