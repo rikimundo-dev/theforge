@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   buildHandoffMicroSpecFiles,
@@ -30,6 +31,7 @@ import { PrismaService } from "../../prisma/prisma.service.js";
 import { getRequestUserId } from "../../common/request-user.store.js";
 import { pickPrimaryStage } from "./stage-helpers.js";
 import { resolveStageDeliverables } from "./stage-deliverables.util.js";
+import { persistStageAndProjectDeliverables } from "./stage-deliverable-persist.util.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
 import { validateDocumentForPersist } from "../sessions/document-shrink.util.js";
 import type { ClarifySpecBody, ConvergeTriggerBody, ProjectDeliverableSource } from "@theforge/shared-types";
@@ -208,7 +210,10 @@ export class SddIntegrationService {
   async clarifySpec(projectId: string, body: ClarifySpecBody): Promise<ClarifySpecResult> {
     const project = await this.loadProject(projectId);
     const stage = pickPrimaryStage(project.stages);
-    const spec = (project.specContent ?? "").trim();
+    const deliverables = stage
+      ? resolveStageDeliverables(project, stage, "analyze").deliverables
+      : {};
+    const spec = (deliverables.specContent ?? project.specContent ?? "").trim();
     const dbga = (project.dbgaContent ?? project.phase0SummaryContent ?? "").trim();
     const brd = (stage?.brdContent ?? "").trim();
 
@@ -235,10 +240,16 @@ export class SddIntegrationService {
       if (!validation.ok) {
         throw new BadRequestException(validation.message);
       }
-      await this.prisma.project.update({
-        where: { id: project.id },
-        data: { specContent: clarified },
-      });
+      if (stage?.id) {
+        await persistStageAndProjectDeliverables(this.prisma, stage.id, project.id, {
+          specContent: clarified,
+        });
+      } else {
+        await this.prisma.project.update({
+          where: { id: project.id },
+          data: { specContent: clarified },
+        });
+      }
       persisted = true;
     }
     return { clarifiedSpec: clarified, clarificationMarkerCount: markerCount, persisted };
@@ -467,10 +478,16 @@ export class SddIntegrationService {
 
     let persisted = false;
     if (persist) {
-      await this.prisma.project.update({
-        where: { id: project.id },
-        data: { tasksContent: suggestedTasksMarkdown },
-      });
+      if (stage?.id) {
+        await persistStageAndProjectDeliverables(this.prisma, stage.id, project.id, {
+          tasksContent: suggestedTasksMarkdown,
+        });
+      } else {
+        await this.prisma.project.update({
+          where: { id: project.id },
+          data: { tasksContent: suggestedTasksMarkdown },
+        });
+      }
       persisted = true;
     }
 
@@ -493,20 +510,30 @@ export class SddIntegrationService {
     body: ConvergeTriggerBody,
     stageId?: string,
   ): Promise<ConvergeResult & { webhookSent: boolean; webhookUrl: string | null }> {
+    const project = await this.loadProject(projectId);
     const result = await this.converge(projectId, body.persist, stageId);
-    const webhookUrl = (body.webhookUrl ?? process.env.CONVERGE_WEBHOOK_URL ?? "").trim() || null;
+    const webhookUrl =
+      (body.webhookUrl ?? project.convergeWebhookUrl ?? process.env.CONVERGE_WEBHOOK_URL ?? "").trim() ||
+      null;
+    const webhookSecret = (project.convergeWebhookSecret ?? "").trim() || null;
     let webhookSent = false;
     if (webhookUrl) {
       try {
+        const payload = JSON.stringify({
+          event: "theforge.converge",
+          projectId,
+          stageId: stageId ?? null,
+          ...result,
+        });
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (webhookSecret) {
+          const signature = createHmac("sha256", webhookSecret).update(payload).digest("hex");
+          headers["X-TheForge-Signature"] = `sha256=${signature}`;
+        }
         const res = await fetch(webhookUrl, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            event: "theforge.converge",
-            projectId,
-            stageId: stageId ?? null,
-            ...result,
-          }),
+          headers,
+          body: payload,
         });
         webhookSent = res.ok;
         if (!res.ok) {

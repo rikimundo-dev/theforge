@@ -75,6 +75,10 @@ export const updateProjectSchema = z.object({
   phase0SummaryContent: z.string().optional().nullable(),
   aemContent: z.string().optional().nullable(),
   figmaMapping: z.record(z.unknown()).optional().nullable(),
+  /** Per-project converge webhook (POST /projects/:id/converge/trigger). */
+  convergeWebhookUrl: z.string().url().optional().nullable(),
+  /** Optional HMAC secret for converge webhook signing. */
+  convergeWebhookSecret: z.string().min(8).optional().nullable(),
 });
 
 /** Body para POST /projects/:id/phase0-deep-research */

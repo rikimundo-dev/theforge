@@ -3,7 +3,7 @@ import { z } from "zod";
 export const convergeTriggerBodySchema = z.object({
   /** If true, persist converge tasks into tasksContent (same as POST /converge). */
   persist: z.boolean().optional().default(false),
-  /** Override webhook URL (default: process.env.CONVERGE_WEBHOOK_URL). */
+  /** Override webhook URL (default: project.convergeWebhookUrl, then CONVERGE_WEBHOOK_URL). */
   webhookUrl: z.string().url().optional(),
 });
 

@@ -35,16 +35,21 @@
 | P3.3 | `quickstart.md` desde spec + change spec | ✅ |
 | P3.4 | Branch policy en IMPLEMENT.md + `openspec/BRANCH-POLICY.md` | ✅ |
 
+## Post-P1–P3 (deferred → done)
+
+| ID | Entregable | Estado |
+|----|------------|--------|
+| D1 | Eliminar columna `Project.legacyFlowState` (`004_drop_project_legacy_flow_state.sql`) | ✅ |
+| D2 | Entregables live por `stageId` (`005_add_stage_deliverable_columns.sql`, `resolveLiveStageDeliverables`) | ✅ |
+| D3 | Webhook converge por proyecto (`convergeWebhookUrl` / optional secret) | ✅ |
+
 ## Tests
 
 - `packages/shared-types/src/brownfield-p1-p2-p3.spec.ts`
+- `packages/shared-types/src/stage-deliverables-resolve.spec.ts`
+- `packages/shared-types/src/legacy-change-state.util.spec.ts` (via stage-deliverables-resolve + legacy gate)
 - `apps/api/src/modules/projects/stage-deliverable-snapshot.util.spec.ts`
-
-## Diferido
-
-- Eliminar columna `Project.legacyFlowState` (migración masiva de datos).
-- Persistir entregables directamente en storage por `stageId` (hoy snapshot + Project flat write).
-- Webhook converge por proyecto en DB (solo env global YAGNI).
+- `apps/api/src/modules/projects/stage-deliverables.util.spec.ts`
 
 ## Referencias
 

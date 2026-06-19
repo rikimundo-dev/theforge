@@ -53,6 +53,7 @@ export interface IntegrationPanelProps {
   projectType: "NEW" | "LEGACY";
   activeStageId: string | null;
   activeStageOrdinal: number;
+  convergeWebhookUrl?: string | null;
   onProjectRefresh: () => void | Promise<void>;
 }
 
@@ -64,6 +65,7 @@ export function IntegrationPanel({
   projectType,
   activeStageId,
   activeStageOrdinal,
+  convergeWebhookUrl: initialConvergeWebhookUrl,
   onProjectRefresh,
 }: IntegrationPanelProps) {
   const [status, setStatus] = useState<IntegrationStatusResponse | null>(null);
@@ -79,6 +81,8 @@ export function IntegrationPanel({
   const [promoteStageName, setPromoteStageName] = useState("");
   const [promoteSelectedIds, setPromoteSelectedIds] = useState<string[]>([]);
   const [promoteSubmitting, setPromoteSubmitting] = useState(false);
+  const [convergeWebhookUrl, setConvergeWebhookUrl] = useState(initialConvergeWebhookUrl ?? "");
+  const [convergeWebhookSaving, setConvergeWebhookSaving] = useState(false);
   const handoffTitleId = useId();
   const handoffDescriptionId = useId();
 
@@ -100,6 +104,10 @@ export function IntegrationPanel({
   useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
+
+  useEffect(() => {
+    setConvergeWebhookUrl(initialConvergeWebhookUrl ?? "");
+  }, [initialConvergeWebhookUrl, projectId]);
 
   useEffect(() => {
     if (projectType !== "NEW" || !status?.linkedLegacyProject) {
@@ -258,6 +266,30 @@ export function IntegrationPanel({
     },
     [projectId, loadStatus],
   );
+
+  const saveConvergeWebhook = useCallback(async () => {
+    setConvergeWebhookSaving(true);
+    setError(null);
+    try {
+      const trimmed = convergeWebhookUrl.trim();
+      const r = await apiFetch(`${API_BASE}/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          convergeWebhookUrl: trimmed.length > 0 ? trimmed : null,
+        }),
+      });
+      if (!r.ok) {
+        const err = (await r.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(err?.message ?? "No se pudo guardar webhook converge");
+      }
+      await onProjectRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar webhook converge");
+    } finally {
+      setConvergeWebhookSaving(false);
+    }
+  }, [projectId, convergeWebhookUrl, onProjectRefresh]);
 
   if (loading && !status) {
     return (
@@ -419,6 +451,35 @@ export function IntegrationPanel({
       </ol>
 
       <TraceMatrix traces={status?.traces ?? []} />
+
+      <Card>
+        <div className="px-5 pt-5 sm:px-6 sm:pt-6">
+          <CardTitle className="text-sm font-semibold">Webhook converge (CI)</CardTitle>
+          <CardDescription className="mt-1.5">
+            URL por proyecto para <code className="text-xs">POST /projects/:id/converge/trigger</code>.
+            Si está vacío, se usa la variable de entorno <code className="text-xs">CONVERGE_WEBHOOK_URL</code>.
+          </CardDescription>
+        </div>
+        <CardContent className="flex flex-col gap-3 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+          <Input
+            type="url"
+            placeholder="https://hooks.example.com/theforge-converge"
+            value={convergeWebhookUrl}
+            onChange={(e) => setConvergeWebhookUrl(e.target.value)}
+          />
+          <WorkshopPanelButton
+            tone="secondary"
+            disabled={convergeWebhookSaving}
+            className="self-start inline-flex items-center gap-2"
+            onClick={() => void saveConvergeWebhook()}
+          >
+            {convergeWebhookSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            ) : null}
+            Guardar webhook
+          </WorkshopPanelButton>
+        </CardContent>
+      </Card>
 
       <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
         <DialogContent size="lg" className="gap-0 p-0">

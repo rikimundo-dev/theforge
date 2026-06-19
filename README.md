@@ -298,6 +298,18 @@ El Software Architect invoca la tool y las tablas aparecen en §3 (Modelo de Dat
 
 Ver CHANGELOG v0.5.0.
 
+### Converge webhook (brownfield CI)
+
+`POST /projects/:id/converge/trigger` ejecuta converge y, opcionalmente, envía el resultado a un webhook HTTP.
+
+| Prioridad | URL usada |
+|-----------|-----------|
+| 1 | `webhookUrl` en el body del request |
+| 2 | `Project.convergeWebhookUrl` (editable en Workshop → panel Integración) |
+| 3 | Variable de entorno `CONVERGE_WEBHOOK_URL` |
+
+Opcional: `Project.convergeWebhookSecret` firma el payload con HMAC-SHA256 en la cabecera `X-TheForge-Signature: sha256=<hex>`.
+
 ---
 
 ## Contribución
