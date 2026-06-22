@@ -495,6 +495,80 @@ Backend NestJS con TypeORM en borrador; Prisma en blueprint.
     assert.equal(mcp?.content.includes("{{API_URL}}"), false);
   });
 
+  it("usa projectName cuando MDD H1 es genérico y §1 lista entidades", () => {
+    const projectName = "Micro Servicio de costos y listas de precios";
+    const suggestions = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# Master Design Document
+## 1. Entidades del dominio
+Geografía (país, estado, ciudad, plaza, ubicación)
+Producto (SKU, precio, moneda)
+## 2. Stack
+Backend NestJS monorepo packages/api.
+`,
+      blueprintMarkdown: "- packages/api/\n",
+      projectName,
+      complexity: "MEDIUM",
+    });
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: { templateVersion: "1.0.0", files: [] },
+        files: [],
+      },
+      "MEDIUM",
+      {
+        suggestions,
+        governanceInput: {
+          mddMarkdown: `
+# Master Design Document
+## 1. Entidades del dominio
+Geografía (país, estado, ciudad, plaza, ubicación)
+## 2. Stack
+Backend NestJS monorepo packages/api.
+`,
+          blueprintMarkdown: "- packages/api/\n",
+          projectName,
+          complexity: "MEDIUM",
+        },
+      },
+    );
+    const rule = reconciled.files.find(
+      (f) => f.path === "docs/agent-governance/rules/stack-backend.mdc",
+    );
+    assert.ok(rule?.content.includes(`Hechos del proyecto (${projectName})`));
+    assert.equal(rule?.content.includes("Hechos del proyecto (Geografía"), false);
+  });
+
+  it("inferNpmScripts no produce npm run 1 literal", () => {
+    const suggestions = suggestAgentGovernanceArtifacts({
+      mddMarkdown: `
+# MDD
+## 2. Stack
+Monorepo NestJS. Gates: npm run test, npm run lint, npm run build.
+`,
+      complexity: "MEDIUM",
+    });
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: { templateVersion: "1.0.0", files: [] },
+        files: [],
+      },
+      "MEDIUM",
+      {
+        suggestions,
+        governanceInput: {
+          mddMarkdown: "npm run test npm run lint npm run build NestJS",
+          complexity: "MEDIUM",
+        },
+      },
+    );
+    const rule = reconciled.files.find(
+      (f) => f.path === "docs/agent-governance/rules/stack-backend.mdc",
+    );
+    assert.ok(rule?.content.includes("npm run test"));
+    assert.equal(rule?.content.includes("npm run 1"), false);
+  });
+
   it("no duplica Módulos/Globs en stack-backend con overlay compacto", () => {
     const suggestions = suggestAgentGovernanceArtifacts({
       mddMarkdown: "# KMS\nBackend NestJS monorepo.",

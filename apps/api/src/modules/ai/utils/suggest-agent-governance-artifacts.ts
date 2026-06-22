@@ -98,7 +98,19 @@ function normalizeProjectTitleCandidate(raw: string): string | null {
   const beforeBreak = trimmed.split(/\s*[—–-]\s+/)[0]?.split(/:\s+/)[0]?.trim();
   if (!beforeBreak || beforeBreak.length < 3) return null;
   if (/^master design document$/i.test(beforeBreak)) return null;
+  if (/^documento maestro de dise/i.test(beforeBreak)) return null;
   return beforeBreak.slice(0, 120);
+}
+
+function isGenericMddH1(h1: string | undefined): boolean {
+  if (!h1?.trim()) return true;
+  const normalized = normalizeProjectTitleCandidate(h1);
+  if (!normalized) return true;
+  return (
+    /^mdd\b/i.test(normalized) ||
+    /^master design document$/i.test(normalized) ||
+    /^documento maestro de dise/i.test(normalized)
+  );
 }
 
 /** Extrae título de alta confianza desde §1 (bold entre paréntesis o em-dash). */
@@ -137,13 +149,16 @@ function extractTitleFromSection1Fallback(mdd: string): string | null {
 /** MDD §1 o primer H1 como título del proyecto. */
 export function extractProjectTitle(input: SuggestAgentGovernanceInput): string {
   const mdd = input.mddMarkdown ?? "";
+  const fromProject = input.projectName?.trim();
   const fromSec1 = extractTitleFromSection1(mdd);
   if (fromSec1) return fromSec1;
   const h1 = mdd.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  if (h1) {
+  const genericH1 = isGenericMddH1(h1);
+  if (h1 && !genericH1) {
     const fromH1 = normalizeProjectTitleCandidate(h1);
-    if (fromH1 && !/^mdd\b|master design document$/i.test(fromH1)) return fromH1;
+    if (fromH1) return fromH1;
   }
+  if (fromProject && genericH1) return fromProject.slice(0, 120);
   const fromSec1Fallback = extractTitleFromSection1Fallback(mdd);
   if (fromSec1Fallback) return fromSec1Fallback;
   const named = mdd.match(/(?:nombre|proyecto|project)[:\s]+([^\n]+)/i)?.[1]?.trim();
@@ -151,7 +166,6 @@ export function extractProjectTitle(input: SuggestAgentGovernanceInput): string 
     const fromNamed = normalizeProjectTitleCandidate(named);
     if (fromNamed) return fromNamed;
   }
-  const fromProject = input.projectName?.trim();
   if (fromProject) return fromProject.slice(0, 120);
   return "Proyecto TheForge";
 }
@@ -685,7 +699,14 @@ function inferNpmScripts(text: string): string[] {
     [/turbo\s+run\s+(\w+)/i, "turbo run $1"],
   ];
   for (const [re, label] of patterns) {
-    if (re.test(text)) scripts.push(label.replace(/\$(\d+)/g, (_, n) => n));
+    if (/\$\d/.test(label)) {
+      const reGlobal = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+      for (const match of text.matchAll(reGlobal)) {
+        scripts.push(label.replace(/\$(\d+)/g, (_, idx) => match[Number(idx)] ?? ""));
+      }
+    } else if (re.test(text)) {
+      scripts.push(label);
+    }
   }
   const scriptBlock = text.match(/"scripts"\s*:\s*\{([^}]+)\}/s);
   if (scriptBlock?.[1]) {

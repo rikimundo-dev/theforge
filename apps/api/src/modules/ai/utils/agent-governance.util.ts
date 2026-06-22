@@ -852,6 +852,13 @@ function isStaleProjectFactsSection(content: string, facts: ProjectGovernanceFac
   return false;
 }
 
+function stripDetectedScriptsBlock(content: string): string {
+  return content.replace(
+    /\n\*\*Scripts detectados:\*\*[\s\S]*?(?=\n\*\*|\n## [^#]|\n#\s|$)/i,
+    "",
+  );
+}
+
 function stripProjectFactsSection(content: string): string {
   const lines = content.split("\n");
   let start = -1;
@@ -895,24 +902,29 @@ function overlayProjectFacts(
   artifactPath?: string,
 ): string {
   const forceFreshOverlay = overlayOptions?.forceFreshOverlay === true;
-  const compact =
-    ruleHasCatalogStackEnrichment(content) &&
-    (artifactPath?.includes("/rules/stack-backend") ||
-      artifactPath?.includes("/rules/stack-frontend"));
+  const isStackRule =
+    artifactPath?.includes("/rules/stack-backend") ||
+    artifactPath?.includes("/rules/stack-frontend");
+  const compact = ruleHasCatalogStackEnrichment(content) && isStackRule;
   const includeSddConflicts = !contentHasSddConflicts(content, facts);
   const block = buildProjectFactsBlock(facts, { compact, includeSddConflicts });
+  const prepareBase = (raw: string): string => {
+    let base = stripSddConflictSections(raw);
+    if (isStackRule) base = stripDetectedScriptsBlock(base);
+    return base;
+  };
   if (/## Hechos del proyecto \(/i.test(content)) {
     if (forceFreshOverlay || isStaleProjectFactsSection(content, facts)) {
       logger.debug(
         `[agent-gov] overlayProjectFacts replacing stale TheForge block projectTitle=${facts.projectTitle} forceFreshOverlay=${forceFreshOverlay}`,
       );
-      let base = stripSddConflictSections(content);
+      let base = prepareBase(content);
       base = stripProjectFactsSection(base);
       return base.trim() ? `${base.trimEnd()}\n\n${block}` : block;
     }
     return content;
   }
-  const base = stripSddConflictSections(content);
+  const base = prepareBase(content);
   return `${base.trimEnd()}\n\n${block}`;
 }
 

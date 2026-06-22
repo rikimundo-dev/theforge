@@ -344,6 +344,33 @@ describe("extractProjectGovernanceFacts", () => {
     assert.ok(facts.docPaths.includes("docs/sdd/api-contracts.md") === false);
   });
 
+  it("prioriza projectName sobre entidad §1 cuando H1 es Master Design Document", () => {
+    const projectName = "Micro Servicio de costos y listas de precios";
+    const facts = extractProjectGovernanceFacts({
+      mddMarkdown: `
+# Master Design Document
+## 1. Entidades del dominio
+Geografía (país, estado, ciudad, plaza, ubicación)
+Producto (SKU, precio, moneda)
+## 2. Stack
+Backend NestJS.
+`,
+      projectName,
+      complexity: "MEDIUM",
+    });
+    assert.equal(facts.projectTitle, projectName);
+  });
+
+  it("inferNpmScripts expande capturas reales, no el índice $1", () => {
+    const facts = extractProjectGovernanceFacts({
+      mddMarkdown: "Monorepo. Ejecutar npm run test y npm run lint antes de merge.",
+      complexity: "MEDIUM",
+    });
+    assert.ok(facts.npmScripts.some((s) => s === "npm run test"));
+    assert.ok(facts.npmScripts.some((s) => s === "npm run lint"));
+    assert.equal(facts.npmScripts.some((s) => s === "npm run 1"), false);
+  });
+
   it("nombra skill de dominio desde carpeta Blueprint", () => {
     const result = suggestAgentGovernanceArtifacts({
       mddMarkdown: "# KMS\nBackend NestJS monorepo.",
