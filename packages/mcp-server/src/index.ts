@@ -12,7 +12,7 @@
  * @license Apache-2.0
  */
 
-import { parseAgentGovernanceScaffold } from "@theforge/shared-types";
+import { parseAgentGovernanceScaffold, type ProjectNextTaskResponse } from "@theforge/shared-types";
 import { generateTable, normalizeTable, normalizeAllTables, parseTable } from "@theforge/shared-types/markdown-table";
 import { generateMermaid, normalizeMermaid, validateMermaid } from "@theforge/shared-types/mermaid";
 
@@ -210,8 +210,8 @@ async function apiFetch(
   }
 }
 
-function apiGet(path: string): Promise<unknown> {
-  return apiFetch("GET", path);
+function apiGet<T = unknown>(path: string): Promise<T> {
+  return apiFetch("GET", path) as Promise<T>;
 }
 function apiPost(path: string, body?: unknown): Promise<unknown> {
   return apiFetch("POST", path, body);
@@ -1646,7 +1646,7 @@ const handlers: Record<string, Handler> = {
   },
   async get_next_implementation_task(args) {
     const projectId = args.projectId as string;
-    const data = await apiGet(`/projects/${projectId}/next-task`);
+    const data = await apiGet<ProjectNextTaskResponse>(`/projects/${projectId}/next-task`);
     return JSON.stringify({
       ...data,
       agentWorkflow: [

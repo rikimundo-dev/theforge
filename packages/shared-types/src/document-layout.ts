@@ -2,6 +2,8 @@
  * Document layout mapping: spec-kit primary paths ↔ docs/sdd mirror (agent governance).
  */
 
+import type { ParsedTaskItem } from "./tasks-parse.js";
+
 export type DocumentLayoutKind = "spec-kit-primary";
 
 export interface DocumentPathEntry {
@@ -78,4 +80,13 @@ export function buildNextTaskDocumentLayout(
     governancePresent,
     implementReadmePath: "IMPLEMENT.md",
   };
+}
+
+/** Respuesta de `GET /projects/:id/next-task` (API + MCP `get_next_implementation_task`). */
+export interface ProjectNextTaskResponse extends NextTaskDocumentLayout {
+  projectId: string;
+  projectName: string;
+  openCount: number;
+  task: ParsedTaskItem | null;
+  implementHint?: string;
 }
