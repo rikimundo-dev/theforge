@@ -308,31 +308,14 @@ export class ProjectsService implements IOrchestratorProjectsPort {
 
     if (isLegacy && parsed.theforgeProjectId?.trim()) {
       const stage = created.stages[0];
-      this.theforge
-        .wireAriadneBrownfieldConverge({
+      this.theforge.scheduleAriadneBrownfieldWire(
+        {
           ariadneSourceId: parsed.theforgeProjectId.trim(),
           workshopProjectId: created.id,
           workshopStageId: stage?.id ?? "",
-        })
-        .then((wire) => {
-          if (wire.wired) return;
-          if (wire.skippedReason) {
-            this.logger.debug(
-              `[Projects] Ariadne brownfield auto-wire skipped: ${wire.skippedReason}`,
-            );
-            return;
-          }
-          if (wire.errors.length) {
-            this.logger.warn(
-              `[Projects] Ariadne brownfield auto-wire partial/failed: ${wire.errors.join("; ")}`,
-            );
-          }
-        })
-        .catch((err) => {
-          this.logger.warn(
-            `[Projects] Ariadne brownfield auto-wire error: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        });
+        },
+        "Projects",
+      );
     }
 
     return apiProject;

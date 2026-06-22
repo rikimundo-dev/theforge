@@ -20,6 +20,7 @@ import { PrismaService } from "../../../prisma/prisma.service.js";
 import { getRequestUserId } from "../../../common/request-user.store.js";
 import { ChangeLogService } from "../../change-log/change-log.service.js";
 import { GraphMemoryService } from "../../ai-analysis/graph-memory/graph-memory.service.js";
+import { TheForgeService } from "../../theforge/theforge.service.js";
 import { ProjectsService } from "../projects.service.js";
 import { persistStageDeliverableSnapshotFromProject } from "../stage-deliverable-snapshot.util.js";
 import {
@@ -43,6 +44,7 @@ type ProjectRow = {
   visibility: string;
   linkedLegacyProjectId: string | null;
   linkedNewProjectId: string | null;
+  theforgeProjectId: string | null;
   integrationHandoff: unknown;
   integrationHandoffUpdatedAt: Date | null;
   stages: { id: string; ordinal: number; mddContent: string | null; handoffSnapshot: unknown; handoffImportedAt: Date | null; linkedNewProjectId: string | null }[];
@@ -54,6 +56,7 @@ export class ProjectIntegrationService {
     private readonly prisma: PrismaService,
     private readonly changeLog: ChangeLogService,
     private readonly graphMemory: GraphMemoryService,
+    private readonly theforge: TheForgeService,
     @Inject(forwardRef(() => ProjectsService))
     private readonly projectsService: ProjectsService,
   ) {}
@@ -408,6 +411,17 @@ export class ProjectIntegrationService {
     await this.persistHandoffItemsLegacyStage(newProjectId, activeItems.map((i) => i.id), stage.id);
     await this.finalizeHandoffStageSetup(projectId, stage.id, newProjectId, activeItems);
     await this.changeLog.log(projectId, "handoffSnapshot", `Promovido a etapa ${stage.ordinal}: ${handoffDesc}`);
+
+    if (project.theforgeProjectId?.trim()) {
+      this.theforge.scheduleAriadneBrownfieldWire(
+        {
+          ariadneSourceId: project.theforgeProjectId.trim(),
+          workshopProjectId: projectId,
+          workshopStageId: stage.id,
+        },
+        "Integration",
+      );
+    }
 
     const updatedStage = await this.prisma.stage.findUniqueOrThrow({ where: { id: stage.id } });
     const updatedTraces = await this.listTraceRows(projectId, handoff);

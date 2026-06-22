@@ -56,10 +56,10 @@ Variables relevantes: ver `.env.example` en la raíz del monorepo (prefijo `LEGA
 
 ## Brownfield converge auto-wire (Ariadne ingest)
 
-Al crear un proyecto **`LEGACY`** (`POST /projects`), si `THEFORGE_MCP_URL` está configurado y `ARIADNE_BROWNFIELD_CONVERGE_AUTO` no es `0`, la API hace **`PATCH /api/repositories/:id`** (proxy ingest) en cada repo resuelto desde `list_known_projects`:
+Al crear un proyecto **`LEGACY`** (`POST /projects`) o al **promover handoff a etapa** (`POST /projects/:id/integration/promote-to-stage`), si `THEFORGE_MCP_URL` está configurado y `ARIADNE_BROWNFIELD_CONVERGE_AUTO` no es `0`, la API hace **`PATCH /api/repositories/:id`** (proxy ingest) en cada repo resuelto desde `list_known_projects`:
 
-- `theforgeProjectId` → UUID del proyecto Workshop recién creado
-- `theforgeStageId` → etapa 1
+- `theforgeProjectId` → UUID del proyecto Workshop
+- `theforgeStageId` → etapa 1 al crear legacy; **etapa promovida** tras integración NEW-LEG
 - `theforgeConvergeTriggerMode` → `ARIADNE_BROWNFIELD_CONVERGE_MODE` (default `incremental`)
 - `theforgeServiceToken` → `THEFORGE_SERVICE_JWT` si está definido
 

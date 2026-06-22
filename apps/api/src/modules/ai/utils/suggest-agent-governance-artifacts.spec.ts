@@ -257,6 +257,40 @@ Backend NestJS.
     });
     assert.equal(title, "Portal Clientes");
   });
+
+  it("prioriza projectName sobre entidad §1 con em-dash (patrón MDD real)", () => {
+    const mddWithEntityBullets = `# Master Design Document
+
+## 1. Contexto y entidades principales
+
+### Entidades principales
+
+- Geografía (país, estado, ciudad, plaza, ubicación) – tablas espejo
+- Producto (SKU, precio, moneda) – catálogo central
+
+## 2. Arquitectura y Stack
+Backend NestJS.
+`;
+
+    assert.equal(
+      extractProjectTitle({
+        mddMarkdown: mddWithEntityBullets,
+        projectName: "IMJ",
+        complexity: "MEDIUM",
+      }),
+      "IMJ",
+    );
+
+    const microServicio = "Micro Servicio de costos y listas de precios";
+    assert.equal(
+      extractProjectTitle({
+        mddMarkdown: mddWithEntityBullets,
+        projectName: microServicio,
+        complexity: "MEDIUM",
+      }),
+      microServicio,
+    );
+  });
 });
 
 const KMS_BLUEPRINT_PROSE_FRAGMENT = `
@@ -350,8 +384,11 @@ describe("extractProjectGovernanceFacts", () => {
       mddMarkdown: `
 # Master Design Document
 ## 1. Entidades del dominio
-Geografía (país, estado, ciudad, plaza, ubicación)
-Producto (SKU, precio, moneda)
+
+### Entidades principales
+
+- Geografía (país, estado, ciudad, plaza, ubicación) – tablas espejo
+- Producto (SKU, precio, moneda) – catálogo central
 ## 2. Stack
 Backend NestJS.
 `,

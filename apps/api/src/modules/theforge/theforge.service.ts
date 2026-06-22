@@ -1206,4 +1206,37 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
       errors,
     };
   }
+
+  /**
+   * Fire-and-forget PATCH Ariadne repos (create legacy, promote handoff to stage, etc.).
+   * @param logLabel - Short context for logs (e.g. "Projects", "Integration").
+   */
+  scheduleAriadneBrownfieldWire(
+    input: {
+      ariadneSourceId: string;
+      workshopProjectId: string;
+      workshopStageId: string;
+    },
+    logLabel = "TheForge",
+  ): void {
+    const label = logLabel.trim() || "TheForge";
+    void this.wireAriadneBrownfieldConverge(input)
+      .then((wire) => {
+        if (wire.wired) return;
+        if (wire.skippedReason) {
+          this.logger.debug(`[${label}] Ariadne brownfield auto-wire skipped: ${wire.skippedReason}`);
+          return;
+        }
+        if (wire.errors.length) {
+          this.logger.warn(
+            `[${label}] Ariadne brownfield auto-wire partial/failed: ${wire.errors.join("; ")}`,
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `[${label}] Ariadne brownfield auto-wire error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
+  }
 }
