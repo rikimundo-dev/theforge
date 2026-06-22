@@ -172,14 +172,27 @@ export class AuthService {
     return display;
   }
 
-  /** Host público de la web (Safari) para @domain #code y magic link. Lee WEB_DOMAIN del env. */
+  /** Host público del front para autofill iOS/macOS (`@dominio #code`) y magic link. */
   private resolveWebAppHostname(): string | null {
-    const raw = stripEnvQuotes(this.config.get<string>("WEB_DOMAIN"))?.trim();
-    if (!raw) return null;
-    let host = raw.toLowerCase();
-    host = host.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].replace(/^\./, '');
+    const candidates = [
+      stripEnvQuotes(this.config.get<string>("WEB_DOMAIN")),
+      stripEnvQuotes(this.config.get<string>("WEB_APP_HOST")),
+      stripEnvQuotes(process.env.WEB_APP_HOST),
+      stripEnvQuotes(process.env.HOST),
+    ];
+    for (const raw of candidates) {
+      const host = this.normalizeWebAppHostname(raw);
+      if (host) return host;
+    }
+    return null;
+  }
+
+  private normalizeWebAppHostname(raw: string | undefined): string | null {
+    if (!raw?.trim()) return null;
+    let host = raw.trim().toLowerCase();
+    host = host.replace(/^https?:\/\//, "").split("/")[0].split(":")[0].replace(/^\./, "");
     if (!host || host.length > 253 || !/^[\w.-]+$/.test(host)) return null;
-    if (host.includes('..')) return null;
+    if (host.includes("..")) return null;
     return host;
   }
 
@@ -193,7 +206,6 @@ export class AuthService {
     appHost: string | null;
   }): { subject: string; text: string; html: string } {
     const { code, email, appHost } = args;
-    const spacedDigits = code.split("").join(" ");
     const domainLine = appHost ? `@${appHost} #${code}` : null;
     const magicLink = appHost
       ? `https://${appHost}/auth/magic-link?otp=${code}&email=${encodeURIComponent(email)}`
@@ -205,43 +217,37 @@ export class AuthService {
     const textDark = "#2d2d2d";
     const codeBoxBg = "#f8f8f8";
 
+    // Text/plain: primera línea con dígitos compactos + línea @dominio #code (Safari / Mail autofill).
     const textLines: string[] = [
+      "THE FORGE — Código de acceso",
+      "",
       code,
       "",
-      "La Forja · Acceso sin contraseña",
+      "Introduce este código en el inicio de sesión. Caduca en 10 minutos.",
       "",
-      "Hola,",
-      "",
-      "Usa este código de un solo uso para iniciar sesión:",
-      "",
-      "TU CÓDIGO",
-      spacedDigits,
-      "",
-      "Caduca en 10 minutos. Si no solicitaste este acceso, ignora este mensaje.",
-      "",
-      "—",
-      "Proyecto de código abierto · Apache License 2.0",
+      "Si no solicitaste este correo, ignóralo.",
     ];
     if (domainLine) textLines.push("", domainLine);
-    if (magicLink) textLines.push("", `Acceso directo: ${magicLink}`);
+    if (magicLink) textLines.push("", `Abrir enlace (opcional): ${magicLink}`);
     const textBody = textLines.join("\n");
 
     const magicBlock = magicLink
       ? `
           <div style="margin:24px 0 0;text-align:center;">
             <a href="${magicLink}" style="display:inline-block;padding:12px 22px;border-radius:999px;border:1px solid ${accent};color:${accent};font-size:14px;font-weight:600;text-decoration:none;background:#fff;">
-              Abrir en el navegador
+              Abrir The Forge
             </a>
+            <p style="margin:8px 0 0;font-size:12px;color:#a8a8a8;">O copia el código de la tarjeta superior.</p>
           </div>`
       : "";
     const iosHint = domainLine
-      ? `<p style="margin:16px 0 0;font-size:11px;color:#a8a8a8;word-break:break-all;font-family:ui-monospace,monospace;line-height:1.4;">${domainLine}</p>`
+      ? `<p style="margin:16px 0 0;padding:12px 14px;background:#f8fafc;border-radius:10px;font-size:12px;color:#64748b;word-break:break-all;font-family:ui-monospace,monospace;text-align:center;border:1px solid #e2e8f0;">${domainLine}</p>`
       : "";
 
     const htmlBody = `
 <!DOCTYPE html>
 <html lang="es">
-<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width"/></head>
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/></head>
 <body style="margin:0;padding:0;background:${pageBg};">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${pageBg};padding:28px 16px 40px;">
     <tr>
@@ -250,17 +256,18 @@ export class AuthService {
           <tr><td style="height:3px;background:linear-gradient(90deg,${accent},#c4896e);"></td></tr>
           <tr>
             <td style="padding:28px 26px 26px;font-family:'Segoe UI',Roboto,-apple-system,BlinkMacSystemFont,'Helvetica Neue',Arial,sans-serif;">
-              <p style="margin:0;font-size:22px;font-weight:700;color:${accent};letter-spacing:-0.02em;">La Forja</p>
+              <p style="margin:0;font-size:22px;font-weight:700;color:${accent};letter-spacing:-0.02em;">The Forge</p>
               <p style="margin:6px 0 22px;font-size:14px;color:${muted};">Acceso sin contraseña</p>
-              <p style="margin:0 0 8px;font-size:15px;color:${textDark};line-height:1.5;">Hola,</p>
-              <p style="margin:0 0 22px;font-size:15px;color:${textDark};line-height:1.55;">Usa este código de un solo uso para iniciar sesión:</p>
-              <div style="background:${codeBoxBg};border-radius:12px;padding:20px 16px 22px;text-align:center;border:1px solid #eeeae4;">
-                <p style="margin:0 0 10px;font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:#888888;">TU CÓDIGO</p>
-                <p style="margin:0;font-size:30px;font-weight:700;letter-spacing:0.35em;color:#111111;font-variant-numeric:tabular-nums;">${spacedDigits}</p>
-              </div>
-              <p style="margin:22px 0 0;font-size:14px;color:#4a4a4a;line-height:1.55;">
-                Caduca en <strong style="color:${textDark};">10 minutos</strong>. Si no solicitaste este acceso, ignora este mensaje.
-              </p>
+              <p style="margin:0 0 8px;font-size:15px;color:#475569;text-align:center;">Tu código de un solo uso es:</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:20px 0;">
+                <tr>
+                  <td align="center" style="background:${codeBoxBg};border-radius:12px;padding:22px 16px;border:1px solid #eeeae4;">
+                    <p style="margin:0;font-family:ui-monospace,Courier New,monospace;font-size:34px;font-weight:700;letter-spacing:0.42em;color:#111111;text-indent:0.42em;">${code}</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 20px;font-size:14px;line-height:1.55;color:#64748b;text-align:center;">Introduce este código en la pantalla de inicio de sesión de The Forge.</p>
+              <p style="margin:0 0 24px;font-size:13px;line-height:1.5;color:#94a3b8;text-align:center;">Caduca en <strong style="color:${textDark};">10 minutos</strong>. Si no solicitaste este acceso, ignora este mensaje.</p>
               ${magicBlock}
               ${iosHint}
               <hr style="border:none;border-top:1px solid #e8e4dc;margin:26px 0 18px;"/>
@@ -277,7 +284,7 @@ export class AuthService {
 </html>`;
 
     return {
-      subject: `Código de acceso — La Forja (${code})`,
+      subject: `The Forge — Tu código de acceso (${code})`,
       text: textBody,
       html: htmlBody.trim(),
     };
@@ -343,6 +350,11 @@ export class AuthService {
 
       const from = this.mailFromHeader();
       const appHost = this.resolveWebAppHostname();
+      if (!appHost) {
+        this.logger.warn(
+          "OTP: WEB_DOMAIN (o WEB_APP_HOST) no configurado — el correo no incluirá @dominio #code; autofill desde Mail en iOS/macOS puede no funcionar.",
+        );
+      }
       const { subject, text, html } = this.buildOtpEmailParts({
         code,
         email,

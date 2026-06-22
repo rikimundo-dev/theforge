@@ -34,7 +34,7 @@ Variables: `SMTP_HOST`, `SMTP_PORT` (default 587), `SMTP_SECURE=1` solo si TLS d
 
 `OTP_DEV_EXPOSE_CODE=1` (o `true`/`yes`/`on`): la respuesta de `POST /auth/otp/request` incluye `devCode` y **no** se envía correo. Con `0` u omitido: se envía por SMTP; sin SMTP la petición falla con 503.
 
-`WEB_DOMAIN` opcional: habilita en el correo el formato iOS `@dominio #code` y un magic link `https://${dominio}/auth/magic-link?otp=...&email=...`.
+`WEB_DOMAIN` (o `WEB_APP_HOST` / `HOST`): host del front **sin** `https://` — incluye en el correo la línea `@dominio #123456` que Safari/Mail usan para autofill OTP. Debe ser el mismo dominio donde abres el login. También habilita magic link `https://${dominio}/auth/magic-link?otp=...&email=...`.
 
 ## Notas
 
