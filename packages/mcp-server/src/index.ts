@@ -1014,7 +1014,8 @@ const TOOLS: Tool[] = [
   {
     name: "get_next_implementation_task",
     description:
-      "Returns the next open task from project tasks.md (spec-kit format). Lightweight /speckit.implement hint with file paths and [P] parallel marker.",
+      "Returns the next open task from project tasks.md (spec-kit format) plus document layout paths. " +
+      "Read IMPLEMENT.md → .specify/memory/constitution.md → tasks in specs/NNN-slug/tasks.md.",
     inputSchema: {
       type: "object",
       properties: { projectId: { type: "string", description: "The Forge project ID" } },
@@ -1645,7 +1646,18 @@ const handlers: Record<string, Handler> = {
   },
   async get_next_implementation_task(args) {
     const projectId = args.projectId as string;
-    return JSON.stringify(await apiGet(`/projects/${projectId}/next-task`));
+    const data = await apiGet(`/projects/${projectId}/next-task`);
+    return JSON.stringify({
+      ...data,
+      agentWorkflow: [
+        "1. Read IMPLEMENT.md",
+        "2. Read .specify/memory/constitution.md (MDD)",
+        `3. Open ${data.tasksPath ?? "specs/NNN-slug/tasks.md"} for checklist`,
+        data.governancePresent
+          ? "4. Install agent-governance per INSTALACION.md if not in .cursor/"
+          : "4. (Optional) Generate agent governance in Workshop",
+      ],
+    });
   },
   // ── Utility Tools ──
   async generate_markdown_table(args) {

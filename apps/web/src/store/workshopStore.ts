@@ -898,8 +898,13 @@ interface WorkshopState {
   ) => Promise<{ created: Array<{ number: number; html_url: string }>; errors: string[] } | null>;
   clarifySpec: (
     projectId: string,
-    opts: { persist: boolean; notes?: string },
-  ) => Promise<{ clarifiedSpec: string; clarificationMarkerCount: number; persisted: boolean } | null>;
+    opts: { persist: boolean; notes?: string; syncMdd?: boolean },
+  ) => Promise<{
+    clarifiedSpec: string;
+    clarificationMarkerCount: number;
+    persisted: boolean;
+    mddSyncQueued?: boolean;
+  } | null>;
   reset: () => void;
 }
 
@@ -2693,7 +2698,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message ?? "Error al preparar ZIP de gobernanza");
       }
-      return (await r.json()) as import("@theforge/shared-types").AgentGovernanceScaffold;
+      const scaffold = (await r.json()) as import("@theforge/shared-types").AgentGovernanceScaffold;
+      const serialized = JSON.stringify(scaffold, null, 2);
+      if (serialized !== (get().agentGovernanceContent ?? "").trim()) {
+        set({ agentGovernanceContent: serialized });
+      }
+      return scaffold;
     } catch (e) {
       set({
         error: e instanceof Error ? e.message : "Error al preparar ZIP de gobernanza",
@@ -4076,6 +4086,7 @@ if (prog && prog.step && prog.step !== "done") {
         clarifiedSpec: string;
         clarificationMarkerCount: number;
         persisted: boolean;
+        mddSyncQueued?: boolean;
       };
       if (data.persisted) {
         set({ specContent: data.clarifiedSpec, error: null });

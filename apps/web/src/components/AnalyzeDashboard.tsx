@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 interface AnalyzeDashboardProps {
   projectId: string;
   className?: string;
+  onReportLoaded?: (report: SddAnalyzeReport) => void;
 }
 
 const STATUS_STYLES = {
@@ -16,7 +17,7 @@ const STATUS_STYLES = {
 } as const;
 
 /** Cross-artifact analyze dashboard (`/speckit.analyze` equivalent). */
-export function AnalyzeDashboard({ projectId, className }: AnalyzeDashboardProps) {
+export function AnalyzeDashboard({ projectId, className, onReportLoaded }: AnalyzeDashboardProps) {
   const [report, setReport] = useState<SddAnalyzeReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +32,9 @@ export function AnalyzeDashboard({ projectId, className }: AnalyzeDashboardProps
         const text = await r.text().catch(() => "");
         throw new Error(text.slice(0, 200) || `HTTP ${r.status}`);
       }
-      setReport((await r.json()) as SddAnalyzeReport);
+      const loaded = (await r.json()) as SddAnalyzeReport;
+      setReport(loaded);
+      onReportLoaded?.(loaded);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setReport(null);
@@ -114,6 +117,7 @@ export function AnalyzeDashboard({ projectId, className }: AnalyzeDashboardProps
             ["Tasks", report.artifacts.tasks.present],
             ["API", report.artifacts.apiContracts.present],
             ["Flujos", report.artifacts.logicFlows.present],
+            ["Gov IA", report.artifacts.agentGovernance?.present ?? false],
           ] as const
         ).map(([label, ok]) => (
           <div
@@ -130,6 +134,27 @@ export function AnalyzeDashboard({ projectId, className }: AnalyzeDashboardProps
           </div>
         ))}
       </div>
+
+      {report.artifacts.agentGovernance ? (
+        <div className="rounded-lg border border-[var(--border)] p-3 text-xs">
+          <p className="mb-1 font-semibold">Gobernanza IA</p>
+          <p>
+            Archivos: {report.artifacts.agentGovernance.fileCount}
+            {report.artifacts.agentGovernance.pathAlignmentOk ? (
+              <span className="ml-2 text-[var(--success)]">· espejos docs/sdd OK</span>
+            ) : (
+              <span className="ml-2 text-[var(--warning)]">· espejos incompletos</span>
+            )}
+          </p>
+          {report.artifacts.agentGovernance.missingRequiredPaths.length > 0 ? (
+            <ul className="mt-1 list-inside list-disc text-[var(--warning)]">
+              {report.artifacts.agentGovernance.missingRequiredPaths.slice(0, 5).map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {report.artifacts.tasks.present ? (
         <p className="text-xs text-[color-mix(in_oklch,var(--foreground)_90%,var(--muted-foreground))]">

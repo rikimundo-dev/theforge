@@ -34,6 +34,15 @@ export interface SddTasksAnalyzeSlice {
   checkpoints: string[];
 }
 
+export interface SddAgentGovernanceAnalyzeSlice {
+  present: boolean;
+  fileCount: number;
+  missingRequiredPaths: string[];
+  hasInstallGuide: boolean;
+  /** True when docs/sdd mirror paths exist in the governance scaffold. */
+  pathAlignmentOk: boolean;
+}
+
 export interface SddAnalyzeConformance {
   blueprint: ConformanceResult;
   blueprintDataModel: ConformanceResult;
@@ -58,6 +67,7 @@ export interface SddAnalyzeReport {
     apiContracts: SddArtifactPresence;
     logicFlows: SddArtifactPresence;
     infra: SddArtifactPresence;
+    agentGovernance: SddAgentGovernanceAnalyzeSlice;
   };
   conformance: SddAnalyzeConformance;
   crossArtifactGaps: string[];

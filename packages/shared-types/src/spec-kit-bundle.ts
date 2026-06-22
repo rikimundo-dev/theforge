@@ -3,6 +3,8 @@
  * `.specify/memory/constitution.md` + `specs/{NNN}-{slug}/`.
  */
 
+import { formatDocumentPathMapTable } from "./document-layout.js";
+
 export interface SpecKitBundleFile {
   path: string;
   content: string;
@@ -31,28 +33,43 @@ export interface SpecKitBundleInput {
 }
 
 /** Resumen para handoff de implementación (equivalente a `/speckit.implement` + consumo The Forge). */
-export const SDD_IMPLEMENT_README = `# Implementation from The Forge (spec-kit style)
+export function buildSddImplementReadme(featureDir: string): string {
+  const pathMapTable = formatDocumentPathMapTable(featureDir);
+  return `# Implementation from The Forge (spec-kit style)
 
 ## Document order (mandatory)
 
 1. Read \`.specify/memory/constitution.md\` (MDD) — single source of truth.
-2. Read \`spec.md\` (what/why) and \`plan.md\` (blueprint / technical plan).
+2. Read \`spec.md\` (what/why) and \`plan.md\` (blueprint / technical plan) under \`${featureDir}/\`.
 3. Use \`tasks.md\` as the execution checklist; always cross-check MDD §3–§4 and \`contracts/\`.
 4. API contracts are binding (methods, paths, DTOs).
 5. On conflict between artifacts, **the MDD wins**.
 
+## Path map (spec-kit primary ↔ governance mirror)
+
+${pathMapTable}
+
+**The spec-kit layout is canonical.** Files under \`docs/sdd/\` mirror content for agent rules/skills — not an alternate SSOT.
+
+## Installation order
+
+1. Extract all bundled files at **repo root** (\`.specify/\`, \`${featureDir}/\`, \`AGENTS.md\`, \`docs/agent-governance/\`, \`docs/sdd/\`, \`scripts/\`).
+2. Install \`docs/agent-governance/\` → \`.cursor/\` per \`docs/agent-governance/INSTALACION.md\` (or run \`scripts/install-agent-governance.sh\`).
+3. Verify \`docs/sdd/*\` mirrors match spec-kit artifacts (optional cross-check).
+
 ## Executing tasks (agent workflow)
 
-1. Open \`tasks.md\` and find the first open item (\`- [ ]\`).
+1. Open \`${featureDir}/tasks.md\` and find the first open item (\`- [ ]\`).
 2. Tasks marked \`[P]\` may run **in parallel** within the same user-story **Checkpoint** block.
 3. Each task should list target **file paths** (e.g. \`src/...\`); edit only those files unless the task explicitly expands scope.
-4. After completing a Checkpoint section, run smoke checks from \`quickstart.md\` for that user story.
+4. After completing a Checkpoint section, run smoke checks from \`${featureDir}/quickstart.md\` for that user story.
 5. Mark completed items as \`- [x]\` in \`tasks.md\` (or track in your agent session) before moving to the next task.
 6. If implementation diverges from spec, stop and run **converge** (The Forge) or update the MDD first — do not silently drift.
 
 ## Agent governance (if bundled)
 
-If this ZIP includes \`agent-governance/\`, install rules/skills per \`INSTALACION.md\` before coding.
+If this ZIP includes governance docs at repo root, install rules/skills per \`docs/agent-governance/INSTALACION.md\` before coding.
+The \`docs/sdd/\` folder is a **mirror** for rules that reference SDD paths — always prefer spec-kit paths when both exist.
 
 ## Git branch naming
 
@@ -60,8 +77,12 @@ Create feature branches as \`{NNN}-{slug}\` where \`NNN\` is the 3-digit stage o
 
 ## Full consumption rules
 
-See \`THEFORGE-DOC-CONSUMPTION-GUIDE.md\` in this bundle for complete agent consumption rules.
+See \`THEFORGE-DOC-CONSUMPTION-GUIDE.md\` at repo root (next to this file) for complete agent consumption rules.
 `;
+}
+
+/** @deprecated Use {@link buildSddImplementReadme} with a concrete featureDir. */
+export const SDD_IMPLEMENT_README = buildSddImplementReadme("specs/NNN-slug");
 
 export function slugifySpecKitFeature(name: string): string {
   const base = name
@@ -190,7 +211,7 @@ export function buildSpecKitBundleFiles(input: SpecKitBundleInput): SpecKitBundl
     files.push({ path: "THEFORGE-DOC-CONSUMPTION-GUIDE.md", content: guide });
   }
 
-  files.push({ path: "IMPLEMENT.md", content: SDD_IMPLEMENT_README });
+  files.push({ path: "IMPLEMENT.md", content: buildSddImplementReadme(featureDir) });
 
   return files;
 }

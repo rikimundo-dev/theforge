@@ -259,6 +259,24 @@ Backend NestJS.
   });
 });
 
+const KMS_BLUEPRINT_PROSE_FRAGMENT = `
+## Modelo de datos
+
+- Entidades \`WorkflowProcess\`, \`Document\`
+- Tabla \`audit_logs\`
+- Todos los módulos en kms-backend/
+
+## Schemas
+
+- Schemas en Prisma para users y sessions
+
+## Estructura del repositorio
+
+- kms-backend/
+- packages/shared/
+- packages/kms-auth/
+`;
+
 describe("extractProjectGovernanceFacts", () => {
   it("filtra bullets prose del Blueprint y mantiene rutas reales", () => {
     const facts = extractProjectGovernanceFacts({
@@ -274,6 +292,29 @@ describe("extractProjectGovernanceFacts", () => {
     );
     assert.ok(facts.backendGlobs.every((g) => /^[\w./-]+\/\*\*$/.test(g)));
     assert.ok(facts.backendGlobs.some((g) => g.includes("kms-backend")));
+  });
+
+  it("rechaza prosa KMS (Entidades, Tabla, Todos, Schemas) y conserva árbol real", () => {
+    const facts = extractProjectGovernanceFacts({
+      mddMarkdown: KMS_MDD,
+      blueprintMarkdown: KMS_BLUEPRINT_PROSE_FRAGMENT,
+      complexity: "HIGH",
+    });
+    assert.deepEqual(facts.blueprintModules, [
+      "kms-backend",
+      "packages/shared",
+      "packages/kms-auth",
+    ]);
+    for (const junk of ["Entidades", "Tabla", "Todos", "Schemas", "En"]) {
+      assert.equal(
+        facts.blueprintModules.some((m) => m.toLowerCase() === junk.toLowerCase()),
+        false,
+        `no debe incluir módulo basura: ${junk}`,
+      );
+    }
+    assert.ok(facts.backendGlobs.some((g) => g.startsWith("kms-backend/")));
+    assert.ok(facts.backendGlobs.some((g) => g.startsWith("packages/shared/")));
+    assert.equal(facts.backendGlobs.some((g) => /Entidades|Tabla/i.test(g)), false);
   });
 
   it("ignora frontend aunque exista ux-ui-guide post-MVP", () => {
@@ -334,6 +375,12 @@ describe("isValidBlueprintModulePath", () => {
     assert.equal(isValidBlueprintModulePath("apps/api"), true);
     assert.equal(isValidBlueprintModulePath("**Autenticación/Autorización:** OAuth2"), false);
     assert.equal(isValidBlueprintModulePath("Observabilidad: logs"), false);
+    assert.equal(isValidBlueprintModulePath("Entidades"), false);
+    assert.equal(isValidBlueprintModulePath("Tabla"), false);
+    assert.equal(isValidBlueprintModulePath("Todos"), false);
+    assert.equal(isValidBlueprintModulePath("Schemas"), false);
+    assert.equal(isValidBlueprintModulePath("Si"), false);
+    assert.equal(isValidBlueprintModulePath("En"), false);
   });
 });
 

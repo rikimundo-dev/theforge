@@ -1,14 +1,29 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import JSZip from "jszip";
-import type { AgentGovernanceScaffold } from "@theforge/shared-types";
+import type { AgentGovernanceScaffold, SpecKitBundleFile } from "@theforge/shared-types";
 import {
   addAgentGovernanceEntriesToZip,
   AGENT_GOVERNANCE_ZIP_ROOT,
   buildAgentGovernanceZipEntries,
+  buildUnifiedHandoffManifest,
   logAgentGovernanceZipBuild,
   normalizeAgentGovernanceZipPath,
 } from "./downloadAgentGovernanceZip.js";
+
+function addMockSpecKitToZip(zip: JSZip, files: SpecKitBundleFile[]): void {
+  for (const file of files) {
+    zip.file(file.path, file.content, { createFolders: true });
+  }
+}
+
+const MOCK_SPEC_KIT: SpecKitBundleFile[] = [
+  { path: ".specify/memory/constitution.md", content: "# MDD\n" },
+  { path: "specs/001-demo-app/spec.md", content: "# Spec\n" },
+  { path: "specs/001-demo-app/plan.md", content: "# Plan\n" },
+  { path: "IMPLEMENT.md", content: "# Implement\n" },
+  { path: "THEFORGE-DOC-CONSUMPTION-GUIDE.md", content: "# Guía\n" },
+];
 
 const MOCK_SCAFFOLD: AgentGovernanceScaffold = {
   manifest: {
@@ -39,6 +54,58 @@ const LEGACY_SCAFFOLD: AgentGovernanceScaffold = {
     { path: "docs/COMO-USAR-GOBERNANZA-IA.md", content: "# Legacy doc\n" },
   ],
 };
+
+describe("buildUnifiedHandoffManifest", () => {
+  it("fusiona rutas de gobernanza y spec-kit sin duplicados", () => {
+    const governancePaths = ["AGENTS.md", "docs/agent-governance/rules/git-commits.mdc"];
+    const merged = buildUnifiedHandoffManifest(governancePaths, MOCK_SPEC_KIT);
+    assert.ok(merged.includes("AGENTS.md"));
+    assert.ok(merged.includes("docs/agent-governance/rules/git-commits.mdc"));
+    assert.ok(merged.includes("IMPLEMENT.md"));
+    assert.ok(merged.includes(".specify/memory/constitution.md"));
+    assert.ok(merged.includes("THEFORGE-DOC-CONSUMPTION-GUIDE.md"));
+    assert.ok(merged.some((p) => p.startsWith("specs/001-demo-app/")));
+    assert.equal(merged.includes("MANIFEST.json"), false);
+    assert.equal(merged.length, new Set(merged).size);
+    assert.deepEqual(merged, [...merged].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it("sin spec-kit devuelve solo rutas de gobernanza", () => {
+    const governancePaths = ["AGENTS.md", "docs/agent-governance/INSTALACION.md"];
+    assert.deepEqual(buildUnifiedHandoffManifest(governancePaths), governancePaths);
+    assert.deepEqual(buildUnifiedHandoffManifest(governancePaths, []), governancePaths);
+  });
+});
+
+describe("implement-handoff MANIFEST", () => {
+  it("MANIFEST.json incluye spec-kit al exportar implement-handoff", async () => {
+    const build = buildAgentGovernanceZipEntries(MOCK_SCAFFOLD);
+    assert.ok(build);
+
+    const handoffBuild = {
+      ...build,
+      manifest: {
+        ...build.manifest,
+        files: buildUnifiedHandoffManifest(build.manifest.files, MOCK_SPEC_KIT),
+      },
+    };
+
+    const zip = new JSZip();
+    addMockSpecKitToZip(zip, MOCK_SPEC_KIT);
+    addAgentGovernanceEntriesToZip(zip, handoffBuild, { flattenToZipRoot: true });
+
+    const loaded = await JSZip.loadAsync(await zip.generateAsync({ type: "nodebuffer" }));
+    const manifestRaw = await loaded.file("MANIFEST.json")!.async("string");
+    const manifest = JSON.parse(manifestRaw) as { files: string[] };
+
+    assert.ok(manifest.files.includes("docs/agent-governance/rules/git-commits.mdc"));
+    assert.ok(manifest.files.includes("IMPLEMENT.md"));
+    assert.ok(manifest.files.includes(".specify/memory/constitution.md"));
+    assert.ok(manifest.files.includes("THEFORGE-DOC-CONSUMPTION-GUIDE.md"));
+    assert.ok(manifest.files.some((p) => p.startsWith("specs/001-demo-app/")));
+    assert.equal(manifest.files.includes("MANIFEST.json"), false);
+  });
+});
 
 describe("normalizeAgentGovernanceZipPath", () => {
   it("quita prefijo agent-governance/ y migra .cursor/ a docs/agent-governance/", () => {
@@ -143,6 +210,28 @@ describe("addAgentGovernanceEntriesToZip", () => {
     assert.ok(manifest.files.includes("docs/agent-governance/rules/git-commits.mdc"));
     assert.ok(manifest.installMap?.length);
   });
+
+  it("flattenToZipRoot escribe gobernanza en la raíz del ZIP (repo-handoff)", async () => {
+    const build = buildAgentGovernanceZipEntries(MOCK_SCAFFOLD);
+    assert.ok(build);
+
+    const zip = new JSZip();
+    addAgentGovernanceEntriesToZip(zip, build!, { flattenToZipRoot: true });
+
+    const loaded = await JSZip.loadAsync(await zip.generateAsync({ type: "nodebuffer" }));
+    const expected = [
+      "docs/agent-governance/rules/git-commits.mdc",
+      "AGENTS.md",
+      "MANIFEST.json",
+    ];
+
+    for (const fullPath of expected) {
+      assert.ok(loaded.file(fullPath), `falta entrada ZIP aplanada: ${fullPath}`);
+    }
+
+    const zipPaths = Object.keys(loaded.files).filter((p) => !p.endsWith("/"));
+    assert.equal(zipPaths.some((p) => p.startsWith(`${AGENT_GOVERNANCE_ZIP_ROOT}/`)), false);
+  });
 });
 
 const MEDIUM_SCAFFOLD_16: AgentGovernanceScaffold = {
@@ -178,7 +267,7 @@ const MEDIUM_SCAFFOLD_16: AgentGovernanceScaffold = {
 };
 
 describe("download path — scaffold realista sin .cursor/", () => {
-  it("build + ZIP: ninguna entrada empieza por .cursor/", async () => {
+  it("downloadAgentGovernanceZip escribe entradas en la raíz del ZIP (sin agent-governance/)", async () => {
     const build = buildAgentGovernanceZipEntries(MEDIUM_SCAFFOLD_16);
     assert.ok(build);
     assert.equal(build!.entries.size, 17);
@@ -191,14 +280,16 @@ describe("download path — scaffold realista sin .cursor/", () => {
     logAgentGovernanceZipBuild(build!, "scaffold");
 
     const zip = new JSZip();
-    addAgentGovernanceEntriesToZip(zip, build!);
+    addAgentGovernanceEntriesToZip(zip, build!, { flattenToZipRoot: true });
     const buffer = await zip.generateAsync({ type: "nodebuffer" });
     const loaded = await JSZip.loadAsync(buffer);
 
     const zipPaths = Object.keys(loaded.files).filter((p) => !p.endsWith("/")).sort();
     assert.equal(zipPaths.length, 18, `ZIP paths: ${zipPaths.join(", ")}`);
-    assert.ok(zipPaths.some((p) => p.includes("/docs/agent-governance/rules/")));
-    assert.ok(zipPaths.some((p) => p.includes("/docs/agent-governance/skills/")));
+    assert.ok(zipPaths.includes("docs/agent-governance/rules/git-commits.mdc"));
+    assert.ok(zipPaths.includes("AGENTS.md"));
+    assert.ok(zipPaths.includes("MANIFEST.json"));
+    assert.equal(zipPaths.some((p) => p.startsWith(`${AGENT_GOVERNANCE_ZIP_ROOT}/`)), false);
     assert.equal(zipPaths.some((p) => p.includes("/.cursor/")), false);
   });
 });

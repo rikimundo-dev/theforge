@@ -32,6 +32,8 @@ export const clarifySpecBodySchema = z.object({
   persist: z.boolean().optional().default(false),
   /** Notas del usuario para guiar la clarificación. */
   notes: z.string().optional(),
+  /** Tras persist, anota el MDD con sync desde Spec aclarado (si hay MDD). */
+  syncMdd: z.boolean().optional().default(false),
 });
 
 export type ClarifySpecBody = z.infer<typeof clarifySpecBodySchema>;

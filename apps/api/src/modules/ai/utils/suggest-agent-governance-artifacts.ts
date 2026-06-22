@@ -448,6 +448,80 @@ function inferDomainSkillFolder(text: string, blueprintModules: string[]): strin
   return undefined;
 }
 
+/** Palabras de prosa española frecuentes en blueprints SDD — no son rutas de repo. */
+const BLUEPRINT_PROSE_DENYLIST = new Set([
+  "entidades",
+  "entidad",
+  "todos",
+  "todo",
+  "si",
+  "sí",
+  "tabla",
+  "tablas",
+  "schemas",
+  "schema",
+  "en",
+  "el",
+  "la",
+  "los",
+  "las",
+  "un",
+  "una",
+  "modulos",
+  "módulos",
+  "modulo",
+  "módulo",
+  "capa",
+  "capas",
+  "fase",
+  "stack",
+  "convenciones",
+  "observabilidad",
+  "autenticacion",
+  "autenticación",
+  "autorizacion",
+  "autorización",
+  "seguridad",
+  "modelo",
+  "datos",
+  "implementacion",
+  "implementación",
+  "componentes",
+  "transversales",
+  "opcional",
+  "pendiente",
+  "nota",
+  "ver",
+  "usa",
+  "usar",
+  "con",
+  "para",
+  "desde",
+  "cada",
+  "otros",
+  "otras",
+  "lista",
+  "listas",
+  "incluye",
+  "incluir",
+  "cubre",
+  "cubrir",
+  "resumen",
+  "detalle",
+  "detalles",
+  "seccion",
+  "sección",
+]);
+
+function isBlueprintProseToken(token: string): boolean {
+  const normalized = token
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  return BLUEPRINT_PROSE_DENYLIST.has(normalized);
+}
+
 /** Valid repo path: kms-backend/, packages/foo/, apps/api/ — not prose bullets. */
 export function isValidBlueprintModulePath(raw: string): boolean {
   const clean = raw.replace(/[`'"\\]/g, "").trim().replace(/\/$/, "");
@@ -458,14 +532,19 @@ export function isValidBlueprintModulePath(raw: string): boolean {
 
   const segments = clean.split("/").filter(Boolean);
   if (segments.length === 0) return false;
+  if (segments.some((s) => isBlueprintProseToken(s))) return false;
+
   const validSegment = (s: string) => /^[a-z0-9][a-z0-9._-]*$/i.test(s);
   if (!segments.every(validSegment)) return false;
 
   if (segments[0] === "apps" || segments[0] === "packages") {
-    return segments.length >= 2;
+    return segments.length >= 2 && segments.length <= 4;
   }
-  if (/^kms-/i.test(segments[0]!) || /^[a-z0-9][a-z0-9_-]*$/i.test(segments[0]!)) {
+  if (/^kms-/i.test(segments[0]!)) {
     return segments.length <= 3;
+  }
+  if (segments.length === 1) {
+    return false;
   }
   return false;
 }
@@ -474,17 +553,41 @@ function extractBlueprintModuleFromLine(line: string): string | null {
   const trimmed = line.trim();
   if (!trimmed || /^#/.test(trimmed)) return null;
 
-  const backtick = trimmed.match(/^[-*]\s+`([^`\n]+)`/);
-  if (backtick?.[1] && isValidBlueprintModulePath(backtick[1])) {
-    return backtick[1].trim().replace(/\/$/, "");
+  const backtickPath = trimmed.match(/`([a-z0-9][a-z0-9._/-]*)`/i);
+  if (backtickPath?.[1] && isValidBlueprintModulePath(backtickPath[1])) {
+    return backtickPath[1].trim().replace(/\/$/, "");
+  }
+
+  const backtickBullet = trimmed.match(/^[-*]\s+`([^`\n]+)`/);
+  if (backtickBullet?.[1] && isValidBlueprintModulePath(backtickBullet[1])) {
+    return backtickBullet[1].trim().replace(/\/$/, "");
+  }
+
+  if (/^[-*]\s+[A-Za-zÀ-ÿ]+\s+`/i.test(trimmed)) {
+    return null;
   }
 
   const tree = trimmed.match(
-    /^[-*]?\s*`?([a-z0-9][a-z0-9_-]*(?:\/[a-z0-9_-]+)*)\/?(?:`|$|\s)/i,
+    /^[-*]?\s*`?((?:apps|packages|kms-[a-z0-9_-]+)(?:\/[a-z0-9._-]+)*)\/?`?(?:\s|$)/i,
   );
   if (tree?.[1] && isValidBlueprintModulePath(tree[1])) {
     return tree[1].trim().replace(/\/$/, "");
   }
+
+  const indentedTree = trimmed.match(
+    /^\s{2,}`?((?:apps|packages|kms-[a-z0-9_-]+)(?:\/[a-z0-9._-]+)*)\/?`?/i,
+  );
+  if (indentedTree?.[1] && isValidBlueprintModulePath(indentedTree[1])) {
+    return indentedTree[1].trim().replace(/\/$/, "");
+  }
+
+  const inlinePath = trimmed.match(
+    /\b((?:apps|packages|kms-[a-z0-9_-]+)(?:\/[a-z0-9._-]+)*)\/?(?:\s|$|[,.])/i,
+  );
+  if (inlinePath?.[1] && isValidBlueprintModulePath(inlinePath[1])) {
+    return inlinePath[1].trim().replace(/\/$/, "");
+  }
+
   return null;
 }
 
@@ -503,7 +606,19 @@ function extractBlueprintModules(bpText: string): string[] {
     else bullets.push(mod);
   }
 
-  return [...new Set([...tree, ...bullets])].slice(0, 12);
+  const merged = [...new Set([...tree, ...bullets])];
+  const prioritized = [
+    ...merged.filter((m) => m.includes("/") || /^kms-/i.test(m)),
+    ...merged.filter((m) => !m.includes("/") && !/^kms-/i.test(m)),
+  ];
+  return prioritized.filter(isValidBlueprintModulePath).slice(0, 12);
+}
+
+/** Omite módulos que son solo tokens de prosa sin estructura de path real. */
+function blueprintModulesForOverlay(modules: string[]): string[] {
+  const valid = modules.filter(isValidBlueprintModulePath);
+  const structured = valid.filter((m) => m.includes("/") || /^kms-/i.test(m));
+  return structured;
 }
 
 function classifyGlobPath(path: string): "backend" | "frontend" | "both" {
@@ -531,7 +646,14 @@ function inferCodebaseGlobs(blueprintModules: string[], text: string): {
   }
 
   for (const line of text.split("\n")) {
-    const dir = line.match(/(?:^|\s|`)([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)\/?(?:`|$|\s)/i)?.[1];
+    const backtickDir = line.match(/`((?:apps|packages|kms-[a-z0-9_-]+)(?:\/[a-z0-9._-]+)*)\/?`/i)?.[1];
+    const treeDir = line.match(
+      /(?:^|\s)`?((?:apps|packages|kms-[a-z0-9_-]+)(?:\/[a-z0-9._-]+)+)\/?`?(?:\s|$)/i,
+    )?.[1];
+    const inlineDir = line.match(
+      /\b((?:apps|packages|kms-[a-z0-9_-]+)(?:\/[a-z0-9._-]+)*)\/?(?:\s|$|[,.])/i,
+    )?.[1];
+    const dir = backtickDir ?? treeDir ?? inlineDir;
     if (!dir || !isValidBlueprintModulePath(dir)) continue;
     all.add(`${dir}/**`);
     const kind = classifyGlobPath(dir);
@@ -582,7 +704,9 @@ export function extractProjectGovernanceFacts(
   const authoritativeUiText = [input.mddMarkdown, input.specMarkdown].filter(Boolean).join("\n\n");
   const stacks = inferStacks(text);
   const projectTitle = extractProjectTitle(input);
-  const blueprintModules = extractBlueprintModules(input.blueprintMarkdown ?? "");
+  const blueprintModules = blueprintModulesForOverlay(
+    extractBlueprintModules(input.blueprintMarkdown ?? ""),
+  );
   const globs = inferCodebaseGlobs(blueprintModules, text);
   const taskCheckboxes = extractTaskCheckboxes(input.tasksMarkdown);
   const sddConflicts = detectSddConflicts(text);

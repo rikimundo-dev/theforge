@@ -2,6 +2,8 @@ import { Logger } from "@nestjs/common";
 import {
   AGENT_GOVERNANCE_TEMPLATE_VERSION,
   buildGovernanceInstallMap,
+  DOCUMENT_PATH_MAP_STATIC,
+  formatDocumentPathMapTable,
   GOVERNANCE_DOCS_PREFIX,
   migrateGovernancePath,
   type AgentGovernanceFile,
@@ -153,34 +155,77 @@ function defaultInstallMapTableRows(): string {
   );
 }
 
-function defaultDocConsumptionGuide(): string {
+function defaultDocumentPathMapTable(featureDir?: string): string {
+  if (featureDir?.trim()) {
+    return formatDocumentPathMapTable(featureDir.trim());
+  }
+  const rows = DOCUMENT_PATH_MAP_STATIC.map(
+    (e) => `| ${e.label} | \`${e.primary}\` | \`${e.mirror}\` |`,
+  ).join("\n");
+  return (
+    "| Documento | Primario (spec-kit) | Espejo (gobernanza) |\n" +
+    "|-----------|---------------------|---------------------|\n" +
+    rows
+  );
+}
+
+function replaceFeatureDirPlaceholders(content: string, featureDir: string): string {
+  return content
+    .replace(/\{featureDir\}/g, featureDir)
+    .replace(/specs\/NNN-slug/g, featureDir);
+}
+
+function defaultDocConsumptionGuide(featureDir?: string): string {
+  const tasksPath = featureDir ? `${featureDir}/tasks.md` : "specs/NNN-slug/tasks.md";
+  const planPath = featureDir ? `${featureDir}/plan.md` : "specs/NNN-slug/plan.md";
+  const specPath = featureDir ? `${featureDir}/spec.md` : "specs/NNN-slug/spec.md";
+  const contractsPath = featureDir
+    ? `${featureDir}/contracts/`
+    : "specs/NNN-slug/contracts/";
   return (
     "# Guía de consumo de documentos TheForge\n\n" +
     "Resumen para agentes que implementan desde entregables SDD incluidos en este ZIP.\n\n" +
-    "## Orden de lectura\n\n" +
-    "1. **`docs/sdd/mdd.md`** — Constitución (stack, entidades, reglas, auth).\n" +
-    "2. **`docs/sdd/blueprint.md`** — Estructura del repo, convenciones, §8 UI si aplica.\n" +
-    "3. **`docs/sdd/spec.md`** — Requisitos y criterios de aceptación.\n" +
-    "4. **`docs/sdd/tasks.md`** — Checklist de implementación (contrastar siempre con MDD).\n" +
-    "5. Entregables opcionales si existen: `api-contracts.md`, `logic-flows.md`, `architecture.md`, `infra.md`.\n\n" +
+    "## Orden de lectura (primario spec-kit, espejo docs/sdd)\n\n" +
+    "1. **`.specify/memory/constitution.md`** — Constitución (MDD); espejo: `docs/sdd/mdd.md`.\n" +
+    `2. **\`${planPath}\`** — Blueprint / plan técnico; espejo: \`docs/sdd/blueprint.md\`.\n` +
+    `3. **\`${specPath}\`** — Requisitos y criterios de aceptación; espejo: \`docs/sdd/spec.md\`.\n` +
+    `4. **\`${tasksPath}\`** — Checklist de implementación; espejo: \`docs/sdd/tasks.md\`.\n` +
+    `5. Entregables opcionales en \`${featureDir ?? "specs/NNN-slug"}/\` o \`docs/sdd/\`: contratos, logic-flows, architecture, infra.\n\n` +
+    "### Mapeo de rutas\n\n" +
+    defaultDocumentPathMapTable(featureDir) +
+    "\n\n" +
+    "**El layout spec-kit es canónico.** Los archivos bajo `docs/sdd/` son espejo para rules/skills de gobernanza; ante conflicto de contenido, gana el primario.\n\n" +
     "## Prioridad ante conflictos\n\n" +
     "**El MDD manda.** Si un entregable contradice otro, sigue MDD §2–§6 y documenta la resolución en `docs/sdd/PROGRESO.md`.\n\n" +
     "## Gates antes de cerrar tareas\n\n" +
     "- Lint, typecheck y tests del paquete tocado.\n" +
-    "- Contratos API alineados a `docs/sdd/api-contracts.md` cuando exista.\n" +
+    `- Contratos API alineados a \`${contractsPath}\` o \`docs/sdd/api-contracts.md\` cuando exista.\n` +
     "- Actualizar `docs/sdd/PROGRESO.md` al completar ítems de Tasks.\n"
   );
 }
 
-function defaultAgentsMd(): string {
+const AGENTS_SDD_DUAL_SECTION = "## Documentos SDD (layout dual)";
+const AGENTS_INSTALL_SECTION = "## Instalación de gobernanza";
+
+function buildAgentsDualSpecKitSection(featureDir?: string): string {
   return (
-    "# AGENTS\n\n" +
-    "Punto de entrada para agentes de código (Cursor, Claude Code, Copilot, etc.).\n\n" +
-    "## Instalación de gobernanza\n\n" +
+    AGENTS_SDD_DUAL_SECTION +
+    "\n\n" +
+    "Lee primero el layout **spec-kit** en la raíz del repo; `docs/sdd/*` es espejo para gobernanza:\n\n" +
+    defaultDocumentPathMapTable(featureDir) +
+    "\n"
+  );
+}
+
+function buildAgentsInstallSection(): string {
+  return (
+    AGENTS_INSTALL_SECTION +
+    "\n\n" +
     "El ZIP **no incluye** la carpeta oculta `.cursor/` (macOS/Finder la oculta al extraer). " +
     "Los artefactos viven en `docs/agent-governance/`; instálalos en el repo destino así:\n\n" +
-    "1. Lee `docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md` y `docs/agent-governance/INSTALACION.md`.\n" +
-    "2. Copia o mapea cada archivo según la tabla (o ejecuta `scripts/install-agent-governance.sh`).\n\n" +
+    "1. Lee `IMPLEMENT.md` y `.specify/memory/constitution.md`.\n" +
+    "2. Lee `docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md` y `docs/agent-governance/INSTALACION.md`.\n" +
+    "3. Copia o mapea cada archivo según la tabla (o ejecuta `scripts/install-agent-governance.sh`).\n\n" +
     "| Archivo en ZIP | Destino en repo destino |\n" +
     "|----------------|-------------------------|\n" +
     defaultInstallMapTableRows() +
@@ -191,24 +236,130 @@ function defaultAgentsMd(): string {
   );
 }
 
-function defaultAgentOnboarding(): string {
+const AGENTS_INSTALL_CANONICAL_MARKERS = [
+  "docs/agent-governance/references/*",
+  ".cursor/references/*",
+  "docs/agent-governance/agents/*",
+  ".cursor/agents/*",
+  "docs/agent-governance/commands/*",
+  ".cursor/commands/*",
+] as const;
+
+function extractMarkdownSection(
+  content: string,
+  heading: string,
+): { start: number; end: number; text: string } | null {
+  const idx = content.indexOf(heading);
+  if (idx < 0) return null;
+  const afterHeading = idx + heading.length;
+  const rest = content.slice(afterHeading);
+  const nextHeading = rest.search(/\n## [^#]/);
+  const end = nextHeading >= 0 ? afterHeading + nextHeading : content.length;
+  return { start: idx, end, text: content.slice(idx, end) };
+}
+
+function replaceMarkdownSection(content: string, heading: string, replacement: string): string {
+  const section = extractMarkdownSection(content, heading);
+  if (!section) return content;
+  const before = content.slice(0, section.start).trimEnd();
+  const after = content.slice(section.end).trimStart();
+  const parts = [before, replacement.trimEnd()];
+  if (after) parts.push(after);
+  return `${parts.join("\n\n")}\n`;
+}
+
+function isStaleAgentsInstallSection(section: string): boolean {
+  if (/\.cursor\/specifications\//i.test(section)) return true;
+  if (/\.cursor\/workflows\//i.test(section)) return true;
+  return AGENTS_INSTALL_CANONICAL_MARKERS.some((marker) => !section.includes(marker));
+}
+
+function mcpJsonExampleSpecificityScore(content: string): number {
+  const trimmed = content.trim();
+  if (!trimmed) return -1;
+  let score = trimmed.length;
+  if (!/\{\{API_URL\}\}/.test(trimmed)) score += 500;
+  if (!/\{\{PROJECT_ID\}\}/.test(trimmed)) score += 200;
+  try {
+    const parsed = JSON.parse(trimmed) as { mcpServers?: Record<string, unknown> };
+    const servers = parsed.mcpServers ?? {};
+    const keys = Object.keys(servers);
+    score += keys.length * 100;
+    for (const key of keys) {
+      if (key !== "example") score += 300;
+    }
+  } catch {
+    score -= 1000;
+  }
+  return score;
+}
+
+function mergeMcpJsonExampleContent(a: string, b: string): string {
+  return mcpJsonExampleSpecificityScore(a) >= mcpJsonExampleSpecificityScore(b) ? a : b;
+}
+
+const MCP_JSON_EXAMPLE_CANONICAL = `${GOVERNANCE_DOCS_PREFIX}mcp.json.example`;
+
+function setFileMapEntry(fileMap: Record<string, string>, path: string, content: string): void {
+  const normalized = normalizePath(path);
+  if (normalized === MCP_JSON_EXAMPLE_CANONICAL && fileMap[normalized]?.trim()) {
+    fileMap[normalized] = mergeMcpJsonExampleContent(fileMap[normalized]!, content);
+    return;
+  }
+  fileMap[normalized] = content;
+}
+
+function deduplicateMcpJsonExample(fileMap: Record<string, string>): void {
+  const rootPath = "mcp.json.example";
+  const rootContent = fileMap[rootPath]?.trim();
+  const docContent = fileMap[MCP_JSON_EXAMPLE_CANONICAL]?.trim();
+  if (!rootContent) return;
+  if (docContent) {
+    fileMap[MCP_JSON_EXAMPLE_CANONICAL] = mergeMcpJsonExampleContent(rootContent, docContent);
+  } else {
+    fileMap[MCP_JSON_EXAMPLE_CANONICAL] = rootContent;
+  }
+  delete fileMap[rootPath];
+}
+
+function defaultAgentsMd(featureDir?: string): string {
   return (
-    "# Onboarding para agentes implementadores\n\n" +
-    "1. Lee **`docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md`** (guía principal).\n" +
-    "2. Si aún no instalaste gobernanza en `.cursor/`, sigue **`docs/agent-governance/INSTALACION.md`**.\n" +
-    "3. Lee el **MDD** (Constitución) y el **Blueprint** si existe.\n" +
-    "4. Consulta la guía de consumo de documentos: `" + DOC_CONSUMPTION_GUIDE_PATH + "`.\n" +
-    "5. Carga `AGENTS.md` y las rules/skills en `.cursor/` según la tarea.\n" +
-    "6. Antes de implementar, confirma gates (lint, typecheck, tests) definidos en workflows.\n"
+    "# AGENTS\n\n" +
+    "Punto de entrada para agentes de código (Cursor, Claude Code, Copilot, etc.).\n\n" +
+    buildAgentsDualSpecKitSection(featureDir).trimEnd() +
+    "\n\n" +
+    buildAgentsInstallSection().trimEnd() +
+    "\n"
   );
 }
 
-function defaultInstalacion(): string {
+function defaultAgentOnboarding(): string {
+  return (
+    "# Onboarding para agentes implementadores\n\n" +
+    "1. Lee **`IMPLEMENT.md`** y **`.specify/memory/constitution.md`** (layout spec-kit primario).\n" +
+    "2. Lee **`docs/agent-governance/COMO-USAR-GOBERNANZA-IA.md`** (guía principal).\n" +
+    "3. Si aún no instalaste gobernanza en `.cursor/`, sigue **`docs/agent-governance/INSTALACION.md`**.\n" +
+    "4. Abre **`specs/NNN-slug/tasks.md`** para la checklist; espejo en `docs/sdd/tasks.md`.\n" +
+    "5. Consulta la guía de consumo: `" + DOC_CONSUMPTION_GUIDE_PATH + "`.\n" +
+    "6. Carga `AGENTS.md` y las rules/skills en `.cursor/` según la tarea.\n" +
+    "7. Antes de implementar, confirma gates (lint, typecheck, tests) definidos en workflows.\n"
+  );
+}
+
+function defaultInstalacion(featureDir?: string): string {
+  const featureRef = featureDir ?? "specs/NNN-slug";
   return (
     "# Instalación de gobernanza IA en el repo destino\n\n" +
     "Este paquete TheForge entrega reglas, skills y referencias bajo **`docs/agent-governance/`** " +
     "(visible en Finder y al extraer el ZIP). En el repo destino deben vivir en **`.cursor/`** " +
     "para que Cursor y herramientas compatibles las carguen automáticamente.\n\n" +
+    "## Orden de instalación recomendado\n\n" +
+    `1. **Spec-kit en raíz** — Descomprime \`.specify/\` y \`${featureRef}/\` (constitution, spec, plan, tasks).\n` +
+    "2. **Gobernanza IA** — Instala `docs/agent-governance/` → `.cursor/` (opciones A/B/C abajo).\n" +
+    "3. **Verificar espejos** — Confirma que `docs/sdd/*` refleja los mismos entregables (no es SSOT alternativo).\n\n" +
+    "### Mapeo spec-kit ↔ docs/sdd\n\n" +
+    defaultDocumentPathMapTable(featureDir) +
+    "\n\n" +
     "## Opción A — Script (recomendado)\n\n" +
     "Desde la raíz del repo destino (tras copiar el ZIP):\n\n" +
     "```bash\n" +
@@ -817,8 +968,9 @@ export function appendProjectDeliverablesToScaffold(
 ): AgentGovernanceScaffold {
   const fileMap: Record<string, string> = {};
   for (const file of scaffold.files) {
-    fileMap[normalizePath(file.path)] = file.content;
+    setFileMapEntry(fileMap, file.path, file.content);
   }
+  deduplicateMcpJsonExample(fileMap);
 
   const written: string[] = [];
   const skipped: string[] = [];
@@ -893,8 +1045,9 @@ function parseLlmFilesPayload(parsed: unknown): Record<string, string> {
   if (root.files && typeof root.files === "object" && !Array.isArray(root.files)) {
     const out: Record<string, string> = {};
     for (const [path, value] of Object.entries(root.files as Record<string, unknown>)) {
-      if (typeof value === "string") out[normalizePath(path)] = value;
+      if (typeof value === "string") setFileMapEntry(out, path, value);
     }
+    deduplicateMcpJsonExample(out);
     return out;
   }
 
@@ -904,9 +1057,10 @@ function parseLlmFilesPayload(parsed: unknown): Record<string, string> {
       if (!item || typeof item !== "object") continue;
       const { path, content } = item as { path?: unknown; content?: unknown };
       if (typeof path === "string" && typeof content === "string") {
-        out[normalizePath(path)] = content;
+        setFileMapEntry(out, path, content);
       }
     }
+    deduplicateMcpJsonExample(out);
     return out;
   }
 
@@ -985,25 +1139,67 @@ function applyCanonicalGovernanceDefaults(
   complexity: ComplexityLevel,
   suggestions?: AgentGovernanceSuggestions | null,
   governanceInput?: SuggestAgentGovernanceInput,
+  featureDir?: string,
 ): void {
   for (const path of LLM_PROOF_CANONICAL_PATHS) {
+    if (path === `${GOVERNANCE_DOCS_PREFIX}INSTALACION.md`) {
+      fileMap[path] = defaultInstalacion(featureDir);
+      continue;
+    }
     const factory = FALLBACK_BY_PATH[path];
-    if (factory) fileMap[path] = factory(complexity, suggestions, governanceInput);
+    if (factory) {
+      let content = factory(complexity, suggestions, governanceInput);
+      if (featureDir?.trim()) {
+        content = replaceFeatureDirPlaceholders(content, featureDir.trim());
+      }
+      fileMap[path] = content;
+    }
   }
   dropDuplicateGovernancePromptPaths(fileMap);
 }
 
-function ensureDocConsumptionGuide(fileMap: Record<string, string>): void {
+function ensureDocConsumptionGuide(fileMap: Record<string, string>, featureDir?: string): void {
   if (!fileMap[DOC_CONSUMPTION_GUIDE_PATH]?.trim()) {
-    fileMap[DOC_CONSUMPTION_GUIDE_PATH] = defaultDocConsumptionGuide();
+    fileMap[DOC_CONSUMPTION_GUIDE_PATH] = defaultDocConsumptionGuide(featureDir);
+  } else if (featureDir?.trim()) {
+    fileMap[DOC_CONSUMPTION_GUIDE_PATH] = replaceFeatureDirPlaceholders(
+      fileMap[DOC_CONSUMPTION_GUIDE_PATH]!,
+      featureDir.trim(),
+    );
   }
 }
 
-function ensureAgentsInstallSection(fileMap: Record<string, string>): void {
+function ensureAgentsCanonicalSections(fileMap: Record<string, string>, featureDir?: string): void {
   const path = "AGENTS.md";
-  const current = fileMap[path]?.trim() ?? "";
-  if (!current.includes("Instalación de gobernanza")) {
-    fileMap[path] = current.length > 0 ? `${current.trimEnd()}\n\n${defaultAgentsMd()}` : defaultAgentsMd();
+  let current = fileMap[path]?.trim() ?? "";
+
+  if (!current.includes(AGENTS_SDD_DUAL_SECTION)) {
+    const dualSection = buildAgentsDualSpecKitSection(featureDir).trimEnd();
+    if (current.length > 0) {
+      const lines = current.split("\n");
+      let insertAt = lines[0]?.startsWith("#") ? 1 : 0;
+      while (insertAt < lines.length && (lines[insertAt] ?? "").trim() === "") insertAt++;
+      const before = lines.slice(0, insertAt).join("\n");
+      const after = lines.slice(insertAt).join("\n");
+      current = `${before.trimEnd()}\n\n${dualSection}${after.trim() ? `\n\n${after}` : ""}`;
+    } else {
+      current = dualSection;
+    }
+    fileMap[path] = current;
+  }
+
+  current = fileMap[path]?.trim() ?? "";
+  if (current.includes(AGENTS_INSTALL_SECTION)) {
+    const installSection = extractMarkdownSection(current, AGENTS_INSTALL_SECTION);
+    if (installSection && isStaleAgentsInstallSection(installSection.text)) {
+      fileMap[path] = replaceMarkdownSection(current, AGENTS_INSTALL_SECTION, buildAgentsInstallSection());
+    }
+  } else {
+    fileMap[path] = `${current.trimEnd()}\n\n${buildAgentsInstallSection().trimEnd()}\n`;
+  }
+
+  if (featureDir?.trim()) {
+    fileMap[path] = replaceFeatureDirPlaceholders(fileMap[path] ?? "", featureDir.trim());
   }
 }
 
@@ -1012,17 +1208,24 @@ function applyRequiredFileFallbacks(
   complexity: ComplexityLevel,
   suggestions?: AgentGovernanceSuggestions | null,
   governanceInput?: SuggestAgentGovernanceInput,
+  featureDir?: string,
 ): string[] {
   const missing: string[] = [];
   for (const required of getRequiredAgentGovernancePaths(complexity)) {
     if (!fileMap[required]?.trim()) {
       missing.push(required);
       const factory = FALLBACK_BY_PATH[required];
-      if (factory) fileMap[required] = factory(complexity, suggestions, governanceInput);
+      if (factory) {
+        let content = factory(complexity, suggestions, governanceInput);
+        if (featureDir?.trim()) {
+          content = replaceFeatureDirPlaceholders(content, featureDir.trim());
+        }
+        fileMap[required] = content;
+      }
     }
   }
-  ensureAgentsInstallSection(fileMap);
-  ensureDocConsumptionGuide(fileMap);
+  ensureAgentsCanonicalSections(fileMap, featureDir);
+  ensureDocConsumptionGuide(fileMap, featureDir);
   return missing;
 }
 
@@ -1258,6 +1461,8 @@ export function reconcileAgentGovernanceScaffold(
     mddMarkdown?: string;
     target?: GovernanceTarget;
     forceFreshOverlay?: boolean;
+    /** Resuelve `{featureDir}` y `specs/NNN-slug` en tablas de path map al exportar. */
+    featureDir?: string;
   },
 ): AgentGovernanceScaffold {
   const suggestions =
@@ -1271,6 +1476,7 @@ export function reconcileAgentGovernanceScaffold(
       complexity,
     } satisfies SuggestAgentGovernanceInput);
   const target = options?.target ?? "cursor";
+  const featureDir = options?.featureDir?.trim();
   const overlayOptions: AgentGovernanceOverlayOptions = {
     forceFreshOverlay: options?.forceFreshOverlay === true,
   };
@@ -1278,8 +1484,9 @@ export function reconcileAgentGovernanceScaffold(
 
   const fileMap: Record<string, string> = {};
   for (const file of scaffold.files) {
-    fileMap[normalizePath(file.path)] = file.content;
+    setFileMapEntry(fileMap, file.path, file.content);
   }
+  deduplicateMcpJsonExample(fileMap);
 
   const facts = extractProjectGovernanceFacts(governanceInput);
   const merged = mergeSuggestedArtifacts(
@@ -1299,11 +1506,12 @@ export function reconcileAgentGovernanceScaffold(
     );
   }
 
-  applyRequiredFileFallbacks(fileMap, complexity, suggestions, governanceInput);
+  applyRequiredFileFallbacks(fileMap, complexity, suggestions, governanceInput, featureDir);
   enrichGovernanceArtifacts(fileMap, complexity, governanceInput, overlayOptions);
   injectDynamicCursorArtifacts(fileMap, facts, complexity);
   appendSuggestionsToComoUsar(fileMap, suggestions);
-  applyCanonicalGovernanceDefaults(fileMap, complexity, suggestions, governanceInput);
+  applyCanonicalGovernanceDefaults(fileMap, complexity, suggestions, governanceInput, featureDir);
+  ensureAgentsCanonicalSections(fileMap, featureDir);
 
   const files = recordToFileEntries(fileMap);
   const paths = files.map((f) => f.path);
@@ -1337,6 +1545,7 @@ export interface ParseAgentGovernanceOptions {
   mddMarkdown?: string;
   target?: string;
   forceFreshOverlay?: boolean;
+  featureDir?: string;
 }
 
 export function parseAgentGovernanceResponse(
@@ -1360,6 +1569,7 @@ export function parseAgentGovernanceResponse(
       complexity,
     } satisfies SuggestAgentGovernanceInput);
   const target = (options?.target as GovernanceTarget) ?? "cursor";
+  const featureDir = options?.featureDir?.trim();
   const overlayOptions: AgentGovernanceOverlayOptions = {
     forceFreshOverlay: options?.forceFreshOverlay === true,
   };
@@ -1383,7 +1593,13 @@ export function parseAgentGovernanceResponse(
     );
   }
 
-  const missing = applyRequiredFileFallbacks(fileMap, complexity, suggestions, governanceInput);
+  const missing = applyRequiredFileFallbacks(
+    fileMap,
+    complexity,
+    suggestions,
+    governanceInput,
+    featureDir,
+  );
   if (missing.length > 0) {
     logger.debug(
       `[agent-gov] parseAgentGovernanceResponse required fallbacks (${complexity}): ${missing.join(", ")}`,
@@ -1407,7 +1623,7 @@ export function parseAgentGovernanceResponse(
       files,
     },
     complexity,
-    { suggestions, governanceInput, target, forceFreshOverlay: overlayOptions.forceFreshOverlay },
+    { suggestions, governanceInput, target, forceFreshOverlay: overlayOptions.forceFreshOverlay, featureDir },
   );
 }
 

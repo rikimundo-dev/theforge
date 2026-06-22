@@ -86,10 +86,18 @@ export function WorkshopDocBubbleMenu({
   triggerLabel = "Acciones del documento",
 }: WorkshopDocBubbleMenuProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<WorkshopDocBubbleMenuItem | null>(null);
 
-  const handleClose = useCallback(() => setOpen(false), []);
+  const handleClose = useCallback(() => {
+    const root = rootRef.current;
+    const active = document.activeElement;
+    if (root?.contains(active) && active !== triggerRef.current) {
+      triggerRef.current?.focus();
+    }
+    setOpen(false);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -217,6 +225,7 @@ export function WorkshopDocBubbleMenu({
 
           {/* Trigger / close — always aligned with panel width */}
           <button
+            ref={triggerRef}
             type="button"
             className={cn(
               open

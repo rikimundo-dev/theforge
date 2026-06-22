@@ -121,7 +121,7 @@ export function migrateGovernancePath(path: string): string {
   if (normalized.startsWith(".cursor/references/")) {
     return `${GOVERNANCE_DOCS_PREFIX}references/${normalized.slice(".cursor/references/".length)}`;
   }
-  if (normalized === ".cursor/mcp.json") {
+  if (normalized === ".cursor/mcp.json" || normalized === "mcp.json.example") {
     return `${GOVERNANCE_DOCS_PREFIX}mcp.json.example`;
   }
   return normalized;

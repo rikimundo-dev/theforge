@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LlevarAlRepoWizardDialog } from "@/components/LlevarAlRepoWizardDialog";
 import { AnalyzeDashboard } from "@/components/AnalyzeDashboard";
+import type { SddAnalyzeReport } from "@theforge/shared-types";
 import { agentGovernanceScaffoldHasContent } from "@theforge/shared-types";
 import { useWorkshopStore, type Status } from "../store/workshopStore";
 import { calculateCostFromMdd } from "../utils/costCalculator";
@@ -134,6 +135,7 @@ export function WorkshopMetricsColumnInner({
   );
   const [repoWizardOpen, setRepoWizardOpen] = useState(false);
   const [showAnalyze, setShowAnalyze] = useState(false);
+  const [analyzeReport, setAnalyzeReport] = useState<SddAnalyzeReport | null>(null);
 
   const isLegacyBaselineStage = useMemo(() => {
     if (!isLegacyProject) return false;
@@ -994,6 +996,7 @@ export function WorkshopMetricsColumnInner({
             <AnalyzeDashboard
               projectId={projectId}
               className="rounded-lg bg-[var(--background)] shadow-sm"
+              onReportLoaded={setAnalyzeReport}
             />
           ) : null}
 
@@ -1004,6 +1007,7 @@ export function WorkshopMetricsColumnInner({
             projectName={project?.name ?? "Workshop"}
             hasAgentGovernance={hasAgentGovernance}
             hasMdd={!!effectiveMddTrimmed}
+            analyzeReport={analyzeReport}
             onError={(msg) => useWorkshopStore.getState().setError(msg)}
             onSuccess={(msg) => useWorkshopStore.getState().setError(msg)}
           />

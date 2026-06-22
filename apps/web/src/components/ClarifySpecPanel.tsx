@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { HelpCircle, Loader2 } from "lucide-react";
+import { HelpCircle, Loader2, RefreshCw } from "lucide-react";
 import { isChangelogOnlyDocument } from "@theforge/shared-types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui";
 import { WorkshopDocToolbarIconButton } from "@/components/WorkshopButtons";
@@ -17,8 +17,12 @@ interface ClarifySpecPanelProps {
   disabled?: boolean;
   onClarify: (
     projectId: string,
-    opts: { persist: boolean; notes?: string },
-  ) => Promise<{ clarifiedSpec: string; clarificationMarkerCount: number } | null>;
+    opts: { persist: boolean; notes?: string; syncMdd?: boolean },
+  ) => Promise<{
+    clarifiedSpec: string;
+    clarificationMarkerCount: number;
+    mddSyncQueued?: boolean;
+  } | null>;
   onApplied: (content: string) => void;
   onMessage?: (msg: string) => void;
   /** Controlled dialog open state (e.g. bubble menu on desktop). */
@@ -50,24 +54,28 @@ export function ClarifySpecPanel({
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
+  const [lastMarkerCount, setLastMarkerCount] = useState(0);
   const previewIsUnsafe = preview != null && isChangelogOnlyDocument(preview);
 
-  const handleRun = async (persist: boolean) => {
+  const handleRun = async (persist: boolean, syncMdd = false) => {
     if (!projectId) return;
     setBusy(true);
     try {
       const res = await onClarify(projectId, {
         persist,
         notes: notes.trim() || undefined,
+        syncMdd,
       });
       if (!res) return;
       setPreview(res.clarifiedSpec);
+      setLastMarkerCount(res.clarificationMarkerCount);
       if (persist) {
         onApplied(res.clarifiedSpec);
+        const syncNote = res.mddSyncQueued ? " · MDD anotado con sync" : "";
         onMessage?.(
           res.clarificationMarkerCount > 0
-            ? `Spec aclarado — ${res.clarificationMarkerCount} [NEEDS CLARIFICATION] pendiente(s)`
-            : "✅ Spec aclarado sin marcadores pendientes",
+            ? `Spec aclarado — ${res.clarificationMarkerCount} [NEEDS CLARIFICATION] pendiente(s)${syncNote}`
+            : `✅ Spec aclarado sin marcadores pendientes${syncNote}`,
         );
         setOpen(false);
         setPreview(null);
@@ -166,6 +174,18 @@ export function ClarifySpecPanel({
             >
               {busy ? <Loader2 className="inline h-3 w-3 animate-spin" /> : null} Aplicar al Spec
             </button>
+            {preview && lastMarkerCount === 0 ? (
+              <button
+                type="button"
+                onClick={() => void handleRun(true, true)}
+                disabled={busy}
+                title="Anota el MDD con referencia al Spec aclarado"
+                className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-medium disabled:opacity-50"
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden />
+                Aplicar y sincronizar MDD
+              </button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

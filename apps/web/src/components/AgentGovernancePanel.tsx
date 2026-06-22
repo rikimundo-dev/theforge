@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Bot, ChevronRight, FileCode, FileText, Folder, Sparkles } from "lucide-react";
 import {
+  migrateGovernancePath,
   parseAgentGovernanceScaffold,
   type AgentGovernanceFile,
   type AgentGovernanceScaffold,
@@ -14,6 +15,22 @@ interface TreeNode {
   isDir: boolean;
   children: TreeNode[];
   file?: AgentGovernanceFile;
+}
+
+/** Rutas como en repo destino / ZIP aplanado (sin prefijo `agent-governance/`). */
+function normalizeScaffoldForDisplay(scaffold: AgentGovernanceScaffold): AgentGovernanceScaffold {
+  const byPath = new Map<string, AgentGovernanceFile>();
+  for (const file of scaffold.files) {
+    const path = migrateGovernancePath(file.path);
+    if (!path || path === "MANIFEST.json") continue;
+    byPath.set(path, { path, content: file.content });
+  }
+  const files = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path));
+  return {
+    ...scaffold,
+    manifest: { ...scaffold.manifest, files: files.map((f) => f.path) },
+    files,
+  };
 }
 
 function buildFileTree(files: AgentGovernanceFile[]): TreeNode[] {
@@ -135,13 +152,22 @@ function TreeRow({
 }
 
 export function AgentGovernancePanel({
+  scaffold: scaffoldProp,
   rawContent,
   viewMode,
+  loading = false,
 }: {
-  rawContent: string | null | undefined;
+  /** Scaffold reconciliado (export API); preferido sobre `rawContent`. */
+  scaffold?: AgentGovernanceScaffold | null;
+  rawContent?: string | null;
   viewMode: "preview" | "source";
+  loading?: boolean;
 }) {
-  const scaffold = useMemo(() => parseAgentGovernanceScaffold(rawContent), [rawContent]);
+  const scaffold = useMemo(() => {
+    const base = scaffoldProp ?? parseAgentGovernanceScaffold(rawContent);
+    if (!base) return null;
+    return normalizeScaffoldForDisplay(base);
+  }, [scaffoldProp, rawContent]);
   const tree = useMemo(() => (scaffold ? buildFileTree(scaffold.files) : []), [scaffold]);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const hasComoUsar = useMemo(
@@ -174,21 +200,27 @@ export function AgentGovernancePanel({
     return scaffold.files.find((f) => f.path === path) ?? scaffold.files[0] ?? null;
   }, [scaffold, selectedPath]);
 
+  if (loading) {
+    return (
+      <p className="p-4 text-sm text-[var(--muted-foreground)]">Cargando paquete reconciliado…</p>
+    );
+  }
+
   if (!scaffold) return null;
 
   return (
     <div className="flex min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-4">
       <aside
         className="flex max-h-[min(40vh,16rem)] min-h-0 w-full shrink-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[color-mix(in_oklch,var(--muted)_35%,var(--background))] lg:max-h-none lg:w-56 xl:w-64"
-        aria-label="Árbol de archivos agent-governance"
+        aria-label="Árbol del paquete handoff en raíz del repo"
       >
         <div className="flex shrink-0 flex-col gap-1.5 border-b border-[var(--border)] px-3 py-2">
           <div className="flex items-center gap-2">
             <Bot className="h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden />
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-[var(--foreground)]">agent-governance/</p>
+              <p className="truncate text-xs font-semibold text-[var(--foreground)]">Raíz del repo (handoff)</p>
               <p className="truncate text-[10px] text-[var(--muted-foreground)]">
-                v{scaffold.manifest.templateVersion} · {scaffold.files.length} archivos
+                v{scaffold.manifest.templateVersion} · {scaffold.files.length} archivos · docs/agent-governance, docs/sdd
               </p>
             </div>
           </div>
