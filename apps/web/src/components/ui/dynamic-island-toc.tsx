@@ -37,13 +37,29 @@ function resolveScrollHost(
   return findScrollParentForHeading(headings[0]?.element ?? null) ?? workspaceFallback;
 }
 
+function isScrollWindow(host: HTMLElement | Window): host is Window {
+  return host === window;
+}
+
+function getHostScrollTop(host: HTMLElement | Window): number {
+  return isScrollWindow(host) ? window.scrollY : host.scrollTop;
+}
+
+function getHostScrollProgress(host: HTMLElement | Window): number {
+  if (isScrollWindow(host)) {
+    const total = document.documentElement.scrollHeight - window.innerHeight;
+    return total > 0 ? Math.min(100, Math.max(0, (window.scrollY / total) * 100)) : 0;
+  }
+  const total = host.scrollHeight - host.clientHeight;
+  return total > 0 ? Math.min(100, Math.max(0, (host.scrollTop / total) * 100)) : 0;
+}
+
 /** Scroll offset of a heading inside its scroll host (stable vs. getBoundingClientRect loops). */
 function getHeadingScrollTop(headingEl: HTMLElement, host: HTMLElement | Window): number {
-  if (host === window) {
+  if (isScrollWindow(host)) {
     return headingEl.getBoundingClientRect().top + window.scrollY;
   }
-  const hostEl = host as HTMLElement;
-  return headingEl.getBoundingClientRect().top - hostEl.getBoundingClientRect().top + hostEl.scrollTop;
+  return headingEl.getBoundingClientRect().top - host.getBoundingClientRect().top + host.scrollTop;
 }
 
 /**
@@ -57,13 +73,14 @@ function resolveActiveHeadingId(
 ): string | null {
   if (headings.length === 0) return null;
 
-  const scrollTop = host === window ? window.scrollY : host.scrollTop;
-  const readMarker = scrollTop + activationOffset;
+  const readMarker = getHostScrollTop(host) + activationOffset;
 
   for (let i = headings.length - 1; i >= 0; i--) {
-    const headingTop = getHeadingScrollTop(headings[i].element, host);
+    const heading = headings[i];
+    if (!heading) continue;
+    const headingTop = getHeadingScrollTop(heading.element, host);
     if (headingTop <= readMarker) {
-      return headings[i].id;
+      return heading.id;
     }
   }
 
@@ -213,13 +230,7 @@ export function DynamicIslandTOC({
     function handleScroll() {
       const host: HTMLElement | Window = scrollHost ?? scrollContainerRef?.current ?? window;
       setActiveId(resolveActiveHeadingId(headings, host));
-      if (host !== window) {
-        const total = host.scrollHeight - host.clientHeight;
-        setProgress(total > 0 ? Math.min(100, Math.max(0, (host.scrollTop / total) * 100)) : 0);
-      } else {
-        const total = document.documentElement.scrollHeight - window.innerHeight;
-        setProgress(total > 0 ? Math.min(100, Math.max(0, (window.scrollY / total) * 100)) : 0);
-      }
+      setProgress(getHostScrollProgress(host));
     }
 
     const target: HTMLElement | Window = scrollHost ?? scrollContainerRef?.current ?? window;
