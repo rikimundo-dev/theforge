@@ -1,19 +1,21 @@
 /**
  * Dashboard projects panel header: integrated title, copy, and actions.
  */
-import { Loader2, Plus, RefreshCw } from "lucide-react";
+import { Loader2, Plus, RefreshCw, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui";
 
 export interface DashboardPanelHeaderProps {
   loading: boolean;
   onCreateProject: () => void;
   onRefresh: () => void;
+  onOpenTutorial?: () => void;
 }
 
 export function DashboardPanelHeader({
   loading,
   onCreateProject,
   onRefresh,
+  onOpenTutorial,
 }: DashboardPanelHeaderProps) {
   return (
     <header className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
@@ -47,6 +49,18 @@ export function DashboardPanelHeader({
           variant="outline"
           size="icon"
           className="touch-manipulation sm:hidden"
+          onClick={onOpenTutorial}
+          disabled={loading || !onOpenTutorial}
+          aria-label="Tutorial greenfield y brownfield"
+          title="Tutorial"
+        >
+          <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="touch-manipulation sm:hidden"
           onClick={onRefresh}
           disabled={loading}
           aria-label="Refrescar lista de proyectos"
@@ -66,6 +80,16 @@ export function DashboardPanelHeader({
         >
           <Plus className="h-4 w-4 shrink-0" aria-hidden />
           Crear nuevo proyecto
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="hidden w-full touch-manipulation min-h-11 sm:inline-flex sm:w-auto sm:min-h-10"
+          onClick={onOpenTutorial}
+          disabled={loading || !onOpenTutorial}
+        >
+          <BookOpen className="h-4 w-4 shrink-0" aria-hidden />
+          Tutorial
         </Button>
         <Button
           type="button"

@@ -33,6 +33,7 @@ import { CloneProjectDialog } from "./components/CloneProjectDialog";
 import { ProjectFolderTile } from "./components/ProjectFolderTile";
 import { DashboardSidebar } from "./components/DashboardSidebar";
 import { DashboardPanelHeader } from "./components/DashboardPanelHeader";
+import { ProjectTutorialDialog } from "./components/ProjectTutorialDialog";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   apiFetch,
@@ -135,6 +136,7 @@ export default function App() {
     message?: string;
   } | null>(null);
   const [showCreateWizard, setShowCreateWizard] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
   const [showTheForgeModal, setShowTheForgeModal] = useState(false);
   const [usersViewOpen, setUsersViewOpen] = useState(false);
   const [settingsViewOpen, setSettingsViewOpen] = useState(false);
@@ -590,6 +592,8 @@ export default function App() {
         onContinueLegacy={openTheForgeModal}
       />
 
+      <ProjectTutorialDialog open={showTutorial} onClose={() => setShowTutorial(false)} />
+
       <ProjectMergeDialog
         open={mergeDialogOpen}
         onOpenChange={setMergeDialogOpen}
@@ -903,6 +907,7 @@ export default function App() {
           loading={loading}
           onCreateProject={() => setShowCreateWizard(true)}
           onRefresh={() => void loadProjects()}
+          onOpenTutorial={() => setShowTutorial(true)}
         />
 
         <Card id="dashboard-projects">

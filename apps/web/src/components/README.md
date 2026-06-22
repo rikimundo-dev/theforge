@@ -7,6 +7,8 @@
 | **Phase0InterviewPanel** | Entrevistador interactivo Paso 0 (`start` → preguntas → `answer`). Incluye auditoría manual al completar. |
 | **MddViewer** | Preview markdown (Fase 0, MDD, BRD, Blueprint): `repairDirectoryTreeBlocks` + detección `((Root))`/`— apps/` envuelve árboles en ` ```text `; párrafos colapsados → `<pre>` monoespaciado. Normaliza `mermaid`. |
 | **DashboardSidebar** | En Workshop, «Panel de proyectos» queda `disabled` mientras `selectWorkshopAgentsBusy` (mismo criterio que el chat). |
+| **DashboardPanelHeader** | Panel de proyectos: acciones Crear / Tutorial / Refrescar. |
+| **ProjectTutorialDialog** | Tutorial **Greenfield** vs **Brownfield** (`content/tutorial/*.md`). |
 | **ProjectMergeDialog** | Fusión de 2+ carpetas en Paso 0: config (destino, benchmark, suite, archivado), preview con conflictos, `POST /projects/merge`. |
 | **RenameProjectDialog** | Renombrar proyecto (`PATCH /projects/:id` con `{ name }`). Lápiz en carpeta del dashboard, barra de selección (1 carpeta) y header del Workshop. |
 | **CloneProjectDialog** | Clonar proyecto (`POST /projects/:id/clone`). Barra de selección con una carpeta: «Clonar» → nombre por defecto «Copia de …»; abre el Workshop en el clon. |
