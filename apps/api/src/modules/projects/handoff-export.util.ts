@@ -104,6 +104,25 @@ export function buildAgentGovernanceInput(
   };
 }
 
+const ROOT_CONSUMPTION_GUIDE = "THEFORGE-DOC-CONSUMPTION-GUIDE.md";
+
+function ensureRootConsumptionGuideInSpecKit(
+  specKitFiles: SpecKitBundleFile[],
+  agentGovernance: AgentGovernanceScaffold | null,
+  consumptionGuideContent: string | null,
+): SpecKitBundleFile[] {
+  if (specKitFiles.some((f) => f.path === ROOT_CONSUMPTION_GUIDE)) {
+    return specKitFiles;
+  }
+  const fromGuide = consumptionGuideContent?.trim();
+  const fromGovernance = agentGovernance?.files.find((f) =>
+    f.path.endsWith("THEFORGE-DOC-CONSUMPTION-GUIDE.md"),
+  )?.content;
+  const content = fromGuide || fromGovernance?.trim();
+  if (!content) return specKitFiles;
+  return [...specKitFiles, { path: ROOT_CONSUMPTION_GUIDE, content }];
+}
+
 /** Reconcile governance scaffold + inject docs/sdd deliverables (shared by export paths). */
 export function reconcileExportScaffold(
   project: ProjectWithStages,
@@ -129,11 +148,14 @@ export function reconcileExportScaffold(
   const mdd = projectConstitutionMarkdown(project);
   const governanceInput = buildAgentGovernanceInput(project, mdd, complexity);
   const suggestions = suggestAgentGovernanceArtifacts(governanceInput);
+  const stage = pickPrimaryStage(project.stages);
+  const featureDir = specKitFeatureDir(stage?.ordinal ?? 1, project.name);
 
   const reconciled = reconcileAgentGovernanceScaffold(scaffold, complexity, {
     suggestions,
     governanceInput,
     forceFreshOverlay: true,
+    featureDir,
   });
 
   return appendProjectDeliverablesToScaffold(reconciled, {
@@ -181,7 +203,6 @@ export function buildUnifiedHandoff(
 ): UnifiedHandoff {
   const stage = pickPrimaryStage(project.stages);
   const featureDir = specKitFeatureDir(stage?.ordinal ?? 1, project.name);
-  const specKitFiles = buildSpecKitFilesForProject(project, consumptionGuideContent);
 
   const raw = project.agentGovernanceContent?.trim() ?? "";
   let agentGovernance: AgentGovernanceScaffold | null = null;
@@ -195,6 +216,12 @@ export function buildUnifiedHandoff(
       governancePersisted = serializedGovernance !== raw;
     }
   }
+
+  const specKitFiles = ensureRootConsumptionGuideInSpecKit(
+    buildSpecKitFilesForProject(project, consumptionGuideContent),
+    agentGovernance,
+    consumptionGuideContent,
+  );
 
   return {
     featureDir,

@@ -902,6 +902,9 @@ export default function WorkshopView({
   const [mddInicialViewMode, setMddInicialViewMode] = useState<"preview" | "source">("preview");
   const [aemViewMode, setAemViewMode] = useState<"preview" | "source">("preview");
   const [agentGovernanceViewMode, setAgentGovernanceViewMode] = useState<"preview" | "source">("preview");
+  const [agentGovernanceExportScaffold, setAgentGovernanceExportScaffold] =
+    useState<import("@theforge/shared-types").AgentGovernanceScaffold | null>(null);
+  const [agentGovernanceExportLoading, setAgentGovernanceExportLoading] = useState(false);
   const [hermesConfigured, setHermesConfigured] = useState<boolean | null>(null);
   const [mddInicialLocalContent, setMddInicialLocalContent] = useState("");
   const [mddInicialSaving, setMddInicialSaving] = useState(false);
@@ -964,6 +967,23 @@ export default function WorkshopView({
     | "integration";
   const centralPanel = useWorkshopStore((s) => s.workshopActiveDocPanel) as DocPanel;
   const setCentralPanel = useWorkshopStore((s) => s.setWorkshopActiveDocPanel);
+
+  useEffect(() => {
+    if (centralPanel !== "agent-governance" || !hasAgentGovernance || !projectId) {
+      return;
+    }
+    let cancelled = false;
+    setAgentGovernanceExportLoading(true);
+    void fetchAgentGovernanceExport(projectId).then((scaffold) => {
+      if (!cancelled) {
+        setAgentGovernanceExportScaffold(scaffold);
+        setAgentGovernanceExportLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [centralPanel, hasAgentGovernance, projectId, agentGovernanceContent, fetchAgentGovernanceExport]);
 
   /** En pestaña MDD legacy: regenerar siempre vía `generate-mdd` (desde codebaseDoc / etapa), nunca `generate-codebase-doc`. */
   const legacyMddNeedsCodebaseDoc = isLegacyProject && !hasCodebaseDoc;
@@ -1921,6 +1941,10 @@ export default function WorkshopView({
           void (async () => {
             const exportScaffold =
               (await fetchAgentGovernanceExport(projectId)) ?? agentGovernanceScaffold;
+            const consumptionGuideContent =
+              exportScaffold.files.find((f) =>
+                f.path.endsWith("THEFORGE-DOC-CONSUMPTION-GUIDE.md"),
+              )?.content ?? null;
             await downloadAgentGovernanceZip(
               exportScaffold,
               projectName ?? project?.name ?? "Workshop",
@@ -1937,6 +1961,7 @@ export default function WorkshopView({
                 phase0SummaryContent: phase0SummaryContent ?? project?.phase0SummaryContent,
                 dbgaContent: dbgaContent ?? project?.dbgaContent,
                 uxUiGuideContent: uxUiGuideContent ?? project?.uxUiGuideContent,
+                consumptionGuideContent,
               }),
             );
           })();
@@ -4013,8 +4038,10 @@ export default function WorkshopView({
                 </div>
               ) : hasAgentGovernance ? (
                 <AgentGovernancePanel
+                  scaffold={agentGovernanceExportScaffold}
                   rawContent={agentGovernanceContent}
                   viewMode={agentGovernanceViewMode}
+                  loading={agentGovernanceExportLoading}
                 />
               ) : (
                 <DocEmptyState

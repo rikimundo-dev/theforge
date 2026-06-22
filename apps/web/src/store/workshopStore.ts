@@ -2677,7 +2677,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         const err = await r.json().catch(() => ({}));
         throw new Error((err as { message?: string }).message ?? "Error al preparar ZIP de gobernanza");
       }
-      return (await r.json()) as import("@theforge/shared-types").AgentGovernanceScaffold;
+      const scaffold = (await r.json()) as import("@theforge/shared-types").AgentGovernanceScaffold;
+      const serialized = JSON.stringify(scaffold, null, 2);
+      if (serialized !== (get().agentGovernanceContent ?? "").trim()) {
+        set({ agentGovernanceContent: serialized });
+      }
+      return scaffold;
     } catch (e) {
       set({
         error: e instanceof Error ? e.message : "Error al preparar ZIP de gobernanza",

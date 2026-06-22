@@ -62,9 +62,7 @@ import {
   type UpdateProjectDto,
 } from "@theforge/shared-types";
 import {
-  appendProjectDeliverablesToScaffold,
   parseAgentGovernanceResponse,
-  reconcileAgentGovernanceScaffold,
   serializeAgentGovernanceScaffold,
 } from "../ai/utils/agent-governance.util.js";
 import {

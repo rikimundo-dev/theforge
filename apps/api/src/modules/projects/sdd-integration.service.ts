@@ -27,7 +27,6 @@ import { getRequestUserId } from "../../common/request-user.store.js";
 import { pickPrimaryStage } from "./stage-helpers.js";
 import { cleanDocumentContent } from "../sessions/document-content.util.js";
 import type { ClarifySpecBody } from "@theforge/shared-types";
-import { ComplexityLevel } from "@theforge/database";
 import {
   analyzeAgentGovernanceSlice,
   buildHermesHandoffPayload,
@@ -353,7 +352,6 @@ export class SddIntegrationService {
     return {
       projectId: project.id,
       projectName: project.name,
-      featureDir,
       openCount,
       task,
       ...buildNextTaskDocumentLayout(featureDir, governancePresent),

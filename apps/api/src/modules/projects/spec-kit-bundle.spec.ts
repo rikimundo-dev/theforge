@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildSpecKitBundleFiles,
-  DOCUMENT_PATH_MAP_STATIC,
+  buildSddImplementReadme,
   parseTasksMarkdown,
   slugifySpecKitFeature,
   specKitFeatureDir,
@@ -28,7 +28,8 @@ describe("spec-kit-bundle", () => {
     assert.ok(paths.includes("IMPLEMENT.md"));
   });
 
-  it("IMPLEMENT.md incluye path map y relación con agent-governance", () => {
+  it("IMPLEMENT.md incluye path map resuelto y relación con gobernanza", () => {
+    const featureDir = specKitFeatureDir(1, "Demo");
     const files = buildSpecKitBundleFiles({
       projectName: "Demo",
       mddContent: "# MDD",
@@ -37,11 +38,13 @@ describe("spec-kit-bundle", () => {
     assert.ok(implement?.content.includes("Path map"));
     assert.ok(implement?.content.includes(".specify/memory/constitution.md"));
     assert.ok(implement?.content.includes("docs/sdd/mdd.md"));
+    assert.ok(implement?.content.includes(`${featureDir}/spec.md`));
+    assert.ok(implement?.content.includes(`${featureDir}/tasks.md`));
+    assert.ok(!implement?.content.includes("{featureDir}"));
+    assert.ok(!implement?.content.includes("specs/NNN-slug"));
     assert.ok(implement?.content.includes("mirror"));
-    assert.ok(implement?.content.includes("agent-governance"));
-    for (const entry of DOCUMENT_PATH_MAP_STATIC) {
-      assert.ok(implement?.content.includes(entry.mirror));
-    }
+    assert.ok(implement?.content.includes("docs/agent-governance"));
+    assert.equal(implement?.content, buildSddImplementReadme(featureDir));
   });
 
   it("specKitFeatureDir usa ordinal", () => {

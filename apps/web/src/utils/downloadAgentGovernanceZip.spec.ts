@@ -143,6 +143,28 @@ describe("addAgentGovernanceEntriesToZip", () => {
     assert.ok(manifest.files.includes("docs/agent-governance/rules/git-commits.mdc"));
     assert.ok(manifest.installMap?.length);
   });
+
+  it("flattenToZipRoot escribe gobernanza en la raíz del ZIP (repo-handoff)", async () => {
+    const build = buildAgentGovernanceZipEntries(MOCK_SCAFFOLD);
+    assert.ok(build);
+
+    const zip = new JSZip();
+    addAgentGovernanceEntriesToZip(zip, build!, { flattenToZipRoot: true });
+
+    const loaded = await JSZip.loadAsync(await zip.generateAsync({ type: "nodebuffer" }));
+    const expected = [
+      "docs/agent-governance/rules/git-commits.mdc",
+      "AGENTS.md",
+      "MANIFEST.json",
+    ];
+
+    for (const fullPath of expected) {
+      assert.ok(loaded.file(fullPath), `falta entrada ZIP aplanada: ${fullPath}`);
+    }
+
+    const zipPaths = Object.keys(loaded.files).filter((p) => !p.endsWith("/"));
+    assert.equal(zipPaths.some((p) => p.startsWith(`${AGENT_GOVERNANCE_ZIP_ROOT}/`)), false);
+  });
 });
 
 const MEDIUM_SCAFFOLD_16: AgentGovernanceScaffold = {
@@ -178,7 +200,7 @@ const MEDIUM_SCAFFOLD_16: AgentGovernanceScaffold = {
 };
 
 describe("download path — scaffold realista sin .cursor/", () => {
-  it("build + ZIP: ninguna entrada empieza por .cursor/", async () => {
+  it("downloadAgentGovernanceZip escribe entradas en la raíz del ZIP (sin agent-governance/)", async () => {
     const build = buildAgentGovernanceZipEntries(MEDIUM_SCAFFOLD_16);
     assert.ok(build);
     assert.equal(build!.entries.size, 17);
@@ -191,14 +213,16 @@ describe("download path — scaffold realista sin .cursor/", () => {
     logAgentGovernanceZipBuild(build!, "scaffold");
 
     const zip = new JSZip();
-    addAgentGovernanceEntriesToZip(zip, build!);
+    addAgentGovernanceEntriesToZip(zip, build!, { flattenToZipRoot: true });
     const buffer = await zip.generateAsync({ type: "nodebuffer" });
     const loaded = await JSZip.loadAsync(buffer);
 
     const zipPaths = Object.keys(loaded.files).filter((p) => !p.endsWith("/")).sort();
     assert.equal(zipPaths.length, 18, `ZIP paths: ${zipPaths.join(", ")}`);
-    assert.ok(zipPaths.some((p) => p.includes("/docs/agent-governance/rules/")));
-    assert.ok(zipPaths.some((p) => p.includes("/docs/agent-governance/skills/")));
+    assert.ok(zipPaths.includes("docs/agent-governance/rules/git-commits.mdc"));
+    assert.ok(zipPaths.includes("AGENTS.md"));
+    assert.ok(zipPaths.includes("MANIFEST.json"));
+    assert.equal(zipPaths.some((p) => p.startsWith(`${AGENT_GOVERNANCE_ZIP_ROOT}/`)), false);
     assert.equal(zipPaths.some((p) => p.includes("/.cursor/")), false);
   });
 });

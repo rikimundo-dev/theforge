@@ -135,16 +135,23 @@ export function buildAgentGovernanceZipEntries(
   return { entries, manifest };
 }
 
-/** Añade entradas al ZIP bajo `agent-governance/` (sin rutas `.cursor/`). */
+export interface AgentGovernanceZipOptions {
+  /** Repo-handoff: escribe entradas en la raíz del ZIP (sin prefijo `agent-governance/`). */
+  flattenToZipRoot?: boolean;
+}
+
+/** Añade entradas al ZIP; por defecto bajo `agent-governance/`, o en raíz si `flattenToZipRoot`. */
 export function addAgentGovernanceEntriesToZip(
   zip: JSZip,
   build: AgentGovernanceZipBuildResult,
+  options?: AgentGovernanceZipOptions,
 ): void {
+  const prefix = options?.flattenToZipRoot ? "" : `${AGENT_GOVERNANCE_ZIP_ROOT}/`;
   for (const [path, content] of build.entries) {
-    zip.file(`${AGENT_GOVERNANCE_ZIP_ROOT}/${path}`, content, { createFolders: true });
+    zip.file(`${prefix}${path}`, content, { createFolders: true });
   }
   zip.file(
-    `${AGENT_GOVERNANCE_ZIP_ROOT}/MANIFEST.json`,
+    `${prefix}MANIFEST.json`,
     JSON.stringify(build.manifest, null, 2),
     { createFolders: false },
   );
@@ -180,6 +187,7 @@ export async function downloadAgentGovernanceZip(
   scaffold: AgentGovernanceScaffold,
   projectName: string,
   specKitBundle?: SpecKitBundleFile[],
+  zipOptions?: AgentGovernanceZipOptions,
 ): Promise<boolean> {
   const build = buildAgentGovernanceZipEntries(scaffold);
   if (!build || build.entries.size === 0) return false;
@@ -187,7 +195,7 @@ export async function downloadAgentGovernanceZip(
   logAgentGovernanceZipBuild(build, "export");
 
   const zip = new JSZip();
-  addAgentGovernanceEntriesToZip(zip, build);
+  addAgentGovernanceEntriesToZip(zip, build, { flattenToZipRoot: true, ...zipOptions });
   if (specKitBundle?.length) {
     addSpecKitBundleToZip(zip, specKitBundle);
   }

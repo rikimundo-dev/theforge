@@ -21,7 +21,7 @@ export interface RepoHandoffApiResponse {
   };
 }
 
-/** Descarga ZIP handoff completo (spec-kit raíz + agent-governance/). */
+/** Descarga ZIP handoff completo (spec-kit + gobernanza aplanada en raíz del ZIP). */
 export async function downloadRepoHandoffFromApi(
   projectId: string,
   projectName: string,
@@ -50,7 +50,7 @@ export async function downloadRepoHandoffFromApi(
       })),
     };
     const build = buildAgentGovernanceZipEntries(scaffold);
-    if (build) addAgentGovernanceEntriesToZip(zip, build);
+    if (build) addAgentGovernanceEntriesToZip(zip, build, { flattenToZipRoot: true });
   }
 
   const blob = await zip.generateAsync({ type: "blob" });

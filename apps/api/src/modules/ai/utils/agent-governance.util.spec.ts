@@ -332,6 +332,23 @@ Backend NestJS, frontend React, monorepo packages/api packages/web.
     assert.ok(script?.content.includes(".cursor/commands"));
   });
 
+  it("AGENTS.md personalizado recibe overlay dual spec-kit con featureDir resuelto", () => {
+    const featureDir = "specs/001-kms";
+    const reconciled = reconcileAgentGovernanceScaffold(
+      {
+        manifest: { templateVersion: "1.0.0", files: ["AGENTS.md"] },
+        files: [{ path: "AGENTS.md", content: "# AGENTS\n\nContenido LLM sin tablas.\n" }],
+      },
+      "MEDIUM",
+      { featureDir },
+    );
+    const agents = reconciled.files.find((f) => f.path === "AGENTS.md");
+    assert.ok(agents?.content.includes("Documentos SDD (layout dual)"));
+    assert.ok(agents?.content.includes(`${featureDir}/spec.md`));
+    assert.ok(agents?.content.includes("Instalación de gobernanza"));
+    assert.ok(agents?.content.includes("Contenido LLM sin tablas"));
+  });
+
   it("deduplica sección SDD y elimina PROMPT duplicado bajo docs/agent-governance/", () => {
     const suggestions = suggestAgentGovernanceArtifacts({
       mddMarkdown: `

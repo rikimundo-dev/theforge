@@ -7,7 +7,7 @@
  *   THEFORGE_MCP_SECRET=<m2m-secret> \
  *   node scripts/theforge-export.mjs --project <uuid> --out ./handoff
  *
- * Writes spec-kit layout at --out root and reconciled agent-governance under --out/agent-governance/.
+ * Writes spec-kit layout and reconciled governance at --out root (flat handoff).
  * API returns unified handoff (spec-kit + gobernanza reconciliada + docs/sdd mirrors).
  */
 
@@ -76,12 +76,12 @@ async function main() {
 
   if (data.agentGovernance?.present) {
     for (const file of data.agentGovernance.files ?? []) {
-      const rel = file.path.replace(/^agent-governance\//i, "");
-      await writeFileEnsured(join(root, "agent-governance", rel), file.content);
+      const rel = file.path.replace(/^agent-governance\//i, "").replace(/^\/+/, "");
+      await writeFileEnsured(join(root, rel), file.content);
     }
     if (data.agentGovernance.manifest) {
       await writeFileEnsured(
-        join(root, "agent-governance", "MANIFEST.json"),
+        join(root, "MANIFEST.json"),
         JSON.stringify(data.agentGovernance.manifest, null, 2),
       );
     }
