@@ -150,6 +150,8 @@ function extractTitleFromSection1Fallback(mdd: string): string | null {
 export function extractProjectTitle(input: SuggestAgentGovernanceInput): string {
   const mdd = input.mddMarkdown ?? "";
   const fromProject = input.projectName?.trim();
+  if (fromProject) return fromProject.slice(0, 120);
+
   const fromSec1 = extractTitleFromSection1(mdd);
   if (fromSec1) return fromSec1;
   const h1 = mdd.match(/^#\s+(.+)$/m)?.[1]?.trim();
@@ -158,7 +160,6 @@ export function extractProjectTitle(input: SuggestAgentGovernanceInput): string 
     const fromH1 = normalizeProjectTitleCandidate(h1);
     if (fromH1) return fromH1;
   }
-  if (fromProject && genericH1) return fromProject.slice(0, 120);
   const fromSec1Fallback = extractTitleFromSection1Fallback(mdd);
   if (fromSec1Fallback) return fromSec1Fallback;
   const named = mdd.match(/(?:nombre|proyecto|project)[:\s]+([^\n]+)/i)?.[1]?.trim();
@@ -166,7 +167,6 @@ export function extractProjectTitle(input: SuggestAgentGovernanceInput): string 
     const fromNamed = normalizeProjectTitleCandidate(named);
     if (fromNamed) return fromNamed;
   }
-  if (fromProject) return fromProject.slice(0, 120);
   return "Proyecto TheForge";
 }
 

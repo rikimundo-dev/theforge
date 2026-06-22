@@ -497,15 +497,19 @@ Backend NestJS con TypeORM en borrador; Prisma en blueprint.
 
   it("usa projectName cuando MDD H1 es genérico y §1 lista entidades", () => {
     const projectName = "Micro Servicio de costos y listas de precios";
-    const suggestions = suggestAgentGovernanceArtifacts({
-      mddMarkdown: `
+    const mddWithEntityBullets = `
 # Master Design Document
 ## 1. Entidades del dominio
-Geografía (país, estado, ciudad, plaza, ubicación)
-Producto (SKU, precio, moneda)
+
+### Entidades principales
+
+- Geografía (país, estado, ciudad, plaza, ubicación) – tablas espejo
+- Producto (SKU, precio, moneda) – catálogo central
 ## 2. Stack
 Backend NestJS monorepo packages/api.
-`,
+`;
+    const suggestions = suggestAgentGovernanceArtifacts({
+      mddMarkdown: mddWithEntityBullets,
       blueprintMarkdown: "- packages/api/\n",
       projectName,
       complexity: "MEDIUM",
@@ -519,13 +523,7 @@ Backend NestJS monorepo packages/api.
       {
         suggestions,
         governanceInput: {
-          mddMarkdown: `
-# Master Design Document
-## 1. Entidades del dominio
-Geografía (país, estado, ciudad, plaza, ubicación)
-## 2. Stack
-Backend NestJS monorepo packages/api.
-`,
+          mddMarkdown: mddWithEntityBullets,
           blueprintMarkdown: "- packages/api/\n",
           projectName,
           complexity: "MEDIUM",
