@@ -53,3 +53,14 @@ Variables relevantes: ver `.env.example` en la raíz del monorepo (prefijo `LEGA
 **Alineación cliente HTTP con AriadneSpecs (Streamable HTTP):** `POST` + JSON-RPC `2.0`, `method: "tools/call"`, `params: { name, arguments }`, headers `Content-Type`, `Accept: application/json, text/event-stream`, `MCP-Protocol-Version: 2025-03-26`, auth `Authorization: Bearer` o `X-M2M-Token`. Respuestas JSON o SSE (primera línea `data: {…}` parseada). No se usa `initialize` ni `Mcp-Session-Id` (servidor stateless). Argumentos MCP según `tools/list` del despliegue (p. ej. `get_definitions` / `get_references` → `symbolName`). Extensión Ariadne: `ask_codebase` con `evidence_first` devuelve JSON MDD; con **`raw_evidence`** (default en `askCodebase`) retrieve determinista + JSON evidencia, normalizado a markdown en la API.
 
 **«Sin datos en índice» en MDD inicial:** el MCP filtra por el **id de repo** tras normalizar (o por `scope` en ask/plan). Si el UUID no coincide con lo indexado en Ariadne o el índice RAG está vacío, el Analyzer puede devolver ese texto. **La API ya no persiste** ese mensaje como `codebaseDoc`: se detecta con `legacyAnalyzerIndicatesEmptyIndex` y se reintenta el **modo clásico** (`ask_codebase` directo + bloques semánticos). Si tras el clásico sigue sin haber partes, el doc queda vacío: revisa sync del repo y que el id sea el mismo que en `list_known_projects`. Con `LEGACY_ANALYZER_REQUIRE_GRAPH_HITS=1` (default) también se omitía el Analyzer cuando no hay hits de grafo; la detección por frase cubre el caso `REQUIRE_GRAPH_HITS=0` o hits débiles que igual disparan la respuesta vacía de Ariadne.
+
+## Brownfield converge auto-wire (Ariadne ingest)
+
+Al crear un proyecto **`LEGACY`** (`POST /projects`), si `THEFORGE_MCP_URL` está configurado y `ARIADNE_BROWNFIELD_CONVERGE_AUTO` no es `0`, la API hace **`PATCH /api/repositories/:id`** (proxy ingest) en cada repo resuelto desde `list_known_projects`:
+
+- `theforgeProjectId` → UUID del proyecto Workshop recién creado
+- `theforgeStageId` → etapa 1
+- `theforgeConvergeTriggerMode` → `ARIADNE_BROWNFIELD_CONVERGE_MODE` (default `incremental`)
+- `theforgeServiceToken` → `THEFORGE_SERVICE_JWT` si está definido
+
+Auth: token Ariadne del usuario (`User.ariadneMcpToken`) o `MCP_AUTH_TOKEN` / `MCP_X_M2M_TOKEN` en env. URL ingest: `ARIADNE_INGEST_URL` o derivada de `THEFORGE_MCP_URL` (`/mcp` → `/api`). Utilidades: `ariadne-brownfield-wire.util.ts`, `ariadne-ingest-api.util.ts`, `TheForgeService.wireAriadneBrownfieldConverge`.

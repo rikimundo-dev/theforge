@@ -10,6 +10,16 @@ import {
   type AriadneCodebaseResolution,
 } from "./ariadne-mcp-scope.util.js";
 import {
+  buildAriadneBrownfieldWirePatchBody,
+  resolveAriadneRepositoryIdsForBrownfieldWire,
+} from "./ariadne-brownfield-wire.util.js";
+import {
+  buildAriadneRepositoryPatchUrl,
+  isAriadneBrownfieldConvergeAutoEnabled,
+  normalizeAriadneBrownfieldConvergeMode,
+  resolveAriadneIngestApiConfig,
+} from "./ariadne-ingest-api.util.js";
+import {
   legacyDocumentationRepoIds,
   mergeLegacyDocumentationByRepo,
   repoLabelFromProjectsCatalog,
@@ -1081,5 +1091,119 @@ export class TheForgeService implements OnModuleInit, IOrchestratorTheForgePort 
     if (currentFilePath?.trim()) args.currentFilePath = currentFilePath.trim();
     const out = await this.callToolInternal("get_references", args);
     return out ?? "";
+  }
+
+  /** Result of PATCH Ariadne repositories after legacy project create (brownfield converge auto-wire). */
+  async wireAriadneBrownfieldConverge(input: {
+    ariadneSourceId: string;
+    workshopProjectId: string;
+    workshopStageId: string;
+  }): Promise<{
+    wired: boolean;
+    repositoryIds: string[];
+    patched: string[];
+    skippedReason?: string;
+    errors: string[];
+  }> {
+    const empty = (skippedReason: string) => ({
+      wired: false,
+      repositoryIds: [] as string[],
+      patched: [] as string[],
+      skippedReason,
+      errors: [] as string[],
+    });
+
+    if (!this.isConfigured()) return empty("mcp_not_configured");
+    if (!isAriadneBrownfieldConvergeAutoEnabled()) return empty("auto_wire_disabled");
+
+    const triggerMode = normalizeAriadneBrownfieldConvergeMode(
+      process.env.ARIADNE_BROWNFIELD_CONVERGE_MODE,
+    );
+    if (triggerMode === "off") return empty("converge_mode_off");
+
+    let userMcpUrl: string | null = null;
+    let userMcpToken: string | null = null;
+    try {
+      const userId = getRequestUserId();
+      if (userId) {
+        const user = await this.prisma.user.findUnique({
+          where: { id: userId },
+          select: { ariadneMcpUrl: true, ariadneMcpToken: true },
+        });
+        userMcpUrl = user?.ariadneMcpUrl ?? null;
+        userMcpToken = user?.ariadneMcpToken ?? null;
+      }
+    } catch {
+      /* background / no request context */
+    }
+
+    const apiConfig = resolveAriadneIngestApiConfig({
+      mcpUrl: this.baseUrl,
+      explicitIngestUrl: process.env.ARIADNE_INGEST_URL?.trim() || null,
+      userMcpUrl,
+      userMcpToken,
+      envMcpToken:
+        process.env.MCP_AUTH_TOKEN?.trim() ||
+        process.env.MCP_X_M2M_TOKEN?.trim() ||
+        null,
+    });
+    if (!apiConfig) return empty("no_ariadne_api_token_or_url");
+
+    const catalog = await this.getProjectsCatalog();
+    const repositoryIds = resolveAriadneRepositoryIdsForBrownfieldWire(
+      input.ariadneSourceId,
+      catalog,
+    );
+    if (!repositoryIds.length) {
+      return empty("no_ariadne_repositories_resolved");
+    }
+
+    const persist =
+      process.env.ARIADNE_BROWNFIELD_CONVERGE_PERSIST?.trim().toLowerCase() === "true" ||
+      process.env.ARIADNE_BROWNFIELD_CONVERGE_PERSIST?.trim() === "1";
+    const patchBody = buildAriadneBrownfieldWirePatchBody({
+      workshopProjectId: input.workshopProjectId,
+      workshopStageId: input.workshopStageId,
+      triggerMode,
+      persist,
+      serviceJwt: process.env.THEFORGE_SERVICE_JWT?.trim() || null,
+    });
+
+    const patched: string[] = [];
+    const errors: string[] = [];
+
+    for (const repoId of repositoryIds) {
+      const url = buildAriadneRepositoryPatchUrl(apiConfig, repoId);
+      try {
+        const res = await fetch(url, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiConfig.bearerToken}`,
+          },
+          body: JSON.stringify(patchBody),
+        });
+        if (!res.ok) {
+          const text = (await res.text()).slice(0, 400);
+          errors.push(`${repoId}: HTTP ${res.status} ${text}`);
+          continue;
+        }
+        patched.push(repoId);
+        this.logger.log(
+          `[TheForge] Ariadne brownfield wire OK repo=${repoId} → workshop=${input.workshopProjectId} mode=${triggerMode}`,
+        );
+      } catch (err) {
+        errors.push(
+          `${repoId}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    return {
+      wired: patched.length > 0,
+      repositoryIds,
+      patched,
+      errors,
+    };
   }
 }

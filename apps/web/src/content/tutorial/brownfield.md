@@ -64,6 +64,8 @@ Sin esto, al crear legacy aparece *«TheForge no está configurado»* y no lista
 2. Modal **Base de conocimientos** — pestaña **Proyectos** o **Repositorios** (datos de `list_known_projects` vía MCP).
 3. Elige el ítem indexado en el paso A → se crea `projectType: LEGACY` con **`theforgeProjectId` = UUID de Ariadne** (automático).
 
+**Auto-wire brownfield converge:** si `THEFORGE_MCP_URL` está activo, la API hace `PATCH` en Ariadne (`/api/repositories/:id`) con el UUID del proyecto Workshop recién creado, modo `incremental` por defecto y `stageId` de la etapa 1. Requiere token MCP (`MCP_AUTH_TOKEN` en el servidor o token Ariadne del usuario en Ajustes). Desactivar: `ARIADNE_BROWNFIELD_CONVERGE_AUTO=0`.
+
 Para **solo documentar** el sistema actual, quédate en **etapa 1**. Para **cambios**, abre **etapa 2+**.
 
 ### Paso D — *(Opcional)* Converge automático post-reindex
