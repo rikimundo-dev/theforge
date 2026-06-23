@@ -17,7 +17,14 @@ import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strateg
 import { LegacyDeliverablesQueueService } from "./legacy-deliverables-queue.service.js";
 
 @Module({
-  imports: [PrismaModule, AiModule, forwardRef(() => ProjectsModule), TheForgeModule, AiAnalysisModule, AgentSupervisorModule],
+  imports: [
+    PrismaModule,
+    AiModule,
+    forwardRef(() => ProjectsModule),
+    TheForgeModule,
+    forwardRef(() => AiAnalysisModule),
+    AgentSupervisorModule,
+  ],
   controllers: [LegacyFlowController, ChangeInterviewController],
   providers: [
     LegacyCoordinatorService,

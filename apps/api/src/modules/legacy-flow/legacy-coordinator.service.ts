@@ -1,7 +1,9 @@
 import {
   BadRequestException,
   ConflictException,
+  forwardRef,
   HttpException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -455,6 +457,7 @@ export class LegacyCoordinatorService {
   constructor(
     private readonly aiFactory: AIFactory,
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => ProjectsService))
     private readonly projects: ProjectsService,
     private readonly theforge: TheForgeService,
     private readonly ai: AiService,
@@ -462,6 +465,7 @@ export class LegacyCoordinatorService {
     private readonly graphMemory: GraphMemoryService,
     private readonly agentSupervisor: AgentSupervisorService,
     private readonly legacyDeliverablesStrategy: LegacyDeliverablesStrategyService,
+    @Inject(forwardRef(() => ProjectIntegrationService))
     private readonly projectIntegration: ProjectIntegrationService,
   ) {}
 

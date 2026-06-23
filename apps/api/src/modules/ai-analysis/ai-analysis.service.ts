@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from "@nestjs/common";
+import { forwardRef, Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { PrismaService } from "../../prisma/prisma.service.js";
 import { PreferencesService } from "../ai/preferences.service.js";
@@ -146,6 +146,7 @@ export class AiAnalysisService {
     private readonly estimationService: EstimationService,
     private readonly graphMemory: GraphMemoryService,
     private readonly nodeCacheService: NodeCacheService,
+    @Inject(forwardRef(() => ProjectsService))
     private readonly projects: ProjectsService,
     private readonly theforge: TheForgeService,
     private readonly agentSupervisor: AgentSupervisorService,
