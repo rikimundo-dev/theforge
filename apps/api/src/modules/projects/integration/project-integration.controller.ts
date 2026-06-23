@@ -80,4 +80,13 @@ export class ProjectIntegrationController {
   ) {
     return this.integration.importHandoffToStage(projectId, stageId);
   }
+
+  @Post("stages/:stageId/reconcile-handoff")
+  reconcileHandoff(
+    @Param("projectId") projectId: string,
+    @Param("stageId") stageId: string,
+    @Body() body: unknown,
+  ) {
+    return this.integration.reconcileHandoffStage(projectId, stageId, body);
+  }
 }

@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { Module, forwardRef } from "@nestjs/common";
 import { PrismaModule } from "../../prisma/prisma.module.js";
 import { AiAnalysisModule } from "../ai-analysis/ai-analysis.module.js";
 import { AgentSupervisorModule } from "../agent-supervisor/agent-supervisor.module.js";
@@ -17,7 +17,7 @@ import { LegacyDeliverablesStrategyService } from "./legacy-deliverables-strateg
 import { LegacyDeliverablesQueueService } from "./legacy-deliverables-queue.service.js";
 
 @Module({
-  imports: [PrismaModule, AiModule, ProjectsModule, TheForgeModule, AiAnalysisModule, AgentSupervisorModule],
+  imports: [PrismaModule, AiModule, forwardRef(() => ProjectsModule), TheForgeModule, AiAnalysisModule, AgentSupervisorModule],
   controllers: [LegacyFlowController, ChangeInterviewController],
   providers: [
     LegacyCoordinatorService,

@@ -155,6 +155,33 @@ export const promoteHandoffToStageBodySchema = z.object({
 
 export type PromoteHandoffToStageBody = z.infer<typeof promoteHandoffToStageBodySchema>;
 
+export const reconcileHandoffStageBodySchema = z.object({
+  wireAriadne: z.boolean().optional().default(true),
+  legacyStart: z.boolean().optional().default(true),
+});
+
+export type ReconcileHandoffStageBody = z.infer<typeof reconcileHandoffStageBodySchema>;
+
+export interface ReconcileHandoffStageResponse {
+  stageId: string;
+  description: string;
+  ariadneWire: {
+    attempted: boolean;
+    wired: boolean;
+    repositoryIds: string[];
+    patched: string[];
+    skippedReason?: string;
+    errors: string[];
+  };
+  legacyStart: {
+    attempted: boolean;
+    ok: boolean;
+    filesCount: number;
+    questionsCount: number;
+    error?: string;
+  };
+}
+
 export interface PromoteHandoffToStageResponse {
   stage: {
     id: string;

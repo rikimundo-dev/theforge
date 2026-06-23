@@ -13,6 +13,7 @@ import {
   Loader2,
   Plus,
   Pencil,
+  RefreshCw,
   Send,
   Sparkles,
   Trash2,
@@ -57,6 +58,11 @@ export interface IntegrationPanelProps {
   activeStageId: string | null;
   activeStageOrdinal: number;
   convergeWebhookUrl?: string | null;
+  /** Stage legacyChangeState: Ariadne analyze already ran (files or questions). */
+  legacyAnalyzeDone?: boolean;
+  /** Active stage handoff import timestamp (preferred over global integration status). */
+  activeStageHandoffImportedAt?: string | null;
+  onOpenModification?: () => void;
   onProjectRefresh: () => void | Promise<void>;
 }
 
@@ -69,6 +75,9 @@ export function IntegrationPanel({
   activeStageId,
   activeStageOrdinal,
   convergeWebhookUrl: initialConvergeWebhookUrl,
+  legacyAnalyzeDone = false,
+  activeStageHandoffImportedAt = null,
+  onOpenModification,
   onProjectRefresh,
 }: IntegrationPanelProps) {
   const [status, setStatus] = useState<IntegrationStatusResponse | null>(null);
@@ -84,6 +93,7 @@ export function IntegrationPanel({
   const [promoteStageName, setPromoteStageName] = useState("");
   const [promoteSelectedIds, setPromoteSelectedIds] = useState<string[]>([]);
   const [promoteSubmitting, setPromoteSubmitting] = useState(false);
+  const [reconcileSubmitting, setReconcileSubmitting] = useState(false);
   const [convergeWebhookUrl, setConvergeWebhookUrl] = useState(initialConvergeWebhookUrl ?? "");
   const [convergeWebhookSaving, setConvergeWebhookSaving] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -216,6 +226,43 @@ export function IntegrationPanel({
     }
     await loadStatus();
     await onProjectRefresh();
+  }, [projectId, activeStageId, loadStatus, onProjectRefresh]);
+
+  const handoffImportedOnActiveStage = activeStageHandoffImportedAt ?? status?.handoffImportedAt;
+
+  const reconcileHandoff = useCallback(async () => {
+    if (!activeStageId) return;
+    setReconcileSubmitting(true);
+    setError(null);
+    try {
+      const r = await apiFetch(
+        `${API_BASE}/projects/${projectId}/integration/stages/${activeStageId}/reconcile-handoff`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wireAriadne: true, legacyStart: true }),
+        },
+      );
+      if (!r.ok) {
+        const err = (await r.json().catch(() => null)) as { message?: string } | null;
+        throw new Error(err?.message ?? "Re-sincronizar handoff falló");
+      }
+      const result = (await r.json()) as {
+        legacyStart?: { ok?: boolean; error?: string };
+        ariadneWire?: { wired?: boolean; skippedReason?: string; errors?: string[] };
+      };
+      if (result.legacyStart?.error) {
+        setError(`Análisis: ${result.legacyStart.error}`);
+      } else if (result.ariadneWire?.errors?.length) {
+        setError(`Ariadne: ${result.ariadneWire.errors.join("; ")}`);
+      }
+      await loadStatus();
+      await onProjectRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Re-sincronizar handoff falló");
+    } finally {
+      setReconcileSubmitting(false);
+    }
   }, [projectId, activeStageId, loadStatus, onProjectRefresh]);
 
   const promotableIds = status?.promotableItemIds ?? [];
@@ -494,26 +541,63 @@ export function IntegrationPanel({
         {projectType === "LEGACY" && activeStageOrdinal >= 2 ? (
           <IntegrationStep
             step={promotableIds.length > 0 ? 3 : 2}
-            status={status?.handoffImportedAt ? "done" : linked ? "active" : "pending"}
+            status={handoffImportedOnActiveStage ? "done" : linked ? "active" : "pending"}
             title={`Recibir handoff · etapa ${activeStageOrdinal}`}
-            description="Importa las solicitudes del proyecto NEW enlazado y genera el MDD de cambio con trazabilidad."
+            description="Importa las solicitudes del proyecto NEW enlazado en esta etapa. Tras importar o promover, The Forge analiza el cambio en Modificación (Ariadne)."
           >
             <div className="space-y-4">
-              {status?.handoffImportedAt ? (
+              {handoffImportedOnActiveStage ? (
                 <p className="flex items-center gap-2.5 text-sm leading-relaxed text-[color-mix(in_oklch,var(--success)_88%,var(--foreground))]">
                   <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-                  Importado: {new Date(status.handoffImportedAt).toLocaleString()}
+                  Importado: {new Date(handoffImportedOnActiveStage).toLocaleString()}
                 </p>
               ) : null}
-              <WorkshopPanelButton
-                tone="primary"
-                disabled={!linked}
-                className="inline-flex items-center gap-2"
-                onClick={() => void importHandoff()}
-              >
-                <Download className="h-3.5 w-3.5" aria-hidden />
-                Importar handoff del proyecto NEW
-              </WorkshopPanelButton>
+              {handoffImportedOnActiveStage && legacyAnalyzeDone ? (
+                <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
+                  Análisis Ariadne listo — revisa archivos y preguntas en{" "}
+                  <strong className="text-[var(--foreground)]">Modificación</strong>.
+                </p>
+              ) : handoffImportedOnActiveStage ? (
+                <p className="text-sm leading-relaxed text-[var(--foreground-muted)]">
+                  Handoff en la etapa. Si promoviste antes del deploy o el análisis falló, usa{" "}
+                  <strong className="text-[var(--foreground)]">Re-sincronizar Ariadne</strong>.
+                </p>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <WorkshopPanelButton
+                  tone="primary"
+                  disabled={!linked || !!handoffImportedOnActiveStage}
+                  className="inline-flex items-center gap-2"
+                  onClick={() => void importHandoff()}
+                >
+                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  Importar handoff del proyecto NEW
+                </WorkshopPanelButton>
+                {handoffImportedOnActiveStage ? (
+                  <WorkshopPanelButton
+                    tone="secondary"
+                    disabled={!linked || reconcileSubmitting}
+                    className="inline-flex items-center gap-2"
+                    onClick={() => void reconcileHandoff()}
+                  >
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${reconcileSubmitting ? "animate-spin" : ""}`}
+                      aria-hidden
+                    />
+                    {reconcileSubmitting ? "Sincronizando…" : "Re-sincronizar Ariadne"}
+                  </WorkshopPanelButton>
+                ) : null}
+                {onOpenModification ? (
+                  <WorkshopPanelButton
+                    tone="secondary"
+                    className="inline-flex items-center gap-2"
+                    onClick={onOpenModification}
+                  >
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                    Ir a Modificación
+                  </WorkshopPanelButton>
+                ) : null}
+              </div>
             </div>
           </IntegrationStep>
         ) : null}

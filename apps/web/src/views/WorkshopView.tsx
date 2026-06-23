@@ -1295,6 +1295,29 @@ export default function WorkshopView({
     if (codebaseDoc) setMddInicialLocalContent(codebaseDoc);
   }, [activeLegacyState?.codebaseDoc]);
 
+  /** Prefill Modificación textarea from handoff/promote description when analyze not run yet. */
+  useEffect(() => {
+    if (project?.projectType !== "LEGACY") return;
+    const desc = (activeLegacyState?.description ?? "").trim();
+    if (!desc) return;
+    if (activeLegacyState?.filesToModify?.length || activeLegacyState?.questions?.length) return;
+    setLegacyDescriptionInput((prev) => (prev.trim() ? prev : desc));
+  }, [
+    project?.projectType,
+    activeStageId,
+    activeLegacyState?.description,
+    activeLegacyState?.filesToModify,
+    activeLegacyState?.questions,
+  ]);
+
+  const legacyAnalyzeDone = useMemo(
+    () =>
+      !!(
+        activeLegacyState?.filesToModify?.length || activeLegacyState?.questions?.length
+      ),
+    [activeLegacyState?.filesToModify, activeLegacyState?.questions],
+  );
+
   useEffect(() => {
     brdTobeServerSnap.current = { stageId: "", brd: "" };
     setBrdWorkshopDraft("");
@@ -3384,6 +3407,9 @@ export default function WorkshopView({
                   workshopStagesList.find((s) => s.id === activeStageId)?.ordinal ?? 1
                 }
                 convergeWebhookUrl={project.convergeWebhookUrl ?? null}
+                legacyAnalyzeDone={legacyAnalyzeDone}
+                activeStageHandoffImportedAt={activeWorkshopStage?.handoffImportedAt ?? null}
+                onOpenModification={() => setCentralPanel("legacy")}
                 onProjectRefresh={() => {
                   void fetchProject(projectId);
                 }}
@@ -3471,6 +3497,13 @@ export default function WorkshopView({
                 )}
                 {!activeLegacyState?.filesToModify?.length && !activeLegacyState?.questions?.length ? (
                   <>
+                    {activeLegacyState?.description?.trim() ? (
+                      <p className="text-xs text-[var(--foreground-muted)]">
+                        Descripción del handoff cargada abajo. Pulsa{" "}
+                        <strong className="text-[var(--foreground)]">Analizar</strong> si aún no hay archivos Ariadne
+                        (p. ej. tras importar antes del despliegue auto-analyze).
+                      </p>
+                    ) : null}
                     <p>Describe la modificación que quieres hacer al proyecto. AriadneSpecs analizará el código y te devolverá archivos a modificar y preguntas para afinar.</p>
                     <textarea
                       value={legacyDescriptionInput}

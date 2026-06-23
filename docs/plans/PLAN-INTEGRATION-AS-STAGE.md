@@ -21,7 +21,7 @@ Permite promover ítems de handoff del proyecto NEW a una **nueva etapa legacy**
 1. Proyecto LEGACY enlazado a NEW (pestaña **Integración**).
 2. NEW envía handoff (`POST …/handoff/send`).
 3. LEGACY importa o promueve: wizard **Promover a etapa** crea Stage, copia handoff, activa etapa.
-4. Etapa 2+ puede generar MDD / entregables (gate satisfecho por handoff o descripción en Modificación).
+4. Etapa 2+ puede generar MDD / entregables (gate satisfecho por handoff). Tras promote/import, la API ejecuta **`legacy/start`** si `LEGACY_HANDOFF_AUTO_LEGACY_START` está activo. Etapas ya promovidas: **`POST …/integration/stages/:stageId/reconcile-handoff`** o botón **Re-sincronizar Ariadne** en Integración.
 
 ## Archivos
 
