@@ -6,7 +6,10 @@ ARG BUILD_CACHE_BUST=96
 RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 WORKDIR /app
-RUN apk add --no-cache gcompat
+RUN apk add --no-cache gcompat openssl
+
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS=--max-old-space-size=2048
 
 RUN corepack enable
 
@@ -16,7 +19,7 @@ COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/business-rules/package.json packages/business-rules/
 COPY apps/web/package.json apps/web/
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @theforge/web...
 
 COPY packages/config packages/config
 COPY packages/shared-types packages/shared-types
@@ -28,10 +31,12 @@ RUN pnpm exec turbo run build --filter=@theforge/web
 # Production stage — Nginx
 FROM public.ecr.aws/docker/library/nginx:alpine AS runner
 
+ARG NGINX_CONF=nginx.local.conf
+
 RUN apk add --no-cache wget
 
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
-COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY apps/web/${NGINX_CONF} /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

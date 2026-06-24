@@ -9,6 +9,9 @@ RUN apk add --no-cache gcompat openssl
 
 WORKDIR /app
 
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS=--max-old-space-size=3072
+
 RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json .npmrc ./
@@ -18,7 +21,8 @@ COPY packages/business-rules/package.json packages/business-rules/
 COPY packages/config/package.json packages/config/
 COPY apps/api/package.json apps/api/
 
-RUN pnpm install --frozen-lockfile
+# Filtered install: only API workspace closure (avoids 3× full monorepo install on Coolify).
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @theforge/api...
 
 COPY packages/database packages/database
 COPY packages/shared-types packages/shared-types

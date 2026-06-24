@@ -6,6 +6,10 @@ RUN echo "Cache bust key: ${BUILD_CACHE_BUST}"
 
 WORKDIR /app
 
+ENV TURBO_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS=--max-old-space-size=2048
+
+RUN apk add --no-cache openssl gcompat
 RUN corepack enable
 
 # Copy workspace manifests
@@ -14,7 +18,7 @@ COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/config/package.json packages/config/
 COPY packages/mcp-server/package.json packages/mcp-server/
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts --filter @theforge/mcp-server...
 
 # Copy all source code
 COPY packages/shared-types packages/shared-types
