@@ -1,50 +1,36 @@
 # Despliegue en Coolify
 
-TheForge usa el mismo `docker-compose.yml` que en Dokploy, con un **override** que quita la red externa `dokploy-network` (específica de Dokploy).
+`docker-compose.yml` está optimizado para Coolify: un solo archivo, sin red externa ni `container_name` fijos.
 
 ## Compose
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.coolify.yml up --build
-```
 
 En **Coolify** (v4+):
 
 1. Nuevo recurso → **Docker Compose**.
 2. Repositorio + rama.
-3. Si la UI permite **varios archivos compose**, añade:
-   - `docker-compose.yml`
-   - `docker-compose.coolify.yml`
-4. Si solo acepta un archivo, usa el comando custom de build/deploy con el merge anterior, o copia manualmente el contenido fusionado (`docker compose … config`).
+3. Archivo compose: **`docker-compose.yml`** (solo este).
+4. Dominio → servicio **`theforge-web`**, puerto **80**.
 
-Validar el merge en local antes de subir:
+Validar en local antes de subir:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.coolify.yml config
+docker compose config
+# o: pnpm run compose:config
 ```
 
-## Routing (recomendado: igual que Dokploy)
+## Routing (recomendado: un solo dominio)
 
-Coolify expone servicios con Traefik/Caddy. Configura **un dominio** con dos rutas:
+El compose monta `nginx.local.conf` en `theforge-web`, que hace proxy de `/api/` → `theforge-api:3000`. Configura **un dominio** apuntando a `theforge-web:80`; no hace falta path split en Traefik/Caddy.
 
-| Ruta | Servicio | Puerto contenedor | Notas |
-|------|----------|-------------------|--------|
-| `/` | `theforge-web` | `80` | Solo estáticos + SPA (`apps/web/nginx.conf`) |
-| `/api` | `theforge-api` | `3000` | **Strip prefix** `/api` (Nest escucha en raíz) |
+El frontend usa `API_BASE = /api` por defecto; no hace falta `VITE_API_URL` en build.
 
-El frontend usa `API_BASE = /api` por defecto; no hace falta `VITE_API_URL` en build si el path routing está bien.
+### Alternativa: path split (estilo Dokploy)
 
-### Alternativa: un solo servicio público (nginx proxy)
-
-Si Coolify no permite path split en tu plan:
-
-1. En `docker-compose.coolify.yml`, descomenta el `volumes` de `theforge-web` que monta `nginx.local.conf`.
-2. Enruta **todo** el dominio → `theforge-web:80`.
-3. Ese nginx hace `proxy_pass` de `/api/` → `theforge-api:3000`.
+Si prefieres `/` → web y `/api` → api (strip prefix), usa el perfil Dokploy localmente como referencia (`docker-compose.dokploy.yml`) y adapta: quita el `volumes` de `theforge-web` para usar solo estáticos (`nginx.conf` de la imagen).
 
 ## Variables de entorno
 
-Inyecta las mismas que en Dokploy (servicio **`theforge-api`** como mínimo):
+Inyecta en el servicio **`theforge-api`** (mínimo):
 
 | Variable | Obligatoria prod |
 |----------|------------------|
@@ -62,8 +48,9 @@ Inyecta las mismas que en Dokploy (servicio **`theforge-api`** como mínimo):
 
 ## Healthchecks
 
-- **API / MCP:** probe **dentro** del contenedor → `http://localhost:3000/health` (no uses la IP del host).
-- **Web:** `http://localhost:80/` (override Coolify/local; en Dokploy prod sigue DNS `theforge-web`).
+- **API / MCP:** `http://localhost:3000/health` (probe dentro del contenedor).
+- **Web:** `http://localhost:80/`.
+- **Adminer:** `http://localhost:8080/`.
 
 ## Servicios opcionales
 
@@ -74,9 +61,9 @@ Inyecta las mismas que en Dokploy (servicio **`theforge-api`** como mínimo):
 
 | | Dokploy | Coolify |
 |---|---------|---------|
-| Compose | `docker-compose.yml` | `docker-compose.yml` + `docker-compose.coolify.yml` |
+| Compose | `docker-compose.yml` + `docker-compose.dokploy.yml` | Solo `docker-compose.yml` |
 | Red externa | `dokploy-network` | Ninguna (red bridge del stack) |
-| Proxy | Traefik Dokploy | Traefik/Caddy Coolify |
-| Local full-docker | `docker-compose.local.yml` | — |
+| Proxy | Traefik Dokploy (path split) | Un dominio → web:80 (nginx proxy /api) |
+| Local full-docker | `docker-compose.local.yml` | `docker-compose.local.yml` |
 
 Ver también [README-LOCAL.md](../README-LOCAL.md) (dev nativo y compose local).

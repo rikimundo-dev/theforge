@@ -1,0 +1,57 @@
+# Perfil Dokploy (Traefik externo en dokploy-network).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.dokploy.yml up --build
+#
+# Traefik Dokploy: / → theforge-web:80 (solo estáticos); /api → theforge-api:3000 (strip /api).
+# El nginx del contenedor web NO hace proxy a la API (evita duplicar rutas con Traefik).
+
+networks:
+  default:
+    name: theforge-app-network
+    driver: bridge
+  dokploy-network:
+    external: true
+
+services:
+  theforge-db:
+    container_name: theforge-db
+
+  theforge-redis-queue:
+    container_name: theforge-redis-queue
+
+  theforge-falkor-sdd:
+    container_name: theforge-falkor-sdd
+    ports:
+      - "6380:6379"
+
+  theforge-api:
+    container_name: theforge-api
+    networks: !override
+      - default
+      - dokploy-network
+
+  theforge-web:
+    container_name: theforge-web
+    networks: !override
+      - default
+      - dokploy-network
+    volumes: !reset []
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://theforge-web:80/"]
+
+  theforge-mcp:
+    container_name: theforge-mcp
+    networks: !override
+      - default
+      - dokploy-network
+
+  theforge-adminer:
+    container_name: theforge-adminer
+    networks: !override
+      - default
+      - dokploy-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO- http://theforge-adminer:8080/ 2>/dev/null | grep -qi adminer || exit 1",
+        ]

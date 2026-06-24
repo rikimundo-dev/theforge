@@ -42,10 +42,12 @@ packages/config       tsconfig.base, eslint, tailwind
 - **Vista:** `WorkshopView.tsx` — grid 3 columnas: ChatContainer (useInterview) | MddViewer (secciones, streaming sin parpadeo) | Semáforo + costos (calculateCostFromMdd).
 - **API:** `POST /ai-orchestrator/chat` y `POST /ai-orchestrator/chat/stream` con `{ projectId, sessionId?, message?, …, images? }` — `message` puede ir vacío si hay `images` (PNG/JPEG/WebP/GIF, máx. 6). **`POST /sessions/:id/chat`** delega en el mismo flujo que el orquestador (`chatBySessionId`: HITL, supervisor, MDD/UX/DBGA desde body, `uxGuideLlmOptions` cuando aplica, etc.); body alineado (`message`/`images`, `activeTab`, `stageId`, `mddContent`, …). Respuesta no-stream: **`{ session, project, uxUiGuideContent?, evaluatorCritique? }`**. Manager MDD: `mdd/stream/manager` y `mdd/stream/resume` también aceptan `images`.
 
-## Docker / Dokploy
+## Docker / Dokploy / Coolify
 
-- **Un contenedor:** servicio `theforge-db` (Postgres + API + Nginx). Conexión interna `localhost:5432`.
-- **Env:** DATABASE_URL, `OPENROUTER_API_KEY` (o `AI_API_KEY` / `OPENAI_API_KEY`), opcional `OPENROUTER_BASE_URL` / `OPENROUTER_CHAT_MODEL` / `OPENROUTER_EMBEDDING_MODEL`. Opcional: `LANGGRAPH_RECURSION_LIMIT` (10–500, default 100) para el grafo MDD. Nuevos servicios/variables → actualizar `docker-compose.yml`.
+- **Coolify:** un solo `docker-compose.yml` (dominio → `theforge-web:80`, nginx proxy `/api`).
+- **Dokploy:** `docker-compose.yml` + `docker-compose.dokploy.yml` (Traefik path split, red `dokploy-network`).
+- **Local full-docker:** `docker-compose.yml` + `docker-compose.local.yml`.
+- **Env:** DATABASE_URL, `OPENROUTER_API_KEY` (o alias `AI_API_KEY` / `OPENAI_API_KEY`), opcional `OPENROUTER_BASE_URL` / `OPENROUTER_CHAT_MODEL` / `OPENROUTER_EMBEDDING_MODEL`. Opcional: `LANGGRAPH_RECURSION_LIMIT` (10–500, default 100). Nuevos servicios/variables → actualizar `docker-compose.yml`.
 
 ## Reglas de código
 
