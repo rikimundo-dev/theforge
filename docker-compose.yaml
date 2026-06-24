@@ -1,0 +1,3 @@
+# Coolify looks for docker-compose.yaml by default. Canonical stack: docker-compose.yml
+include:
+  - docker-compose.yml

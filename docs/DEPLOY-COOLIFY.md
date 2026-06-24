@@ -8,7 +8,7 @@ En **Coolify** (v4+):
 
 1. Nuevo recurso → **Docker Compose**.
 2. Repositorio + rama.
-3. Archivo compose: **`docker-compose.yml`** (solo este).
+3. Archivo compose: **`docker-compose.yaml`** (por defecto en Coolify) o **`docker-compose.yml`** (mismo stack).
 4. Dominio → servicio **`theforge-web`**, puerto **80**.
 
 Validar en local antes de subir:
