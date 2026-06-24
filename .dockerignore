@@ -4,8 +4,6 @@
 .git
 .cursor
 docs
-**/*.md
-!README.md
 **/*.test.ts
 **/*.spec.ts
 **/__tests__
